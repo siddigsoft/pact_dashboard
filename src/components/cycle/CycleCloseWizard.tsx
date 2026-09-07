@@ -13,6 +13,8 @@ import type { RedirectAllocationDraft } from './redirectSettlement';
 import type { MatchResult, MatchPair } from '@/utils/fuzzyMatcher';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
+import { canAdvancePastMatch } from './matchGate';
+import { sanitizeMatchingPairs } from './matchAliases';
 
 export type StepStatus = 'not_started' | 'in_progress' | 'done' | 'blocked';
 
@@ -98,6 +100,32 @@ export interface WizardState {
   paymentActions: Record<string, { action: 'pay' | 'recover' | 'writeoff' | 'redirect'; done: boolean }>;
   overrides: Record<number, { justification: string; by: string; at: string }>;
   cycleClosedAt: string | null;
+  attributionReport: AttributionReportRow[];
+  attributionUnresolvedCount: number;
+  attributionLoaded: boolean;
+}
+
+export interface AttributionReportRow {
+  id?: string;
+  site_id?: string;
+  site_name?: string;
+  state?: string;
+  device_id?: string | null;
+  wfp_raw_device_id?: string | null;
+  wfp_raw_interviewer_name?: string | null;
+  submission_uuid?: string | null;
+  submission_date?: string | null;
+  claimed_collector_name?: string | null;
+  claimed_collector?: string | null;
+  resolved_collector_id?: string | null;
+  resolved_collector_name?: string | null;
+  status?: string | null;
+  method?: string | null;
+  correction_reason?: string | null;
+  exception_code?: string | null;
+  coordinator_id?: string | null;
+  requires_attribution?: boolean | null;
+  issue_type?: string | null;
 }
 
 const STEPS = [
@@ -128,6 +156,9 @@ const initialState: WizardState = {
   paymentActions: {},
   overrides: {},
   cycleClosedAt: null,
+  attributionReport: [],
+  attributionUnresolvedCount: 0,
+  attributionLoaded: false,
 };
 
 interface Props {
@@ -138,6 +169,7 @@ interface Props {
   currentUser: any;
   initialStep?: number;
   initialMmpId?: string | null;
+  availableCycles?: any[];
 }
 
 export interface RoleFlags {
@@ -269,6 +301,7 @@ export default function CycleCloseWizard({
   currentUser,
   initialStep,
   initialMmpId,
+  availableCycles,
 }: Props) {
   const roleFlags = getCycleCloseRoleFlags(currentUser);
   const isStep4ContributorOnly = isCycleCloseStep4ContributorOnly(currentUser);
@@ -332,6 +365,9 @@ export default function CycleCloseWizard({
       paymentActions: {},
       overrides: {},
       cycleClosedAt: null,
+      attributionReport: [],
+      attributionUnresolvedCount: 0,
+      attributionLoaded: false,
     });
   };
 
@@ -414,12 +450,19 @@ export default function CycleCloseWizard({
     saveTimer.current = setTimeout(() => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { mmpRawRows, ...stateToSave } = wizardState;
+        const { mmpRawRows, fileRows, matchResults, ...stateToSave } = wizardState;
+        // Resume storage contains workflow metadata and decisions only. Raw WFP
+        // rows (including device IDs and names) never leave memory/browser RAM.
+        const safeStateToSave = {
+          ...stateToSave,
+          fileRows: [],
+          matchResults: matchResults.map(result => ({ ...result, wfpRow: {} })),
+        };
         const session: SavedSession = {
           savedAt: new Date().toISOString(),
           currentStep,
           stepStatuses,
-          wizardState: stateToSave,
+          wizardState: safeStateToSave,
         };
         localStorage.setItem(getKey(wizardState.selectedMmpId!), JSON.stringify(session));
       } catch {
@@ -450,9 +493,16 @@ export default function CycleCloseWizard({
 
   const handleResume = () => {
     if (!savedSession) return;
+    const restored = savedSession.wizardState;
+    const safePairs = sanitizeMatchingPairs(
+      restored.mmpColumns,
+      restored.fileColumns,
+      restored.matchingPairs,
+    );
     setWizardState(prev => ({
       ...prev,
-      ...savedSession.wizardState,
+      ...restored,
+      matchingPairs: safePairs,
       mmpRawRows: [], // re-fetched by Step2's loadCandidates
     }));
     setCurrentStep(savedSession.currentStep);
@@ -489,9 +539,7 @@ export default function CycleCloseWizard({
   const canAdvance = useMemo(() => {
     if (currentStep === 1) return !!wizardState.selectedMmpId;
     if (currentStep === 2) {
-      const hasUnactioned = wizardState.matchResults.some(r => r.status === 'review');
-      const hasResubmit   = Object.values(wizardState.resolvedSites).some(v => v === 'resubmit');
-      return wizardState.matchResults.length > 0 && !hasUnactioned && !hasResubmit;
+      return canAdvancePastMatch(wizardState.matchResults, wizardState.resolvedSites);
     }
     if (currentStep === 3) {
       // Step 3 = Mark Uncovered: every not-covered site must have a supervisor-confirmed reason.
@@ -824,6 +872,7 @@ export default function CycleCloseWizard({
                 savedSession={savedSession}
                 onResume={handleResume}
                 onStartFresh={handleStartFresh}
+                availableCycles={availableCycles}
               />
             )}
             {currentStep === 2 && <Step2UploadMatch {...stepProps} />}

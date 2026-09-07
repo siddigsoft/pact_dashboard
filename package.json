@@ -23,6 +23,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:covered-fee-payments": "bash scripts/test-covered-fee-payment-workflow.sh",
+    "test:field-device-cycle-close": "bash scripts/test-field-device-cycle-close-attribution.sh",
     "check:registry": "vitest run src/lib/__tests__/registry-drift.test.ts --reporter=verbose"
   },
   "dependencies": {

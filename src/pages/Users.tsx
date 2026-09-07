@@ -62,7 +62,8 @@ import {
   MessageSquare as MessageIcon,
   Calendar as CalendarIcon,
   MapPin,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Radio
 } from 'lucide-react';
 import {
   Dialog,
@@ -92,6 +93,7 @@ import RoleBadge from '@/components/user/RoleBadge';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { useLocation as useLocationData } from '@/context/location/LocationContext';
 import { exportFormattedMultiSheetExcel } from '@/utils/formattedExcelExport';
+import { FieldDeviceAssignments } from '@/components/user/FieldDeviceAssignments';
 
 const STATE_ID_TO_NAME = new Map(sudanStates.map(s => [s.id, s.name]));
 
@@ -119,6 +121,7 @@ const Users = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [deviceAssignmentsUser, setDeviceAssignmentsUser] = useState<User | null>(null);
   
   const [passwordResetDialog, setPasswordResetDialog] = useState<{ open: boolean; user?: User }>({ open: false });
   const [isSendingReset, setIsSendingReset] = useState(false);
@@ -151,6 +154,9 @@ const Users = () => {
     primaryRole === 'admin' ||
     primaryRole === 'ict' ||
     primaryRole === 'superadmin';
+  const isFOM = (roles || []).some(role => ['fom', 'fieldOperationManager', 'field_operation_manager'].includes(String(role))) ||
+    ['fom', 'fieldoperationmanager', 'field_operation_manager'].includes(primaryRole.replace(/\s/g, ''));
+  const canManageFieldDevices = isAdminOrICT || isFOM;
 
   const isSuperAdminUser =
     primaryRole === 'superadmin' ||
@@ -1133,7 +1139,7 @@ const Users = () => {
                 <Eye className="h-4 w-4" />
               </Link>
             </Button>
-            {(isAdminOrICT || canManageRolesUI) && (
+            {(isAdminOrICT || isFOM || canManageRolesUI) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-menu-${user.id}`}>
@@ -1147,6 +1153,17 @@ const Users = () => {
                       View Profile
                     </Link>
                   </DropdownMenuItem>
+                  {canManageFieldDevices && ['datacollector', 'coordinator'].includes(
+                    String(normalizeRole(getPrimaryRoleLabel(user)) || '').replace(/[\s_-]/g, '').toLowerCase()
+                  ) && (
+                    <DropdownMenuItem
+                      onClick={() => setDeviceAssignmentsUser(user)}
+                      data-testid={`button-device-assignments-${user.id}`}
+                    >
+                      <Radio className="h-4 w-4 mr-2" />
+                      Manage field devices
+                    </DropdownMenuItem>
+                  )}
                   {canManageRolesUI && (
                     <DropdownMenuItem asChild>
                       <Link to="/role-management" className="flex items-center">
@@ -2147,6 +2164,16 @@ const Users = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {deviceAssignmentsUser && (
+        <FieldDeviceAssignments
+          profileId={deviceAssignmentsUser.id}
+          profileName={deviceAssignmentsUser.name || deviceAssignmentsUser.email}
+          profileRole={getPrimaryRoleLabel(deviceAssignmentsUser)}
+          open={!!deviceAssignmentsUser}
+          onOpenChange={(open) => { if (!open) setDeviceAssignmentsUser(null); }}
+          canManage={canManageFieldDevices}
+        />
+      )}
     </div>
   );
 };

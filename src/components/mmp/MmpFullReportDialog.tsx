@@ -111,6 +111,16 @@ interface Props {
   mmpName: string;
 }
 
+interface ActivityExportRow {
+  timestamp: string | null;
+  actor: string;
+  role: string;
+  action: string;
+  description: string;
+  previousState: string;
+  newState: string;
+}
+
 // ── Stat card left-border accent colours ─────────────────────────────
 const clsCard: Record<EntryClass | 'total', { border: string; icon: string; num: string }> = {
   total:       { border: 'border-l-teal-500',    icon: 'text-teal-500',    num: 'text-teal-700' },
@@ -132,6 +142,8 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
   const [downPayments, setDownPayments] = useState<any[]>([]);
   const [costSubmissions, setCostSubmissions] = useState<any[]>([]);
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [reportScope, setReportScope] = useState<{ hub_scoped?: boolean; hub_ids?: string[]; state_names?: string[] }>({});
+  const [accessError, setAccessError] = useState('');
   const [financeLoading, setFinanceLoading] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
 
@@ -146,91 +158,30 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
     setDownPayments([]);
     setCostSubmissions([]);
     setActivityLogs([]);
+    setReportScope({});
+    setAccessError('');
 
     (async () => {
       try {
-        const [{ data: mmpData }, allEntries] = await Promise.all([
-          supabase
-            .from('mmp_files')
-            .select('id, name, mmp_id, status, cycle_status, created_at, uploaded_by, workflow, archivedby, archivedat, project:projects(name)')
-            .eq('id', mmpId)
-            .single(),
-          (async () => {
-            let all: SiteEntry[] = [];
-            let from = 0;
-            while (true) {
-              const { data, error } = await supabase
-                .from('mmp_site_entries')
-                .select('id, site_name, site_code, status, hub_office, state, locality, forwarded_to_user_id, additional_data, enumerator_fee, transport_fee, cost, visit_completed_by')
-                .eq('mmp_file_id', mmpId)
-                .range(from, from + 999);
-              if (error) break;
-              if (!data?.length) break;
-              all = all.concat(data as SiteEntry[]);
-              if (data.length < 1000) break;
-              from += 1000;
-            }
-            return all;
-          })(),
-        ]);
+        const { data, error } = await supabase.rpc(
+          'get_mmp_report_payload' as any,
+          { p_mmp_id: mmpId } as any
+        );
+        if (error) throw error;
 
-        setMmp(mmpData);
-        setEntries(allEntries);
-
-        // Resolve coordinator names
-        const coordIds = new Set<string>();
-        allEntries.forEach(e => {
-          const id = (e.additional_data as any)?.assigned_to || e.forwarded_to_user_id;
-          if (id) coordIds.add(id);
-        });
-        if (coordIds.size > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, full_name, email')
-            .in('id', [...coordIds]);
-          const pm: Record<string, string> = {};
-          (profiles || []).forEach((p: any) => { pm[p.id] = p.full_name || p.email || p.id; });
-          setProfileMap(pm);
-        }
+        const payload = (data || {}) as any;
+        setMmp(payload.mmp || null);
+        setEntries((payload.entries || []) as SiteEntry[]);
+        setProfileMap(payload.profile_map || {});
+        setDownPayments(payload.down_payments || []);
+        setCostSubmissions(payload.cost_submissions || []);
+        setActivityLogs(payload.activity_logs || []);
+        setReportScope(payload.scope || {});
+      } catch (error: any) {
+        console.error('[MMP Report] secure report load failed:', error);
+        setAccessError(error?.message || 'You do not have access to this MMP report.');
       } finally {
         setLoading(false);
-      }
-
-      // ── Financial + Activity (parallel, non-blocking) ─────────────────
-      try {
-        // down_payment_requests links to MMPs via mmp_site_entry_id (site-level FK),
-        // NOT mmp_file_id — so we must look up by the entry IDs for this MMP.
-        const entryIds = allEntries.map(e => e.id);
-
-        const dpQuery = entryIds.length > 0
-          ? supabase
-              .from('down_payment_requests')
-              .select('id, site_name, hub_name, status, requested_amount, total_paid_amount, remaining_amount, payment_type, created_at, supervisor_status, admin_status, fully_paid_at')
-              .in('mmp_site_entry_id', entryIds)
-              .order('created_at', { ascending: false })
-          : Promise.resolve({ data: [] as any[], error: null });
-
-        const [dpRes, csRes, alRes] = await Promise.allSettled([
-          dpQuery,
-          // operational_cost_submissions has both mmp_file_id and mmp_id columns;
-          // query both to avoid missing records linked via either column.
-          supabase
-            .from('operational_cost_submissions')
-            .select('id, status, tier1_status, tier2_status, tier3_status, amount_cents, expense_category, description, hub_id, created_at, request_title')
-            .or(`mmp_file_id.eq.${mmpId},mmp_id.eq.${mmpId}`)
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('audit_logs')
-            .select('id, actor_name, actor_role, timestamp, action, description, details, new_state, previous_state')
-            .in('entity_type', ['mmp', 'mmp_file', 'mmp_files'])
-            .eq('entity_id', mmpId)
-            .order('timestamp', { ascending: false })
-            .limit(100),
-        ]);
-        if (dpRes.status === 'fulfilled') setDownPayments((dpRes.value as any).data || []);
-        if (csRes.status === 'fulfilled') setCostSubmissions(csRes.value.data || []);
-        if (alRes.status === 'fulfilled') setActivityLogs(alRes.value.data || []);
-      } finally {
         setFinanceLoading(false);
       }
     })();
@@ -319,6 +270,95 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
     return list.slice(0, 500); // cap display at 500
   }, [entries, siteFilter, statusFilter]);
 
+  const activityExportRows = useMemo<ActivityExportRow[]>(() => {
+    const rows: ActivityExportRow[] = activityLogs.map(log => {
+      const previousState = typeof log.previous_state === 'string'
+        ? log.previous_state
+        : log.previous_state?.status || '';
+      const newState = typeof log.new_state === 'string'
+        ? log.new_state
+        : log.new_state?.status || '';
+      const details = typeof log.details === 'string'
+        ? log.details
+        : log.details
+          ? JSON.stringify(log.details)
+          : '';
+
+      return {
+        timestamp: log.timestamp || null,
+        actor: log.actor_name || 'System',
+        role: (log.actor_role || '').replace(/_/g, ' '),
+        action: (log.action || 'activity').replace(/_/g, ' '),
+        description: log.description || details || '—',
+        previousState,
+        newState,
+      };
+    });
+
+    const workflow = mmp?.workflow && typeof mmp.workflow === 'object' ? mmp.workflow : {};
+    const archiveHistory = Array.isArray(workflow.archive_history) ? workflow.archive_history : [];
+    const cycles = [...archiveHistory];
+    const isCurrentlyArchived = mmp?.status === 'archived' || mmp?.cycle_status === 'archived';
+    const archivedBy = mmp?.archivedby || workflow.archived_by;
+    const archivedAt = mmp?.archivedat || workflow.archived_at;
+
+    if (isCurrentlyArchived && archivedBy) {
+      cycles.push({
+        archived_by: archivedBy,
+        archived_at: archivedAt || null,
+        pre_archive_status: workflow.pre_archive_status || null,
+        restored_by: null,
+        restored_at: null,
+      });
+    }
+
+    if (
+      !isCurrentlyArchived &&
+      workflow.restored_by &&
+      workflow.restored_at &&
+      !archiveHistory.some((item: any) => item.restored_at === workflow.restored_at)
+    ) {
+      cycles.push({
+        archived_by: workflow.archived_by || null,
+        archived_at: workflow.archived_at || null,
+        pre_archive_status: workflow.pre_archive_status || null,
+        restored_by: workflow.restored_by,
+        restored_at: workflow.restored_at,
+      });
+    }
+
+    cycles.forEach((cycle: any) => {
+      if (cycle.archived_by || cycle.archived_at) {
+        rows.push({
+          timestamp: cycle.archived_at || null,
+          actor: cycle.archived_by || 'System',
+          role: '',
+          action: 'Archived',
+          description: 'MMP archived',
+          previousState: cycle.pre_archive_status || '',
+          newState: 'archived',
+        });
+      }
+      if (cycle.restored_by || cycle.restored_at) {
+        rows.push({
+          timestamp: cycle.restored_at || null,
+          actor: cycle.restored_by || 'System',
+          role: '',
+          action: 'Restored',
+          description: 'MMP restored from archive',
+          previousState: 'archived',
+          newState: cycle.restored_status || '',
+        });
+      }
+    });
+
+    return rows.sort((a, b) => {
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [activityLogs, mmp]);
+
   // ── PDF Export ────────────────────────────────────────────────────────────
   const exportPDF = () => {
     if (!stats || !mmp) return;
@@ -389,6 +429,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
       const RED     = 'FFDC2626';
       const SLATE   = 'FF64748B';
       const GOLD    = 'FFFBBF24';
+      const AMOUNT_FORMAT = '#,##0;[Red]-#,##0';
 
       type ExWS = ExcelJS.Worksheet;
 
@@ -467,7 +508,10 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         c.font = { bold: true, size: 10, color: { argb: pctArgb(pct) } };
       };
 
-      const subtitle = `MMP: ${mmpTitle}  |  Project: ${project}  |  Status: ${mmp.status || '—'}  |  Generated: ${now}`;
+      const scopeLabel = reportScope.hub_scoped
+        ? `Hub scope: ${(reportScope.hub_ids || []).join(', ') || 'Assigned hubs'}`
+        : 'Scope: All authorized hubs';
+      const subtitle = `MMP: ${mmpTitle}  |  Project: ${project}  |  Status: ${mmp.status || '—'}  |  ${scopeLabel}  |  Generated: ${now}`;
 
       // ════════════════════════════════════════════════════════════════
       // Sheet 1 — Summary
@@ -506,7 +550,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         ['Pending (SDG)',    costSubmissions.filter(c => c.status === 'pending').reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100],
         ['', ''],
         ['── ACTIVITY ──', ''],
-        ['Log Entries',      activityLogs.length],
+        ['Log Entries',      activityExportRows.length],
       ];
 
       summSections.forEach(([label, value], i) => {
@@ -536,6 +580,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         if (label === 'Coverage %' || label === 'Covered') {
           row.getCell(2).font = { bold: true, size: 10, color: { argb: pctArgb(stats.coveragePct) } };
         }
+        if (String(label).includes('(SDG)') && typeof value === 'number') {
+          row.getCell(2).numFmt = AMOUNT_FORMAT;
+        }
       });
 
       // ════════════════════════════════════════════════════════════════
@@ -559,9 +606,11 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         row.getCell(4).font = { size: 10, color: { argb: AMBER } };
         row.getCell(5).font = { size: 10, color: { argb: RED } };
         row.getCell(6).font = { size: 10, color: { argb: SLATE } };
+        row.getCell(9).numFmt = AMOUNT_FORMAT;
         coverageCell(row, 7, s.coveragePct);
       });
       const stTot = addTotalsRow(wsState, ['TOTAL', stats.total, stats.done, stats.inProgress, stats.attention, stats.pending, `${stats.coveragePct}%`, stats.coordCount, stats.totalFees]);
+      stTot.getCell(9).numFmt = AMOUNT_FORMAT;
       coverageCell(stTot, 7, stats.coveragePct);
 
       // ════════════════════════════════════════════════════════════════
@@ -625,6 +674,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
           Number(e.enumerator_fee || 0), Number(e.transport_fee || 0), Number(e.cost || 0),
         ], i % 2 === 0);
         row.getCell(6).font = { size: 10, bold: true, color: { argb: CAT_COLOR[cat] || SLATE } };
+        row.getCell(7).numFmt = AMOUNT_FORMAT;
+        row.getCell(8).numFmt = AMOUNT_FORMAT;
+        row.getCell(9).numFmt = AMOUNT_FORMAT;
       });
 
       // ════════════════════════════════════════════════════════════════
@@ -666,6 +718,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
           row.getCell(7).font = { size: 10 };
           row.getCell(8).font = { size: 10, color: { argb: GREEN } };
           row.getCell(9).font = { size: 10, color: { argb: totRem > 0 ? RED : GREEN } };
+          row.getCell(7).numFmt = AMOUNT_FORMAT;
+          row.getCell(8).numFmt = AMOUNT_FORMAT;
+          row.getCell(9).numFmt = AMOUNT_FORMAT;
         });
 
         const dpTot = addTotalsRow(wsDP, [
@@ -675,6 +730,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         dpTot.getCell(7).font = { bold: true, size: 10, color: { argb: GOLD } };
         dpTot.getCell(8).font = { bold: true, size: 10, color: { argb: GREEN } };
         dpTot.getCell(9).font = { bold: true, size: 10, color: { argb: totRem > 0 ? RED : GREEN } };
+        dpTot.getCell(7).numFmt = AMOUNT_FORMAT;
+        dpTot.getCell(8).numFmt = AMOUNT_FORMAT;
+        dpTot.getCell(9).numFmt = AMOUNT_FORMAT;
       }
 
       // ════════════════════════════════════════════════════════════════
@@ -711,50 +769,58 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
           row.getCell(4).font = { size: 10, color: { argb: CS_STATUS_COLOR[cs.tier1_status] || SLATE } };
           row.getCell(5).font = { size: 10, color: { argb: CS_STATUS_COLOR[cs.tier2_status] || SLATE } };
           row.getCell(6).font = { size: 10, bold: true };
+          row.getCell(6).numFmt = AMOUNT_FORMAT;
         });
 
         const csTot = addTotalsRow(wsCS, [`TOTAL (${costSubmissions.length})`, '', '', '', '', totAmt, '']);
         csTot.getCell(6).font = { bold: true, size: 10, color: { argb: GOLD } };
+        csTot.getCell(6).numFmt = AMOUNT_FORMAT;
       }
 
       // ════════════════════════════════════════════════════════════════
-      // Sheet 7 — Activity Log (if any)
+      // Sheet 7 — Activity
       // ════════════════════════════════════════════════════════════════
-      if (activityLogs.length > 0) {
-        const wsAct = wb.addWorksheet('Activity Log');
-        wsAct.columns = [
-          { key: 'ts',   width: 18 }, { key: 'actor', width: 24 },
-          { key: 'role', width: 18 }, { key: 'act',   width: 22 },
-          { key: 'desc', width: 40 }, { key: 'prev',  width: 18 },
-          { key: 'next', width: 18 },
-        ];
-        addTitleBlock(wsAct, 'MMP Activity Log', subtitle, 7);
-        addHeaderRow(wsAct, ['Timestamp', 'Actor', 'Role', 'Action', 'Description', 'Previous State', 'New State']);
+      const wsAct = wb.addWorksheet('Activity');
+      wsAct.columns = [
+        { key: 'ts',   width: 20 }, { key: 'actor', width: 26 },
+        { key: 'role', width: 18 }, { key: 'act',   width: 22 },
+        { key: 'desc', width: 42 }, { key: 'prev',  width: 18 },
+        { key: 'next', width: 18 },
+      ];
+      addTitleBlock(wsAct, `MMP Activity (${activityExportRows.length} records)`, subtitle, 7);
+      addHeaderRow(wsAct, ['Timestamp', 'Actor', 'Role', 'Action', 'Description', 'Previous State', 'New State']);
 
-        const ACT_COLOR = (action: string) => {
-          const a = (action || '').toLowerCase();
-          if (a.includes('reject') || a.includes('recall') || a.includes('return')) return RED;
-          if (a.includes('approve') || a.includes('complete') || a.includes('verify')) return GREEN;
-          if (a.includes('update') || a.includes('edit')) return 'FF2563EB';
-          return SLATE;
-        };
+      const ACT_COLOR = (action: string) => {
+        const a = (action || '').toLowerCase();
+        if (a.includes('reject') || a.includes('recall') || a.includes('return')) return RED;
+        if (a.includes('approve') || a.includes('complete') || a.includes('verify') || a.includes('restore')) return GREEN;
+        if (a.includes('archive')) return AMBER;
+        if (a.includes('update') || a.includes('edit')) return 'FF2563EB';
+        return SLATE;
+      };
 
-        activityLogs.forEach((log, i) => {
-          const prevState = typeof log.previous_state === 'string'
-            ? log.previous_state : (log.previous_state as any)?.status || '';
-          const newState = typeof log.new_state === 'string'
-            ? log.new_state : (log.new_state as any)?.status || '';
+      if (activityExportRows.length === 0) {
+        const emptyRow = wsAct.addRow(['No activity recorded for this MMP.']);
+        wsAct.mergeCells(emptyRow.number, 1, emptyRow.number, 7);
+        emptyRow.height = 28;
+        emptyRow.getCell(1).font = { italic: true, size: 10, color: { argb: SLATE } };
+        emptyRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        emptyRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LT } };
+        emptyRow.getCell(1).border = border();
+      } else {
+        activityExportRows.forEach((event, i) => {
           const row = addDataRow(wsAct, [
-            log.timestamp ? format(new Date(log.timestamp), 'dd MMM yyyy HH:mm') : '—',
-            log.actor_name || 'System',
-            (log.actor_role || '').replace(/_/g, ' '),
-            (log.action || '').replace(/_/g, ' '),
-            log.description || log.details || '—',
-            prevState, newState,
+            event.timestamp ? format(new Date(event.timestamp), 'dd MMM yyyy HH:mm') : '—',
+            event.actor,
+            event.role || '—',
+            event.action,
+            event.description,
+            event.previousState || '—',
+            event.newState || '—',
           ], i % 2 === 0);
           row.getCell(1).font = { size: 9, color: { argb: SLATE } };
-          row.getCell(4).font = { bold: true, size: 10, color: { argb: ACT_COLOR(log.action) } };
-          if (newState) row.getCell(7).font = { bold: true, size: 10, color: { argb: GREEN } };
+          row.getCell(4).font = { bold: true, size: 10, color: { argb: ACT_COLOR(event.action) } };
+          if (event.newState) row.getCell(7).font = { bold: true, size: 10, color: { argb: GREEN } };
         });
       }
 
@@ -833,6 +899,11 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
               <p className="text-xs text-teal-200 mt-1 truncate pl-9">
                 {mmpName}{mmp?.mmp_id ? ` · ${mmp.mmp_id}` : ''}{(mmp?.project as any)?.name ? ` · ${(mmp.project as any).name}` : ''}
               </p>
+              {reportScope.hub_scoped && (
+                <p className="text-[10px] text-teal-100 mt-1 pl-9">
+                  Restricted to assigned hubs: {(reportScope.hub_ids || []).join(', ') || 'No hub assigned'}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <Button
@@ -868,6 +939,14 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
           <div className="flex-1 flex items-center justify-center py-16">
             <Loader2 className="h-7 w-7 animate-spin text-teal-600" />
             <span className="ml-3 text-muted-foreground text-sm">Loading report data…</span>
+          </div>
+        ) : accessError ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-16 gap-3 text-center px-6">
+            <ShieldAlert className="h-9 w-9 text-red-500" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Report access denied</p>
+              <p className="text-xs text-muted-foreground mt-1">{accessError}</p>
+            </div>
           </div>
         ) : !stats ? (
           <div className="flex-1 flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">

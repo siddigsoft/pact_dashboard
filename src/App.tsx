@@ -429,10 +429,17 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   //   checks page_access_overrides for an explicit grant (e.g. a Super Admin
   //   granting a non-default role access to a restricted page). Only deny once
   //   we confirm no grant exists in the DB.
-  const roleAllowed = canSeePage(slug, role);
+  const hasAdditionalSupervisorRole = slug === 'mmp-full-report'
+    && Array.isArray((currentUser as any)?.additionalRoles)
+    && (currentUser as any).additionalRoles.some((assignment: any) => {
+      const key = String(assignment?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+      return key === 'supervisor' || key === 'hubsupervisor';
+    });
+  const guardRole = hasAdditionalSupervisorRole ? 'supervisor' : role;
+  const roleAllowed = canSeePage(slug, guardRole);
 
   return (
-    <PageRouteGuardAsync slug={slug} role={role} startDenied={!roleAllowed}>
+    <PageRouteGuardAsync slug={slug} role={guardRole} startDenied={!roleAllowed}>
       {children}
     </PageRouteGuardAsync>
   );

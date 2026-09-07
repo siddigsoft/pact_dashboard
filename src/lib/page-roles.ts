@@ -20,10 +20,14 @@ const ROLE_ALIASES: Record<string, string> = {
   ict: 'ict',
   fom: 'fom',
   field_operation_manager: 'fom',
+  'field_operation_manager_(fom)': 'fom',
+  field_ops_manager: 'fom',
   financial_admin: 'financialAdmin',
   financialadmin: 'financialAdmin',
   auditor: 'auditor',
   supervisor: 'supervisor',
+  hubsupervisor: 'supervisor',
+  hub_supervisor: 'supervisor',
   coordinator: 'coordinator',
   data_collector: 'dataCollector',
   datacollector: 'dataCollector',
@@ -75,6 +79,9 @@ const PATH_TO_SLUG: Record<string, string> = (() => {
 export function resolveSlug(pathname: string): string | null {
   // Exact match first
   if (PATH_TO_SLUG[pathname]) return PATH_TO_SLUG[pathname];
+  // The report has a dynamic MMP id between its parent path and fixed suffix.
+  // It must use its own permission instead of inheriting the broader /mmp page.
+  if (/^\/mmp\/[^/]+\/full-report\/?$/.test(pathname)) return 'mmp-full-report';
   // Walk up the path, stripping dynamic segments one at a time
   const segments = pathname.split('/').filter(Boolean);
   for (let len = segments.length - 1; len >= 1; len--) {

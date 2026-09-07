@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,6 +20,7 @@ interface Props {
   onResume?: () => void;
   onStartFresh?: () => void;
   nextLabel?: string;
+  availableCycles?: any[];
 }
 
 function formatSavedAt(iso: string): string {
@@ -54,7 +55,7 @@ const CYCLE_PAGE_SIZE = 80;
 
 export default function Step1SelectCycle({
   wizardState, updateWizardState, onNext, canAdvance,
-  savedSession, onResume, onStartFresh, nextLabel,
+  savedSession, onResume, onStartFresh, nextLabel, availableCycles,
 }: Props) {
   const [openCycles, setOpenCycles] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -63,14 +64,35 @@ export default function Step1SelectCycle({
   const [enumeratorCount, setEnumeratorCount] = useState(0);
   const [loadingMoreCycles, setLoadingMoreCycles] = useState(false);
   const [hasMoreCycles, setHasMoreCycles] = useState(false);
+  const activeRequest = useRef<AbortController | null>(null);
 
-  useEffect(() => { loadCycles(); }, []);
+  const reusableCycles = useMemo(() => {
+    if (!availableCycles?.length) return [];
+    return availableCycles
+      .filter(m => m.status !== 'rejected' && m.cycle_status !== 'closed')
+      .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
+  }, [availableCycles]);
 
-  const loadCycles = async (offset = 0) => {
+  const loadCycles = useCallback(async (offset = 0) => {
     const loadingMore = offset > 0;
     if (loadingMore) setLoadingMoreCycles(true);
     else setLoading(true);
     setError(null);
+
+    // The parent MMP screen already loaded the role-scoped cycle list. Reuse it
+    // instead of issuing the same RLS-heavy query every time the wizard opens.
+    if (reusableCycles.length > 0) {
+      const rows = reusableCycles.slice(offset, offset + CYCLE_PAGE_SIZE);
+      setOpenCycles(previous => loadingMore ? [...previous, ...rows] : rows);
+      setHasMoreCycles(offset + rows.length < reusableCycles.length);
+      if (loadingMore) setLoadingMoreCycles(false);
+      else setLoading(false);
+      return;
+    }
+
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
 
     // Keep this query bounded. The previous unbounded sort made the wizard wait
     // for every historical MMP row before it could render the selector.
@@ -80,7 +102,8 @@ export default function Step1SelectCycle({
       .not('status', 'eq', 'rejected')
       .neq('cycle_status', 'closed')    // exclude already-closed cycles
       .order('created_at', { ascending: false })
-      .range(offset, offset + CYCLE_PAGE_SIZE - 1);
+      .range(offset, offset + CYCLE_PAGE_SIZE - 1)
+      .abortSignal(controller.signal);
 
     let timeoutId: number | undefined;
     try {
@@ -89,7 +112,7 @@ export default function Step1SelectCycle({
         new Promise<never>((_, reject) => {
           timeoutId = window.setTimeout(
             () => reject(new Error('Loading cycles took too long. Please try again.')),
-            8_000,
+            15_000,
           );
         }),
       ]);
@@ -106,8 +129,14 @@ export default function Step1SelectCycle({
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
       if (loadingMore) setLoadingMoreCycles(false);
       else setLoading(false);
+      if (activeRequest.current === controller) activeRequest.current = null;
     }
-  };
+  }, [reusableCycles]);
+
+  useEffect(() => {
+    void loadCycles();
+    return () => activeRequest.current?.abort();
+  }, [loadCycles]);
 
   const handleSelect = async (mmpId: string) => {
     const mmp = openCycles.find(m => m.id === mmpId);

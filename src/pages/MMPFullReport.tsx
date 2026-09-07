@@ -94,50 +94,17 @@ const MMPFullReport = () => {
       setLoading(true);
       setError(null);
       try {
-        // Fetch MMP metadata
-        const { data: mmpData, error: mmpErr } = await supabase
-          .from('mmp_files')
-          .select('id, name, mmp_id, status, cycle_status, created_at, uploaded_by, project:projects(id, name)')
-          .eq('id', mmpId)
-          .single();
-        if (mmpErr) throw mmpErr;
-        setMmp(mmpData);
-
-        // Fetch all site entries for this MMP in batches
-        let all: SiteEntry[] = [];
-        let from = 0;
-        const BATCH = 1000;
-        while (true) {
-          const { data, error: sErr } = await supabase
-            .from('mmp_site_entries')
-            .select('id, site_name, site_code, status, hub_office, state, forwarded_to_user_id, additional_data, enumerator_fee, transport_fee, cost, visit_completed_by')
-            .eq('mmp_file_id', mmpId)
-            .range(from, from + BATCH - 1);
-          if (sErr) throw sErr;
-          if (!data || data.length === 0) break;
-          all = all.concat(data as SiteEntry[]);
-          if (data.length < BATCH) break;
-          from += BATCH;
-        }
-        setEntries(all);
-
-        // Fetch profiles for coordinators
-        const coordIds = new Set<string>();
-        all.forEach(e => {
-          const id = (e.additional_data as any)?.assigned_to || e.forwarded_to_user_id;
-          if (id) coordIds.add(id);
-        });
-        if (coordIds.size > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, full_name, email')
-            .in('id', [...coordIds]);
-          const pm: Record<string, string> = {};
-          (profiles || []).forEach((p: any) => { pm[p.id] = p.full_name || p.email || p.id; });
-          setProfileMap(pm);
-        }
+        const { data, error: reportError } = await supabase.rpc(
+          'get_mmp_report_payload' as any,
+          { p_mmp_id: mmpId } as any
+        );
+        if (reportError) throw reportError;
+        const payload = (data || {}) as any;
+        setMmp(payload.mmp || null);
+        setEntries((payload.entries || []) as SiteEntry[]);
+        setProfileMap(payload.profile_map || {});
       } catch (e: any) {
-        setError(e?.message || 'Failed to load report');
+        setError(e?.message || 'You do not have access to this MMP report.');
       } finally {
         setLoading(false);
       }
