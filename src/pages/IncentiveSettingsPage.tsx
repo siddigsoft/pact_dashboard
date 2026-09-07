@@ -26,7 +26,7 @@ interface GlobalRoleRow { role: IncentiveRole; isActive: boolean; bonusPct: numb
 interface HubOverrideRow { localId: string; dbId: string | null; hubId: string; role: IncentiveRole; bonusPct: number; isNew: boolean; toDelete: boolean }
 interface Snapshot { id: string; mmp_id: string; status: string; total_dc_fee_pool_cents: number; total_bonus_cents: number; currency: string; coordinator_count: number; supervisor_count: number; pre_approved_at: string | null; approved_at: string | null; created_at: string }
 interface Payment { id: string; snapshot_id?: string; mmp_id: string; user_id: string; role: string; hub_name: string | null; bonus_pct: number; bonus_amount_cents: number; currency: string; excluded: boolean; payment_method: string | null; payroll_period: string | null; paid_at: string | null; status: string; profiles?: { full_name?: string; email?: string } | null }
-interface MmpName { id: string; name: string | null; mmp_id: string | null; hub_name: string | null }
+interface MmpName { id: string; name: string | null; mmp_id: string | null; hub_id: string | null; hub_name: string | null }
 type ReportBasis = 'payment' | 'calculation';
 
 const mkId = () => crypto.randomUUID();
@@ -197,10 +197,13 @@ export default function IncentiveSettingsPage() {
       for (let index = 0; index < mmpIds.length; index += queryBatchSize) {
         const { data, error } = await supabase
           .from('mmp_files')
-          .select('id,name,mmp_id,hub_name')
+          .select('id,name,mmp_id,hub_id')
           .in('id', mmpIds.slice(index, index + queryBatchSize));
         if (error) throw error;
-        mmpRows.push(...((data ?? []) as MmpName[]));
+        mmpRows.push(...(data ?? []).map(row => ({
+          ...row,
+          hub_name: hubs.find(hub => hub.id === row.hub_id)?.name ?? null,
+        })) as MmpName[]);
       }
 
       const profileMap = new Map<string, { full_name?: string; email?: string }>();
@@ -236,7 +239,7 @@ export default function IncentiveSettingsPage() {
         setReportLoading(false);
       }
     }
-  }, [reportBasis, selectedMonth]);
+  }, [hubs, reportBasis, selectedMonth]);
 
   useEffect(() => { loadConfigs(); }, [loadConfigs]);
   useEffect(() => { if (allowed) loadReport(); }, [allowed, loadReport]);
