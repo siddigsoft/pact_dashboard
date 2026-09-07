@@ -134,17 +134,10 @@ export default function IncentivesOverviewPage() {
   const { toast } = useToast();
   const { user } = useAppContext();
   const { hubs } = useLocationCtx();
-  const { hasAnyRole } = useAuthorization();
+  const { isSuperAdmin } = useAuthorization();
 
-  const isAdmin      = hasAnyRole(['super_admin', 'superAdmin', 'admin', 'ict']);
-  const isFinance    = hasAnyRole(['finance', 'financial_admin', 'financialAdmin']);
-  const isFOM        = hasAnyRole(['fom']);
-  const isSenior     = hasAnyRole(['Senior Management', 'country_director']);
-  const isCoord      = hasAnyRole(['coordinator']);
-  const isSupervisor = hasAnyRole(['supervisor']);
-
-  const canSeeAll = isAdmin || isFinance || isFOM || isSenior;
-  const canSeeOwn = isCoord || isSupervisor;
+  const canSeeAll = isSuperAdmin();
+  const canSeeOwn = false;
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const [mmps, setMmps]           = useState<MMPRow[]>([]);
@@ -273,6 +266,20 @@ export default function IncentivesOverviewPage() {
     ?.mmp_incentive_snapshots?.currency ?? 'SDG';
 
   // ─────────────────────────────────────────────────────────────────────────
+  if (!canSeeAll) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center p-6">
+        <div className="max-w-sm text-center">
+          <Award className="mx-auto h-10 w-10 text-muted-foreground" />
+          <h1 className="mt-4 text-xl font-semibold">Access restricted</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Incentive bonuses are currently available to Super Admins only.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* ── Header ───────────────────────────────────────────────────────── */}

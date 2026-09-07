@@ -66,11 +66,11 @@ const DEFAULT_INCENTIVE_CONFIGS: Omit<GlobalRoleRow, 'dbId'>[] = [
 ];
 
 export default function IncentiveSettingsPage() {
-  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const { isSuperAdmin } = useAuthorization();
   const { hubs, hubStates } = useLocationCtx();
   const { toast } = useToast();
   const [language, setLanguage] = useState<PageLanguage>(() => getCurrentLanguage() === 'ar' ? 'ar' : 'en');
-  const allowed = isSuperAdmin() || hasAnyRole(['admin']);
+  const allowed = isSuperAdmin();
   const [section, setSection] = useState<'reports' | 'settings'>('reports');
   const [loading, setLoading] = useState(true);
   const [settingsError, setSettingsError] = useState('');
@@ -362,7 +362,7 @@ export default function IncentiveSettingsPage() {
     }
   };
 
-   if (!allowed) return <div dir={language === 'ar' ? 'rtl' : 'ltr'} lang={language} className="min-h-[60vh] flex items-center justify-center p-6"><div className="max-w-sm text-center"><ShieldCheck className="mx-auto h-10 w-10 text-slate-400" /><h1 className="mt-4 text-xl font-semibold">{text(language, 'Access restricted', 'الوصول مقيّد')}</h1><p className="mt-2 text-sm text-muted-foreground">{text(language, 'Only Admins and Super Admins can configure and audit incentive bonuses.', 'يستطيع المشرفون ومديرو النظام فقط إعداد حوافز المكافآت ومراجعتها.')}</p></div></div>;
+   if (!allowed) return <div dir={language === 'ar' ? 'rtl' : 'ltr'} lang={language} className="min-h-[60vh] flex items-center justify-center p-6"><div className="max-w-sm text-center"><ShieldCheck className="mx-auto h-10 w-10 text-slate-400" /><h1 className="mt-4 text-xl font-semibold">{text(language, 'Access restricted', 'الوصول مقيّد')}</h1><p className="mt-2 text-sm text-muted-foreground">{text(language, 'Incentive bonuses are currently available to Super Admins only.', 'حوافز المكافآت متاحة حالياً لمديري النظام فقط.')}</p></div></div>;
    if (loading) return <div dir={language === 'ar' ? 'rtl' : 'ltr'} lang={language} className="mx-auto max-w-6xl p-6"><div className="h-8 w-64 animate-pulse rounded bg-muted" /><div className="mt-8 grid gap-4 md:grid-cols-3"><div className="h-28 animate-pulse rounded-xl bg-muted" /><div className="h-28 animate-pulse rounded-xl bg-muted" /><div className="h-28 animate-pulse rounded-xl bg-muted" /></div></div>;
 
    return <div dir={language === 'ar' ? 'rtl' : 'ltr'} lang={language} className="min-h-[100dvh] bg-[#f4f7f6] text-[#16343a]">

@@ -153,6 +153,15 @@ DELETE FROM mmp_incentive_payments
 SQL
 
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260906_incentive_system_hardening.sql"
+"${PSQL[@]}" <<'SQL'
+-- Reproduce the production upgrade path: an older deployment may already have
+-- this argument signature with a return type that CREATE OR REPLACE cannot alter.
+CREATE FUNCTION public.profile_incentive_role_evidence(uuid,text,text)
+RETURNS text
+LANGUAGE sql
+STABLE
+AS $$ SELECT NULL::text $$;
+SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260907_mmp_incentive_role_eligibility.sql"
 "${PSQL[@]}" -f "$ROOT/supabase/tests/incentive_system_hardening_test.sql"
 "${PSQL[@]}" -f "$ROOT/supabase/tests/incentive_system_settlement_fixture_test.sql"

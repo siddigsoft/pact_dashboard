@@ -58,6 +58,12 @@ END $$;
 
 -- Return every valid assignment, not a global LIMIT 1.  State IDs are converted
 -- to the hub's canonical ID, whether the assignment used an ID or display name.
+-- PostgreSQL cannot CREATE OR REPLACE a function when its return type changes.
+-- Earlier installations used this same argument signature with a different
+-- result shape, so remove that exact overload before installing the SETOF jsonb
+-- implementation below.
+DROP FUNCTION IF EXISTS public.profile_incentive_role_evidence(uuid,text,text);
+
 CREATE OR REPLACE FUNCTION public.profile_incentive_role_evidence(
  p_user_id uuid,p_role text,p_hub_id text
 ) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
