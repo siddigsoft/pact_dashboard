@@ -38,7 +38,7 @@ These are source-code observations, not verification of deployed database polici
 Keep the existing Workspace Hub route and application navigation. Within the hub:
 
 - All documents, Recent, and Pinned are the main views.
-- Categories: Site permits, Payment receipts, Site images, MMPs, Project documents, Reports, Other documents.
+- Categories use Documents-style tabs with counts; list rows and site-image groups match the Document Registry pattern (not a flat file dump).
 - Project, site, hub/state, and reporting period are filters, not several competing folder trees.
 - Existing custom folders remain available through a secondary Folders section.
 - Admin only is a saved filter visible to admins/superadmins, not a separate physical copy of files.

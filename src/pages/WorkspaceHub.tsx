@@ -62,6 +62,9 @@ import {
 
 import { DOCUMENT_CATEGORIES, isAdminOnlyDocument, matchesDocumentFilters, documentSourceRoute, type DocumentMetadata, type DocumentCategory } from '@/lib/workspaceDocuments';
 import { DocumentLibraryFilters, EMPTY_LIBRARY_FILTERS } from '@/components/workspace/DocumentLibraryFilters';
+import { DocumentLibraryBrowse } from '@/components/workspace/DocumentLibraryBrowse';
+
+const LIBRARY_REGISTRY_VIEWS = new Set(['__all__', '__recent__', '__pinned__', '__mine__']);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AccessLevel = 'owner' | 'editor' | 'commenter' | 'viewer' | 'no_access';
@@ -2962,6 +2965,8 @@ export default function WorkspaceHub() {
     new Set(folders.filter(f => f.password_hash && !unlockedFolderIds.has(f.id)).map(f => f.id)),
   [folders, unlockedFolderIds]);
 
+  const isLibraryRegistryView = !!(selectedFolderId && LIBRARY_REGISTRY_VIEWS.has(selectedFolderId));
+
   const displayedFiles = useMemo(() => filterDisplayedFiles({
     files: allFiles.filter(f => matchesDocumentFilters(f, libraryFilters)),
     selectedFolderId,
@@ -2977,8 +2982,56 @@ export default function WorkspaceHub() {
     secFilter,
     typeFilter,
     searchQuery,
-    sortBy,
-  }), [allFiles, libraryFilters, isAdmin, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, grantedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
+    sortBy: isLibraryRegistryView ? 'date' : sortBy,
+  }), [allFiles, libraryFilters, isAdmin, selectedFolderId, isLibraryRegistryView, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, grantedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
+
+  const libraryFacetFiles = useMemo(() => {
+    if (!isLibraryRegistryView || !selectedFolderId) return [] as typeof allFiles;
+    return filterDisplayedFiles({
+      files: allFiles.filter(f => matchesDocumentFilters(f, {
+        category: 'all',
+        project: libraryFilters.project,
+        site: '',
+        period: libraryFilters.period,
+        adminOnly: libraryFilters.adminOnly,
+      })),
+      selectedFolderId,
+      userId,
+      isSuperAdmin,
+      isAdmin,
+      effectiveClearance,
+      deniedFileIds,
+      grantedFileIds,
+      allDeniedFolderIds,
+      lockedFolderIdSet,
+      descendantFolderIds,
+      secFilter,
+      typeFilter,
+      searchQuery,
+      sortBy: 'date',
+    });
+  }, [isLibraryRegistryView, allFiles, libraryFilters.project, libraryFilters.period, libraryFilters.adminOnly, selectedFolderId, userId, isSuperAdmin, isAdmin, effectiveClearance, deniedFileIds, grantedFileIds, allDeniedFolderIds, lockedFolderIdSet, descendantFolderIds, secFilter, typeFilter, searchQuery]);
+
+  const libraryCategoryCounts = useMemo(() => {
+    const counts: Partial<Record<DocumentCategory | 'all', number>> = { all: libraryFacetFiles.length };
+    for (const file of libraryFacetFiles) {
+      const cat = (file.document_category ?? 'other') as DocumentCategory;
+      counts[cat] = (counts[cat] ?? 0) + 1;
+    }
+    return counts;
+  }, [libraryFacetFiles]);
+
+  const libraryProjects = useMemo(
+    () => [...new Set(libraryFacetFiles.map(f => f.project_label).filter((v): v is string => !!v?.trim()))].sort((a, b) => a.localeCompare(b)),
+    [libraryFacetFiles],
+  );
+
+  const librarySites = useMemo(() => {
+    const scoped = libraryFilters.project
+      ? libraryFacetFiles.filter(f => (f.project_label ?? '').toLowerCase().includes(libraryFilters.project.toLowerCase()))
+      : libraryFacetFiles;
+    return [...new Set(scoped.map(f => f.site_label).filter((v): v is string => !!v?.trim()))].sort((a, b) => a.localeCompare(b));
+  }, [libraryFacetFiles, libraryFilters.project]);
 
   // ── Folder search results ────────────────────────────────────────────────
   const folderSearchResults = useMemo(() => {
@@ -4662,7 +4715,20 @@ export default function WorkspaceHub() {
               <Button key={id} variant={selectedFolderId === id ? 'secondary' : 'ghost'} size="sm" aria-pressed={selectedFolderId === id} onClick={() => setSelectedFolderId(id)}>{label}</Button>
             )}
           </nav>
-          {selectedFolderId !== '__trash__' && selectedFolderId !== '__task_docs__' && <DocumentLibraryFilters value={libraryFilters} isAdmin={isAdmin} onChange={value => { setLibraryFilters(value); setSelectedFolderId('__all__'); }} />}
+          {isLibraryRegistryView && (
+            <DocumentLibraryFilters
+              value={libraryFilters}
+              isAdmin={isAdmin}
+              counts={libraryCategoryCounts}
+              projects={libraryProjects}
+              sites={librarySites}
+              resultCount={displayedFiles.length}
+              onChange={value => {
+                setLibraryFilters(value);
+                if (!selectedFolderId || !LIBRARY_REGISTRY_VIEWS.has(selectedFolderId)) setSelectedFolderId('__all__');
+              }}
+            />
+          )}
           {filesLoading && <div role="status" className="px-8 py-4 text-sm text-muted-foreground">Loading documents…</div>}
           {filesError && <div role="alert" className="px-8 py-4 text-sm">Could not load documents. <Button variant="outline" size="sm" onClick={() => refetchFiles()}>Retry</Button></div>}
 
@@ -4928,6 +4994,12 @@ export default function WorkspaceHub() {
                   <LockOpen className="h-3.5 w-3.5" />Unlock Folder
                 </Button>
               </div>
+            ) : isLibraryRegistryView ? (
+              <DocumentLibraryBrowse
+                files={displayedFiles}
+                category={libraryFilters.category}
+                onOpen={(file) => openFile(file as WFile)}
+              />
             ) : displayedFiles.length === 0 && currentSubFolders.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-5 text-muted-foreground px-8">
                 {(searchQuery || typeFilter !== 'all' || secFilter !== 'all') ? (
