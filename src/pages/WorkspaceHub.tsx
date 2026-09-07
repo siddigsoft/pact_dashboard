@@ -60,11 +60,15 @@ import {
   type SecurityLevel,
 } from '@/lib/workspaceHubLogic';
 
+import { DOCUMENT_CATEGORIES, isAdminOnlyDocument, matchesDocumentFilters, documentSourceRoute, type DocumentMetadata, type DocumentCategory } from '@/lib/workspaceDocuments';
+import { DocumentLibraryFilters, EMPTY_LIBRARY_FILTERS } from '@/components/workspace/DocumentLibraryFilters';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AccessLevel = 'owner' | 'editor' | 'commenter' | 'viewer' | 'no_access';
 type GranteeType = 'user' | 'role' | 'department' | 'hub' | 'all_staff' | 'guest';
 
 interface WFolder {
+  audience?: 'workspace' | 'admin_only';
   id: string; name: string; description: string | null;
   parent_folder_id: string | null; security_level: SecurityLevel;
   created_by: string | null; color: string; icon: string;
@@ -106,7 +110,7 @@ async function notifyAdminsOfDeleteRequest(params: {
 interface PasswordTarget {
   id: string; name: string; password_hash: string | null; isFolder: boolean;
 }
-interface WFile {
+interface WFile extends DocumentMetadata {
   id: string; folder_id: string | null; name: string; description: string | null;
   storage_path: string; public_url: string | null; file_size: number;
   storage_provider: 'supabase' | 'r2';
@@ -1099,6 +1103,13 @@ function UploadDialog({ folderId, folderName, folderPath, folderSecurityLevel = 
   const folderRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<Array<{ file: File; relativePath: string }>>([]);
   const [secLevel, setSecLevel] = useState<SecurityLevel>(folderSecurityLevel);
+  const [category, setCategory] = useState<DocumentCategory>('other');
+  const [projectLabel, setProjectLabel] = useState('');
+  const [siteLabel, setSiteLabel] = useState('');
+  const [period, setPeriod] = useState('');
+  const protectedCategory = isAdminOnlyDocument({ document_category: category });
+  const { hasAnyRole: uploadHasRole } = useAuthorization();
+  const uploadIsAdmin = uploadHasRole(['admin', 'super_admin']);
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -1122,7 +1133,7 @@ function UploadDialog({ folderId, folderName, folderPath, folderSecurityLevel = 
       checkDuplicates(initialEntries.map(e => e.file));
     }
     if (!open) {
-      setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName('');
+      setFiles([]); setCategory('other'); setProjectLabel(''); setSiteLabel(''); setPeriod(''); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName('');
       setExtractZips(true); setDuplicates([]); setSecLevel(folderSecurityLevel);
       setDriveInput(''); setDriveImportLabel('');
     }
@@ -1388,6 +1399,8 @@ function UploadDialog({ folderId, folderName, folderPath, folderSecurityLevel = 
           file_size: f.size, mime_type: f.type, extension: ext,
           security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
           tags: tagList,
+          document_category: category, audience: protectedCategory ? 'admin_only' : 'workspace',
+          project_label: projectLabel.trim() || null, site_label: siteLabel.trim() || null, reporting_period: period || null,
           ...(shouldExtract ? { extract_status: 'pending' } : {}),
         };
         const { data: inserted, error: dbErr } = await withTimeout(
@@ -1630,6 +1643,18 @@ function UploadDialog({ folderId, folderName, folderPath, folderSecurityLevel = 
             </label>
           )}
 
+          <div className="space-y-2">
+            <label htmlFor="document-category" className="text-xs font-semibold">Document category</label>
+            <select id="document-category" className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" value={category} onChange={e => setCategory(e.target.value as DocumentCategory)}>
+              {Object.entries(DOCUMENT_CATEGORIES).filter(([key]) => uploadIsAdmin || !isAdminOnlyDocument({ document_category: key as DocumentCategory })).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+            {protectedCategory && <p className="text-xs flex gap-1.5 items-center"><Lock className="h-3.5 w-3.5" />Admin only. Visible to admins and superadmins.</p>}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Input aria-label="Document project" placeholder="Project" value={projectLabel} onChange={e => setProjectLabel(e.target.value)} />
+              <Input aria-label="Document site" placeholder="Site" value={siteLabel} onChange={e => setSiteLabel(e.target.value)} />
+              <Input aria-label="Document reporting period" type="month" value={period} onChange={e => setPeriod(e.target.value)} />
+            </div>
+          </div>
           {/* Security level */}
           <div>
             <label className="text-xs font-semibold mb-2 block text-foreground">Security Level</label>
@@ -1865,7 +1890,7 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold leading-tight truncate">{file.name}</p>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <SecBadge level={file.security_level} size="xs" />
+            {isAdminOnlyDocument(file) ? <Badge variant="secondary">Admin only</Badge> : <SecBadge level={file.security_level} size="xs" />}
             <span className="text-[10px] text-muted-foreground">{fmtSize(file.file_size)}</span>
             <span className="text-[10px] text-muted-foreground">v{file.version}</span>
           </div>
@@ -1887,6 +1912,8 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
         </div>
       )}
 
+      {documentSourceRoute(file) && <a href={documentSourceRoute(file)!} className="text-sm text-primary underline px-4 py-2 block">Open document register</a>}
+      {isAdminOnlyDocument(file) && <p className="text-xs px-4 py-2 flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" />Admin only. External sharing is unavailable.</p>}
       {/* Actions */}
       <div className="flex items-center gap-1.5 px-4 py-2 border-b bg-muted/20">
         {(file.allow_download || canManage) && !isLocked && (
@@ -1933,6 +1960,10 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
               { label: 'Modified', value: fmtRelative(file.updated_at) },
               { label: 'Downloads', value: file.download_count.toString() },
               { label: 'Views', value: file.view_count.toString() },
+              { label: 'Category', value: DOCUMENT_CATEGORIES[file.document_category ?? 'other'] },
+              { label: 'Visibility', value: isAdminOnlyDocument(file) ? 'Admin only' : 'Workspace permissions' },
+              { label: 'Project / site', value: [file.project_label, file.site_label].filter(Boolean).join(' / ') || '—' },
+              { label: 'Period', value: file.reporting_period || '—' },
               { label: 'Version', value: `v${file.version}${file.version_label ? ` — ${file.version_label}` : ''}` },
               ...(file.expires_at ? [{ label: 'Expires', value: fmtDate(file.expires_at) }] : []),
             ].map(r => (
@@ -2250,7 +2281,8 @@ export default function WorkspaceHub() {
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
 
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>('__all__');
+  const [libraryFilters, setLibraryFilters] = useState(EMPTY_LIBRARY_FILTERS);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<WFile | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'details'>('list');
@@ -2381,10 +2413,11 @@ export default function WorkspaceHub() {
     });
   }, [location.search, folders]);
 
-  const { data: allFiles = [], refetch: refetchFiles } = useQuery<WFile[]>({
-    queryKey: ['workspace_files', userId],
+  const { data: loadedFiles = [], refetch: refetchFiles, isLoading: filesLoading, error: filesError } = useQuery<WFile[]>({
+    queryKey: ['workspace_files', userId, isAdmin],
     queryFn: async () => {
-      const { data: files } = await supabase.from('workspace_files').select('*').eq('archived', false).order('updated_at', { ascending: false });
+      const { data: files, error } = await supabase.from('workspace_files').select('*').eq('archived', false).order('updated_at', { ascending: false });
+      if (error) throw error;
       if (!files) return [];
       const uploaderIds = [...new Set(files.map(f => f.created_by).filter(Boolean))];
       let nameMap: Record<string, string> = {};
@@ -2396,6 +2429,8 @@ export default function WorkspaceHub() {
     },
     staleTime: 300_000,
   });
+
+  const allFiles = useMemo(() => loadedFiles.filter(f => isAdmin || !isAdminOnlyDocument(f)), [loadedFiles, isAdmin]);
 
   const { data: archivedFiles = [], refetch: refetchArchived } = useQuery<WFile[]>({
     queryKey: ['workspace_archived_files', userId],
@@ -2885,9 +2920,9 @@ export default function WorkspaceHub() {
   // Denials always win — allDeniedFolderIds is checked first.
   const visibleFolders = useMemo(() =>
     filterVisibleFolders(folders, {
-      isSuperAdmin, userId, effectiveClearance, allDeniedFolderIds, grantedFolderIds,
+      isSuperAdmin, isAdmin, userId, effectiveClearance, allDeniedFolderIds, grantedFolderIds,
     }),
-  [folders, isSuperAdmin, userId, effectiveClearance, allDeniedFolderIds, grantedFolderIds]);
+  [folders, isSuperAdmin, isAdmin, userId, effectiveClearance, allDeniedFolderIds, grantedFolderIds]);
 
   const rootFolders = visibleFolders.filter(f => !f.parent_folder_id);
   const childMap = useMemo(() => {
@@ -2928,10 +2963,11 @@ export default function WorkspaceHub() {
   [folders, unlockedFolderIds]);
 
   const displayedFiles = useMemo(() => filterDisplayedFiles({
-    files: allFiles,
+    files: allFiles.filter(f => matchesDocumentFilters(f, libraryFilters)),
     selectedFolderId,
     userId,
     isSuperAdmin,
+    isAdmin,
     effectiveClearance,
     deniedFileIds,
     grantedFileIds,
@@ -2942,7 +2978,7 @@ export default function WorkspaceHub() {
     typeFilter,
     searchQuery,
     sortBy,
-  }), [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, grantedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
+  }), [allFiles, libraryFilters, isAdmin, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, grantedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
 
   // ── Folder search results ────────────────────────────────────────────────
   const folderSearchResults = useMemo(() => {
@@ -4227,7 +4263,7 @@ export default function WorkspaceHub() {
           {/* Meta row */}
           <div className="flex items-center gap-1.5 mt-auto">
             <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0', secCfg.bg, secCfg.text)}>
-              {secCfg.label}
+              {isAdminOnlyDocument(f) ? 'Admin only' : secCfg.label}
             </span>
             {!isSuperAdmin && myFileAccessMap.has(file.id) && (
               <MyAccessBadge level={myFileAccessMap.get(file.id)!} />
@@ -4339,7 +4375,7 @@ export default function WorkspaceHub() {
             </div>
 
             {/* Notion-style nav: Search / Recent / Starred */}
-            <button onClick={() => { setSelectedFolderId('__all__'); setTimeout(() => document.querySelector<HTMLInputElement>('[placeholder="Search files…"]')?.focus(), 100); }}
+            <button onClick={() => { setSelectedFolderId('__all__'); setTimeout(() => document.querySelector<HTMLInputElement>('[aria-label="Search documents" placeholder="Search documents…"]')?.focus(), 100); }}
               className={cn('w-full flex items-center gap-1.5 text-xs text-gray-500 hover:bg-gray-200 dark:hover:bg-muted rounded px-2 py-1.5 cursor-pointer mb-0.5 transition-colors',
                 selectedFolderId === '__all__' && searchQuery ? 'bg-gray-200 dark:bg-[#1D3461] text-gray-900 dark:text-white' : '')}>
               <Search className="w-3.5 h-3.5 flex-shrink-0" /> Search
@@ -4621,41 +4657,14 @@ export default function WorkspaceHub() {
             </div>
           </div>
 
-          {/* KPI tiles — each reports a number and filters the view; click again to clear */}
-          {breadcrumbs.length === 0 && selectedFolderId !== '__trash__' && (
-            <div id="tour-kpi-tiles" className="px-8 pt-3 pb-1 flex-shrink-0">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-                {[
-                  { id: '__all__', label: 'All Files', value: stats.total, caption: `${fmtSize(stats.totalSize)} in the workspace`, icon: Folders, from: '#0284c7', to: '#1e40af' },
-                  { id: '__pinned__', label: 'Starred', value: stats.pinned, caption: 'pinned for quick access', icon: Star, from: '#d97706', to: '#c2410c' },
-                  { id: '__mine__', label: 'My Files', value: stats.mine, caption: 'uploaded by you', icon: User, from: '#059669', to: '#115e59' },
-                  { id: '__task_docs__', label: 'Task Documents', value: totalTaskAttachments, caption: `across ${taskDocsRaw.length} task${taskDocsRaw.length !== 1 ? 's' : ''}`, icon: CheckCircle2, from: '#6366f1', to: '#4338ca' },
-                ].map(tile => {
-                  const TileIcon = tile.icon;
-                  const active = selectedFolderId === tile.id;
-                  return (
-                    <button
-                      key={tile.id}
-                      onClick={() => setSelectedFolderId(active ? '__all__' : tile.id)}
-                      className={cn(
-                        'relative overflow-hidden rounded-xl p-3 text-left text-white transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] group',
-                        active && 'ring-2 ring-white ring-offset-2 ring-offset-[#f3f6f9] dark:ring-offset-[#080c16]'
-                      )}
-                      style={{ background: `linear-gradient(to bottom right, ${tile.from}, ${tile.to})` }}
-                    >
-                      <div className="flex items-start justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-[0.11em] text-white/90" style={{ fontFamily: "'Manrope', system-ui, sans-serif" }}>{tile.label}</span>
-                        <TileIcon className="h-3.5 w-3.5 text-white/80 flex-shrink-0" />
-                      </div>
-                      <p className="mt-1 text-xl leading-none tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{tile.value}</p>
-                      <p className="mt-1 text-[10.5px] text-white/75 truncate">{tile.caption}</p>
-                      <TileIcon className="absolute -bottom-4 -right-4 h-20 w-20 text-white/10 transition-transform duration-200 group-hover:scale-110 pointer-events-none" />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <nav id="tour-kpi-tiles" aria-label="Library views" className="flex flex-wrap gap-2 px-4 sm:px-8 py-2 border-b border-border">
+            {[['__all__', 'All documents'], ['__recent__', 'Recent'], ['__pinned__', 'Pinned'], ['__mine__', 'My documents'], ['__task_docs__', 'Task documents']].map(([id, label]) =>
+              <Button key={id} variant={selectedFolderId === id ? 'secondary' : 'ghost'} size="sm" aria-pressed={selectedFolderId === id} onClick={() => setSelectedFolderId(id)}>{label}</Button>
+            )}
+          </nav>
+          {selectedFolderId !== '__trash__' && selectedFolderId !== '__task_docs__' && <DocumentLibraryFilters value={libraryFilters} isAdmin={isAdmin} onChange={value => { setLibraryFilters(value); setSelectedFolderId('__all__'); }} />}
+          {filesLoading && <div role="status" className="px-8 py-4 text-sm text-muted-foreground">Loading documents…</div>}
+          {filesError && <div role="alert" className="px-8 py-4 text-sm">Could not load documents. <Button variant="outline" size="sm" onClick={() => refetchFiles()}>Retry</Button></div>}
 
           {/* Inline search + secondary controls — sticky: stays put as the masthead/tiles scroll away */}
           <div className="sticky top-0 z-20 flex items-center gap-3 px-8 py-3 flex-wrap bg-[#f3f6f9]/95 dark:bg-[#080c16]/95 backdrop-blur-sm border-b border-slate-900/[0.06] dark:border-slate-100/[0.08]">
@@ -5229,7 +5238,7 @@ export default function WorkspaceHub() {
                                     )}
                                     <div className="min-w-0">
                                       <span className="text-sm font-medium text-gray-800 dark:text-foreground truncate block" title={f.name}>{f.name}</span>
-                                      {f.description && <span className="text-[10px] text-muted-foreground truncate block">{f.description}</span>}
+                                      <span className="text-[10px] text-muted-foreground truncate block">{[DOCUMENT_CATEGORIES[f.document_category ?? 'other'], f.project_label, f.site_label, f.reporting_period].filter(Boolean).join(' · ')}</span>
                                     </div>
                                     {f.is_pinned && <Star className="h-3 w-3 text-amber-500 flex-shrink-0" />}
                                     {isLocked && <Lock className="h-3 w-3 text-amber-500 flex-shrink-0" />}
@@ -5241,7 +5250,7 @@ export default function WorkspaceHub() {
                                 {/* Security */}
                                 <td className="py-2.5 pr-4 hidden lg:table-cell">
                                   <span className={cn('inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap', secCfg.bg, secCfg.text)}>
-                                    <SecIcon className="h-2.5 w-2.5" />{secCfg.label}
+                                    <SecIcon className="h-2.5 w-2.5" />{isAdminOnlyDocument(f) ? 'Admin only' : secCfg.label}
                                   </span>
                                 </td>
                                 {/* Type */}
