@@ -205,7 +205,13 @@ export interface MmpIncentivePayment {
 export interface IncentiveEligibilityEvidence {
   user_id?: string;
   role?: IncentiveRole;
-  source: 'profile_role' | 'explicit_selection' | 'admin_override';
+  source:
+    | 'primary_role'
+    | 'additional_role_object'
+    | 'additional_role_scalar'
+    | 'active_classification'
+    | 'explicit_selection'
+    | 'admin_override';
   classification?: string;
   scope?: 'state' | 'hub';
   hub_id?: string;
@@ -227,6 +233,8 @@ export interface IncentiveEligibilityOverride {
   created_by: string;
   created_at: string;
   revoked_at: string | null;
+  revoked_by: string | null;
+  revoke_note: string | null;
 }
 
 // ─── Transforms ──────────────────────────────────────────────────────────────

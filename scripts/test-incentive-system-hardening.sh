@@ -26,10 +26,20 @@ CREATE ROLE authenticated;
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
 $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+CREATE FUNCTION public.incentive_is_finance_or_admin() RETURNS boolean
+ LANGUAGE sql STABLE AS $$ SELECT false $$;
+CREATE FUNCTION public.incentive_is_admin() RETURNS boolean
+ LANGUAGE sql STABLE AS $$ SELECT false $$;
 
 CREATE TABLE public.profiles (
  id uuid PRIMARY KEY, role text, hub_id text, secondary_hub_id text,
- state_id text, location jsonb DEFAULT '{}'::jsonb
+ state_id text, location jsonb DEFAULT '{}'::jsonb,
+ additional_roles jsonb DEFAULT '[]'::jsonb
+);
+CREATE TABLE public.user_classifications (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid REFERENCES public.profiles(id),
+ role_scope text, is_active boolean DEFAULT true, effective_from timestamptz DEFAULT now(),
+ effective_until timestamptz
 );
 CREATE TABLE public.hubs (id uuid PRIMARY KEY, name text);
 CREATE TABLE public.hub_states (hub_id text, state_id text, state_name text);
@@ -143,6 +153,7 @@ DELETE FROM mmp_incentive_payments
 SQL
 
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260906_incentive_system_hardening.sql"
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260907_mmp_incentive_role_eligibility.sql"
 "${PSQL[@]}" -f "$ROOT/supabase/tests/incentive_system_hardening_test.sql"
 "${PSQL[@]}" -f "$ROOT/supabase/tests/incentive_system_settlement_fixture_test.sql"
 

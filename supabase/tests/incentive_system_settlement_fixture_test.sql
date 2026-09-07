@@ -4,9 +4,16 @@ BEGIN;
 INSERT INTO profiles(id,role,hub_id,state_id) VALUES
  ('00000000-0000-0000-0000-000000000001','Financial Admin',NULL,NULL),
  ('00000000-0000-0000-0000-000000000002','Coordinator','10000000-0000-0000-0000-000000000001','north'),
- ('00000000-0000-0000-0000-000000000003','Supervisor','10000000-0000-0000-0000-000000000001',NULL);
+ ('00000000-0000-0000-0000-000000000003','Supervisor','10000000-0000-0000-0000-000000000001',NULL),
+ ('00000000-0000-0000-0000-000000000004','Officer','10000000-0000-0000-0000-000000000001',NULL),
+ ('00000000-0000-0000-0000-000000000005','Officer','10000000-0000-0000-0000-000000000001',NULL),
+ ('00000000-0000-0000-0000-000000000006','Admin',NULL,NULL);
+UPDATE profiles SET additional_roles='[{"role":"FOM","hub_id":"10000000-0000-0000-0000-000000000001"}]'
+ WHERE id='00000000-0000-0000-0000-000000000004';
 INSERT INTO hubs VALUES('10000000-0000-0000-0000-000000000001','Test Hub');
-INSERT INTO hub_states VALUES('10000000-0000-0000-0000-000000000001','north','Northern State');
+INSERT INTO hub_states VALUES
+ ('10000000-0000-0000-0000-000000000001','north','Northern State'),
+ ('10000000-0000-0000-0000-000000000001','south','Southern State');
 INSERT INTO mmp_files(id,name,hub_id,currency,uploaded_at)
  VALUES('20000000-0000-0000-0000-000000000001','September MMP','10000000-0000-0000-0000-000000000001','SDG','2026-09-01');
 INSERT INTO mmp_site_entries(mmp_file_id,state,enumerator_fee,verified_by) VALUES
@@ -14,10 +21,92 @@ INSERT INTO mmp_site_entries(mmp_file_id,state,enumerator_fee,verified_by) VALUE
  ('20000000-0000-0000-0000-000000000001','Northern State',50.02,'00000000-0000-0000-0000-000000000001');
 INSERT INTO incentive_configs(hub_id,role,is_active,bonus_pct,split_method,coverage_threshold_pct,what_counts) VALUES
  (NULL,'coordinator',true,10,'proportional',100,'wfp_confirmed'),
- (NULL,'supervisor',true,5,'equal',100,'wfp_confirmed');
+ (NULL,'supervisor',true,5,'equal',100,'wfp_confirmed'),
+ (NULL,'fom',true,3,'equal',100,'wfp_confirmed'),
+ (NULL,'support_team',true,2,'equal',100,'wfp_confirmed');
 
 SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
-SELECT calculate_and_preapprove_mmp_incentives('20000000-0000-0000-0000-000000000001','[]');
+-- A name matching two canonical IDs must fail before a snapshot/payment is made.
+INSERT INTO hub_states VALUES('10000000-0000-0000-0000-000000000001','north-duplicate','Northern-State');
+INSERT INTO mmp_files(id,name,hub_id,currency,uploaded_at)
+ VALUES('20000000-0000-0000-0000-000000000099','Ambiguous State MMP','10000000-0000-0000-0000-000000000001','SDG','2026-09-01');
+INSERT INTO mmp_site_entries(mmp_file_id,state,enumerator_fee,verified_by)
+ VALUES('20000000-0000-0000-0000-000000000099','Northern State',10,'00000000-0000-0000-0000-000000000001');
+DO $$
+BEGIN
+ BEGIN
+  PERFORM calculate_and_preapprove_mmp_incentives(
+   '20000000-0000-0000-0000-000000000099',
+   '[{"user_id":"00000000-0000-0000-0000-000000000005","role":"support_team","action":"include","note":"fixture"}]');
+  RAISE EXCEPTION 'ambiguous normalized state unexpectedly calculated';
+ EXCEPTION WHEN OTHERS THEN
+  IF SQLERRM NOT LIKE 'ambiguous state %' THEN RAISE; END IF;
+ END;
+ IF EXISTS(SELECT 1 FROM mmp_incentive_payments WHERE mmp_id='20000000-0000-0000-0000-000000000099')
+    OR EXISTS(SELECT 1 FROM mmp_incentive_snapshots WHERE mmp_id='20000000-0000-0000-0000-000000000099')
+ THEN RAISE EXCEPTION 'ambiguous state failure left incentive rows behind'; END IF;
+END $$;
+DELETE FROM hub_states WHERE state_id='north-duplicate';
+
+-- Exercise the audited revocation RPC through its authenticated grant.
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000006',true);
+SELECT set_mmp_incentive_eligibility_override(
+ '00000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001',
+ 'support_team','include','temporary fixture',NULL);
+SELECT revoke_mmp_incentive_eligibility_override(
+ (SELECT id FROM mmp_incentive_eligibility_overrides WHERE user_id='00000000-0000-0000-0000-000000000005' AND revoked_at IS NULL),
+ 'fixture revocation');
+DO $$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM mmp_incentive_eligibility_overrides
+   WHERE user_id='00000000-0000-0000-0000-000000000005'
+    AND revoked_at IS NOT NULL AND revoked_by='00000000-0000-0000-0000-000000000006'
+    AND revoke_note='fixture revocation') THEN RAISE EXCEPTION 'override revocation evidence missing'; END IF;
+END $$;
+-- This user is the payable Supervisor.  Their valid Coordinator exception is
+-- for a state absent from this MMP and must not create false role ambiguity.
+SELECT set_mmp_incentive_eligibility_override(
+ '00000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001',
+ 'coordinator','include','other-state coordinator fixture','south');
+
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+SELECT calculate_and_preapprove_mmp_incentives(
+ '20000000-0000-0000-0000-000000000001',
+ '[{"user_id":"00000000-0000-0000-0000-000000000005","role":"support_team","action":"include","note":"fixture support selection"}]');
+DO $$
+DECLARE snap uuid; counts jsonb;
+BEGIN
+ SELECT id,role_counts INTO snap,counts FROM mmp_incentive_snapshots
+  WHERE mmp_id='20000000-0000-0000-0000-000000000001';
+ IF (SELECT count(*) FROM mmp_incentive_payments WHERE snapshot_id=snap)<>4
+    OR (SELECT sum(bonus_amount_cents) FROM mmp_incentive_payments WHERE snapshot_id=snap)<>3000
+    OR counts<> '{"coordinator":1,"supervisor":1,"fom":1,"support_team":1}'::jsonb
+    OR NOT EXISTS(SELECT 1 FROM mmp_incentive_payments WHERE snapshot_id=snap AND role='fom'
+      AND eligibility_evidence->>'source'='additional_role_object')
+    OR NOT EXISTS(SELECT 1 FROM mmp_incentive_payments WHERE snapshot_id=snap AND role='support_team'
+      AND eligibility_evidence->>'source'='explicit_selection')
+    OR NOT EXISTS(SELECT 1 FROM mmp_incentive_payments WHERE snapshot_id=snap AND role='supervisor'
+      AND user_id='00000000-0000-0000-0000-000000000003')
+    OR EXISTS(SELECT 1 FROM mmp_incentive_payments WHERE snapshot_id=snap
+      AND user_id='00000000-0000-0000-0000-000000000003' AND role='coordinator')
+ THEN RAISE EXCEPTION 'four-role payment/evidence/count reconciliation failed: %',
+   (SELECT jsonb_agg(to_jsonb(p)) FROM mmp_incentive_payments p WHERE snapshot_id=snap);
+ END IF;
+ UPDATE profiles SET additional_roles='["supervisor"]'::jsonb
+  WHERE id='00000000-0000-0000-0000-000000000002';
+ BEGIN
+  PERFORM calculate_and_preapprove_mmp_incentives(
+   '20000000-0000-0000-0000-000000000001',
+   '[{"user_id":"00000000-0000-0000-0000-000000000005","role":"support_team","action":"include","note":"fixture support selection"}]');
+  RAISE EXCEPTION 'cross-role ambiguity unexpectedly calculated';
+ EXCEPTION WHEN OTHERS THEN
+  IF SQLERRM NOT LIKE 'ambiguous incentive roles for user(s): %' THEN RAISE; END IF;
+ END;
+ UPDATE profiles SET additional_roles='[]'::jsonb
+  WHERE id='00000000-0000-0000-0000-000000000002';
+ IF (SELECT count(*) FROM mmp_incentive_payments WHERE snapshot_id=snap)<>4
+ THEN RAISE EXCEPTION 'ambiguity failure altered existing payments'; END IF;
+END $$;
 UPDATE mmp_incentive_snapshots SET status='approved'
  WHERE mmp_id='20000000-0000-0000-0000-000000000001';
 
@@ -31,7 +120,7 @@ BEGIN
  SELECT id,total_bonus_cents INTO snap,total FROM mmp_incentive_snapshots
   WHERE mmp_id='20000000-0000-0000-0000-000000000001';
  IF total<>(SELECT sum(bonus_amount_cents) FROM mmp_incentive_payments WHERE snapshot_id=snap)
-    OR total<>2250 THEN RAISE EXCEPTION 'snapshot total does not reconcile exactly: %',total; END IF;
+     OR total<>3000 THEN RAISE EXCEPTION 'snapshot total does not reconcile exactly: %',total; END IF;
 
  SELECT pay_mmp_incentive(c,'wallet',NULL,NULL)->>'reference' INTO first_ref;
  SELECT pay_mmp_incentive(c,'wallet',NULL,NULL)->>'reference' INTO retry_ref;
