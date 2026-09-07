@@ -21,6 +21,7 @@ import {
   exportIncentiveExcel,
   exportIncentivePdf,
 } from './incentiveReportExports';
+import { getCurrentLanguage } from '@/lib/i18n';
 
 interface GlobalRoleRow { role: IncentiveRole; isActive: boolean; bonusPct: number; splitMethod: IncentiveSplitMethod; dbId: string | null }
 interface HubOverrideRow { localId: string; dbId: string | null; hubId: string; role: IncentiveRole; bonusPct: number; isNew: boolean; toDelete: boolean }
@@ -51,11 +52,20 @@ const monthBoundsUtc = (key: string) => {
 };
 const statusLabel = (status: string) => status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 const statusClass = (status: string) => ({ paid: 'bg-emerald-50 text-emerald-700 border-emerald-200', approved: 'bg-sky-50 text-sky-700 border-sky-200', pre_approved: 'bg-amber-50 text-amber-700 border-amber-200', calculating: 'bg-slate-100 text-slate-600 border-slate-200', failed: 'bg-red-50 text-red-700 border-red-200' }[status] ?? 'bg-slate-100 text-slate-600 border-slate-200');
+type PageLanguage = 'en' | 'ar';
+const text = (language: PageLanguage, en: string, ar: string) => language === 'ar' ? ar : en;
+const roleLabel = (language: PageLanguage, role: IncentiveRole | string) => language === 'ar'
+  ? ({ coordinator: 'المنسق', supervisor: 'المشرف' } as Record<string, string>)[role] ?? role
+  : INCENTIVE_ROLE_LABELS[role as IncentiveRole] ?? role;
+const statusText = (language: PageLanguage, status: string) => language === 'ar'
+  ? ({ paid: 'مدفوع', approved: 'معتمد', pre_approved: 'معتمد مبدئياً', calculating: 'قيد الاحتساب', failed: 'فشل' } as Record<string, string>)[status] ?? statusLabel(status)
+  : statusLabel(status);
 
 export default function IncentiveSettingsPage() {
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const { hubs } = useLocationCtx();
   const { toast } = useToast();
+  const [language, setLanguage] = useState<PageLanguage>(() => getCurrentLanguage() === 'ar' ? 'ar' : 'en');
   const allowed = isSuperAdmin() || hasAnyRole(['admin']);
   const [section, setSection] = useState<'reports' | 'settings'>('reports');
   const [loading, setLoading] = useState(true);
@@ -93,9 +103,9 @@ export default function IncentiveSettingsPage() {
         return db ? { ...local, dbId: db.id, isActive: db.is_active, bonusPct: Number(db.bonus_pct), splitMethod: db.split_method } : local;
       }));
       setHubOverrides(rows.filter(row => row.hub_id && CONFIGURABLE_INCENTIVE_ROLES.includes(row.role)).map(row => ({ localId: row.id, dbId: row.id, hubId: row.hub_id!, role: row.role, bonusPct: Number(row.bonus_pct), isNew: false, toDelete: false })));
-    } catch (error: any) { toast({ title: 'Unable to load settings', description: error.message, variant: 'destructive' }); }
+    } catch (error: any) { toast({ title: text(language, 'Unable to load settings', 'تعذر تحميل الإعدادات'), description: error.message, variant: 'destructive' }); }
     finally { setLoading(false); }
-  }, [toast]);
+  }, [language, toast]);
 
   const loadReport = useCallback(async () => {
     const requestId = ++reportRequestRef.current;
@@ -245,23 +255,23 @@ export default function IncentiveSettingsPage() {
   useEffect(() => { if (allowed) loadReport(); }, [allowed, loadReport]);
   useEffect(() => {
     const next: string[] = [];
-    globalRows.forEach(row => { if (row.isActive && row.bonusPct === 0) next.push(`${INCENTIVE_ROLE_LABELS[row.role]} is active with a 0% bonus.`); });
-    if (coverageThreshold < 0 || coverageThreshold > 100) next.push('Coverage threshold must be between 0 and 100.');
+    globalRows.forEach(row => { if (row.isActive && row.bonusPct === 0) next.push(`${roleLabel(language, row.role)} ${text(language, 'is active with a 0% bonus.', 'مفعّل مع حافز بنسبة 0٪.')}`); });
+    if (coverageThreshold < 0 || coverageThreshold > 100) next.push(text(language, 'Coverage threshold must be between 0 and 100.', 'يجب أن تكون نسبة التغطية بين 0 و100.'));
     const seen = new Set<string>();
-    hubOverrides.filter(row => !row.toDelete).forEach(row => { const key = `${row.hubId}:${row.role}`; if (seen.has(key)) next.push(`Duplicate override for ${hubs.find(h => h.id === row.hubId)?.name ?? row.hubId}.`); seen.add(key); });
+    hubOverrides.filter(row => !row.toDelete).forEach(row => { const key = `${row.hubId}:${row.role}`; if (seen.has(key)) next.push(`${text(language, 'Duplicate override for', 'يوجد تكرار في إعداد الاستثناء للمركز')} ${hubs.find(h => h.id === row.hubId)?.name ?? row.hubId}.`); seen.add(key); });
     setWarnings(next);
-  }, [coverageThreshold, globalRows, hubOverrides, hubs]);
+  }, [coverageThreshold, globalRows, hubOverrides, hubs, language]);
 
   const save = async () => {
     const active = hubOverrides.filter(row => !row.toDelete); const seen = new Set<string>();
-    for (const row of active) { const key = `${row.hubId}:${row.role}`; if (seen.has(key)) { toast({ title: 'Duplicate override', description: 'Remove duplicate hub and role overrides before saving.', variant: 'destructive' }); return; } seen.add(key); }
+    for (const row of active) { const key = `${row.hubId}:${row.role}`; if (seen.has(key)) { toast({ title: text(language, 'Duplicate override', 'استثناء مكرر'), description: text(language, 'Remove duplicate hub and role overrides before saving.', 'أزل استثناءات المركز والدور المكررة قبل الحفظ.'), variant: 'destructive' }); return; } seen.add(key); }
     setSaving(true);
     try {
       const settings = [...globalRows.map(row => ({ hub_id: null, role: row.role, is_active: row.isActive, bonus_pct: row.bonusPct, split_method: row.splitMethod, coverage_threshold_pct: coverageThreshold, what_counts: 'wfp_confirmed' })), ...active.map(row => ({ hub_id: row.hubId, role: row.role, is_active: true, bonus_pct: row.bonusPct, split_method: 'proportional', coverage_threshold_pct: coverageThreshold, what_counts: 'wfp_confirmed' }))];
       const { data, error } = await (supabase.rpc as any)('save_incentive_settings', { p_settings: settings });
-      if (error) throw error; if (data?.ok === false) throw new Error(data.error ?? 'Settings were not saved.');
-      toast({ title: 'Settings saved', description: 'The new rules apply to future MMP calculations.' }); await loadConfigs();
-    } catch (error: any) { toast({ title: 'Save failed', description: error.message, variant: 'destructive' }); }
+      if (error) throw error; if (data?.ok === false) throw new Error(data.error ?? text(language, 'Settings were not saved.', 'لم يتم حفظ الإعدادات.'));
+      toast({ title: text(language, 'Settings saved', 'تم حفظ الإعدادات'), description: text(language, 'The new rules apply to future MMP calculations.', 'تسري القواعد الجديدة على احتسابات MMP المستقبلية.') }); await loadConfigs();
+    } catch (error: any) { toast({ title: text(language, 'Save failed', 'فشل الحفظ'), description: error.message, variant: 'destructive' }); }
     finally { setSaving(false); }
   };
 
@@ -319,9 +329,9 @@ export default function IncentiveSettingsPage() {
     setExporting('excel');
     try {
       await exportIncentiveExcel(exportReport);
-      toast({ title: 'Excel report exported', description: `${monthLabel(selectedMonth)} is ready to download.` });
+       toast({ title: text(language, 'Excel report exported', 'تم تصدير تقرير Excel'), description: `${monthLabel(selectedMonth)} ${text(language, 'is ready to download.', 'جاهز للتنزيل.')}` });
     } catch (error: any) {
-      toast({ title: 'Excel export failed', description: error.message ?? 'The workbook could not be generated.', variant: 'destructive' });
+       toast({ title: text(language, 'Excel export failed', 'فشل تصدير Excel'), description: error.message ?? text(language, 'The workbook could not be generated.', 'تعذر إنشاء ملف المصنف.'), variant: 'destructive' });
     } finally {
       setExporting(null);
     }
@@ -332,34 +342,35 @@ export default function IncentiveSettingsPage() {
     setExporting('pdf');
     try {
       exportIncentivePdf(exportReport);
-      toast({ title: 'PDF report exported', description: `${monthLabel(selectedMonth)} is ready to download.` });
+       toast({ title: text(language, 'PDF report exported', 'تم تصدير تقرير PDF'), description: `${monthLabel(selectedMonth)} ${text(language, 'is ready to download.', 'جاهز للتنزيل.')}` });
     } catch (error: any) {
-      toast({ title: 'PDF export failed', description: error.message ?? 'The PDF could not be generated.', variant: 'destructive' });
+       toast({ title: text(language, 'PDF export failed', 'فشل تصدير PDF'), description: error.message ?? text(language, 'The PDF could not be generated.', 'تعذر إنشاء ملف PDF.'), variant: 'destructive' });
     } finally {
       setExporting(null);
     }
   };
 
-  if (!allowed) return <div className="min-h-[60vh] flex items-center justify-center p-6"><div className="max-w-sm text-center"><ShieldCheck className="mx-auto h-10 w-10 text-slate-400" /><h1 className="mt-4 text-xl font-semibold">Access restricted</h1><p className="mt-2 text-sm text-muted-foreground">Only Admins and Super Admins can configure and audit incentive bonuses.</p></div></div>;
-  if (loading) return <div className="mx-auto max-w-6xl p-6"><div className="h-8 w-64 animate-pulse rounded bg-muted" /><div className="mt-8 grid gap-4 md:grid-cols-3"><div className="h-28 animate-pulse rounded-xl bg-muted" /><div className="h-28 animate-pulse rounded-xl bg-muted" /><div className="h-28 animate-pulse rounded-xl bg-muted" /></div></div>;
+   if (!allowed) return <div dir={language === 'ar' ? 'rtl' : 'ltr'} lang={language} className="min-h-[60vh] flex items-center justify-center p-6"><div className="max-w-sm text-center"><ShieldCheck className="mx-auto h-10 w-10 text-slate-400" /><h1 className="mt-4 text-xl font-semibold">{text(language, 'Access restricted', 'الوصول مقيّد')}</h1><p className="mt-2 text-sm text-muted-foreground">{text(language, 'Only Admins and Super Admins can configure and audit incentive bonuses.', 'يستطيع المشرفون ومديرو النظام فقط إعداد حوافز المكافآت ومراجعتها.')}</p></div></div>;
+   if (loading) return <div dir={language === 'ar' ? 'rtl' : 'ltr'} lang={language} className="mx-auto max-w-6xl p-6"><div className="h-8 w-64 animate-pulse rounded bg-muted" /><div className="mt-8 grid gap-4 md:grid-cols-3"><div className="h-28 animate-pulse rounded-xl bg-muted" /><div className="h-28 animate-pulse rounded-xl bg-muted" /><div className="h-28 animate-pulse rounded-xl bg-muted" /></div></div>;
 
-  return <div className="min-h-[100dvh] bg-[#f4f7f6] text-[#16343a]">
+   return <div dir={language === 'ar' ? 'rtl' : 'ltr'} lang={language} className="min-h-[100dvh] bg-[#f4f7f6] text-[#16343a]">
     <header className="border-b border-[#d8e5e1] bg-[#123942] text-white">
       <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6">
         <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
-          <div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#a7d9cc]"><LineChart className="h-4 w-4" /> PACT operations / incentives</div><h1 className="mt-2 text-3xl font-bold tracking-tight">Bonus control room</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#c8ded9]">Set the rules for future Coordinator and Supervisor bonuses, then audit exactly what was calculated for each monthly MMP cycle.</p></div>
-          <div className="flex rounded-lg border border-white/15 bg-white/10 p-1"><button onClick={() => setSection('reports')} className={cn('rounded-md px-4 py-2 text-sm font-medium transition-colors', section === 'reports' && 'bg-[#e9c46a] text-[#16343a]')}>Monthly reports</button><button onClick={() => setSection('settings')} className={cn('rounded-md px-4 py-2 text-sm font-medium transition-colors', section === 'settings' && 'bg-[#e9c46a] text-[#16343a]')}>Configure rules</button></div>
+           <div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#a7d9cc]"><LineChart className="h-4 w-4" /> PACT {text(language, 'operations / incentives', 'العمليات / الحوافز')}</div><h1 className="mt-2 text-3xl font-bold tracking-tight">{text(language, 'Bonus control room', 'مركز إدارة المكافآت')}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#c8ded9]">{text(language, 'Set the rules for future Coordinator and Supervisor bonuses, then audit exactly what was calculated for each monthly MMP cycle.', 'اضبط قواعد مكافآت المنسقين والمشرفين المستقبلية، وراجع بدقة ما تم احتسابه لكل دورة MMP شهرية.')}</p></div>
+           <div className="flex flex-wrap items-center gap-2"><button onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')} className="rounded-md border border-white/20 px-3 py-2 text-sm font-medium">{language === 'en' ? 'العربية' : 'English'}</button><div className="flex rounded-lg border border-white/15 bg-white/10 p-1"><button onClick={() => setSection('reports')} className={cn('rounded-md px-4 py-2 text-sm font-medium transition-colors', section === 'reports' && 'bg-[#e9c46a] text-[#16343a]')}>{text(language, 'Monthly reports', 'التقارير الشهرية')}</button><button onClick={() => setSection('settings')} className={cn('rounded-md px-4 py-2 text-sm font-medium transition-colors', section === 'settings' && 'bg-[#e9c46a] text-[#16343a]')}>{text(language, 'Configure rules', 'إعداد القواعد')}</button></div></div>
         </div>
       </div>
     </header>
     <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-     {section === 'reports' ? <ReportWorkspace {...{ selectedMonth, setSelectedMonth, reportBasis, setReportBasis, months, reportLoading, reportError, loadReport, snapshots, payments, mmpNames, bonusByCurrency, poolByCurrency, excluded, exportExcel, exportPdf, exporting, reportReady: loadedReportKey === currentReportKey }} /> : <><PoolSplitGuide /><SettingsWorkspace {...{ coverageThreshold, setCoverageThreshold, globalRows, setGlobalRows, hubOverrides, setHubOverrides, hubs, newHub, setNewHub, newRole, setNewRole, newPct, setNewPct, warnings, save, saving }} /></>}
+     {section === 'reports' ? <ReportWorkspace {...{ language, selectedMonth, setSelectedMonth, reportBasis, setReportBasis, months, reportLoading, reportError, loadReport, snapshots, payments, mmpNames, bonusByCurrency, poolByCurrency, excluded, exportExcel, exportPdf, exporting, reportReady: loadedReportKey === currentReportKey }} /> : <><PoolSplitGuide language={language} /><SettingsWorkspace {...{ language, coverageThreshold, setCoverageThreshold, globalRows, setGlobalRows, hubOverrides, setHubOverrides, hubs, newHub, setNewHub, newRole, setNewRole, newPct, setNewPct, warnings, save, saving }} /></>}
     </main>
   </div>;
 }
 
 function ReportWorkspace(props: any) {
   const {
+    language,
     selectedMonth, setSelectedMonth, reportBasis, setReportBasis, months,
     reportLoading, reportError, loadReport, snapshots, payments, mmpNames,
     bonusByCurrency, poolByCurrency, excluded, exportExcel, exportPdf, exporting,
@@ -380,55 +391,55 @@ function ReportWorkspace(props: any) {
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#178080]">
-            Monthly review
+             {text(language, 'Monthly review', 'المراجعة الشهرية')}
           </p>
-          <h2 className="mt-1 text-2xl font-bold">Incentive report ledger</h2>
+           <h2 className="mt-1 text-2xl font-bold">{text(language, 'Incentive report ledger', 'سجل تقارير الحوافز')}</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
             {reportBasis === 'payment'
-              ? 'Payment month uses paid_at. Only non-excluded paid rows in the selected month contribute to totals; excluded rows remain visible for audit.'
-              : 'Calculation month uses snapshot created_at and includes every payment attached to those snapshots.'}
+               ? text(language, 'Payment month uses paid_at. Only non-excluded paid rows in the selected month contribute to totals; excluded rows remain visible for audit.', 'يعتمد شهر الدفع على paid_at. تساهم الصفوف المدفوعة غير المستبعدة فقط في الإجماليات؛ وتظل الصفوف المستبعدة ظاهرة للمراجعة.')
+               : text(language, 'Calculation month uses snapshot created_at and includes every payment attached to those snapshots.', 'يعتمد شهر الاحتساب على created_at للقطة، ويشمل كل دفعة مرتبطة بهذه اللقطات.')}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Select value={reportBasis} onValueChange={setReportBasis}>
             <SelectTrigger className="w-[220px] bg-white"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="payment">Payment month</SelectItem>
-              <SelectItem value="calculation">Calculation month</SelectItem>
+             <SelectItem value="payment">{text(language, 'Payment month', 'شهر الدفع')}</SelectItem>
+             <SelectItem value="calculation">{text(language, 'Calculation month', 'شهر الاحتساب')}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-[190px] bg-white"><SelectValue /></SelectTrigger>
             <SelectContent>{months.map((month: string) => <SelectItem key={month} value={month}>{monthLabel(month)}</SelectItem>)}</SelectContent>
           </Select>
-          <Button variant="outline" onClick={loadReport} disabled={reportLoading}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
-          <Button onClick={exportExcel} disabled={!reportReady || !!exporting || reportLoading || !snapshots.length} className="bg-[#123942] hover:bg-[#1b4d57]"><Download className="mr-2 h-4 w-4" />Excel</Button>
-          <Button variant="outline" onClick={exportPdf} disabled={!reportReady || !!exporting || reportLoading || !snapshots.length}><FileText className="mr-2 h-4 w-4" />PDF</Button>
+           <Button variant="outline" onClick={loadReport} disabled={reportLoading}><RefreshCw className="mr-2 h-4 w-4" />{text(language, 'Refresh', 'تحديث')}</Button>
+           <Button onClick={exportExcel} disabled={!reportReady || !!exporting || reportLoading || !snapshots.length} className="bg-[#123942] hover:bg-[#1b4d57]"><Download className="mr-2 h-4 w-4" />Excel</Button>
+           <Button variant="outline" onClick={exportPdf} disabled={!reportReady || !!exporting || reportLoading || !snapshots.length}><FileText className="mr-2 h-4 w-4" />PDF</Button>
         </div>
       </div>
-      {reportError && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><strong>Report unavailable.</strong> {reportError}<Button variant="link" className="ml-2 p-0 text-red-800" onClick={loadReport}>Try again</Button></div>}
+       {reportError && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><strong>{text(language, 'Report unavailable.', 'التقرير غير متاح.')}</strong> {reportError}<Button variant="link" className="ml-2 p-0 text-red-800" onClick={loadReport}>{text(language, 'Try again', 'حاول مرة أخرى')}</Button></div>}
       {reportLoading ? <div className="grid gap-4 md:grid-cols-4">{[1, 2, 3, 4].map((item) => <div key={item} className="h-28 animate-pulse rounded-xl bg-white/70" />)}</div> : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric label={reportBasis === 'payment' ? 'Paid in selected month' : 'Snapshot bonus total'} value={moneyByCurrency(bonusByCurrency)} icon={CircleDollarSign} tone="gold" />
-            <Metric label={reportBasis === 'payment' ? 'Fee pool not restated' : 'DC fee pool'} value={moneyByCurrency(poolByCurrency)} icon={WalletCards} tone="teal" />
-            <Metric label="MMP snapshots" value={snapshots.length} icon={BarChart3} tone="navy" />
-            <Metric label="Excluded recipients" value={excluded} icon={ShieldCheck} tone="rose" />
+             <Metric language={language} label={reportBasis === 'payment' ? text(language, 'Paid in selected month', 'المدفوع في الشهر المحدد') : text(language, 'Snapshot bonus total', 'إجمالي مكافآت اللقطات')} value={moneyByCurrency(bonusByCurrency)} icon={CircleDollarSign} tone="gold" />
+             <Metric language={language} label={reportBasis === 'payment' ? text(language, 'Fee pool not restated', 'مجمّع الرسوم دون إعادة احتساب') : text(language, 'DC fee pool', 'مجمّع رسوم التوزيع')} value={moneyByCurrency(poolByCurrency)} icon={WalletCards} tone="teal" />
+             <Metric language={language} label="MMP snapshots" value={snapshots.length} icon={BarChart3} tone="navy" />
+             <Metric language={language} label={text(language, 'Excluded recipients', 'المستلمون المستبعدون')} value={excluded} icon={ShieldCheck} tone="rose" />
           </div>
           <section className="overflow-hidden rounded-xl border border-[#d8e5e1] bg-white">
-            <div className="border-b border-[#e5efec] px-5 py-4"><h3 className="font-semibold">MMP snapshot register</h3><p className="mt-1 text-xs text-slate-500">{monthLabel(selectedMonth)} · {reportBasis === 'payment' ? 'paid recipients only; fee pool is not restated' : 'snapshot totals'}</p></div>
-            {snapshots.length ? <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-[#f4f8f7] text-[10px] uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3 text-left">MMP / hub</th><th className="px-3 py-3 text-left">Status</th><th className="px-3 py-3 text-right">Recipients</th><th className="px-3 py-3 text-right">Fee pool</th><th className="px-5 py-3 text-right">Bonus / paid</th></tr></thead><tbody className="divide-y divide-[#edf3f1]">{snapshots.map((snapshot: Snapshot) => <tr key={snapshot.id} className="hover:bg-[#f7fbfa]"><td className="px-5 py-3"><p className="font-medium">{mmpNames[snapshot.mmp_id]?.name ?? snapshot.mmp_id}</p><p className="text-xs text-slate-500">{mmpNames[snapshot.mmp_id]?.hub_name ?? 'Hub not recorded'}</p></td><td className="px-3 py-3"><Badge className={cn('border text-[10px]', statusClass(snapshot.status))}>{statusLabel(snapshot.status)}</Badge></td><td className="px-3 py-3 text-right text-xs">{reportBasis === 'payment' ? `${paymentRowsFor(snapshot.id).length} paid` : `${snapshot.coordinator_count} C · ${snapshot.supervisor_count} S`}</td><td className="px-3 py-3 text-right text-xs">{reportBasis === 'payment' ? 'N/A' : money(snapshot.total_dc_fee_pool_cents, snapshot.currency)}</td><td className="px-5 py-3 text-right text-xs font-semibold">{reportBasis === 'payment' ? paidSummaryFor(snapshot.id) : money(snapshot.total_bonus_cents, snapshot.currency)}</td></tr>)}</tbody></table></div> : <EmptyReport month={selectedMonth} />}</section>
-          <section className="overflow-hidden rounded-xl border border-[#d8e5e1] bg-white"><div className="border-b border-[#e5efec] px-5 py-4"><h3 className="font-semibold">Payment detail</h3><p className="mt-1 text-xs text-slate-500">Non-excluded rows reconcile to the selected headline; excluded rows are retained for audit.</p></div>{payments.length ? <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-sm"><thead className="bg-[#f4f8f7] text-[10px] uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3 text-left">Recipient</th><th className="px-3 py-3 text-left">Role</th><th className="px-3 py-3 text-left">Currency</th><th className="px-3 py-3 text-right">Amount</th><th className="px-5 py-3 text-left">Status</th></tr></thead><tbody className="divide-y divide-[#edf3f1]">{payments.map((payment: Payment) => <tr key={payment.id} className={cn(payment.excluded && 'opacity-60')}><td className="px-5 py-3"><p className="font-medium">{payment.profiles?.full_name ?? payment.user_id}</p><p className="text-xs text-slate-500">{payment.profiles?.email ?? 'Email not available'}</p></td><td className="px-3 py-3 text-xs capitalize">{payment.role}</td><td className="px-3 py-3 text-xs">{payment.currency}</td><td className="px-3 py-3 text-right text-xs font-semibold">{money(payment.bonus_amount_cents, payment.currency)}</td><td className="px-5 py-3"><Badge className={cn('border text-[10px]', payment.excluded ? 'bg-slate-100 text-slate-500' : statusClass(payment.status))}>{payment.excluded ? 'Excluded · audit only' : statusLabel(payment.status)}</Badge></td></tr>)}</tbody></table></div> : <div className="p-10 text-center text-sm text-slate-500">No payment records are attached to this report basis and month.</div>}</section>
+             <div className="border-b border-[#e5efec] px-5 py-4"><h3 className="font-semibold">{text(language, 'MMP snapshot register', 'سجل لقطات MMP')}</h3><p className="mt-1 text-xs text-slate-500">{monthLabel(selectedMonth)} · {reportBasis === 'payment' ? text(language, 'paid recipients only; fee pool is not restated', 'المستلمون المدفوع لهم فقط؛ دون إعادة احتساب مجمّع الرسوم') : text(language, 'snapshot totals', 'إجماليات اللقطات')}</p></div>
+             {snapshots.length ? <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-[#f4f8f7] text-[10px] uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3 text-left">{text(language, 'MMP / hub', 'MMP / المركز')}</th><th className="px-3 py-3 text-left">{text(language, 'Status', 'الحالة')}</th><th className="px-3 py-3 text-right">{text(language, 'Recipients', 'المستلمون')}</th><th className="px-3 py-3 text-right">{text(language, 'Fee pool', 'مجمّع الرسوم')}</th><th className="px-5 py-3 text-right">{text(language, 'Bonus / paid', 'المكافأة / المدفوع')}</th></tr></thead><tbody className="divide-y divide-[#edf3f1]">{snapshots.map((snapshot: Snapshot) => <tr key={snapshot.id} className="hover:bg-[#f7fbfa]"><td className="px-5 py-3"><p className="font-medium">{mmpNames[snapshot.mmp_id]?.name ?? snapshot.mmp_id}</p><p className="text-xs text-slate-500">{mmpNames[snapshot.mmp_id]?.hub_name ?? text(language, 'Hub not recorded', 'لم يُسجّل المركز')}</p></td><td className="px-3 py-3"><Badge className={cn('border text-[10px]', statusClass(snapshot.status))}>{statusText(language, snapshot.status)}</Badge></td><td className="px-3 py-3 text-right text-xs">{reportBasis === 'payment' ? `${paymentRowsFor(snapshot.id).length} ${text(language, 'paid', 'مدفوع')}` : `${snapshot.coordinator_count} C · ${snapshot.supervisor_count} S`}</td><td className="px-3 py-3 text-right text-xs">{reportBasis === 'payment' ? 'N/A' : money(snapshot.total_dc_fee_pool_cents, snapshot.currency)}</td><td className="px-5 py-3 text-right text-xs font-semibold">{reportBasis === 'payment' ? paidSummaryFor(snapshot.id) : money(snapshot.total_bonus_cents, snapshot.currency)}</td></tr>)}</tbody></table></div> : <EmptyReport language={language} month={selectedMonth} />}</section>
+           <section className="overflow-hidden rounded-xl border border-[#d8e5e1] bg-white"><div className="border-b border-[#e5efec] px-5 py-4"><h3 className="font-semibold">{text(language, 'Payment detail', 'تفاصيل الدفع')}</h3><p className="mt-1 text-xs text-slate-500">{text(language, 'Non-excluded rows reconcile to the selected headline; excluded rows are retained for audit.', 'تتطابق الصفوف غير المستبعدة مع الإجمالي المعروض؛ وتُحفظ الصفوف المستبعدة للمراجعة.')}</p></div>{payments.length ? <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-sm"><thead className="bg-[#f4f8f7] text-[10px] uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3 text-left">{text(language, 'Recipient', 'المستلم')}</th><th className="px-3 py-3 text-left">{text(language, 'Role', 'الدور')}</th><th className="px-3 py-3 text-left">{text(language, 'Currency', 'العملة')}</th><th className="px-3 py-3 text-right">{text(language, 'Amount', 'المبلغ')}</th><th className="px-5 py-3 text-left">{text(language, 'Status', 'الحالة')}</th></tr></thead><tbody className="divide-y divide-[#edf3f1]">{payments.map((payment: Payment) => <tr key={payment.id} className={cn(payment.excluded && 'opacity-60')}><td className="px-5 py-3"><p className="font-medium">{payment.profiles?.full_name ?? payment.user_id}</p><p className="text-xs text-slate-500">{payment.profiles?.email ?? text(language, 'Email not available', 'البريد الإلكتروني غير متاح')}</p></td><td className="px-3 py-3 text-xs capitalize">{roleLabel(language, payment.role)}</td><td className="px-3 py-3 text-xs">{payment.currency}</td><td className="px-3 py-3 text-right text-xs font-semibold">{money(payment.bonus_amount_cents, payment.currency)}</td><td className="px-5 py-3"><Badge className={cn('border text-[10px]', payment.excluded ? 'bg-slate-100 text-slate-500' : statusClass(payment.status))}>{payment.excluded ? text(language, 'Excluded · audit only', 'مستبعد · للمراجعة فقط') : statusText(language, payment.status)}</Badge></td></tr>)}</tbody></table></div> : <div className="p-10 text-center text-sm text-slate-500">{text(language, 'No payment records are attached to this report basis and month.', 'لا توجد سجلات دفع مرتبطة بأساس التقرير وهذا الشهر.')}</div>}</section>
         </>
       )}
     </div>
   );
 }
 
-function Metric({ label, value, icon: Icon, tone }: any) { const tones: any = { gold: 'bg-[#fff3c8] text-[#8a6811]', teal: 'bg-[#d8efea] text-[#167575]', navy: 'bg-[#dce9eb] text-[#215260]', rose: 'bg-[#f7e5df] text-[#98513c]' }; return <div className="rounded-xl border border-[#d8e5e1] bg-white p-4 shadow-[0_8px_30px_rgba(18,57,66,0.04)]"><div className="flex items-center justify-between"><div className={cn('rounded-lg p-2', tones[tone])}><Icon className="h-4 w-4" /></div><span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Selected month</span></div><p className="mt-4 text-xs text-slate-500">{label}</p><p className="mt-1 truncate text-xl font-bold tracking-tight">{value}</p></div>; }
-function EmptyReport({ month }: { month: string }) { return <div className="p-14 text-center"><ListChecks className="mx-auto h-9 w-9 text-[#8fb8af]" /><h3 className="mt-3 font-semibold">No incentive snapshots yet</h3><p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">There are no calculated MMP snapshots for {monthLabel(month)}. Try another month or return after the calculation run.</p></div>; }
+function Metric({ label, value, icon: Icon, tone, language }: any) { const tones: any = { gold: 'bg-[#fff3c8] text-[#8a6811]', teal: 'bg-[#d8efea] text-[#167575]', navy: 'bg-[#dce9eb] text-[#215260]', rose: 'bg-[#f7e5df] text-[#98513c]' }; return <div className="rounded-xl border border-[#d8e5e1] bg-white p-4 shadow-[0_8px_30px_rgba(18,57,66,0.04)]"><div className="flex items-center justify-between"><div className={cn('rounded-lg p-2', tones[tone])}><Icon className="h-4 w-4" /></div><span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{text(language, 'Selected month', 'الشهر المحدد')}</span></div><p className="mt-4 text-xs text-slate-500">{label}</p><p className="mt-1 truncate text-xl font-bold tracking-tight">{value}</p></div>; }
+function EmptyReport({ month, language }: { month: string; language: PageLanguage }) { return <div className="p-14 text-center"><ListChecks className="mx-auto h-9 w-9 text-[#8fb8af]" /><h3 className="mt-3 font-semibold">{text(language, 'No incentive snapshots yet', 'لا توجد لقطات حوافز بعد')}</h3><p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">{text(language, `There are no calculated MMP snapshots for ${monthLabel(month)}. Try another month or return after the calculation run.`, `لا توجد لقطات MMP محتسبة لشهر ${monthLabel(month)}. جرّب شهراً آخر أو عد بعد اكتمال الاحتساب.`)}</p></div>; }
 
-function PoolSplitGuide() {
+function PoolSplitGuide({ language }: { language: PageLanguage }) {
   return (
     <details open className="group border-b border-[#dbeae5] bg-[#f2f8f6]">
       <summary className="flex cursor-pointer list-none items-start gap-3 px-5 py-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#178080]">
@@ -437,39 +448,39 @@ function PoolSplitGuide() {
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-[#16343a]">
-            How pool split works
-            <span className="rounded-full border border-[#b9d9d0] bg-white px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#167575]">Admin guide</span>
+             {text(language, 'How pool split works', 'كيف يعمل تقسيم المجمّع')}
+             <span className="rounded-full border border-[#b9d9d0] bg-white px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#167575]">{text(language, 'Admin guide', 'دليل المشرف')}</span>
           </span>
-          <span className="mt-1 block text-xs leading-5 text-slate-600">A role percentage creates one shared pool for that role, not a percentage paid to every person.</span>
+           <span className="mt-1 block text-xs leading-5 text-slate-600">{text(language, 'A role percentage creates one shared pool for that role, not a percentage paid to every person.', 'تنشئ نسبة الدور مجمّعاً مشتركاً للدور، ولا تعني دفع النسبة لكل شخص.')}</span>
         </span>
         <span className="mt-1 text-xs font-semibold text-[#167575] group-open:rotate-180" aria-hidden="true">⌄</span>
       </summary>
       <div className="space-y-4 px-5 pb-5 pl-16 text-xs leading-5 text-slate-600">
-        <p>Each active role rate is applied to the <strong className="text-[#16343a]">WFP-confirmed DC fee pool</strong>. That creates one shared role pool, then the pool is divided among eligible recipients for that role. Coordinator and Supervisor always have separate pools.</p>
+         <p>{text(language, 'Each active role rate is applied to the WFP-confirmed DC fee pool. That creates one shared role pool, then the pool is divided among eligible recipients for that role. Coordinator and Supervisor always have separate pools.', 'تُطبّق نسبة كل دور مفعّل على مجمّع رسوم التوزيع المؤكد من WFP. وينشئ ذلك مجمّعاً مشتركاً للدور ثم يُقسّم بين المستلمين المؤهلين. ويظل للمنسقين والمشرفين مجمّعان منفصلان دائماً.')}</p>
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="rounded-lg border border-[#c5e0d8] bg-white p-4">
-            <p className="font-semibold text-[#16343a]">Proportional</p>
-            <p className="mt-1">A person receives more when their attributable confirmed DC fee pool is larger.</p>
+             <p className="font-semibold text-[#16343a]">{text(language, 'Proportional', 'نسبي')}</p>
+             <p className="mt-1">{text(language, 'A person receives more when their attributable confirmed DC fee pool is larger.', 'يحصل الشخص على مبلغ أكبر عندما يكون مجمّع رسوم التوزيع المؤكد المنسوب إليه أكبر.')}</p>
             <p className="mt-3 rounded-md bg-[#edf6f3] px-3 py-2 font-mono text-[11px] leading-5 text-[#24545a]">person bonus = role pool × person's attributable confirmed DC fee pool ÷ total attributable confirmed DC fee pool</p>
           </div>
           <div className="rounded-lg border border-[#c5e0d8] bg-white p-4">
-            <p className="font-semibold text-[#16343a]">Equal</p>
-            <p className="mt-1">The role pool is divided evenly between recipients who are eligible at calculation time.</p>
+             <p className="font-semibold text-[#16343a]">{text(language, 'Equal', 'متساوٍ')}</p>
+             <p className="mt-1">{text(language, 'The role pool is divided evenly between recipients who are eligible at calculation time.', 'يُقسّم مجمّع الدور بالتساوي بين المستلمين المؤهلين وقت الاحتساب.')}</p>
             <p className="mt-3 rounded-md bg-[#edf6f3] px-3 py-2 font-mono text-[11px] leading-5 text-[#24545a]">person bonus = role pool ÷ eligible recipients</p>
           </div>
         </div>
         <div className="rounded-lg border border-[#ead7a1] bg-[#fffaf0] p-4">
-          <p className="font-semibold text-[#6d5412]">Worked example</p>
-          <p className="mt-1">With an SDG 1,000,000 confirmed DC fee pool and a 5% role bonus, the role pool is <strong className="text-[#6d5412]">SDG 50,000</strong>. If three eligible recipients have attributable fee shares of 60% / 30% / 10%, proportional distribution pays SDG 30,000 / 15,000 / 5,000. Equal distribution would pay about SDG 16,666.67 each (subject to rounding).</p>
+           <p className="font-semibold text-[#6d5412]">{text(language, 'Worked example', 'مثال تطبيقي')}</p>
+           <p className="mt-1">{text(language, 'With an SDG 1,000,000 confirmed DC fee pool and a 5% role bonus, the role pool is SDG 50,000. If three eligible recipients have attributable fee shares of 60% / 30% / 10%, proportional distribution pays SDG 30,000 / 15,000 / 5,000. Equal distribution would pay about SDG 16,666.67 each (subject to rounding).', 'مع مجمّع رسوم توزيع مؤكد قدره SDG 1,000,000 ومكافأة دور بنسبة 5٪، يبلغ مجمّع الدور SDG 50,000. إذا كانت حصص ثلاثة مستلمين مؤهلين 60٪ و30٪ و10٪، يدفع التوزيع النسبي SDG 30,000 و15,000 و5,000. أما التوزيع المتساوي فيدفع نحو SDG 16,666.67 لكل شخص، مع مراعاة التقريب.')}</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-[#d8e5e1] bg-white p-3">
-            <p className="font-semibold text-[#16343a]">Coverage and eligibility</p>
-            <p className="mt-1">The coverage threshold checks the share of DC fees confirmed by WFP. Recipients who pass the snapshot's eligibility rules are included; excluded recipients do not receive a payment and remain visible for audit.</p>
+             <p className="font-semibold text-[#16343a]">{text(language, 'Coverage and eligibility', 'التغطية والأهلية')}</p>
+             <p className="mt-1">{text(language, 'The coverage threshold checks the share of DC fees confirmed by WFP. Recipients who pass the snapshot eligibility rules are included; excluded recipients do not receive a payment and remain visible for audit.', 'تتحقق عتبة التغطية من حصة رسوم التوزيع التي أكدها WFP. يُدرج المستلمون الذين يستوفون قواعد الأهلية في اللقطة؛ ولا يتلقى المستبعدون دفعة ويظلون ظاهرين للمراجعة.')}</p>
           </div>
           <div className="rounded-lg border border-[#d8e5e1] bg-white p-3">
-            <p className="font-semibold text-[#16343a]">When changes take effect</p>
-            <p className="mt-1">Saved changes affect future snapshots only. Existing snapshots keep the rates, split method, eligibility, and recipient counts recorded when they were calculated.</p>
+             <p className="font-semibold text-[#16343a]">{text(language, 'When changes take effect', 'متى تسري التغييرات')}</p>
+             <p className="mt-1">{text(language, 'Saved changes affect future snapshots only. Existing snapshots keep the rates, split method, eligibility, and recipient counts recorded when they were calculated.', 'تؤثر التغييرات المحفوظة على اللقطات المستقبلية فقط. وتحتفظ اللقطات الحالية بالنسب وطريقة التقسيم والأهلية وأعداد المستلمين المسجلة وقت احتسابها.')}</p>
           </div>
         </div>
       </div>
@@ -478,7 +489,7 @@ function PoolSplitGuide() {
 }
 
 function SettingsWorkspace(props: any) {
-  const { coverageThreshold, setCoverageThreshold, globalRows, setGlobalRows, hubOverrides, setHubOverrides, hubs, newHub, setNewHub, newRole, setNewRole, newPct, setNewPct, warnings, save, saving } = props;
+  const { language, coverageThreshold, setCoverageThreshold, globalRows, setGlobalRows, hubOverrides, setHubOverrides, hubs, newHub, setNewHub, newRole, setNewRole, newPct, setNewPct, warnings, save, saving } = props;
   const visible = hubOverrides.filter((row: HubOverrideRow) => !row.toDelete);
   const addOverride = () => { if (!newHub) return; if (visible.some((row: HubOverrideRow) => row.hubId === newHub && row.role === newRole)) return; setHubOverrides((rows: HubOverrideRow[]) => [...rows, { localId: mkId(), dbId: null, hubId: newHub, role: newRole, bonusPct: newPct, isNew: true, toDelete: false }]); setNewHub(''); };
   return <div className="space-y-6"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#178080]">Future calculations</p><div className="mt-1 flex flex-col justify-between gap-3 md:flex-row md:items-end"><div><h2 className="text-2xl font-bold">Configure bonus rules</h2><p className="mt-1 max-w-2xl text-sm text-slate-600">These rules are read when a new MMP incentive snapshot is calculated. Existing snapshots keep their recorded configuration.</p></div><Button onClick={save} disabled={saving} className="bg-[#123942] hover:bg-[#1b4d57]"><Save className="mr-2 h-4 w-4" />{saving ? 'Saving changes…' : 'Save changes'}</Button></div></div>{warnings.length > 0 && <div className="rounded-xl border border-[#ead7a1] bg-[#fff8df] p-4"><div className="flex items-center gap-2 text-sm font-semibold text-[#775d14]"><AlertTriangle className="h-4 w-4" />Review before saving</div>{warnings.map((warning: string) => <p key={warning} className="ml-6 mt-1 text-xs text-[#775d14]">{warning}</p>)}</div>}<div className="grid gap-6 xl:grid-cols-[1fr_360px]"><div className="space-y-6"><section className="rounded-xl border border-[#d8e5e1] bg-white p-5"><div className="flex items-start gap-3"><div className="rounded-lg bg-[#d8efea] p-2 text-[#167575]"><CircleDollarSign className="h-4 w-4" /></div><div><h3 className="font-semibold">Eligibility gate</h3><p className="mt-1 text-xs leading-5 text-slate-500">An MMP must meet this WFP-confirmed coverage percentage before its bonus pool can be unlocked.</p></div></div><div className="mt-5 flex max-w-sm items-end gap-3"><div className="flex-1"><Label className="text-xs text-slate-500">Minimum confirmed coverage</Label><Input className="mt-1.5" type="number" min={0} max={100} value={coverageThreshold} onChange={e => setCoverageThreshold(Math.max(0, Math.min(100, Number(e.target.value))))} /></div><span className="pb-2 text-sm font-semibold text-slate-500">%</span></div></section><section className="overflow-hidden rounded-xl border border-[#d8e5e1] bg-white"><div className="border-b border-[#e5efec] px-5 py-4"><div className="flex items-center gap-2"><Settings2 className="h-4 w-4 text-[#178080]" /><h3 className="font-semibold">Role rules</h3></div><p className="mt-1 text-xs text-slate-500">The global rule applies unless a hub override is listed below.</p></div><div className="divide-y divide-[#edf3f1]">{globalRows.map((row: GlobalRoleRow) => <div key={row.role} className="grid gap-4 px-5 py-4 sm:grid-cols-[1fr_auto_130px_170px] sm:items-center"><div><p className="font-medium">{INCENTIVE_ROLE_LABELS[row.role]}</p><p className="mt-0.5 text-xs text-slate-500">{row.role === 'coordinator' ? 'Coordinates field delivery and quality checks.' : 'Supervises hub-level programme execution.'}</p></div><Switch checked={row.isActive} onCheckedChange={(value: boolean) => setGlobalRows((rows: GlobalRoleRow[]) => rows.map(item => item.role === row.role ? { ...item, isActive: value } : item))} /><div><Label className="text-[10px] uppercase tracking-wider text-slate-400">Bonus rate</Label><div className="mt-1 flex items-center gap-1"><Input className="h-9" type="number" step={0.5} disabled={!row.isActive} value={row.bonusPct} onChange={e => setGlobalRows((rows: GlobalRoleRow[]) => rows.map(item => item.role === row.role ? { ...item, bonusPct: Number(e.target.value) } : item))} /><span className="text-sm text-slate-500">%</span></div></div><div><Label className="text-[10px] uppercase tracking-wider text-slate-400">Pool distribution</Label><Select value={row.splitMethod} disabled={!row.isActive} onValueChange={(value: IncentiveSplitMethod) => setGlobalRows((rows: GlobalRoleRow[]) => rows.map(item => item.role === row.role ? { ...item, splitMethod: value } : item))}><SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="proportional">Proportional</SelectItem><SelectItem value="equal">Equal share</SelectItem></SelectContent></Select></div></div>)}</div><div className="flex gap-2 border-t border-[#e5efec] bg-[#f7fbfa] px-5 py-3 text-xs text-slate-500"><Info className="h-4 w-4 shrink-0 text-[#178080]" /><span><strong>Proportional</strong> weights a share by DC fee pool. <strong>Equal share</strong> divides eligible recipients evenly.</span></div></section><section className="overflow-hidden rounded-xl border border-[#d8e5e1] bg-white"><div className="border-b border-[#e5efec] px-5 py-4"><h3 className="font-semibold">Hub-specific overrides</h3><p className="mt-1 text-xs text-slate-500">Use sparingly for a hub and role that needs a different rate.</p></div>{visible.length ? <div className="divide-y divide-[#edf3f1]">{visible.map((row: HubOverrideRow) => <div key={row.localId} className="flex flex-wrap items-center gap-3 px-5 py-3"><span className="min-w-[160px] flex-1 text-sm font-medium">{hubs.find((hub: any) => hub.id === row.hubId)?.name ?? row.hubId}</span><span className="w-32 text-xs text-slate-500">{INCENTIVE_ROLE_LABELS[row.role]}</span><div className="flex items-center gap-1"><Input className="h-8 w-20" type="number" step={0.5} value={row.bonusPct} onChange={e => setHubOverrides((rows: HubOverrideRow[]) => rows.map(item => item.localId === row.localId ? { ...item, bonusPct: Number(e.target.value) } : item))} /><span className="text-xs text-slate-500">%</span></div><Button variant="ghost" size="icon" className="text-red-600" onClick={() => setHubOverrides((rows: HubOverrideRow[]) => rows.filter(item => item.localId !== row.localId))}><Trash2 className="h-4 w-4" /></Button></div>)}</div> : <p className="px-5 py-6 text-sm text-slate-500">No hub overrides. Global rules apply across all hubs.</p>}<div className="flex flex-wrap items-end gap-2 border-t border-[#e5efec] bg-[#f7fbfa] p-5"><div><Label className="text-[10px] uppercase tracking-wider text-slate-400">Hub</Label><Select value={newHub} onValueChange={setNewHub}><SelectTrigger className="mt-1 h-9 w-44"><SelectValue placeholder="Select a hub" /></SelectTrigger><SelectContent>{hubs.map((hub: any) => <SelectItem key={hub.id} value={hub.id}>{hub.name}</SelectItem>)}</SelectContent></Select></div><div><Label className="text-[10px] uppercase tracking-wider text-slate-400">Role</Label><Select value={newRole} onValueChange={(value: IncentiveRole) => setNewRole(value)}><SelectTrigger className="mt-1 h-9 w-36"><SelectValue /></SelectTrigger><SelectContent>{CONFIGURABLE_INCENTIVE_ROLES.map(role => <SelectItem key={role} value={role}>{INCENTIVE_ROLE_LABELS[role]}</SelectItem>)}</SelectContent></Select></div><div><Label className="text-[10px] uppercase tracking-wider text-slate-400">Rate</Label><Input className="mt-1 h-9 w-20" type="number" step={0.5} value={newPct} onChange={e => setNewPct(Number(e.target.value))} /></div><Button variant="outline" className="h-9" onClick={addOverride}><Plus className="mr-2 h-4 w-4" />Add override</Button></div></section></div><aside className="space-y-4"><section className="rounded-xl bg-[#123942] p-5 text-white"><div className="flex items-center gap-2 text-[#a7d9cc]"><ListChecks className="h-4 w-4" /><h3 className="font-semibold">How the workflow works</h3></div><div className="mt-5 space-y-5">{[['01', 'Configure', 'Save rules for future calculations.'], ['02', 'Calculate', 'The system checks coverage and builds a snapshot.'], ['03', 'Pre-approve', 'An administrator reviews recipients and exclusions.'], ['04', 'Approve and pay', 'Finance approves the locked snapshot and records payment.']].map(([number, title, text], index) => <div key={number} className="flex gap-3"><span className="font-mono text-xs text-[#e9c46a]">{number}</span><div><p className="text-sm font-semibold">{title}</p><p className="mt-1 text-xs leading-5 text-[#c8ded9]">{text}</p>{index < 3 && <ArrowRight className="mt-3 h-3 w-3 rotate-90 text-[#6da89c]" />}</div></div>)}</div></section><section className="rounded-xl border border-[#d8e5e1] bg-white p-5"><div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#178080]" /><h3 className="font-semibold">What is recorded</h3></div><ul className="mt-4 space-y-3 text-xs leading-5 text-slate-600"><li>Coverage gate and eligible role rates.</li><li>Pool split method and recipient counts.</li><li>Pre-approval, approval, and payment timestamps.</li><li>Excluded recipients and payment method.</li></ul></section></aside></div></div>;
