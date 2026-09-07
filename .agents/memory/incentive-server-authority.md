@@ -45,3 +45,17 @@ shape check without representing an authorized settlement.
 **How to apply:** Revoke direct lifecycle-table DML and block incentive-tagged
 source inserts outside the authorized security-definer settlement path. Test the
 boundary under the actual authenticated database role, not only as table owner.
+
+Expanded incentive roles must retain their own geographic eligibility scope:
+Coordinators are state-scoped, Supervisors and FOM are hub-scoped, and Support
+Team membership is manual-only. Manual Coordinator includes require an explicit
+hub-mapped state; all overrides require a hub and an audit reason.
+
+**Why:** Treating every role as one hub-wide recipient list can turn proportional
+state pools into duplicate whole-hub payouts. Support Team has no canonical
+system role, so automatic inference would make eligibility ambiguous.
+
+**How to apply:** Resolve primary roles, additional-role assignments, and active
+classifications independently using each source's own hub/state. Snapshot the
+chosen evidence and derive recipient counts from final payable rows, not the
+pre-filter candidate set.

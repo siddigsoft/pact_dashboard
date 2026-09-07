@@ -7,9 +7,8 @@ import {
 
 describe('incentive RPC contracts', () => {
   it('limits editable settings to roles supported by the calculator UI', () => {
-    expect(CONFIGURABLE_INCENTIVE_ROLES).toEqual(['coordinator', 'supervisor']);
+    expect(CONFIGURABLE_INCENTIVE_ROLES).toEqual(['coordinator', 'supervisor', 'fom', 'support_team']);
     expect(CONFIGURABLE_INCENTIVE_ROLES).not.toContain('datacollector');
-    expect(CONFIGURABLE_INCENTIVE_ROLES).not.toContain('fom');
     expect(CONFIGURABLE_INCENTIVE_ROLES).not.toContain('teamleader');
   });
 

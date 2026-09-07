@@ -21,6 +21,79 @@ BEGIN
   END IF;
 END $$;
 
+-- Assignment JSON must preserve an object's own hub/state while legacy scalar
+-- roles use profile scope.  This fixture catches accidental object coercion.
+DO $$
+DECLARE v_object_role text; v_object_hub text; v_object_state text; v_scalar_role text;
+BEGIN
+  SELECT CASE WHEN jsonb_typeof(v)='object' THEN v->>'role' ELSE v#>>'{}' END,
+         CASE WHEN jsonb_typeof(v)='object' THEN v->>'hub_id' END,
+         CASE WHEN jsonb_typeof(v)='object' THEN v->>'state_id' END
+    INTO v_object_role,v_object_hub,v_object_state
+  FROM (VALUES ('{"role":"coordinator","hub_id":"hub-b","state_id":"state-b"}'::jsonb)) q(v);
+  SELECT CASE WHEN jsonb_typeof(v)='object' THEN v->>'role' ELSE v#>>'{}' END
+    INTO v_scalar_role FROM (VALUES ('"supervisor"'::jsonb)) q(v);
+  IF v_object_role<>'coordinator' OR v_object_hub<>'hub-b' OR v_object_state<>'state-b'
+     OR v_scalar_role<>'supervisor' THEN
+    RAISE EXCEPTION 'additional role object/scalar scope parsing regressed';
+  END IF;
+END $$;
+
+-- Counts are based on final candidates, and equal coordinator payments retain
+-- SQL NULL state attribution (the grouping scope is internal only).
+DO $$
+DECLARE v_counts jsonb; v_null_states int;
+BEGIN
+  CREATE TEMP TABLE test_final_allocation(role text,state_id text,user_id uuid) ON COMMIT DROP;
+  INSERT INTO test_final_allocation VALUES
+    ('coordinator',NULL,gen_random_uuid()),
+    ('coordinator',NULL,gen_random_uuid()),
+    ('supervisor',NULL,gen_random_uuid());
+  SELECT jsonb_object_agg(role,n) INTO v_counts
+  FROM (SELECT role,count(*) n FROM test_final_allocation GROUP BY role) q;
+  SELECT count(*) INTO v_null_states FROM test_final_allocation
+    WHERE role='coordinator' AND state_id IS NULL;
+  IF (v_counts->>'coordinator')::int<>2 OR (v_counts->>'supervisor')::int<>1
+     OR v_null_states<>2 THEN
+    RAISE EXCEPTION 'final allocation counts or equal coordinator state regressed';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE oid='public.calculate_and_preapprove_mmp_incentives(uuid,jsonb)'::regprocedure
+      AND prosrc ILIKE '%public.incentive_scope_key(e->>''state_id'')%'
+      AND prosrc NOT ILIKE '%''__hub__''%'
+  ) THEN RAISE EXCEPTION 'resolved evidence state is not authoritative'; END IF;
+END $$;
+
+-- Role expansion is forward-compatible with existing coordinator/supervisor
+-- callers while making Support Team an explicit, auditable selection only.
+DO $$
+BEGIN
+  IF to_regclass('public.mmp_incentive_eligibility_overrides') IS NULL
+     OR to_regprocedure('public.set_mmp_incentive_eligibility_override(uuid,text,text,text)') IS NULL THEN
+    RAISE EXCEPTION 'eligibility override contract is missing';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='mmp_incentive_snapshots'
+      AND column_name='eligibility_snapshot'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='mmp_incentive_payments'
+      AND column_name='eligibility_evidence'
+  ) THEN RAISE EXCEPTION 'immutable eligibility snapshot columns are missing'; END IF;
+  IF public.incentive_role_key('Support Team') <> 'support_team' THEN
+    RAISE EXCEPTION 'support team role normalization regression';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE oid='public.calculate_and_preapprove_mmp_incentives(uuid,jsonb)'::regprocedure
+      AND prosrc ILIKE '%explicit_selection%'
+      AND prosrc ILIKE '%admin_override%'
+      AND prosrc ILIKE '%unresolved incentive identity%'
+  ) THEN RAISE EXCEPTION 'authoritative expanded eligibility calculator is missing'; END IF;
+END $$;
+
 DO $$
 BEGIN
   IF EXISTS (
