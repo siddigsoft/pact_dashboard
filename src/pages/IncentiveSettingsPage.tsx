@@ -350,7 +350,7 @@ export default function IncentiveSettingsPage() {
       </div>
     </header>
     <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-     {section === 'reports' ? <ReportWorkspace {...{ selectedMonth, setSelectedMonth, reportBasis, setReportBasis, months, reportLoading, reportError, loadReport, snapshots, payments, mmpNames, bonusByCurrency, poolByCurrency, excluded, exportExcel, exportPdf, exporting, reportReady: loadedReportKey === currentReportKey }} /> : <SettingsWorkspace {...{ coverageThreshold, setCoverageThreshold, globalRows, setGlobalRows, hubOverrides, setHubOverrides, hubs, newHub, setNewHub, newRole, setNewRole, newPct, setNewPct, warnings, save, saving }} />}
+     {section === 'reports' ? <ReportWorkspace {...{ selectedMonth, setSelectedMonth, reportBasis, setReportBasis, months, reportLoading, reportError, loadReport, snapshots, payments, mmpNames, bonusByCurrency, poolByCurrency, excluded, exportExcel, exportPdf, exporting, reportReady: loadedReportKey === currentReportKey }} /> : <><PoolSplitGuide /><SettingsWorkspace {...{ coverageThreshold, setCoverageThreshold, globalRows, setGlobalRows, hubOverrides, setHubOverrides, hubs, newHub, setNewHub, newRole, setNewRole, newPct, setNewPct, warnings, save, saving }} /></>}
     </main>
   </div>;
 }
@@ -424,6 +424,55 @@ function ReportWorkspace(props: any) {
 
 function Metric({ label, value, icon: Icon, tone }: any) { const tones: any = { gold: 'bg-[#fff3c8] text-[#8a6811]', teal: 'bg-[#d8efea] text-[#167575]', navy: 'bg-[#dce9eb] text-[#215260]', rose: 'bg-[#f7e5df] text-[#98513c]' }; return <div className="rounded-xl border border-[#d8e5e1] bg-white p-4 shadow-[0_8px_30px_rgba(18,57,66,0.04)]"><div className="flex items-center justify-between"><div className={cn('rounded-lg p-2', tones[tone])}><Icon className="h-4 w-4" /></div><span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Selected month</span></div><p className="mt-4 text-xs text-slate-500">{label}</p><p className="mt-1 truncate text-xl font-bold tracking-tight">{value}</p></div>; }
 function EmptyReport({ month }: { month: string }) { return <div className="p-14 text-center"><ListChecks className="mx-auto h-9 w-9 text-[#8fb8af]" /><h3 className="mt-3 font-semibold">No incentive snapshots yet</h3><p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">There are no calculated MMP snapshots for {monthLabel(month)}. Try another month or return after the calculation run.</p></div>; }
+
+function PoolSplitGuide() {
+  return (
+    <details open className="group border-b border-[#dbeae5] bg-[#f2f8f6]">
+      <summary className="flex cursor-pointer list-none items-start gap-3 px-5 py-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#178080]">
+        <span className="mt-0.5 rounded-full bg-[#d8efea] p-1.5 text-[#167575]">
+          <Info className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-[#16343a]">
+            How pool split works
+            <span className="rounded-full border border-[#b9d9d0] bg-white px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#167575]">Admin guide</span>
+          </span>
+          <span className="mt-1 block text-xs leading-5 text-slate-600">A role percentage creates one shared pool for that role, not a percentage paid to every person.</span>
+        </span>
+        <span className="mt-1 text-xs font-semibold text-[#167575] group-open:rotate-180" aria-hidden="true">⌄</span>
+      </summary>
+      <div className="space-y-4 px-5 pb-5 pl-16 text-xs leading-5 text-slate-600">
+        <p>Each active role rate is applied to the <strong className="text-[#16343a]">WFP-confirmed DC fee pool</strong>. That creates one shared role pool, then the pool is divided among eligible recipients for that role. Coordinator and Supervisor always have separate pools.</p>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="rounded-lg border border-[#c5e0d8] bg-white p-4">
+            <p className="font-semibold text-[#16343a]">Proportional</p>
+            <p className="mt-1">A person receives more when their attributable confirmed DC fee pool is larger.</p>
+            <p className="mt-3 rounded-md bg-[#edf6f3] px-3 py-2 font-mono text-[11px] leading-5 text-[#24545a]">person bonus = role pool × person's attributable confirmed DC fee pool ÷ total attributable confirmed DC fee pool</p>
+          </div>
+          <div className="rounded-lg border border-[#c5e0d8] bg-white p-4">
+            <p className="font-semibold text-[#16343a]">Equal</p>
+            <p className="mt-1">The role pool is divided evenly between recipients who are eligible at calculation time.</p>
+            <p className="mt-3 rounded-md bg-[#edf6f3] px-3 py-2 font-mono text-[11px] leading-5 text-[#24545a]">person bonus = role pool ÷ eligible recipients</p>
+          </div>
+        </div>
+        <div className="rounded-lg border border-[#ead7a1] bg-[#fffaf0] p-4">
+          <p className="font-semibold text-[#6d5412]">Worked example</p>
+          <p className="mt-1">With an SDG 1,000,000 confirmed DC fee pool and a 5% role bonus, the role pool is <strong className="text-[#6d5412]">SDG 50,000</strong>. If three eligible recipients have attributable fee shares of 60% / 30% / 10%, proportional distribution pays SDG 30,000 / 15,000 / 5,000. Equal distribution would pay about SDG 16,666.67 each (subject to rounding).</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-[#d8e5e1] bg-white p-3">
+            <p className="font-semibold text-[#16343a]">Coverage and eligibility</p>
+            <p className="mt-1">The coverage threshold checks the share of DC fees confirmed by WFP. Recipients who pass the snapshot's eligibility rules are included; excluded recipients do not receive a payment and remain visible for audit.</p>
+          </div>
+          <div className="rounded-lg border border-[#d8e5e1] bg-white p-3">
+            <p className="font-semibold text-[#16343a]">When changes take effect</p>
+            <p className="mt-1">Saved changes affect future snapshots only. Existing snapshots keep the rates, split method, eligibility, and recipient counts recorded when they were calculated.</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  );
+}
 
 function SettingsWorkspace(props: any) {
   const { coverageThreshold, setCoverageThreshold, globalRows, setGlobalRows, hubOverrides, setHubOverrides, hubs, newHub, setNewHub, newRole, setNewRole, newPct, setNewPct, warnings, save, saving } = props;
