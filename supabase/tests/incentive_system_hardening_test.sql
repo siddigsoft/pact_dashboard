@@ -83,7 +83,11 @@ DO $$
 BEGIN
   IF to_regprocedure('public.pay_mmp_incentive(uuid,text,uuid,text)') IS NULL
      OR to_regprocedure('public.reverse_mmp_incentive(uuid,text)') IS NULL
-     OR to_regprocedure('public.get_my_incentive_payments()') IS NULL THEN
+     OR to_regprocedure('public.get_my_incentive_payments()') IS NULL
+     OR to_regprocedure('public.enforce_mmp_incentive_payment_evidence()') IS NULL
+     OR to_regprocedure('public.enforce_mmp_incentive_settlement_evidence()') IS NULL
+     OR to_regprocedure('public.check_mmp_incentive_final_consistency()') IS NULL
+     OR to_regprocedure('public.prevent_untrusted_mmp_incentive_evidence_insert()') IS NULL THEN
     RAISE EXCEPTION 'settlement RPC contract is missing';
   END IF;
 END $$;

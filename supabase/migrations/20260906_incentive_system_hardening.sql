@@ -78,6 +78,263 @@ CREATE TABLE IF NOT EXISTS public.mmp_incentive_settlements (
   reversal_reference text UNIQUE,
   reversal_reason text
 );
+ALTER TABLE public.mmp_incentive_settlements
+  ADD COLUMN IF NOT EXISTS reversal_wallet_transaction_id uuid;
+
+DO $$
+DECLARE v_bad_payroll boolean;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='mmp_incentive_settlements_wallet_tx_fk') THEN
+    ALTER TABLE public.mmp_incentive_settlements ADD CONSTRAINT mmp_incentive_settlements_wallet_tx_fk
+      FOREIGN KEY(wallet_transaction_id) REFERENCES public.wallet_transactions(id) ON DELETE RESTRICT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='mmp_incentive_settlements_reversal_wallet_tx_fk') THEN
+    ALTER TABLE public.mmp_incentive_settlements ADD CONSTRAINT mmp_incentive_settlements_reversal_wallet_tx_fk
+      FOREIGN KEY(reversal_wallet_transaction_id) REFERENCES public.wallet_transactions(id) ON DELETE RESTRICT;
+  END IF;
+  IF to_regclass('public.payroll_run_items') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='mmp_incentive_settlements_payroll_item_fk') THEN
+    ALTER TABLE public.mmp_incentive_settlements ADD CONSTRAINT mmp_incentive_settlements_payroll_item_fk
+      FOREIGN KEY(payroll_item_id) REFERENCES public.payroll_run_items(id) ON DELETE RESTRICT;
+  END IF;
+  IF EXISTS(
+    SELECT 1 FROM public.mmp_incentive_payments p
+    LEFT JOIN public.mmp_incentive_settlements e ON e.payment_id=p.id
+    LEFT JOIN public.wallet_transactions w ON w.id=e.wallet_transaction_id
+    LEFT JOIN public.wallet_transactions rw ON rw.id=e.reversal_wallet_transaction_id
+    WHERE p.status IN ('paid','reversed') AND (
+      e.payment_id IS NULL OR e.method IS DISTINCT FROM p.payment_method
+      OR e.payment_reference IS DISTINCT FROM p.payment_reference
+      OR (e.method='wallet' AND (w.id IS NULL OR w.user_id IS DISTINCT FROM p.user_id
+        OR w.amount_cents IS DISTINCT FROM p.bonus_amount_cents OR w.currency IS DISTINCT FROM p.currency
+        OR w.type IS DISTINCT FROM 'adjustment' OR w.status IS DISTINCT FROM 'posted'
+        OR w.metadata->>'incentive_payment_id' IS DISTINCT FROM p.id::text))
+      OR (p.status='reversed' AND (e.method<>'wallet' OR e.reversed_at IS NULL
+        OR e.reversal_reference IS NULL OR rw.id IS NULL
+        OR rw.user_id IS DISTINCT FROM p.user_id OR rw.amount_cents IS DISTINCT FROM -p.bonus_amount_cents
+        OR rw.currency IS DISTINCT FROM p.currency OR rw.type IS DISTINCT FROM 'adjustment'
+        OR rw.status IS DISTINCT FROM 'posted'
+        OR rw.metadata->>'incentive_payment_id' IS DISTINCT FROM p.id::text
+        OR rw.metadata->>'reversal_reference' IS DISTINCT FROM e.reversal_reference))
+    )
+  ) THEN
+    RAISE EXCEPTION 'legacy settled incentives require evidence backfill before hardening can be enabled';
+  END IF;
+  IF EXISTS(SELECT 1 FROM public.mmp_incentive_payments p
+    JOIN public.mmp_incentive_settlements e ON e.payment_id=p.id
+    WHERE p.status IN ('paid','reversed') AND e.method='payroll') THEN
+    IF to_regclass('public.payroll_run_items') IS NULL THEN
+      RAISE EXCEPTION 'legacy payroll incentive evidence cannot be validated';
+    END IF;
+    EXECUTE $q$SELECT EXISTS(
+      SELECT 1 FROM public.mmp_incentive_payments p
+      JOIN public.mmp_incentive_settlements e ON e.payment_id=p.id
+      LEFT JOIN public.payroll_run_items i ON i.id=e.payroll_item_id
+      WHERE p.status IN ('paid','reversed') AND e.method='payroll'
+        AND (i.id IS NULL OR i.user_id IS DISTINCT FROM p.user_id
+          OR i.amount_cents IS DISTINCT FROM p.bonus_amount_cents
+          OR i.currency IS DISTINCT FROM p.currency OR i.type<>'incentive_bonus'
+          OR i.reference_id IS DISTINCT FROM p.id)
+    )$q$ INTO v_bad_payroll;
+    IF v_bad_payroll THEN
+      RAISE EXCEPTION 'legacy payroll incentive evidence requires remediation before hardening';
+    END IF;
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.enforce_mmp_incentive_payment_evidence()
+RETURNS trigger LANGUAGE plpgsql SET search_path=public AS $$
+DECLARE e public.mmp_incentive_settlements%ROWTYPE;
+BEGIN
+  IF TG_OP='UPDATE' AND OLD.status IN ('paid','reversed') THEN
+    IF (OLD.status='reversed' AND to_jsonb(NEW) IS DISTINCT FROM to_jsonb(OLD))
+       OR (OLD.status='paid' AND NEW.status='paid' AND (
+         NEW.reversed_at IS DISTINCT FROM OLD.reversed_at
+         OR NEW.reversed_by IS DISTINCT FROM OLD.reversed_by
+         OR NEW.reversal_reason IS DISTINCT FROM OLD.reversal_reason
+         OR NEW.reversal_reference IS DISTINCT FROM OLD.reversal_reference
+       ))
+       OR (to_jsonb(NEW) - ARRAY['status','reversed_at','reversed_by','reversal_reason','reversal_reference'])
+         IS DISTINCT FROM
+       (to_jsonb(OLD) - ARRAY['status','reversed_at','reversed_by','reversal_reason','reversal_reference'])
+       OR (OLD.status='reversed' AND NEW.status<>'reversed')
+       OR (OLD.status='paid' AND NEW.status NOT IN ('paid','reversed')) THEN
+      RAISE EXCEPTION 'settled incentive payment identity and lifecycle are immutable';
+    END IF;
+  END IF;
+  IF NEW.status NOT IN ('paid','reversed') THEN RETURN NEW; END IF;
+  SELECT * INTO e FROM public.mmp_incentive_settlements WHERE payment_id=NEW.id;
+  IF NOT FOUND
+     OR e.method IS DISTINCT FROM NEW.payment_method
+     OR e.payment_reference IS DISTINCT FROM NEW.payment_reference
+     OR (e.method='wallet' AND e.wallet_transaction_id IS NULL)
+     OR (e.method='payroll' AND e.payroll_item_id IS NULL)
+     OR (NEW.status='reversed' AND
+        (e.method<>'wallet' OR e.reversed_at IS NULL OR e.reversal_reference IS NULL
+         OR e.reversal_wallet_transaction_id IS NULL
+         OR NEW.reversal_reference IS DISTINCT FROM e.reversal_reference
+         OR NEW.reversal_reason IS DISTINCT FROM e.reversal_reason)) THEN
+    RAISE EXCEPTION 'incentive payment status requires matching immutable settlement evidence';
+  END IF;
+  IF e.method='wallet' AND NOT EXISTS(
+    SELECT 1 FROM public.wallet_transactions t WHERE t.id=e.wallet_transaction_id
+      AND t.user_id=NEW.user_id AND t.amount_cents=NEW.bonus_amount_cents
+      AND t.currency=NEW.currency AND t.type='adjustment' AND t.status='posted'
+      AND t.metadata->>'incentive_payment_id'=NEW.id::text
+  ) THEN RAISE EXCEPTION 'wallet settlement evidence does not match incentive payment'; END IF;
+  IF e.method='payroll' AND NOT EXISTS(
+    SELECT 1 FROM public.payroll_run_items i WHERE i.id=e.payroll_item_id
+      AND i.user_id=NEW.user_id AND i.amount_cents=NEW.bonus_amount_cents
+      AND i.currency=NEW.currency AND i.type='incentive_bonus' AND i.reference_id=NEW.id
+  ) THEN RAISE EXCEPTION 'payroll settlement evidence does not match incentive payment'; END IF;
+  IF NEW.status='reversed' AND NOT EXISTS(
+    SELECT 1 FROM public.wallet_transactions t WHERE t.id=e.reversal_wallet_transaction_id
+      AND t.user_id=NEW.user_id AND t.amount_cents=-NEW.bonus_amount_cents
+      AND t.currency=NEW.currency AND t.type='adjustment' AND t.status='posted'
+      AND t.metadata->>'incentive_payment_id'=NEW.id::text
+      AND t.metadata->>'reversal_reference'=e.reversal_reference
+  ) THEN RAISE EXCEPTION 'wallet reversal evidence does not match incentive payment'; END IF;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.enforce_mmp_incentive_settlement_evidence()
+RETURNS trigger LANGUAGE plpgsql SET search_path=public AS $$
+DECLARE p public.mmp_incentive_payments%ROWTYPE; e public.mmp_incentive_settlements%ROWTYPE;
+BEGIN
+  IF TG_OP='UPDATE' AND OLD.payment_id IS DISTINCT FROM NEW.payment_id THEN
+    RAISE EXCEPTION 'settlement payment identity is immutable';
+  END IF;
+  SELECT * INTO p FROM public.mmp_incentive_payments
+    WHERE id=OLD.payment_id;
+  IF p.status NOT IN ('paid','reversed') THEN RETURN coalesce(NEW,OLD); END IF;
+  IF TG_OP='DELETE' THEN
+    RAISE EXCEPTION 'settlement evidence for a settled incentive is immutable';
+  END IF;
+  IF OLD.payment_reference IS DISTINCT FROM NEW.payment_reference
+     OR OLD.method IS DISTINCT FROM NEW.method
+     OR OLD.wallet_transaction_id IS DISTINCT FROM NEW.wallet_transaction_id
+     OR OLD.payroll_item_id IS DISTINCT FROM NEW.payroll_item_id
+     OR OLD.settled_at IS DISTINCT FROM NEW.settled_at
+     OR (p.status='reversed' AND
+       (OLD.reversal_reference IS DISTINCT FROM NEW.reversal_reference
+        OR OLD.reversal_wallet_transaction_id IS DISTINCT FROM NEW.reversal_wallet_transaction_id
+        OR OLD.reversed_at IS DISTINCT FROM NEW.reversed_at
+        OR OLD.reversal_reason IS DISTINCT FROM NEW.reversal_reason)) THEN
+    RAISE EXCEPTION 'settlement evidence identity is immutable after payment';
+  END IF;
+  e:=NEW;
+  IF e.method IS DISTINCT FROM p.payment_method OR e.payment_reference IS DISTINCT FROM p.payment_reference
+     OR (e.method='wallet' AND e.wallet_transaction_id IS NULL)
+     OR (e.method='payroll' AND e.payroll_item_id IS NULL)
+     OR (p.status='reversed' AND
+        (e.method<>'wallet' OR e.reversed_at IS NULL OR e.reversal_reference IS NULL
+         OR e.reversal_wallet_transaction_id IS NULL)) THEN
+    RAISE EXCEPTION 'settlement evidence cannot diverge from incentive payment status';
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.check_mmp_incentive_final_consistency()
+RETURNS trigger LANGUAGE plpgsql SET search_path=public AS $$
+DECLARE p public.mmp_incentive_payments%ROWTYPE; e public.mmp_incentive_settlements%ROWTYPE;
+  v_payment_id uuid;
+BEGIN
+  IF TG_TABLE_NAME='mmp_incentive_payments' THEN
+    v_payment_id:=coalesce(NEW.id,OLD.id);
+  ELSE
+    v_payment_id:=coalesce(NEW.payment_id,OLD.payment_id);
+  END IF;
+  SELECT * INTO p FROM public.mmp_incentive_payments WHERE id=v_payment_id;
+  SELECT * INTO e FROM public.mmp_incentive_settlements WHERE payment_id=v_payment_id;
+  IF p.status='paid' AND (
+       e.payment_id IS NULL OR e.reversed_at IS NOT NULL OR e.reversal_reference IS NOT NULL
+       OR e.reversal_reason IS NOT NULL OR e.reversal_wallet_transaction_id IS NOT NULL
+     ) THEN
+    RAISE EXCEPTION 'paid incentive cannot contain reversal evidence';
+  END IF;
+  IF p.status='reversed' AND (
+       e.method<>'wallet' OR e.reversed_at IS NULL OR e.reversal_reference IS NULL
+       OR e.reversal_reason IS NULL OR e.reversal_wallet_transaction_id IS NULL
+     ) THEN
+    RAISE EXCEPTION 'reversed incentive requires complete wallet reversal evidence';
+  END IF;
+  RETURN coalesce(NEW,OLD);
+END $$;
+
+CREATE OR REPLACE FUNCTION public.prevent_mmp_incentive_source_evidence_mutation()
+RETURNS trigger LANGUAGE plpgsql SET search_path=public AS $$
+BEGIN
+  IF EXISTS(SELECT 1 FROM public.mmp_incentive_settlements
+    WHERE wallet_transaction_id=OLD.id OR reversal_wallet_transaction_id=OLD.id
+       OR payroll_item_id=OLD.id) THEN
+    RAISE EXCEPTION 'source evidence for a settled incentive is immutable';
+  END IF;
+  RETURN OLD;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.prevent_untrusted_mmp_incentive_evidence_insert()
+RETURNS trigger LANGUAGE plpgsql SET search_path=public AS $$
+DECLARE v_owner name;
+BEGIN
+  SELECT pg_get_userbyid(proowner) INTO v_owner
+  FROM pg_proc WHERE oid='public.pay_mmp_incentive(uuid,text,uuid,text)'::regprocedure;
+  IF current_user<>v_owner THEN
+    IF TG_TABLE_NAME='wallet_transactions' THEN
+      IF NEW.metadata ? 'incentive_payment_id' THEN
+        RAISE EXCEPTION 'incentive settlement evidence may only be created by the settlement RPC'
+          USING ERRCODE='42501';
+      END IF;
+    ELSIF TG_TABLE_NAME='payroll_run_items' THEN
+      IF NEW.type='incentive_bonus' OR EXISTS(
+        SELECT 1 FROM public.mmp_incentive_payments WHERE id=NEW.reference_id
+      ) THEN
+        RAISE EXCEPTION 'incentive settlement evidence may only be created by the settlement RPC'
+          USING ERRCODE='42501';
+      END IF;
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS mmp_incentive_payment_evidence_guard ON public.mmp_incentive_payments;
+CREATE TRIGGER mmp_incentive_payment_evidence_guard
+BEFORE INSERT OR UPDATE ON public.mmp_incentive_payments
+FOR EACH ROW EXECUTE FUNCTION public.enforce_mmp_incentive_payment_evidence();
+DROP TRIGGER IF EXISTS mmp_incentive_settlement_evidence_guard ON public.mmp_incentive_settlements;
+CREATE TRIGGER mmp_incentive_settlement_evidence_guard
+BEFORE UPDATE OR DELETE ON public.mmp_incentive_settlements
+FOR EACH ROW EXECUTE FUNCTION public.enforce_mmp_incentive_settlement_evidence();
+DROP TRIGGER IF EXISTS mmp_incentive_payment_final_consistency ON public.mmp_incentive_payments;
+CREATE CONSTRAINT TRIGGER mmp_incentive_payment_final_consistency
+AFTER INSERT OR UPDATE ON public.mmp_incentive_payments
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION public.check_mmp_incentive_final_consistency();
+DROP TRIGGER IF EXISTS mmp_incentive_settlement_final_consistency ON public.mmp_incentive_settlements;
+CREATE CONSTRAINT TRIGGER mmp_incentive_settlement_final_consistency
+AFTER INSERT OR UPDATE ON public.mmp_incentive_settlements
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION public.check_mmp_incentive_final_consistency();
+DROP TRIGGER IF EXISTS mmp_incentive_wallet_source_guard ON public.wallet_transactions;
+CREATE TRIGGER mmp_incentive_wallet_source_guard
+BEFORE UPDATE OR DELETE ON public.wallet_transactions
+FOR EACH ROW EXECUTE FUNCTION public.prevent_mmp_incentive_source_evidence_mutation();
+DROP TRIGGER IF EXISTS mmp_incentive_wallet_insert_guard ON public.wallet_transactions;
+CREATE TRIGGER mmp_incentive_wallet_insert_guard
+BEFORE INSERT ON public.wallet_transactions
+FOR EACH ROW EXECUTE FUNCTION public.prevent_untrusted_mmp_incentive_evidence_insert();
+DO $$
+BEGIN
+  IF to_regclass('public.payroll_run_items') IS NOT NULL THEN
+    DROP TRIGGER IF EXISTS mmp_incentive_payroll_source_guard ON public.payroll_run_items;
+    CREATE TRIGGER mmp_incentive_payroll_source_guard
+      BEFORE UPDATE OR DELETE ON public.payroll_run_items
+      FOR EACH ROW EXECUTE FUNCTION public.prevent_mmp_incentive_source_evidence_mutation();
+    DROP TRIGGER IF EXISTS mmp_incentive_payroll_insert_guard ON public.payroll_run_items;
+    CREATE TRIGGER mmp_incentive_payroll_insert_guard
+      BEFORE INSERT ON public.payroll_run_items
+      FOR EACH ROW EXECUTE FUNCTION public.prevent_untrusted_mmp_incentive_evidence_insert();
+  END IF;
+END $$;
 
 -- Repair duplicate legacy global/override rows before installing the conflict
 -- arbiter used by save_incentive_settings.
@@ -280,8 +537,9 @@ BEGIN
  CREATE TEMP TABLE _pay(row_id bigint GENERATED ALWAYS AS IDENTITY,user_id uuid,role text,state_id text,hub_id text,dc_count int,pool bigint,pct numeric,split text,excluded boolean,note text,amount bigint) ON COMMIT DROP;
  -- Start from every qualifying entry scope, including malformed scopes. Nothing
  -- can disappear merely because a reference-table join failed.
- CREATE TEMP TABLE _coord_states ON COMMIT DROP AS
- SELECT public.incentive_scope_key(se.state) entry_scope,hs.state_id,hs.state_name,
+  CREATE TEMP TABLE _coord_states ON COMMIT DROP AS
+  SELECT public.incentive_scope_key(coalesce(hs.state_id,se.state)) entry_scope,
+    hs.state_id,max(hs.state_name) state_name,
    count(*)::int dc_count,coalesce(sum(round(coalesce(se.enumerator_fee,0)*100)::bigint),0) pool
  FROM _cfg c JOIN public.mmp_site_entries se ON se.mmp_file_id=p_mmp_id
  LEFT JOIN public.hub_states hs ON public.incentive_scope_key(hs.hub_id)=v_hub
@@ -289,7 +547,7 @@ BEGIN
      (public.incentive_scope_key(hs.state_id),public.incentive_scope_key(hs.state_name))
  WHERE c.role='coordinator' AND c.split_method='proportional'
    AND (c.what_counts='submitted' OR se.verified_by IS NOT NULL)
- GROUP BY public.incentive_scope_key(se.state),hs.state_id,hs.state_name;
+  GROUP BY public.incentive_scope_key(coalesce(hs.state_id,se.state)),hs.state_id;
  IF EXISTS(SELECT 1 FROM _coord_states WHERE entry_scope='' OR state_id IS NULL) THEN
    RAISE EXCEPTION 'qualifying MMP state is blank or is not mapped to the MMP hub';
  END IF;
@@ -427,7 +685,8 @@ BEGIN
  RETURNING id INTO v_tx;
  UPDATE public.wallets SET balances=jsonb_set(v_bal,array[p.currency],to_jsonb(v_after)),
    total_earned=coalesce(v_earned,0)-p.bonus_amount_cents::numeric/100,updated_at=now() WHERE id=v_wallet;
- UPDATE public.mmp_incentive_settlements SET reversed_at=now(),reversal_reference=v_ref,reversal_reason=p_reason WHERE payment_id=p.id;
+  UPDATE public.mmp_incentive_settlements SET reversed_at=now(),reversal_reference=v_ref,
+    reversal_reason=p_reason,reversal_wallet_transaction_id=v_tx WHERE payment_id=p.id;
  UPDATE public.mmp_incentive_payments SET status='reversed',reversed_at=now(),reversed_by=v_actor,reversal_reason=p_reason,reversal_reference=v_ref WHERE id=p.id;
  UPDATE public.mmp_incentive_snapshots SET
    status=CASE WHEN EXISTS(SELECT 1 FROM public.mmp_incentive_payments WHERE snapshot_id=p.snapshot_id AND status='paid')
@@ -463,3 +722,5 @@ REVOKE ALL ON FUNCTION public.pay_mmp_incentive(uuid,text,uuid,text), public.rev
 GRANT EXECUTE ON FUNCTION public.pay_mmp_incentive(uuid,text,uuid,text), public.reverse_mmp_incentive(uuid,text) TO authenticated;
 REVOKE ALL ON FUNCTION public.get_my_incentive_payments() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_my_incentive_payments() TO authenticated;
+REVOKE INSERT,UPDATE,DELETE ON public.mmp_incentive_payments FROM PUBLIC,authenticated;
+REVOKE INSERT,UPDATE,DELETE ON public.mmp_incentive_settlements FROM PUBLIC,authenticated;

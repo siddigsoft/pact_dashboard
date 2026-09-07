@@ -8,3 +8,26 @@ MMP incentive amounts, recipients, lifecycle eligibility, and settlement status 
 **Why:** Client-supplied totals and separate payment/status writes can be altered or interrupted, producing incorrect bonuses, duplicate credits, or payment records that disagree with wallet and payroll evidence.
 
 **How to apply:** Lock the MMP/payment scope, calculate from canonical site/config/profile data, reject unresolved geographic assignments or unsupported roles, allocate integer remainders deterministically, and commit the settlement evidence and payment lifecycle in one transaction.
+
+Settlement evidence must be FK-backed, semantically matched to the recipient,
+signed amount, currency, lifecycle/type, and incentive identity, and immutable
+after settlement. Reversals need their own retained source transaction identity;
+non-null reference text is not evidence.
+
+**Why:** A status guard that checks only non-null UUIDs or reference strings can
+still accept fabricated, swapped, deleted, pending, or unrelated source rows.
+
+**How to apply:** Treat paid/reversed lifecycle states and all evidence-defining
+payment fields as terminal or immutable. Validate legacy rows per payment before
+enabling guards; fail closed when trustworthy evidence cannot be established.
+
+Incentive lifecycle and evidence creation must be RPC-only, not merely
+shape-validated.
+
+**Why:** If authenticated clients can write the underlying payment, settlement,
+wallet, or payroll rows, they can fabricate records that satisfy every semantic
+shape check without representing an authorized settlement.
+
+**How to apply:** Revoke direct lifecycle-table DML and block incentive-tagged
+source inserts outside the authorized security-definer settlement path. Test the
+boundary under the actual authenticated database role, not only as table owner.
