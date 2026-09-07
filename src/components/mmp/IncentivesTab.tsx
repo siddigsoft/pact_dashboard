@@ -8,7 +8,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,10 +24,15 @@ import {
 } from '@/components/ui/dialog';
 import {
   AlertTriangle, CheckCircle2, Clock, DollarSign, Download, Info,
-  Lock, ShieldCheck, User, Loader2, RefreshCw,
+  Lock, ShieldCheck, User, Loader2, RefreshCw, RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+import {
+  buildIncentivePreapprovalArgs,
+  buildPayMmpIncentiveArgs,
+  type IncentivePaymentMethod,
+} from '@/types/incentive';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,6 +61,8 @@ interface ProfileRow {
   full_name: string;
   role: string;
   hub_id: string | null;
+  state_id: string | null;
+  location: { state_id?: string; state?: string } | null;
 }
 
 interface CalcRow {
@@ -71,14 +77,14 @@ interface CalcRow {
   excluded: boolean;
   exclusionNote: string;
   paymentId: string | null;    // existing DB row id
-  paymentStatus: 'pending' | 'paid' | null;
+  paymentStatus: 'pending' | 'paid' | 'failed' | 'reversed' | null;
   paymentMethod: string | null;
   payrollPeriod: string | null;
 }
 
 interface Snapshot {
   id: string;
-  status: 'calculating' | 'pre_approved' | 'approved' | 'paid';
+  status: 'calculating' | 'pre_approved' | 'approved' | 'paid' | 'failed' | 'reversed';
   totalDcFeePoolCents: number;
   totalBonusCents: number;
   preApprovedBy: string | null;
@@ -105,7 +111,7 @@ interface PaymentRow {
   exclusionNote: string | null;
   paymentMethod: string | null;
   payrollPeriod: string | null;
-  status: 'pending' | 'paid';
+  status: 'pending' | 'paid' | 'failed' | 'reversed';
   idempotencyKey: string | null;
 }
 
@@ -133,7 +139,6 @@ const SYSTEM_ACTIVATION_DATE = '2026-08-01'; // MMPs before this are historical
 
 export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed, isHistorical }: Props) {
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
-  const { currentUser } = useAppContext();
   const { toast } = useToast();
 
   const isAdmin = isSuperAdmin() || hasAnyRole(['admin']);
@@ -157,6 +162,9 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
   const [payingId, setPayingId] = useState<string | null>(null);
   const [payMethodOverrides, setPayMethodOverrides] = useState<Record<string, string>>({});
   const [payPeriodOverrides, setPayPeriodOverrides] = useState<Record<string, string>>({});
+  const [reversalPayment, setReversalPayment] = useState<PaymentRow | null>(null);
+  const [reversalReason, setReversalReason] = useState('');
+  const [reversingId, setReversingId] = useState<string | null>(null);
 
   // ── Load all data ──────────────────────────────────────────────────────────
 
@@ -185,7 +193,7 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
       if (resolvedHubId) {
         const { data: profData } = await supabase
           .from('profiles')
-          .select('id, full_name, role, hub_id')
+          .select('id, full_name, role, hub_id, state_id, location')
           .eq('hub_id', resolvedHubId)
           .in('role', ['coordinator', 'Coordinator', 'supervisor', 'Supervisor']);
         const profiles = (profData ?? []) as ProfileRow[];
@@ -343,10 +351,10 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
       return [{
         userId: c.id, name: c.full_name, role: 'coordinator',
         stateOrHub: states.join(', '),
-        dcCount: confirmedEntries.filter(e => e.accepted_by != null).length,
-        dcFeePoolCents: totalDcFeePoolCents,
-        bonusPct,
-        bonusAmountCents: Math.round(totalDcFeePoolCents * bonusPct / 100),
+        dcCount: payment?.dcCount ?? confirmedEntries.filter(e => e.accepted_by != null).length,
+        dcFeePoolCents: payment?.dcFeePoolCents ?? totalDcFeePoolCents,
+        bonusPct: payment?.bonusPct ?? bonusPct,
+        bonusAmountCents: payment?.bonusAmountCents ?? Math.round(totalDcFeePoolCents * bonusPct / 100),
         excluded: payment?.excluded ?? false,
         exclusionNote: payment?.exclusionNote ?? '',
         paymentId: payment?.id ?? null,
@@ -358,11 +366,8 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
 
     // ── Multiple coordinators ──────────────────────────────────────────────
     // For EQUAL: divide total fee pool equally among all coordinators.
-    // For PROPORTIONAL: distribute states round-robin among coordinators so
-    //   each coordinator's attributed pool = sum of fees for their assigned
-    //   states.  Without explicit coordinator→state assignments (Task #492),
-    //   this round-robin proxy produces pool sizes that differ when states have
-    //   unequal fee totals, which is the correct proportional behaviour.
+    // For PROPORTIONAL, preview only explicit profile state assignments. Never
+    // invent a round-robin assignment that the authoritative server will reject.
     if (splitMethod === 'equal') {
       const perCoord = Math.floor(totalDcFeePoolCents / coordinators.length);
       return coordinators.map(c => {
@@ -370,10 +375,10 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
         return {
           userId: c.id, name: c.full_name, role: 'coordinator',
           stateOrHub: states.join(', '),
-          dcCount: Math.floor(confirmedEntries.length / coordinators.length),
-          dcFeePoolCents: perCoord,
-          bonusPct,
-          bonusAmountCents: Math.round(perCoord * bonusPct / 100),
+          dcCount: payment?.dcCount ?? Math.floor(confirmedEntries.length / coordinators.length),
+          dcFeePoolCents: payment?.dcFeePoolCents ?? perCoord,
+          bonusPct: payment?.bonusPct ?? bonusPct,
+          bonusAmountCents: payment?.bonusAmountCents ?? Math.round(perCoord * bonusPct / 100),
           excluded: payment?.excluded ?? false,
           exclusionNote: payment?.exclusionNote ?? '',
           paymentId: payment?.id ?? null,
@@ -384,12 +389,12 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
       });
     }
 
-    // proportional: assign states round-robin; each coordinator owns their states' fees
-    const coordStateMap: Map<string, string[]> = new Map(coordinators.map(c => [c.id, []]));
-    states.forEach((state, i) => {
-      const owner = coordinators[i % coordinators.length];
-      coordStateMap.get(owner.id)!.push(state);
-    });
+    const scopeKey = (value: string | null | undefined) =>
+      (value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const coordStateMap = new Map(coordinators.map(c => {
+      const profileState = c.state_id ?? c.location?.state_id ?? c.location?.state;
+      return [c.id, states.filter(state => scopeKey(state) === scopeKey(profileState))];
+    }));
 
     return coordinators.map(c => {
       const payment = payments.find(p => p.userId === c.id && p.role === 'coordinator');
@@ -400,11 +405,11 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
       );
       return {
         userId: c.id, name: c.full_name, role: 'coordinator',
-        stateOrHub: ownedStates.length > 0 ? ownedStates.join(', ') : 'All states',
-        dcCount: coordDcCount,
-        dcFeePoolCents: coordPool,
-        bonusPct,
-        bonusAmountCents: Math.round(coordPool * bonusPct / 100),
+        stateOrHub: ownedStates.length > 0 ? ownedStates.join(', ') : 'Unresolved state assignment',
+        dcCount: payment?.dcCount ?? coordDcCount,
+        dcFeePoolCents: payment?.dcFeePoolCents ?? coordPool,
+        bonusPct: payment?.bonusPct ?? bonusPct,
+        bonusAmountCents: payment?.bonusAmountCents ?? Math.round(coordPool * bonusPct / 100),
         excluded: payment?.excluded ?? false,
         exclusionNote: payment?.exclusionNote ?? '',
         paymentId: payment?.id ?? null,
@@ -412,7 +417,24 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
         paymentMethod: payment?.paymentMethod ?? null,
         payrollPeriod: payment?.payrollPeriod ?? null,
       };
-    });
+    }).concat(states
+      .filter(state => !coordinators.some(c => (coordStateMap.get(c.id) ?? []).includes(state)))
+      .map(state => ({
+        userId: null,
+        name: 'Unresolved',
+        role: 'coordinator' as const,
+        stateOrHub: state,
+        dcCount: feeByState[state].dcIds.size,
+        dcFeePoolCents: feeByState[state].feeCents,
+        bonusPct,
+        bonusAmountCents: 0,
+        excluded: false,
+        exclusionNote: '',
+        paymentId: null,
+        paymentStatus: null,
+        paymentMethod: null,
+        payrollPeriod: null,
+      })));
   }, [coordinators, feeByState, totalDcFeePoolCents, getBonusPct, configs, hubId, confirmedEntries, payments]);
 
   // Supervisor rows
@@ -427,10 +449,10 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
       return {
         userId: s.id, name: s.full_name, role: 'supervisor',
         stateOrHub: mmpHubName ?? 'Hub',
-        dcCount: confirmedEntries.length,
-        dcFeePoolCents: poolPerSup,
-        bonusPct,
-        bonusAmountCents: Math.round(poolPerSup * bonusPct / 100),
+        dcCount: payment?.dcCount ?? confirmedEntries.length,
+        dcFeePoolCents: payment?.dcFeePoolCents ?? poolPerSup,
+        bonusPct: payment?.bonusPct ?? bonusPct,
+        bonusAmountCents: payment?.bonusAmountCents ?? Math.round(poolPerSup * bonusPct / 100),
         excluded: payment?.excluded ?? false,
         exclusionNote: payment?.exclusionNote ?? '',
         paymentId: payment?.id ?? null,
@@ -441,12 +463,13 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
     });
   }, [supervisors, totalDcFeePoolCents, getBonusPct, mmpHubName, confirmedEntries, payments]);
 
-  const totalBonusCents = useMemo(
+  const previewTotalBonusCents = useMemo(
     () => [...coordCalcRows, ...supCalcRows]
       .filter(r => !r.excluded && r.userId !== null)
       .reduce((s, r) => s + r.bonusAmountCents, 0),
     [coordCalcRows, supCalcRows]
   );
+  const totalBonusCents = snapshot?.totalBonusCents ?? previewTotalBonusCents;
 
   // Warnings
   const warnings = useMemo(() => {
@@ -510,51 +533,25 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
 
     setSpreApproving(true);
     try {
-      const allRows = [...coordCalcRows, ...supCalcRows];
-
-      // Build the payment-row payload for the RPC — exclusions applied here
-      const paymentRows = allRows
-        .filter(r => r.userId !== null)
-        .map(r => {
-          const key = r.userId! + ':' + r.role;
-          const excl = exclusions[key] ?? { excluded: false, note: '' };
-          return {
-            user_id: r.userId,
-            role: r.role,
-            hub_id: hubId,
-            hub_name: mmpHubName,
-            dc_count: r.dcCount,
-            dc_fee_pool_cents: r.dcFeePoolCents,
-            bonus_pct: r.bonusPct,
-            bonus_amount_cents: excl.excluded ? 0 : r.bonusAmountCents,
-            currency: 'SDG',
-            excluded: excl.excluded,
-            exclusion_note: excl.note || null,
-          };
+      const selectedExclusions = Object.entries(exclusions)
+        .filter(([, value]) => value.excluded)
+        .map(([key, value]) => {
+          const separator = key.lastIndexOf(':');
+          return { user_id: key.slice(0, separator), role: key.slice(separator + 1), note: value.note.trim() };
         });
-
-      // Single transactional RPC: upserts snapshot + all payment rows atomically.
-      // If ANY row fails the whole operation rolls back — no partial payout sets.
-      // The lifecycle trigger inside the RPC also blocks closed/historical MMPs
-      // as a final server-side backstop.
-      const { data: rpcResult, error: rpcError } = await supabase.rpc(
-        'pre_approve_mmp_incentives',
-        {
-          p_mmp_id:       mmpId,
-          p_total_pool:   totalDcFeePoolCents,
-          p_total_bonus:  totalBonusCents,
-          p_config_snap:  configs,
-          p_payment_rows: paymentRows,
-        }
+      // The server derives recipients, configuration, pools, and final amounts.
+      const { data: rpcResult, error: rpcError } = await (supabase.rpc as any)(
+        'calculate_and_preapprove_mmp_incentives',
+        buildIncentivePreapprovalArgs(mmpId, selectedExclusions)
       );
 
       if (rpcError) throw rpcError;
       const result = rpcResult as { ok: boolean; error?: string } | null;
       if (!result?.ok) {
-        throw new Error(result?.error ?? 'pre_approve_mmp_incentives returned failure');
+        throw new Error(result?.error ?? 'Incentive calculation returned failure');
       }
 
-      toast({ title: 'Incentives pre-approved', description: 'Snapshot locked. Amounts will update as WFP data is finalized.' });
+      toast({ title: 'Incentives pre-approved', description: 'Final amounts were calculated by the server and are now frozen.' });
       setPreApproveOpen(false);
       await loadData();
     } catch (err: any) {
@@ -578,59 +575,16 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
 
     setPayingId(payment.id);
     try {
-      if (method === 'wallet') {
-        // credit_retainer_wallet is idempotent on (user_id, period); we use the
-        // payment idempotency_key as the period so retries never double-credit.
-        const { error } = await supabase.rpc('credit_retainer_wallet', {
-          p_user_id: payment.userId,
-          p_amount_cents: payment.bonusAmountCents,
-          p_currency: payment.currency,
-          p_period: payment.idempotencyKey ?? `incentive-${payment.id}`,
-          p_created_by: currentUser?.id ?? null,
-          p_base_currency: null,
-          p_fx_rate: null,
-        });
-        if (error && !error.message?.includes('already_processed')) throw error;
-      } else {
-        // Payroll: check for an existing row keyed to this payment first so we
-        // never insert a second bonus line if the Finance user retries.
-        const { data: existing, error: chkErr } = await supabase
-          .from('payroll_run_items')
-          .select('id')
-          .eq('reference_id', payment.id)
-          .maybeSingle();
-        if (chkErr) throw chkErr;
-
-        if (!existing) {
-          const { error } = await supabase.from('payroll_run_items').insert({
-            user_id: payment.userId,
-            type: 'incentive_bonus',
-            amount_cents: payment.bonusAmountCents,
-            currency: payment.currency,
-            period_label: period,
-            reference_id: payment.id,
-            notes: `Incentive bonus for MMP ${mmpId}`,
-            created_by: currentUser?.id,
-          });
-          if (error) throw error;
-        }
-      }
-
-      // Mark payment row as paid — this is the canonical source of truth.
-      // Update atomically so a mid-flight crash cannot leave the row pending
-      // after the wallet/payroll write has already landed.
-      const { error: updateErr } = await supabase
-        .from('mmp_incentive_payments')
-        .update({
-          status: 'paid',
-          payment_method: method,
-          payroll_period: method === 'payroll' ? period : null,
-          paid_by: currentUser?.id,
-          paid_at: new Date().toISOString(),
-        })
-        .eq('id', payment.id)
-        .eq('status', 'pending'); // only update if still pending — prevents double-pay races
-      if (updateErr) throw updateErr;
+      const { data, error } = await (supabase.rpc as any)(
+        'pay_mmp_incentive',
+        buildPayMmpIncentiveArgs(
+          payment.id,
+          method as IncentivePaymentMethod,
+          period,
+        ),
+      );
+      if (error) throw error;
+      if (data && data.ok === false) throw new Error(data.error ?? 'Payment was not processed');
 
       toast({ title: 'Payment processed', description: `${fmt(payment.bonusAmountCents)} sent via ${method}.` });
       await loadData();
@@ -638,6 +592,27 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
       toast({ title: 'Payment failed', description: err.message, variant: 'destructive' });
     } finally {
       setPayingId(null);
+    }
+  };
+
+  const handleReverse = async () => {
+    if (!reversalPayment || !reversalReason.trim()) return;
+    setReversingId(reversalPayment.id);
+    try {
+      const { data, error } = await (supabase.rpc as any)('reverse_mmp_incentive', {
+        p_payment_id: reversalPayment.id,
+        p_reason: reversalReason.trim(),
+      });
+      if (error) throw error;
+      if (data && data.ok === false) throw new Error(data.error ?? 'Payment was not reversed');
+      toast({ title: 'Payment reversed', description: 'The wallet incentive payment was reversed.' });
+      setReversalPayment(null);
+      setReversalReason('');
+      await loadData();
+    } catch (err: any) {
+      toast({ title: 'Reversal failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setReversingId(null);
     }
   };
 
@@ -707,9 +682,11 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
   const statusBadge = () => {
     const s = snapshot?.status ?? 'calculating';
     switch (s) {
-      case 'pre_approved': return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Pre-Approved — Awaiting WFP Final Data</Badge>;
+      case 'pre_approved': return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Pre-Approved — Server Amounts Frozen</Badge>;
       case 'approved':     return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200"><CheckCircle2 className="h-3 w-3 mr-1" />Approved</Badge>;
       case 'paid':         return <Badge className="bg-purple-100 text-purple-700 border-purple-200"><DollarSign className="h-3 w-3 mr-1" />Paid</Badge>;
+      case 'failed':       return <Badge className="bg-red-100 text-red-700 border-red-200">Failed</Badge>;
+      case 'reversed':     return <Badge className="bg-slate-100 text-slate-700 border-slate-200">Reversed</Badge>;
       default:             return <Badge variant="outline" className="text-muted-foreground"><Clock className="h-3 w-3 mr-1" />Calculating</Badge>;
     }
   };
@@ -824,6 +801,7 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
         <CalcTable rows={coordCalcRows} showPayPanel={showPaymentPanel} payments={payments}
           payingId={payingId} payMethodOverrides={payMethodOverrides} payPeriodOverrides={payPeriodOverrides}
           onPay={(pmt) => handlePay(pmt)}
+          onReverse={(pmt) => { setReversalPayment(pmt); setReversalReason(''); }}
           onMethodChange={(id, v) => setPayMethodOverrides(prev => ({ ...prev, [id]: v }))}
           onPeriodChange={(id, v) => setPayPeriodOverrides(prev => ({ ...prev, [id]: v }))}
         />
@@ -842,6 +820,7 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
           <CalcTable rows={supCalcRows} showPayPanel={showPaymentPanel} payments={payments}
             payingId={payingId} payMethodOverrides={payMethodOverrides} payPeriodOverrides={payPeriodOverrides}
             onPay={(pmt) => handlePay(pmt)}
+            onReverse={(pmt) => { setReversalPayment(pmt); setReversalReason(''); }}
             onMethodChange={(id, v) => setPayMethodOverrides(prev => ({ ...prev, [id]: v }))}
             onPeriodChange={(id, v) => setPayPeriodOverrides(prev => ({ ...prev, [id]: v }))}
           />
@@ -857,7 +836,7 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
               Pre-Approve Incentive Bonuses
             </DialogTitle>
             <DialogDescription>
-              Review totals and optionally exclude individuals. Amounts will continue updating as WFP data is finalized. The config snapshot is locked at this point.
+              The figures below are previews only. On confirmation, final amounts are calculated by the server and frozen. You may exclude individuals with a required note.
             </DialogDescription>
           </DialogHeader>
 
@@ -901,6 +880,7 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
                   {state.excluded && (
                     <Textarea
                       placeholder="Reason for exclusion…"
+                        required
                       value={state.note}
                       onChange={e => setExclusions(prev => ({ ...prev, [key]: { ...state, note: e.target.value } }))}
                       className="text-sm h-16 resize-none"
@@ -915,11 +895,51 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
             <Button type="button" variant="outline" onClick={() => setPreApproveOpen(false)}>Cancel</Button>
             <Button
               type="button"
-              disabled={preApproving}
+              disabled={preApproving || Object.values(exclusions).some(value => value.excluded && !value.note.trim())}
               onClick={handlePreApprove}
               className="bg-[#1D3461] hover:bg-[#1D3461]/90 text-white"
             >
               {preApproving ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Saving…</> : 'Confirm Pre-Approval'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!reversalPayment}
+        onOpenChange={open => {
+          if (!open && !reversingId) {
+            setReversalPayment(null);
+            setReversalReason('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reverse wallet payment</DialogTitle>
+            <DialogDescription>
+              This creates an auditable wallet reversal. Payroll payments must be reversed through payroll.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="incentive-reversal-reason">Reason</Label>
+            <Textarea
+              id="incentive-reversal-reason"
+              value={reversalReason}
+              onChange={event => setReversalReason(event.target.value)}
+              placeholder="Required reversal reason…"
+              required
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={!!reversingId} onClick={() => setReversalPayment(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={!!reversingId || !reversalReason.trim()}
+              onClick={handleReverse}
+            >
+              {reversingId ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-1.5" />}
+              Reverse payment
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -938,11 +958,12 @@ interface CalcTableProps {
   payMethodOverrides: Record<string, string>;
   payPeriodOverrides: Record<string, string>;
   onPay: (pmt: PaymentRow) => void;
+  onReverse: (pmt: PaymentRow) => void;
   onMethodChange: (id: string, v: string) => void;
   onPeriodChange: (id: string, v: string) => void;
 }
 
-function CalcTable({ rows, showPayPanel, payments, payingId, payMethodOverrides, payPeriodOverrides, onPay, onMethodChange, onPeriodChange }: CalcTableProps) {
+function CalcTable({ rows, showPayPanel, payments, payingId, payMethodOverrides, payPeriodOverrides, onPay, onReverse, onMethodChange, onPeriodChange }: CalcTableProps) {
   if (rows.length === 0) {
     return <p className="px-5 py-4 text-sm text-muted-foreground">No data.</p>;
   }
@@ -978,12 +999,11 @@ function CalcTable({ rows, showPayPanel, payments, payingId, payMethodOverrides,
                 <td className="px-3 py-3 text-right tabular-nums">{pct(row.bonusPct)}</td>
                 <td className="px-3 py-3 text-right tabular-nums font-semibold">{fmt(row.bonusAmountCents)}</td>
                 <td className="px-3 py-3 text-center">
-                  {row.paymentStatus === 'paid'
-                    ? <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px]">Paid</Badge>
-                    : row.paymentId
-                      ? <Badge variant="outline" className="text-[10px]">Pending</Badge>
-                      : <span className="text-[10px] text-muted-foreground">—</span>
-                  }
+                  {row.paymentStatus === 'paid' && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px]">Paid</Badge>}
+                  {row.paymentStatus === 'failed' && <Badge className="bg-red-100 text-red-700 border-red-200 text-[10px]">Failed</Badge>}
+                  {row.paymentStatus === 'reversed' && <Badge className="bg-slate-100 text-slate-700 border-slate-200 text-[10px]">Reversed</Badge>}
+                  {row.paymentStatus === 'pending' && <Badge variant="outline" className="text-[10px]">Pending</Badge>}
+                  {!row.paymentStatus && <span className="text-[10px] text-muted-foreground">—</span>}
                 </td>
                 {showPayPanel && (
                   <td className="px-3 py-3">
@@ -1021,9 +1041,23 @@ function CalcTable({ rows, showPayPanel, payments, payingId, payMethodOverrides,
                       </div>
                     )}
                     {pmt?.status === 'paid' && (
-                      <span className="text-[11px] text-muted-foreground">
-                        via {pmt.paymentMethod} {pmt.payrollPeriod ? `(${pmt.payrollPeriod})` : ''}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground">
+                          via {pmt.paymentMethod} {pmt.payrollPeriod ? `(${pmt.payrollPeriod})` : ''}
+                        </span>
+                        {pmt.paymentMethod === 'wallet' && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-[11px] text-destructive"
+                            onClick={() => onReverse(pmt)}
+                          >
+                            <RotateCcw className="h-3 w-3 mr-1" />
+                            Reverse
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </td>
                 )}

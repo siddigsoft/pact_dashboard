@@ -61,3 +61,4 @@
 - [MMP supervisor hub report boundary](mmp-supervisor-hub-report-boundary.md) — Supervisor MMP lists, report payloads, performance, finance, and exports must be scoped server-side to assigned hubs.
 - [WFP device attribution authority](wfp-device-attribution-authority.md) — Confirmed-site finance follows resolved device attribution; preserve raw evidence and serialize changes with Cycle Close.
 - [Cycle Close matching boundary](cycle-close-matching-boundary.md) — Step 2 resolves every WFP row; Step 3 alone owns reasons for MMP sites not confirmed by WFP.
+- [Incentive server authority](incentive-server-authority.md) — Bonus calculations and settlements must be database-authoritative, atomic, and fail closed on unresolved recipients.

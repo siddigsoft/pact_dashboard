@@ -24,11 +24,48 @@ export type IncentiveSnapshotStatus =
   | 'calculating'
   | 'pre_approved'
   | 'approved'
-  | 'paid';
+  | 'paid'
+  | 'failed'
+  | 'reversed';
 
-export type IncentivePaymentStatus = 'pending' | 'paid';
+export type IncentivePaymentStatus = 'pending' | 'paid' | 'failed' | 'reversed';
 
 export type IncentivePaymentMethod = 'wallet' | 'payroll';
+
+export interface IncentiveExclusion {
+  user_id: string;
+  role: string;
+  note: string;
+}
+
+/** Browser-safe RPC contract: all monetary inputs are intentionally absent. */
+export function buildIncentivePreapprovalArgs(
+  mmpId: string,
+  exclusions: IncentiveExclusion[],
+) {
+  const normalized = exclusions.map(exclusion => ({
+    user_id: exclusion.user_id,
+    role: exclusion.role,
+    note: exclusion.note.trim(),
+  }));
+  if (normalized.some(exclusion => !exclusion.user_id || !exclusion.role || !exclusion.note)) {
+    throw new Error('A note is required for every excluded recipient.');
+  }
+  return { p_mmp_id: mmpId, p_exclusions: normalized };
+}
+
+export function buildPayMmpIncentiveArgs(
+  paymentId: string,
+  method: IncentivePaymentMethod,
+  payrollPeriod: string | null,
+) {
+  return {
+    p_payment_id: paymentId,
+    p_method: method,
+    p_payroll_run_id: null,
+    p_payroll_period: method === 'payroll' ? payrollPeriod : null,
+  };
+}
 
 // ─── DB row types (snake_case, as returned by Supabase) ──────────────────────
 
@@ -235,6 +272,8 @@ export const INCENTIVE_STATUS_LABELS: Record<IncentiveSnapshotStatus, string> = 
   pre_approved: 'Pre-Approved',
   approved:     'Approved',
   paid:         'Paid',
+  failed:       'Failed',
+  reversed:     'Reversed',
 };
 
 export const INCENTIVE_STATUS_COLORS: Record<IncentiveSnapshotStatus, string> = {
@@ -242,15 +281,22 @@ export const INCENTIVE_STATUS_COLORS: Record<IncentiveSnapshotStatus, string> = 
   pre_approved: 'bg-amber-100 text-amber-700',
   approved:     'bg-green-100 text-green-700',
   paid:         'bg-emerald-100 text-emerald-700',
+  failed:       'bg-red-100 text-red-700',
+  reversed:     'bg-slate-100 text-slate-700',
 };
 
 export const INCENTIVE_PAYMENT_STATUS_COLORS: Record<IncentivePaymentStatus, string> = {
   pending: 'bg-amber-100 text-amber-700',
   paid:    'bg-emerald-100 text-emerald-700',
+  failed:  'bg-red-100 text-red-700',
+  reversed:'bg-slate-100 text-slate-700',
 };
 
 /** Roles that receive incentive payments (active by default at launch). */
 export const DEFAULT_ACTIVE_INCENTIVE_ROLES: IncentiveRole[] = ['coordinator', 'supervisor'];
+
+/** Roles currently supported by the settings UI and server calculator. */
+export const CONFIGURABLE_INCENTIVE_ROLES: IncentiveRole[] = ['coordinator', 'supervisor'];
 
 /** All roles that can ever be configured in the incentive system. */
 export const ALL_INCENTIVE_ROLES: IncentiveRole[] = [

@@ -3,7 +3,6 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useLocation as useLocationCtx } from '@/context/location/LocationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useAppContext } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -23,8 +22,7 @@ import type {
 } from '@/types/incentive';
 import {
   INCENTIVE_ROLE_LABELS,
-  ALL_INCENTIVE_ROLES,
-  DEFAULT_ACTIVE_INCENTIVE_ROLES,
+  CONFIGURABLE_INCENTIVE_ROLES,
 } from '@/types/incentive';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -57,7 +55,6 @@ function mkLocalId() {
 
 export default function IncentiveSettingsPage() {
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
-  const { currentUser } = useAppContext();
   const { hubs } = useLocationCtx();
   const { toast } = useToast();
 
@@ -70,9 +67,9 @@ export default function IncentiveSettingsPage() {
 
   // Global role rows (one per role, hub_id IS NULL)
   const [globalRows, setGlobalRows] = useState<GlobalRoleRow[]>(() =>
-    ALL_INCENTIVE_ROLES.map(role => ({
+    CONFIGURABLE_INCENTIVE_ROLES.map(role => ({
       role,
-      isActive: DEFAULT_ACTIVE_INCENTIVE_ROLES.includes(role),
+      isActive: true,
       bonusPct: role === 'coordinator' ? 10 : role === 'supervisor' ? 7 : 0,
       splitMethod: 'proportional' as IncentiveSplitMethod,
       dbId: null,
@@ -127,7 +124,12 @@ export default function IncentiveSettingsPage() {
       );
 
       // ── Hub overrides ─────────────────────────────────────────────────────
-      const hubDbRows = rows.filter(r => r.hub_id !== null);
+      // Unsupported legacy/future roles are intentionally omitted. Because the
+      // save RPC replaces the complete set, the next save also removes them.
+      const hubDbRows = rows.filter(
+        r => r.hub_id !== null
+          && CONFIGURABLE_INCENTIVE_ROLES.includes(r.role as IncentiveRole)
+      );
       setHubOverrides(
         hubDbRows.map(r => ({
           localId: r.id,
@@ -194,11 +196,10 @@ export default function IncentiveSettingsPage() {
 
     setSaving(true);
     try {
-      const userId = currentUser?.id ?? null;
-
-      // 1. Upsert global rows
-      for (const row of globalRows) {
-        const payload = {
+      // This RPC owns the complete settings set. Sending all global rows and all
+      // non-deleted overrides makes deletion and upsert one atomic operation.
+      const settings = [
+        ...globalRows.map(row => ({
           hub_id: null as string | null,
           role: row.role,
           is_active: row.isActive,
@@ -206,38 +207,8 @@ export default function IncentiveSettingsPage() {
           split_method: row.splitMethod,
           coverage_threshold_pct: coverageThreshold,
           what_counts: 'wfp_confirmed' as const,
-          created_by: userId,
-        };
-        if (row.dbId) {
-          const { error } = await supabase
-            .from('incentive_configs')
-            .update({ ...payload, created_by: undefined })
-            .eq('id', row.dbId);
-          if (error) throw error;
-        } else {
-          const { data: inserted, error } = await supabase
-            .from('incentive_configs')
-            .insert(payload)
-            .select('id')
-            .single();
-          if (error) throw error;
-          setGlobalRows(prev =>
-            prev.map(r => r.role === row.role ? { ...r, dbId: inserted.id } : r)
-          );
-        }
-      }
-
-      // 2. Delete marked hub overrides
-      const toDelete = hubOverrides.filter(o => o.toDelete && o.dbId);
-      for (const o of toDelete) {
-        const { error } = await supabase.from('incentive_configs').delete().eq('id', o.dbId!);
-        if (error) throw error;
-      }
-
-      // 3. Upsert remaining hub overrides
-      const toUpsert = hubOverrides.filter(o => !o.toDelete);
-      for (const o of toUpsert) {
-        const payload = {
+        })),
+        ...active.map(o => ({
           hub_id: o.hubId,
           role: o.role,
           is_active: true,
@@ -245,31 +216,16 @@ export default function IncentiveSettingsPage() {
           split_method: 'proportional' as const,
           coverage_threshold_pct: coverageThreshold,
           what_counts: 'wfp_confirmed' as const,
-          created_by: userId,
-        };
-        if (o.dbId) {
-          const { error } = await supabase
-            .from('incentive_configs')
-            .update({ ...payload, created_by: undefined })
-            .eq('id', o.dbId);
-          if (error) throw error;
-        } else {
-          const { data: inserted, error } = await supabase
-            .from('incentive_configs')
-            .insert(payload)
-            .select('id')
-            .single();
-          if (error) throw error;
-          setHubOverrides(prev =>
-            prev.map(r => r.localId === o.localId ? { ...r, dbId: inserted.id, isNew: false } : r)
-          );
-        }
-      }
-
-      // Purge deleted rows from local state
-      setHubOverrides(prev => prev.filter(o => !o.toDelete));
+        })),
+      ];
+      const { data, error } = await (supabase.rpc as any)('save_incentive_settings', {
+        p_settings: settings,
+      });
+      if (error) throw error;
+      if (data && data.ok === false) throw new Error(data.error ?? 'Settings were not saved');
 
       toast({ title: 'Incentive settings saved', description: 'Changes will apply to future MMP calculations.' });
+      await loadConfigs();
     } catch (err: any) {
       toast({ title: 'Save failed', description: err.message, variant: 'destructive' });
     } finally {
@@ -449,9 +405,6 @@ export default function IncentiveSettingsPage() {
                 {/* Role name */}
                 <td className="px-6 py-4">
                   <div className="font-medium">{INCENTIVE_ROLE_LABELS[row.role]}</div>
-                  {!DEFAULT_ACTIVE_INCENTIVE_ROLES.includes(row.role) && (
-                    <span className="text-[10px] text-muted-foreground">Future feature</span>
-                  )}
                 </td>
 
                 {/* Active toggle */}
@@ -623,7 +576,7 @@ export default function IncentiveSettingsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ALL_INCENTIVE_ROLES.map(r => (
+                  {CONFIGURABLE_INCENTIVE_ROLES.map(r => (
                     <SelectItem key={r} value={r} className="text-xs">{INCENTIVE_ROLE_LABELS[r]}</SelectItem>
                   ))}
                 </SelectContent>
