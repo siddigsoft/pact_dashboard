@@ -1,3 +1,4 @@
+import { isAdminOnlyDocument, type DocumentMetadata } from './workspaceDocuments';
 export type SecurityLevel = 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
 
 export const CLEARANCE_ORDER: Record<SecurityLevel, number> = {
@@ -42,7 +43,7 @@ export function collectDescendantFolderIds(
   return result;
 }
 
-export interface WorkspaceFileLike {
+export interface WorkspaceFileLike extends DocumentMetadata {
   id: string;
   folder_id: string | null;
   name: string;
@@ -59,6 +60,7 @@ export interface WorkspaceFileLike {
 }
 
 export interface WorkspaceFolderLike {
+  audience?: 'workspace' | 'admin_only';
   id: string;
   created_by: string | null;
   security_level: SecurityLevel;
@@ -69,6 +71,7 @@ export function filterVisibleFolders<T extends WorkspaceFolderLike>(
   folders: T[],
   opts: {
     isSuperAdmin: boolean;
+    isAdmin?: boolean;
     userId: string;
     effectiveClearance: SecurityLevel;
     allDeniedFolderIds: Set<string>;
@@ -76,6 +79,7 @@ export function filterVisibleFolders<T extends WorkspaceFolderLike>(
   },
 ): T[] {
   return folders.filter(f => {
+    if (f.audience === 'admin_only') return opts.isSuperAdmin || !!opts.isAdmin;
     if (opts.allDeniedFolderIds.has(f.id)) return false;
     return opts.isSuperAdmin
       || f.created_by === opts.userId
@@ -132,6 +136,7 @@ export function filterDisplayedFiles<T extends WorkspaceFileLike>(opts: {
   selectedFolderId: string | null;
   userId: string;
   isSuperAdmin: boolean;
+  isAdmin?: boolean;
   effectiveClearance: SecurityLevel;
   deniedFileIds: Set<string>;
   grantedFileIds: Set<string>;
@@ -143,7 +148,7 @@ export function filterDisplayedFiles<T extends WorkspaceFileLike>(opts: {
   searchQuery: string;
   sortBy: string;
 }): T[] {
-  let files = opts.files;
+  let files = opts.files.filter(f => !isAdminOnlyDocument(f) || opts.isSuperAdmin || opts.isAdmin);
   const isOwnerOrAdmin = (f: T) => opts.isSuperAdmin || f.created_by === opts.userId;
 
   files = files.filter(f => !opts.deniedFileIds.has(f.id));
@@ -151,7 +156,8 @@ export function filterDisplayedFiles<T extends WorkspaceFileLike>(opts: {
     files = files.filter(f => !f.folder_id || !opts.allDeniedFolderIds.has(f.folder_id));
   }
   files = files.filter(f =>
-    isOwnerOrAdmin(f)
+    (isAdminOnlyDocument(f) && opts.isAdmin)
+    || isOwnerOrAdmin(f)
     || meetsClearance(f.security_level, opts.effectiveClearance)
     || opts.grantedFileIds.has(f.id),
   );

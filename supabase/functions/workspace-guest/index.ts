@@ -121,15 +121,18 @@ serve(async (req) => {
       await Promise.all([
         admin
           .from('workspace_folders')
-          .select('id, name, description, parent_folder_id, security_level, color, icon, short_code, password_hash')
+          .select('id, name, description, parent_folder_id, security_level, color, icon, short_code, password_hash, audience')
           .eq('parent_folder_id', requestedId)
           .eq('archived', false)
+          .neq('audience', 'admin_only')
           .order('name'),
         admin
           .from('workspace_files')
-          .select('id, folder_id, name, description, file_size, mime_type, extension, security_level, storage_provider, short_code, allow_download, is_pinned, tags, created_at')
+          .select('id, folder_id, name, description, file_size, mime_type, extension, security_level, storage_provider, short_code, allow_download, is_pinned, tags, created_at, audience, document_category')
           .eq('folder_id', requestedId)
           .eq('archived', false)
+          .neq('audience', 'admin_only')
+          .not('document_category', 'in', '(site_permit,payment_receipt,site_image,mmp)')
           .order('name'),
       ])
     if (foldersError || filesError) return json({ error: 'Failed to load folder contents' }, 500)
@@ -151,8 +154,13 @@ serve(async (req) => {
         ...item,
         password_protected: !!item.password_hash,
         password_hash: undefined,
+        audience: undefined,
       })),
-      files: files ?? [],
+      files: (files ?? []).map((item) => ({
+        ...item,
+        audience: undefined,
+        document_category: undefined,
+      })),
     })
   }
 
@@ -191,12 +199,15 @@ serve(async (req) => {
     if (!UUID_RE.test(fileId)) return json({ error: 'Invalid file' }, 400)
     const { data: file } = await admin
       .from('workspace_files')
-      .select('id, folder_id, name, storage_path, storage_provider, public_url, allow_download, archived')
+      .select('id, folder_id, name, storage_path, storage_provider, public_url, allow_download, archived, audience, document_category')
       .eq('id', fileId)
       .maybeSingle()
+    const protectedCats = new Set(['site_permit', 'payment_receipt', 'site_image', 'mmp'])
     if (
       !file ||
       file.archived ||
+      file.audience === 'admin_only' ||
+      protectedCats.has(String(file.document_category ?? '')) ||
       !file.allow_download ||
       !file.folder_id ||
       !(await isInsideSharedFolder(file.folder_id))

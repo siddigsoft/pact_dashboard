@@ -30,7 +30,7 @@ export function WorkspaceAccessGate({ children }: { children: ReactNode }) {
   const [reason, setReason] = useState('');
   const [requesting, setRequesting] = useState(false);
 
-  const isSuperAdmin = hasAnyRole(['super_admin']);
+  const isSuperAdmin = hasAnyRole(['super_admin', 'admin']);
 
   // Fetch grant status for this user
   const { data: grant, isLoading: loadingGrant } = useQuery<AccessGrant | null>({

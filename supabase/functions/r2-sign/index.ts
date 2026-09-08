@@ -10,10 +10,10 @@
  *                    unique filename. Client cannot pick the key.
  *                    Requires an authenticated user.
  *  - sign-download { key, filename? }  → { url }        (presigned GET, 1 h)
- *                    Authenticated users: always allowed (RLS on the metadata
- *                    table already gated what keys they can see).
- *                    Anonymous (share / QR FileViewer): any non-archived
- *                    workspace_files row — the share URL is the access grant.
+ *                    Authenticated users: allowed (source modules may reuse keys;
+ *                    hub Admin only rows stay hidden from non-admins via RLS lists).
+ *                    Anonymous (share / QR FileViewer): non-archived workspace row
+ *                    that is not Admin only — guest share cannot open hub-restricted docs.
  *  - delete        { key }             → { ok: true }
  *                    Requires auth. Allowed for legacy user-id prefixes,
  *                    unregistered snapshot keys (orphan cleanup), or keys
@@ -119,16 +119,22 @@ serve(async (req) => {
     if (!validR2Key(key)) return json({ error: 'Invalid key' }, 400)
 
     if (!user) {
-      // Anonymous share / QR viewer. The share URL is the access grant, including
-      // Confidential and Top Secret files. Only require a live workspace_files row.
+      // Anonymous share / QR viewer. Share URL is the access grant for ordinary
+      // hub files only — Admin only library rows must not be downloadable this way.
       const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
       const { data: row } = await admin
         .from('workspace_files')
-        .select('id, archived')
+        .select('id, archived, audience, document_category')
         .eq('storage_path', key)
         .eq('storage_provider', 'r2')
         .maybeSingle()
-      if (!row || row.archived) {
+      const protectedCats = new Set(['site_permit', 'payment_receipt', 'site_image', 'mmp'])
+      if (
+        !row ||
+        row.archived ||
+        row.audience === 'admin_only' ||
+        protectedCats.has(String(row.document_category ?? ''))
+      ) {
         return json({ error: 'Unauthorized' }, 401)
       }
     }
