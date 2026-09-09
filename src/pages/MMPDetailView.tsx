@@ -136,7 +136,7 @@ const MMPDetailView = () => {
   const isDataTeam = hasAnyRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
   const isCountryDirector = hasAnyRole(['countryDirector', 'country_director', 'CountryDirector']);
   const canAccessQuestionnaires = isSuperAdmin() || isAdmin || isDataTeam || isFOM || isCountryDirector;
-  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isSupervisor || isDataTeam;
+  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isSupervisor || isDataTeam || isCountryDirector;
   const canEdit = (checkPermission('mmp', 'update') || isAdmin || isCoordinator || isSupervisor) ? true : false;
   // Only Super Admins may delete MMPs — permission checks and isAdmin are insufficient alone.
   const canDelete = isSuperAdmin();
