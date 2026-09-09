@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
+import { useLocation as useLocationCtx } from '@/context/location/LocationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -52,11 +53,12 @@ interface MyPaymentRow {
   bonus_amount_cents: number;
   currency: string;
   excluded: boolean;
-  status: string;
+  payment_status: string;
   payment_method: string | null;
   paid_at: string | null;
-  mmp_incentive_snapshots: { id: string; status: string } | null;
-  mmp_files: { id: string; name: string; mmp_id: string } | null;
+  snapshot_status: string;
+  mmp_id: string | null;
+  mmp_name: string | null;
 }
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
@@ -74,6 +76,8 @@ const INC_LABEL: Record<string, string> = {
   pre_approved: 'Pre-Approved',
   approved:     'Approved',
   paid:         'Paid',
+  failed:       'Failed',
+  reversed:     'Reversed',
 };
 
 const INC_CLASS: Record<string, string> = {
@@ -82,6 +86,8 @@ const INC_CLASS: Record<string, string> = {
   pre_approved: 'bg-amber-100 text-amber-700 border-amber-200',
   approved:     'bg-emerald-100 text-emerald-700 border-emerald-200',
   paid:         'bg-purple-100 text-purple-700 border-purple-200',
+  failed:       'bg-red-100 text-red-700 border-red-200',
+  reversed:     'bg-slate-100 text-slate-700 border-slate-200',
 };
 
 const CYCLE_CLASS: Record<string, string> = {
@@ -127,17 +133,11 @@ export default function IncentivesOverviewPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
+  const { hubs } = useLocationCtx();
+  const { isSuperAdmin } = useAuthorization();
 
-  const isAdmin      = hasAnyRole(['super_admin', 'superAdmin', 'admin', 'ict']);
-  const isFinance    = hasAnyRole(['finance', 'financial_admin', 'financialAdmin']);
-  const isFOM        = hasAnyRole(['fom']);
-  const isSenior     = hasAnyRole(['Senior Management', 'country_director']);
-  const isCoord      = hasAnyRole(['coordinator']);
-  const isSupervisor = hasAnyRole(['supervisor']);
-
-  const canSeeAll = isAdmin || isFinance || isFOM || isSenior;
-  const canSeeOwn = isCoord || isSupervisor;
+  const canSeeAll = isSuperAdmin();
+  const canSeeOwn = false;
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const [mmps, setMmps]           = useState<MMPRow[]>([]);
@@ -158,7 +158,7 @@ export default function IncentivesOverviewPage() {
       let q = supabase
         .from('mmp_files')
         .select(`
-          id, name, mmp_id, hub_name, hub_id, cycle_status, status, created_at, uploaded_at,
+          id, name, mmp_id, hub_id, cycle_status, status, created_at, uploaded_at,
           mmp_incentive_snapshots(
             id, status, total_bonus_cents, coordinator_count, supervisor_count,
             currency, pre_approved_at, approved_at
@@ -174,6 +174,7 @@ export default function IncentivesOverviewPage() {
       // Supabase returns the 1-to-1 relation as an array; unwrap to object or null
       const rows = (data ?? []).map((r: any) => ({
         ...r,
+        hub_name: hubs.find(hub => hub.id === r.hub_id)?.name ?? null,
         mmp_incentive_snapshots: Array.isArray(r.mmp_incentive_snapshots)
           ? (r.mmp_incentive_snapshots[0] ?? null)
           : (r.mmp_incentive_snapshots ?? null),
@@ -185,29 +186,35 @@ export default function IncentivesOverviewPage() {
     } finally {
       setLoadingMmps(false);
     }
-  }, [toast]);
+  }, [hubs, toast]);
 
   const fetchMyPayments = useCallback(async () => {
     if (!user?.id) return;
     setLoadingMine(true);
     try {
-      const { data, error } = await supabase
-        .from('mmp_incentive_payments')
-        .select(`
-          id, role, hub_name, bonus_pct,
-          bonus_amount_cents, currency, excluded, status,
-          payment_method, paid_at,
-          mmp_incentive_snapshots(id, status),
-          mmp_files(id, name, mmp_id)
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
+      const { data, error } = await (supabase.rpc as any)('get_my_incentive_payments');
       if (error) throw error;
-      const visible = (data ?? []).filter(
-        (p: any) => (p.mmp_incentive_snapshots as any)?.status !== 'calculating'
-      );
-      setMyPayments(visible as unknown as MyPaymentRow[]);
+      const rawRows = Array.isArray(data)
+        ? data
+        : (data && Array.isArray(data.payments) ? data.payments : []);
+      const visible = rawRows
+        .map((p: any): MyPaymentRow => ({
+          id: String(p.id ?? ''),
+          role: String(p.role ?? ''),
+          hub_name: typeof p.hub_name === 'string' ? p.hub_name : null,
+          bonus_pct: p.bonus_pct == null ? null : Number(p.bonus_pct),
+          bonus_amount_cents: Number(p.bonus_amount_cents ?? 0),
+          currency: typeof p.currency === 'string' ? p.currency : 'SDG',
+          excluded: p.excluded === true,
+          payment_status: String(p.payment_status ?? p.status ?? 'pending'),
+          payment_method: typeof p.payment_method === 'string' ? p.payment_method : null,
+          paid_at: typeof p.paid_at === 'string' ? p.paid_at : null,
+          snapshot_status: String(p.snapshot_status ?? p.mmp_incentive_snapshots?.status ?? 'pre_approved'),
+          mmp_id: typeof p.mmp_id === 'string' ? p.mmp_id : p.mmp_files?.id ?? null,
+          mmp_name: typeof p.mmp_name === 'string' ? p.mmp_name : p.mmp_files?.name ?? null,
+        }))
+        .filter((p: MyPaymentRow) => p.id && p.snapshot_status !== 'calculating');
+      setMyPayments(visible);
     } catch (err: any) {
       toast({ title: 'Error loading bonuses', description: err.message, variant: 'destructive' });
     } finally {
@@ -231,11 +238,11 @@ export default function IncentivesOverviewPage() {
   });
 
   const filteredPayments = myPayments.filter(p => {
-    const displayStatus = p.status === 'paid'
-      ? 'paid'
-      : (p.mmp_incentive_snapshots?.status ?? 'pre_approved');
+    const displayStatus = ['paid', 'failed', 'reversed'].includes(p.payment_status)
+      ? p.payment_status
+      : p.snapshot_status;
     const matchSearch = !search
-      || (p.mmp_files?.name ?? '').toLowerCase().includes(search.toLowerCase());
+      || (p.mmp_name ?? '').toLowerCase().includes(search.toLowerCase());
     const matchInc = incFilter === 'all' || displayStatus === incFilter;
     return matchSearch && matchInc;
   });
@@ -244,13 +251,13 @@ export default function IncentivesOverviewPage() {
   const totalPaidCents = canSeeAll
     ? mmps.filter(m => m.mmp_incentive_snapshots?.status === 'paid')
         .reduce((s, m) => s + (m.mmp_incentive_snapshots?.total_bonus_cents ?? 0), 0)
-    : myPayments.filter(p => p.status === 'paid' && !p.excluded)
+    : myPayments.filter(p => p.payment_status === 'paid' && !p.excluded)
         .reduce((s, p) => s + p.bonus_amount_cents, 0);
 
   const totalApprovedCents = canSeeAll
     ? mmps.filter(m => m.mmp_incentive_snapshots?.status === 'approved')
         .reduce((s, m) => s + (m.mmp_incentive_snapshots?.total_bonus_cents ?? 0), 0)
-    : myPayments.filter(p => p.mmp_incentive_snapshots?.status === 'approved' && !p.excluded)
+    : myPayments.filter(p => p.snapshot_status === 'approved' && !p.excluded)
         .reduce((s, p) => s + p.bonus_amount_cents, 0);
 
   const pendingMMPCount = mmps.filter(m => !m.mmp_incentive_snapshots && m.cycle_status !== 'closed').length;
@@ -259,6 +266,20 @@ export default function IncentivesOverviewPage() {
     ?.mmp_incentive_snapshots?.currency ?? 'SDG';
 
   // ─────────────────────────────────────────────────────────────────────────
+  if (!canSeeAll) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center p-6">
+        <div className="max-w-sm text-center">
+          <Award className="mx-auto h-10 w-10 text-muted-foreground" />
+          <h1 className="mt-4 text-xl font-semibold">Access restricted</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Incentive bonuses are currently available to Super Admins only.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* ── Header ───────────────────────────────────────────────────────── */}
@@ -333,7 +354,7 @@ export default function IncentivesOverviewPage() {
               label="Pre-Approved (awaiting finance)"
               value={fmt(
                 myPayments
-                  .filter(p => p.mmp_incentive_snapshots?.status === 'pre_approved' && !p.excluded)
+                  .filter(p => p.snapshot_status === 'pre_approved' && !p.excluded)
                   .reduce((s, p) => s + p.bonus_amount_cents, 0),
                 myPayments[0]?.currency ?? 'SDG'
               )}
@@ -365,6 +386,8 @@ export default function IncentivesOverviewPage() {
               <SelectItem value="pre_approved">Pre-Approved</SelectItem>
               <SelectItem value="approved">Approved</SelectItem>
               <SelectItem value="paid">Paid</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="reversed">Reversed</SelectItem>
             </SelectContent>
           </Select>
           {canSeeAll && (
@@ -558,11 +581,11 @@ export default function IncentivesOverviewPage() {
                     </thead>
                     <tbody>
                       {filteredPayments.map(p => {
-                        const displayStatus = p.status === 'paid'
-                          ? 'paid'
-                          : (p.mmp_incentive_snapshots?.status ?? 'pre_approved');
-                        const mmpName = (p.mmp_files as any)?.name ?? (p.mmp_files as any)?.mmp_id ?? '—';
-                        const mmpFileId = (p.mmp_files as any)?.id;
+                        const displayStatus = ['paid', 'failed', 'reversed'].includes(p.payment_status)
+                          ? p.payment_status
+                          : p.snapshot_status;
+                        const mmpName = p.mmp_name ?? '—';
+                        const mmpFileId = p.mmp_id;
                         return (
                           <tr key={p.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
                             <td className="px-4 py-3">
@@ -588,7 +611,7 @@ export default function IncentivesOverviewPage() {
                               </Badge>
                             </td>
                             <td className="px-4 py-3 text-xs text-muted-foreground">
-                              {p.status === 'paid' ? (
+                              {p.payment_status === 'paid' ? (
                                 <div>
                                   <span className="capitalize">{p.payment_method ?? 'wallet'}</span>
                                   {p.paid_at && <p className="text-[10px] mt-0.5">{fmtDate(p.paid_at)}</p>}
@@ -599,9 +622,9 @@ export default function IncentivesOverviewPage() {
                         );
                       })}
                     </tbody>
-                    {filteredPayments.some(p => p.status === 'paid') && (() => {
+                    {filteredPayments.some(p => p.payment_status === 'paid') && (() => {
                       const totalPaid = filteredPayments
-                        .filter(p => p.status === 'paid' && !p.excluded)
+                        .filter(p => p.payment_status === 'paid' && !p.excluded)
                         .reduce((s, p) => s + p.bonus_amount_cents, 0);
                       return (
                         <tfoot>

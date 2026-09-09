@@ -476,14 +476,13 @@
     if (planningItems.length) groups.push({ id: 'programme-planning', label: 'Planning', order: 2.1, items: planningItems, parentGroup: 'programme' } as any);
 
     // ── Incentive Bonuses section ────────────────────────────────────────────
-    const canSeeIncentives = isSuperAdmin || isAdmin || isICT || isFOM || isCountryDirector || isSeniorManagement ||
-      isFinancialAdmin || isCoordinator || isSupervisor;
+    // Temporary restriction: the complete Bonuses area is Super Admin only.
+    const canSeeIncentives = isSuperAdmin;
     const incentiveItems: MenuGroup['items'] = [];
     if (canSeeIncentives && !isHidden('/incentives')) {
-      const incTitle = (isCoordinator || isSupervisor) ? 'My Bonuses' : 'Incentive Overview';
-      incentiveItems.push({ id: 'incentive-overview', title: incTitle, url: '/incentives', icon: Award, priority: 1, isPinned: isPinned('/incentives') });
+      incentiveItems.push({ id: 'incentive-overview', title: 'Incentive Overview', url: '/incentives', icon: Award, priority: 1, isPinned: isPinned('/incentives') });
     }
-    if ((isSuperAdmin || isAdmin) && !isHidden('/mmp/incentive-settings')) {
+    if (isSuperAdmin && !isHidden('/mmp/incentive-settings')) {
       incentiveItems.push({ id: 'incentive-settings', title: 'Incentive Settings', url: '/mmp/incentive-settings', icon: Settings2 as any, priority: 2, isPinned: isPinned('/mmp/incentive-settings') });
     }
     if (incentiveItems.length) groups.push({ id: 'incentives-main', label: 'Bonuses', order: 2.15, items: incentiveItems, parentGroup: 'incentives' } as any);

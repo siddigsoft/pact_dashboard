@@ -2,7 +2,7 @@ import type jsPDF from 'jspdf';
 
 const FONT_NAME = 'Amiri';
 const FONT_FILE = 'Amiri-Regular.ttf';
-const FONT_URL = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/amiri/Amiri-Regular.ttf';
+const FONT_URL = '/fonts/Amiri-Regular.ttf';
 const CACHE_KEY = 'pact_amiri_font_b64_v1';
 
 let inflight: Promise<string | null> | null = null;

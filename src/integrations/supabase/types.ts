@@ -284,6 +284,175 @@ export type Database = {
         }
         Relationships: []
       }
+      mmp_incentive_eligibility_overrides: {
+        Row: {
+          created_at: string
+          created_by: string
+          decision: string
+          hub_id: string
+          id: string
+          note: string
+          revoke_note: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          role: string
+          state_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          decision: string
+          hub_id: string
+          id?: string
+          note: string
+          revoke_note?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role: string
+          state_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          decision?: string
+          hub_id?: string
+          id?: string
+          note?: string
+          revoke_note?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role?: string
+          state_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mmp_incentive_eligibility_overrides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mmp_incentive_eligibility_overrides_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mmp_incentive_eligibility_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mmp_incentive_payments: {
+        Row: {
+          bonus_amount_cents: number
+          bonus_pct: number
+          created_at: string
+          currency: string
+          dc_count: number | null
+          dc_fee_pool_cents: number | null
+          eligibility_evidence: Json
+          hub_id: string | null
+          hub_name: string | null
+          id: string
+          mmp_id: string
+          payment_method: string | null
+          role: string
+          snapshot_id: string
+          state_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          bonus_amount_cents: number
+          bonus_pct?: number
+          created_at?: string
+          currency?: string
+          dc_count?: number | null
+          dc_fee_pool_cents?: number | null
+          eligibility_evidence?: Json
+          hub_id?: string | null
+          hub_name?: string | null
+          id?: string
+          mmp_id: string
+          payment_method?: string | null
+          role: string
+          snapshot_id: string
+          state_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          bonus_amount_cents?: number
+          bonus_pct?: number
+          created_at?: string
+          currency?: string
+          dc_count?: number | null
+          dc_fee_pool_cents?: number | null
+          eligibility_evidence?: Json
+          hub_id?: string | null
+          hub_name?: string | null
+          id?: string
+          mmp_id?: string
+          payment_method?: string | null
+          role?: string
+          snapshot_id?: string
+          state_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mmp_incentive_snapshots: {
+        Row: {
+          config_snapshot: Json | null
+          coordinator_count: number
+          created_at: string
+          eligibility_snapshot: Json
+          id: string
+          mmp_id: string
+          role_counts: Json
+          status: string
+          supervisor_count: number
+          total_bonus_cents: number
+          total_dc_fee_pool_cents: number
+        }
+        Insert: {
+          config_snapshot?: Json | null
+          coordinator_count?: number
+          created_at?: string
+          eligibility_snapshot?: Json
+          id?: string
+          mmp_id: string
+          role_counts?: Json
+          status?: string
+          supervisor_count?: number
+          total_bonus_cents?: number
+          total_dc_fee_pool_cents?: number
+        }
+        Update: {
+          config_snapshot?: Json | null
+          coordinator_count?: number
+          created_at?: string
+          eligibility_snapshot?: Json
+          id?: string
+          mmp_id?: string
+          role_counts?: Json
+          status?: string
+          supervisor_count?: number
+          total_bonus_cents?: number
+          total_dc_fee_pool_cents?: number
+        }
+        Relationships: []
+      }
       departments: {
         Row: {
           id: string
@@ -1642,6 +1811,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_and_preapprove_mmp_incentives: {
+        Args: { p_exclusions?: Json; p_mmp_id: string }
+        Returns: Json
+      }
       get_nav_badge_counts: {
         Args: {
           p_hub_id?: string | null
@@ -1699,6 +1872,39 @@ export type Database = {
           p_justification: string
         }
         Returns: undefined
+      }
+      revoke_mmp_incentive_eligibility_override: {
+        Args: { p_note: string; p_override_id: string }
+        Returns: Json
+      }
+      save_incentive_settings: {
+        Args: { p_settings: Json }
+        Returns: Json
+      }
+      set_mmp_incentive_eligibility_override: {
+        Args:
+          | {
+              p_decision: string
+              p_note: string
+              p_role: string
+              p_user_id: string
+            }
+          | {
+              p_decision: string
+              p_hub_id: string
+              p_note: string
+              p_role: string
+              p_user_id: string
+            }
+          | {
+              p_decision: string
+              p_hub_id: string
+              p_note: string
+              p_role: string
+              p_state_id: string | null
+              p_user_id: string
+            }
+        Returns: Json
       }
       cycle_approve_close: {
         Args: {

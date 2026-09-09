@@ -1,0 +1,48 @@
+import { AlertTriangle, Save, Settings2, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import type { Hub } from '@/context/location/LocationContext';
+import type { IncentiveRole, IncentiveSplitMethod } from '@/types/incentive';
+import { CONFIGURABLE_INCENTIVE_ROLES } from '@/types/incentive';
+
+type Language = 'en' | 'ar';
+type RoleRow = { role: IncentiveRole; isActive: boolean; bonusPct: number; splitMethod: IncentiveSplitMethod; coverageThresholdPct: number; whatCounts: string };
+type HubOverride = RoleRow & { localId: string; hubId: string; toDelete: boolean };
+const t = (l: Language, en: string, ar: string) => l === 'ar' ? ar : en;
+const roleName = (l: Language, r: IncentiveRole) => ({ coordinator: t(l, 'Coordinator', 'المنسق'), supervisor: t(l, 'Supervisor', 'المشرف'), fom: t(l, 'FOM', 'مدير العمليات الميدانية'), support_team: t(l, 'Support Team', 'فريق الدعم') }[r]);
+const evidence = (l: Language, value: string) => value === 'submitted' ? t(l, 'Submitted', 'مقدّم') : t(l, 'WFP confirmed', 'مؤكد من WFP');
+
+export function SettingsWorkspaceTranslated(props: {
+  language: Language; globalRows: RoleRow[]; setGlobalRows: (value: RoleRow[] | ((rows: RoleRow[]) => RoleRow[])) => void;
+  hubOverrides: HubOverride[]; setHubOverrides: (value: HubOverride[] | ((rows: HubOverride[]) => HubOverride[])) => void;
+  hubs: Hub[]; newHub: string; setNewHub: (value: string) => void; newRole: IncentiveRole; setNewRole: (value: IncentiveRole) => void;
+  newPct: number; setNewPct: (value: number) => void; warnings: string[]; save: () => void; saving: boolean; settingsLoaded: boolean; settingsError: string; retry: () => void;
+}) {
+  const { language, globalRows, setGlobalRows, hubOverrides, setHubOverrides, hubs, newHub, setNewHub, newRole, setNewRole, newPct, setNewPct, warnings, save, saving, settingsLoaded, settingsError, retry } = props;
+  const visible = hubOverrides.filter(item => !item.toDelete);
+  const patchGlobal = (r: IncentiveRole, patch: Partial<RoleRow>) => setGlobalRows(rows => rows.map(row => row.role === r ? { ...row, ...patch } : row));
+  const patchOverride = (id: string, patch: Partial<HubOverride>) => setHubOverrides(rows => rows.map(row => row.localId === id ? { ...row, ...patch } : row));
+  const addOverride = () => {
+    if (!newHub || visible.some(item => item.hubId === newHub && item.role === newRole)) return;
+    const source = globalRows.find(item => item.role === newRole);
+    if (!source) return;
+    setHubOverrides(rows => [...rows, { ...source, localId: crypto.randomUUID(), hubId: newHub, bonusPct: newPct, toDelete: false }]);
+    setNewHub('');
+  };
+  const fields = (row: RoleRow, onPatch: (patch: Partial<RoleRow>) => void, compact = false) => <div className={`grid gap-2 ${compact ? 'sm:grid-cols-4' : 'sm:grid-cols-4'}`}>
+    <div><Label className="text-[10px] uppercase text-slate-500">{t(language, 'Rate', 'النسبة')}</Label><Input className="mt-1 h-9" type="number" step={0.5} value={row.bonusPct} onChange={e => onPatch({ bonusPct: Number(e.target.value) })} /></div>
+    <div><Label className="text-[10px] uppercase text-slate-500">{t(language, 'Split', 'التوزيع')}</Label><Select value={row.splitMethod} onValueChange={(splitMethod: IncentiveSplitMethod) => onPatch({ splitMethod })}><SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="proportional">{t(language, 'Proportional', 'نسبي')}</SelectItem><SelectItem value="equal">{t(language, 'Equal', 'متساوٍ')}</SelectItem></SelectContent></Select></div>
+    <div><Label className="text-[10px] uppercase text-slate-500">{t(language, 'Evidence basis', 'أساس الدليل')}</Label><Select value={row.whatCounts} onValueChange={whatCounts => onPatch({ whatCounts })}><SelectTrigger className="mt-1 h-9"><SelectValue>{evidence(language, row.whatCounts)}</SelectValue></SelectTrigger><SelectContent><SelectItem value="wfp_confirmed">{evidence(language, 'wfp_confirmed')}</SelectItem><SelectItem value="submitted">{evidence(language, 'submitted')}</SelectItem></SelectContent></Select></div>
+    <div><Label className="text-[10px] uppercase text-slate-500">{t(language, 'Coverage threshold', 'حد التغطية')}</Label><div className="mt-1 flex items-center gap-1"><Input className="h-9" type="number" min={0} max={100} value={row.coverageThresholdPct} onChange={e => onPatch({ coverageThresholdPct: Math.max(0, Math.min(100, Number(e.target.value))) })} /><span>%</span></div></div>
+  </div>;
+  return <div className="space-y-6">
+    {settingsError && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><b>{t(language, 'Settings could not be loaded.', 'تعذر تحميل الإعدادات.')}</b><p className="mt-1">{settingsError}</p><Button variant="outline" className="mt-3" onClick={retry}>{t(language, 'Retry', 'إعادة المحاولة')}</Button></div>}
+    <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-[#178080]">{t(language, 'Future calculations', 'الاحتسابات المستقبلية')}</p><h2 className="mt-1 text-2xl font-bold">{t(language, 'Configure bonus rules', 'إعداد قواعد المكافآت')}</h2><p className="mt-1 text-sm text-slate-600">{t(language, 'Every operational setting is stored per global rule or hub override.', 'يُحفظ كل إعداد تشغيلي لكل قاعدة عامة أو استثناء مركز.')}</p></div><Button onClick={save} disabled={saving || !settingsLoaded || !!settingsError} className="bg-[#123942] hover:bg-[#1b4d57]"><Save className="me-2 h-4 w-4" />{saving ? t(language, 'Saving…', 'جارٍ الحفظ…') : t(language, 'Save changes', 'حفظ التغييرات')}</Button></div>
+    {warnings.length > 0 && <div className="rounded-xl border border-[#ead7a1] bg-[#fff8df] p-4 text-xs text-[#775d14]"><div className="flex gap-2 font-semibold"><AlertTriangle className="h-4 w-4" />{t(language, 'Review before saving', 'راجع قبل الحفظ')}</div>{warnings.map(item => <p key={item} className="ms-6 mt-1">{item}</p>)}</div>}
+    <section className="overflow-hidden rounded-xl border border-[#d8e5e1] bg-white"><header className="border-b px-5 py-4"><div className="flex gap-2"><Settings2 className="h-4 w-4 text-[#178080]" /><h3 className="font-semibold">{t(language, 'Global role rules', 'قواعد الأدوار العامة')}</h3></div><p className="mt-1 text-xs text-slate-500">{t(language, 'FOM and Support Team remain inactive unless explicitly enabled.', 'يبقى مدير العمليات الميدانية وفريق الدعم غير مفعّلين ما لم يتم تفعيلهما صراحةً.')}</p></header><div className="divide-y">{globalRows.map(row => <div className="p-5" key={row.role}><div className="mb-3 flex items-center justify-between"><b>{roleName(language, row.role)}</b><div className="flex items-center gap-2 text-xs"><Label>{t(language, 'Active', 'مفعّل')}</Label><Switch checked={row.isActive} onCheckedChange={isActive => patchGlobal(row.role, { isActive })} /></div></div>{fields(row, patch => patchGlobal(row.role, patch))}</div>)}</div></section>
+    <section className="overflow-hidden rounded-xl border border-[#d8e5e1] bg-white"><header className="border-b px-5 py-4"><h3 className="font-semibold">{t(language, 'Hub-specific overrides', 'تجاوزات خاصة بالمركز')}</h3><p className="mt-1 text-xs text-slate-500">{t(language, 'Overrides retain their own active, rate, split, evidence, and threshold values.', 'تحتفظ الاستثناءات بقيم التفعيل والنسبة والتوزيع والدليل والحد الخاصة بها.')}</p></header>{visible.map(item => <div className="border-b p-5" key={item.localId}><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><b>{hubs.find(h => h.id === item.hubId)?.name ?? item.hubId} · {roleName(language, item.role)}</b><div className="flex items-center gap-2 text-xs"><Label>{t(language, 'Active', 'مفعّل')}</Label><Switch checked={item.isActive} onCheckedChange={isActive => patchOverride(item.localId, { isActive })} /><Button variant="ghost" size="icon" aria-label={t(language, 'Remove override', 'إزالة التجاوز')} onClick={() => setHubOverrides(rows => rows.filter(row => row.localId !== item.localId))}><Trash2 className="h-4 w-4 text-red-600" /></Button></div></div>{fields(item, patch => patchOverride(item.localId, patch))}</div>)}{!visible.length && <p className="p-5 text-sm text-slate-500">{t(language, 'No hub overrides. Global rules apply.', 'لا توجد استثناءات للمراكز. تطبق القواعد العامة.')}</p>}<div className="flex flex-wrap items-end gap-2 bg-[#f7fbfa] p-5"><div><Label>{t(language, 'Hub', 'المركز')}</Label><Select value={newHub} onValueChange={setNewHub}><SelectTrigger className="mt-1 w-48"><SelectValue placeholder={t(language, 'Select hub', 'اختر المركز')} /></SelectTrigger><SelectContent>{hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent></Select></div><div><Label>{t(language, 'Role', 'الدور')}</Label><Select value={newRole} onValueChange={setNewRole}><SelectTrigger className="mt-1 w-40"><SelectValue /></SelectTrigger><SelectContent>{CONFIGURABLE_INCENTIVE_ROLES.map(r => <SelectItem key={r} value={r}>{roleName(language, r)}</SelectItem>)}</SelectContent></Select></div><div><Label>{t(language, 'Initial rate', 'النسبة الأولية')}</Label><Input className="mt-1 w-24" type="number" value={newPct} onChange={e => setNewPct(Number(e.target.value))} /></div><Button variant="outline" onClick={addOverride}>{t(language, 'Add inherited override', 'إضافة استثناء موروث')}</Button></div></section>
+  </div>;
+}

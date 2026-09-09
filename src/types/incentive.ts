@@ -12,6 +12,7 @@
 export type IncentiveRole =
   | 'coordinator'
   | 'supervisor'
+  | 'support_team'
   | 'datacollector'
   | 'fom'
   | 'teamleader';
@@ -24,11 +25,51 @@ export type IncentiveSnapshotStatus =
   | 'calculating'
   | 'pre_approved'
   | 'approved'
-  | 'paid';
+  | 'paid'
+  | 'failed'
+  | 'reversed';
 
-export type IncentivePaymentStatus = 'pending' | 'paid';
+export type IncentivePaymentStatus = 'pending' | 'paid' | 'failed' | 'reversed';
 
 export type IncentivePaymentMethod = 'wallet' | 'payroll';
+
+export interface IncentiveExclusion {
+  user_id: string;
+  role: IncentiveRole;
+  note: string;
+  /** Omitted preserves the legacy exclusion payload. */
+  action?: 'include' | 'exclude';
+}
+
+/** Browser-safe RPC contract: all monetary inputs are intentionally absent. */
+export function buildIncentivePreapprovalArgs(
+  mmpId: string,
+  exclusions: IncentiveExclusion[],
+) {
+  const normalized = exclusions.map(exclusion => ({
+    user_id: exclusion.user_id,
+    role: exclusion.role,
+    note: exclusion.note.trim(),
+    ...(exclusion.action ? { action: exclusion.action } : {}),
+  }));
+  if (normalized.some(exclusion => !exclusion.user_id || !exclusion.role || !exclusion.note)) {
+    throw new Error('A note is required for every excluded recipient.');
+  }
+  return { p_mmp_id: mmpId, p_exclusions: normalized };
+}
+
+export function buildPayMmpIncentiveArgs(
+  paymentId: string,
+  method: IncentivePaymentMethod,
+  payrollPeriod: string | null,
+) {
+  return {
+    p_payment_id: paymentId,
+    p_method: method,
+    p_payroll_run_id: null,
+    p_payroll_period: method === 'payroll' ? payrollPeriod : null,
+  };
+}
 
 // ─── DB row types (snake_case, as returned by Supabase) ──────────────────────
 
@@ -53,6 +94,10 @@ export interface MmpIncentiveSnapshotRow {
   total_dc_fee_pool_cents: number;
   total_bonus_cents: number;
   config_snapshot: Record<string, unknown> | null;
+  eligibility_snapshot?: IncentiveEligibilityEvidence[] | null;
+  role_counts?: Partial<Record<IncentiveRole, number>> | null;
+  coordinator_count?: number;
+  supervisor_count?: number;
   pre_approved_by: string | null;
   pre_approved_at: string | null;
   approved_at: string | null;
@@ -79,6 +124,7 @@ export interface MmpIncentivePaymentRow {
   currency: string;
   excluded: boolean;
   exclusion_note: string | null;
+  eligibility_evidence?: IncentiveEligibilityEvidence | null;
   payment_method: IncentivePaymentMethod | null;
   payroll_period: string | null;
   paid_by: string | null;
@@ -112,6 +158,10 @@ export interface MmpIncentiveSnapshot {
   totalDcFeePoolCents: number;
   totalBonusCents: number;
   configSnapshot: Record<string, unknown> | null;
+  eligibilitySnapshot?: IncentiveEligibilityEvidence[] | null;
+  roleCounts?: Partial<Record<IncentiveRole, number>> | null;
+  coordinatorCount?: number;
+  supervisorCount?: number;
   preApprovedBy: string | null;
   preApprovedAt: string | null;
   approvedAt: string | null;
@@ -138,6 +188,7 @@ export interface MmpIncentivePayment {
   currency: string;
   excluded: boolean;
   exclusionNote: string | null;
+  eligibilityEvidence?: IncentiveEligibilityEvidence | null;
   paymentMethod: IncentivePaymentMethod | null;
   payrollPeriod: string | null;
   paidBy: string | null;
@@ -149,6 +200,41 @@ export interface MmpIncentivePayment {
   // Joined fields (optional — populated when fetched with joins)
   userName?: string;
   userEmail?: string;
+}
+
+export interface IncentiveEligibilityEvidence {
+  user_id?: string;
+  role?: IncentiveRole;
+  source:
+    | 'primary_role'
+    | 'additional_role_object'
+    | 'additional_role_scalar'
+    | 'active_classification'
+    | 'explicit_selection'
+    | 'admin_override';
+  classification?: string;
+  scope?: 'state' | 'hub';
+  hub_id?: string;
+  state_id?: string | null;
+  decision?: 'include' | 'exclude';
+  note?: string;
+  override_id?: string;
+}
+
+export interface IncentiveEligibilityOverride {
+  id: string;
+  user_id: string;
+  hub_id: string;
+  /** Required for coordinator include/exclude exceptions. */
+  state_id: string | null;
+  role: IncentiveRole;
+  decision: 'include' | 'exclude';
+  note: string;
+  created_by: string;
+  created_at: string;
+  revoked_at: string | null;
+  revoked_by: string | null;
+  revoke_note: string | null;
 }
 
 // ─── Transforms ──────────────────────────────────────────────────────────────
@@ -177,6 +263,10 @@ export function transformMmpIncentiveSnapshot(row: MmpIncentiveSnapshotRow): Mmp
     totalDcFeePoolCents: row.total_dc_fee_pool_cents,
     totalBonusCents: row.total_bonus_cents,
     configSnapshot: row.config_snapshot,
+    eligibilitySnapshot: row.eligibility_snapshot,
+    roleCounts: row.role_counts,
+    coordinatorCount: row.coordinator_count,
+    supervisorCount: row.supervisor_count,
     preApprovedBy: row.pre_approved_by,
     preApprovedAt: row.pre_approved_at,
     approvedAt: row.approved_at,
@@ -207,6 +297,7 @@ export function transformMmpIncentivePayment(row: MmpIncentivePaymentRow & {
     currency: row.currency,
     excluded: row.excluded,
     exclusionNote: row.exclusion_note,
+    eligibilityEvidence: row.eligibility_evidence,
     paymentMethod: row.payment_method,
     payrollPeriod: row.payroll_period,
     paidBy: row.paid_by,
@@ -225,6 +316,7 @@ export function transformMmpIncentivePayment(row: MmpIncentivePaymentRow & {
 export const INCENTIVE_ROLE_LABELS: Record<IncentiveRole, string> = {
   coordinator:   'Coordinator',
   supervisor:    'Supervisor',
+  support_team:  'Support Team',
   datacollector: 'Data Collector',
   fom:           'FOM',
   teamleader:    'Team Leader',
@@ -235,6 +327,8 @@ export const INCENTIVE_STATUS_LABELS: Record<IncentiveSnapshotStatus, string> = 
   pre_approved: 'Pre-Approved',
   approved:     'Approved',
   paid:         'Paid',
+  failed:       'Failed',
+  reversed:     'Reversed',
 };
 
 export const INCENTIVE_STATUS_COLORS: Record<IncentiveSnapshotStatus, string> = {
@@ -242,20 +336,28 @@ export const INCENTIVE_STATUS_COLORS: Record<IncentiveSnapshotStatus, string> = 
   pre_approved: 'bg-amber-100 text-amber-700',
   approved:     'bg-green-100 text-green-700',
   paid:         'bg-emerald-100 text-emerald-700',
+  failed:       'bg-red-100 text-red-700',
+  reversed:     'bg-slate-100 text-slate-700',
 };
 
 export const INCENTIVE_PAYMENT_STATUS_COLORS: Record<IncentivePaymentStatus, string> = {
   pending: 'bg-amber-100 text-amber-700',
   paid:    'bg-emerald-100 text-emerald-700',
+  failed:  'bg-red-100 text-red-700',
+  reversed:'bg-slate-100 text-slate-700',
 };
 
 /** Roles that receive incentive payments (active by default at launch). */
 export const DEFAULT_ACTIVE_INCENTIVE_ROLES: IncentiveRole[] = ['coordinator', 'supervisor'];
 
+/** Roles currently supported by the settings UI and server calculator. */
+export const CONFIGURABLE_INCENTIVE_ROLES: IncentiveRole[] = ['coordinator', 'supervisor', 'fom', 'support_team'];
+
 /** All roles that can ever be configured in the incentive system. */
 export const ALL_INCENTIVE_ROLES: IncentiveRole[] = [
   'coordinator',
   'supervisor',
+  'support_team',
   'datacollector',
   'fom',
   'teamleader',
