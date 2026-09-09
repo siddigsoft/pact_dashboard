@@ -39,10 +39,12 @@ interface PresencePayload {
   user_id?: string;
   odId?: string;
   userId?: string;
+  source?: string;
   payload?: {
     user_id?: string;
     odId?: string;
     userId?: string;
+    source?: string;
   };
 }
 
@@ -59,16 +61,34 @@ function presenceUserId(entry?: PresencePayload | null, key?: string): string | 
   return undefined;
 }
 
-function extractIds(state: Record<string, PresencePayload[]>): Set<string> {
+function presenceSource(entry?: PresencePayload | null): string | undefined {
+  const src = entry?.source || entry?.payload?.source;
+  return typeof src === 'string' ? src : undefined;
+}
+
+function isMobilePresence(entry?: PresencePayload | null): boolean {
+  const src = presenceSource(entry);
+  if (src === 'mobile') return true;
+  if (src === 'web') return false;
+  // Flutter PresenceService sends user_id; web WebRTC used to send only userId.
+  return Boolean(entry?.user_id || entry?.payload?.user_id);
+}
+
+function extractIds(
+  state: Record<string, PresencePayload[]>,
+  opts?: { mobileOnly?: boolean }
+): Set<string> {
   const ids = new Set<string>();
   Object.entries(state || {}).forEach(([key, presences]) => {
     const list = Array.isArray(presences) ? presences : [];
     if (list.length === 0) {
+      if (opts?.mobileOnly) return;
       const id = presenceUserId(undefined, key);
       if (id) ids.add(id);
       return;
     }
     list.forEach((p) => {
+      if (opts?.mobileOnly && !isMobilePresence(p)) return;
       const id = presenceUserId(p, key);
       if (id) ids.add(id);
     });
@@ -192,25 +212,41 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
 
     webChannelRef.current = webChannel;
 
-    /* ── 2. Mobile channel — read-only observer ─────────────────────── */
-    const mobileChannel = supabase.channel(MOBILE_CHANNEL);
+    /* ── 2. Mobile channel — read-only observer ───────────────────────
+       Must enable presence (key + enabled) or presenceState() stays empty.
+       Do NOT track() here — web users already appear on global-presence.
+       A unique observer key avoids colliding with a phone using the same user id. */
+    const mobileChannel = supabase.channel(MOBILE_CHANNEL, {
+      config: {
+        presence: {
+          key: `web-observer:${userId}`,
+          enabled: true,
+        },
+      },
+    });
 
     mobileChannel
       .on('presence', { event: 'sync' }, () => {
-        mobileIdsRef.current = extractIds(mobileChannel.presenceState());
+        mobileIdsRef.current = extractIds(mobileChannel.presenceState() as Record<string, PresencePayload[]>, {
+          mobileOnly: true,
+        });
         syncMerged();
         console.log('[GlobalPresence] Mobile synced, online:', mobileIdsRef.current.size);
       })
       .on('presence', { event: 'join' }, ({ newPresences }) => {
         newPresences.forEach((p) => {
-          const id = presenceUserId(p as PresencePayload);
+          const payload = p as PresencePayload;
+          if (!isMobilePresence(payload)) return;
+          const id = presenceUserId(payload);
           if (id) mobileIdsRef.current.add(id);
         });
         syncMerged();
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
         leftPresences.forEach((p) => {
-          const id = presenceUserId(p);
+          const payload = p as PresencePayload;
+          if (!isMobilePresence(payload)) return;
+          const id = presenceUserId(payload);
           if (id) mobileIdsRef.current.delete(id);
         });
         syncMerged();
