@@ -93,6 +93,14 @@ function normalizeForCompare(v: string) {
   return v.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+/** Status comparisons for payment must be exact after harmless formatting normalization. */
+function normalizedStatus(v: string | null | undefined) {
+  return (v || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+const isWfpConfirmed = (status: string | null | undefined) =>
+  normalizedStatus(status) === 'wfp_confirmed';
+
 function looksLikeEmail(v: string) {
   return /\S+@\S+\.\S+/.test(v);
 }
@@ -185,7 +193,6 @@ export default function EnumeratorFeesReport() {
   const [payMethod, setPayMethod] = useState('Bank Transfer');
   const [payNotes, setPayNotes] = useState('');
   const [paySubmitting, setPaySubmitting] = useState(false);
-  const [unpayId, setUnpayId] = useState<string | null>(null);
 
   // ── fetch ──────────────────────────────────────────────────────────────────
   const fetchData = async () => {
@@ -468,7 +475,7 @@ export default function EnumeratorFeesReport() {
 
   // ── payment mutations ─────────────────────────────────────────────────────
   const payableSelected = useMemo(
-    () => filtered.filter(r => selectedIds.has(r.id) && r.feePaidStatus !== 'paid' && (r.totalFee ?? 0) > 0),
+    () => filtered.filter(r => selectedIds.has(r.id) && isWfpConfirmed(r.siteStatus) && r.feePaidStatus !== 'paid' && (r.totalFee ?? 0) > 0),
     [filtered, selectedIds]
   );
   const selectedTotal = useMemo(() => payableSelected.reduce((s, r) => s + (r.totalFee ?? 0), 0), [payableSelected]);
@@ -482,68 +489,22 @@ export default function EnumeratorFeesReport() {
   };
 
   const toggleSelectAllUnpaid = () => {
-    const unpaidVisible = filtered.filter(r => r.feePaidStatus !== 'paid' && (r.totalFee ?? 0) > 0).map(r => r.id);
+    const unpaidVisible = filtered.filter(r => isWfpConfirmed(r.siteStatus) && r.feePaidStatus !== 'paid' && (r.totalFee ?? 0) > 0).map(r => r.id);
     const allSelected = unpaidVisible.length > 0 && unpaidVisible.every(id => selectedIds.has(id));
     setSelectedIds(allSelected ? new Set() : new Set(unpaidVisible));
   };
 
   const submitPayment = async () => {
-    if (payableSelected.length === 0) return;
-    setPaySubmitting(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const paidAtIso = new Date(`${payDate}T12:00:00`).toISOString();
-      const updates = payableSelected.map(r => ({
-        id: r.id,
-        totalFee: r.totalFee ?? 0,
-      }));
-      for (const u of updates) {
-        const { error } = await supabase
-          .from('mmp_site_entries')
-          .update({
-            fee_paid_status: 'paid',
-            fee_paid_amount: u.totalFee,
-            fee_paid_at: paidAtIso,
-            fee_paid_by: user?.id ?? null,
-            fee_payment_method: payMethod,
-            fee_payment_notes: payNotes || null,
-          })
-          .eq('id', u.id);
-        if (error) throw error;
-      }
-      toast({ title: 'Payment recorded', description: `Marked ${updates.length} fee${updates.length !== 1 ? 's' : ''} as paid (${selectedTotal.toLocaleString()} SDG).` });
-      setPayDialogOpen(false);
-      setSelectedIds(new Set());
-      setPayNotes('');
-      await fetchData();
-    } catch (err: any) {
-      toast({ title: 'Failed to record payment', description: err?.message, variant: 'destructive' });
-    } finally {
-      setPaySubmitting(false);
+    if (payableSelected.length === 0) {
+      toast({ title: 'Payment blocked', description: 'Payment becomes available only after WFP confirmation.', variant: 'destructive' });
+      return;
     }
-  };
-
-  const confirmUnpay = async () => {
-    if (!unpayId) return;
-    try {
-      const { error } = await supabase
-        .from('mmp_site_entries')
-        .update({
-          fee_paid_status: 'unpaid',
-          fee_paid_amount: null,
-          fee_paid_at: null,
-          fee_paid_by: null,
-          fee_payment_method: null,
-          fee_payment_notes: null,
-        })
-        .eq('id', unpayId);
-      if (error) throw error;
-      toast({ title: 'Payment reverted', description: 'Fee marked as unpaid again.' });
-      setUnpayId(null);
-      await fetchData();
-    } catch (err: any) {
-      toast({ title: 'Failed to revert payment', description: err?.message, variant: 'destructive' });
+    if (!payNotes.trim()) {
+      toast({ title: 'Receipt required', description: 'Upload or enter genuine receipt evidence before recording payment. No synthetic receipt is accepted.', variant: 'destructive' });
+      return;
     }
+    toast({ title: 'Use Field Payments Centre', description: 'Upload a genuine receipt there before recording covered-site payment.', variant: 'destructive' });
+    return;
   };
 
   const exportExcel = async () => {
@@ -799,13 +760,12 @@ export default function EnumeratorFeesReport() {
               <Button
                 size="sm"
                 className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-                disabled={payableSelected.length === 0}
-                onClick={() => setPayDialogOpen(true)}
+                disabled
+                onClick={() => toast({ title: 'Use Field Payments Centre', description: 'Upload a genuine receipt there before recording payment.', variant: 'destructive' })}
                 data-testid="button-mark-paid"
               >
                 <Wallet className="h-3.5 w-3.5" />
-                Mark {payableSelected.length > 0 ? `${payableSelected.length} ` : ''}Paid
-                {payableSelected.length > 0 && ` (${selectedTotal.toLocaleString()} SDG)`}
+                Use Field Payments Centre for payment
               </Button>
             )}
           </div>
@@ -840,7 +800,7 @@ export default function EnumeratorFeesReport() {
                       <TableHead className="w-8">
                         <Checkbox
                           checked={(() => {
-                            const unpaidVisible = filtered.filter(r => r.feePaidStatus !== 'paid' && (r.totalFee ?? 0) > 0).map(r => r.id);
+                            const unpaidVisible = filtered.filter(r => isWfpConfirmed(r.siteStatus) && r.feePaidStatus !== 'paid' && (r.totalFee ?? 0) > 0).map(r => r.id);
                             return unpaidVisible.length > 0 && unpaidVisible.every(id => selectedIds.has(id));
                           })()}
                           onCheckedChange={toggleSelectAllUnpaid}
@@ -866,11 +826,12 @@ export default function EnumeratorFeesReport() {
                 <TableBody>
                   {filtered.map(r => {
                     const payable = (r.totalFee ?? 0) > 0;
+                    const canPay = isWfpConfirmed(r.siteStatus);
                     return (
                     <TableRow key={r.id} className="text-xs hover:bg-muted/30" data-testid={`row-fee-${r.id}`}>
                       {isFinance && (
                         <TableCell>
-                          {payable && r.feePaidStatus !== 'paid' && (
+                          {canPay && payable && r.feePaidStatus !== 'paid' && (
                             <Checkbox
                               checked={selectedIds.has(r.id)}
                               onCheckedChange={() => toggleSelected(r.id)}
@@ -923,19 +884,11 @@ export default function EnumeratorFeesReport() {
                              <span className={`text-[9px] max-w-[150px] truncate ${r.feeFundingSource ? 'text-teal-700 dark:text-teal-300' : 'text-amber-700 dark:text-amber-300'}`} title={r.feeFundingSource ?? undefined}>
                                {r.feeFundingSource ? `From: ${r.feeFundingSource}` : 'Pre-Fund: unlinked historical'}
                              </span>
-                            {isFinance && (
-                              <button
-                                type="button"
-                                className="text-[9px] text-muted-foreground hover:text-red-600 underline flex items-center gap-0.5"
-                                onClick={() => setUnpayId(r.id)}
-                                data-testid={`button-unpay-${r.id}`}
-                              >
-                                <Undo2 className="h-2.5 w-2.5" /> Undo
-                              </button>
-                            )}
                           </div>
                         ) : (
-                          <Badge variant="outline" className="text-[10px] text-muted-foreground">Unpaid</Badge>
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                              {canPay ? 'Unpaid' : 'Available after WFP confirmation'}
+                          </Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-center">
@@ -1070,23 +1023,6 @@ export default function EnumeratorFeesReport() {
         </DialogContent>
       </Dialog>
 
-      {/* Undo payment confirm dialog */}
-      <Dialog open={!!unpayId} onOpenChange={(o) => { if (!o) setUnpayId(null); }}>
-        <DialogContent data-testid="dialog-unpay">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Undo2 className="h-4 w-4 text-red-500" /> Revert Payment?
-            </DialogTitle>
-            <DialogDescription>
-              This will mark the fee as unpaid again and clear its payment date, method, and notes. Use this only to correct a mistake.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setUnpayId(null)} data-testid="button-cancel-unpay">Cancel</Button>
-            <Button variant="destructive" onClick={confirmUnpay} data-testid="button-confirm-unpay">Revert to Unpaid</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

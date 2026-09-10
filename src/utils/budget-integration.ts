@@ -87,6 +87,10 @@ export async function recordSiteVisitPayment(
   }
 ): Promise<void> {
   try {
+    // Site-fee earnings are created by the trusted WFP-confirmation server
+    // transition. This legacy client helper is intentionally inert.
+    console.warn('[BudgetIntegration] Site-visit payment deferred until WFP confirmation');
+    return;
     const amountInCents = Math.round(amount * 100);
 
     // Create wallet transaction

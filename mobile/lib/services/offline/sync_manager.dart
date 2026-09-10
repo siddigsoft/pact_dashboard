@@ -599,7 +599,6 @@ class SyncManager {
     );
 
     // 6) Create wallet transaction if visit is for a site claim
-    await _createWalletTransactionIfNeeded(visit.siteEntryId);
 
     // 7) Village campaign: insert daily log (insert-only; never overwrites
     //    coordinator-entered data).  The payload may carry village_campaign_data
@@ -980,105 +979,6 @@ class SyncManager {
       fileName: fileName,
       folderPath: 'SiteVisits/$siteEntryId',
     );
-  }
-
-  Future<void> _createWalletTransactionIfNeeded(String siteEntryId) async {
-    try {
-      debugPrint(
-        '[SyncManager] _createWalletTransactionIfNeeded: siteEntryId=$siteEntryId',
-      );
-      // Check if transaction already exists
-      final existing = await _client
-          .from('wallet_transactions')
-          .select()
-          .eq('reference_id', siteEntryId)
-          .maybeSingle();
-
-      if (existing != null) {
-        debugPrint(
-          '[SyncManager] _createWalletTransactionIfNeeded: already exists, skip',
-        );
-        return; // Transaction already created
-      }
-
-      double toDouble(dynamic value) {
-        if (value is num) return value.toDouble();
-        if (value is String) return double.tryParse(value.trim()) ?? 0.0;
-        return 0.0;
-      }
-
-      // Get site entry for user to credit (visit_completed_by or accepted_by)
-      final site = await _client
-          .from('mmp_site_entries')
-          .select(
-            'visit_completed_by, accepted_by, enumerator_fee, transport_fee, additional_data',
-          )
-          .eq('id', siteEntryId)
-          .single();
-
-      final userId = site['visit_completed_by'] ?? site['accepted_by'];
-      if (userId == null) {
-        debugPrint(
-          '[SyncManager] _createWalletTransactionIfNeeded: no user to credit, skip',
-        );
-        return;
-      }
-
-      final additionalDataRaw = site['additional_data'];
-      final additionalData = additionalDataRaw is Map
-          ? Map<String, dynamic>.from(additionalDataRaw)
-          : <String, dynamic>{};
-      final feeMultiplier =
-          (additionalData['total_visit_fees'] as num?)?.toInt() ?? 1;
-      final enumeratorFee = toDouble(site['enumerator_fee']);
-      final transportFee = toDouble(site['transport_fee']);
-      final amount = (enumeratorFee + transportFee).clamp(0.0, 999999999.0);
-
-      if (amount <= 0) {
-        debugPrint(
-          '[SyncManager] _createWalletTransactionIfNeeded: computed amount is 0, skip',
-        );
-        return;
-      }
-
-      // Build detailed metadata for the transaction
-      final activityDetails =
-          additionalData['activity_details'] as Map<String, dynamic>? ?? {};
-      final selectedActivities =
-          additionalData['selected_activities'] as List? ?? [];
-      final metadata = {
-        'site_id': siteEntryId,
-        'site_name': additionalData['site_name']?.toString() ?? 'Unknown',
-        'site_code': additionalData['site_code']?.toString() ?? '',
-        'fee_breakdown': {
-          'enumerator_fee': enumeratorFee,
-          'transport_fee': transportFee,
-          'fee_multiplier': feeMultiplier,
-          'is_adjusted': feeMultiplier > 1,
-        },
-        'activity_details': activityDetails,
-        'selected_activities': selectedActivities,
-      };
-
-      // Create transaction using multiplier-adjusted fees from mmp_site_entries
-      await _client.from('wallet_transactions').insert({
-        'user_id': userId,
-        'reference_id': siteEntryId,
-        'type': 'earning',
-        'amount': amount,
-        'description':
-            'Site visit completion: ${additionalData['site_code']?.toString() ?? 'Site'} | Enumerator: $enumeratorFee, Transport: $transportFee',
-        'status': 'posted',
-        'created_at': DateTime.now().toIso8601String(),
-        'metadata': metadata,
-      });
-      debugPrint(
-        '[SyncManager] _createWalletTransactionIfNeeded: created for user=$userId, breakdown: enum=$enumeratorFee, transport=$transportFee',
-      );
-    } catch (e) {
-      // Log but don't fail the sync
-      debugPrint('[SyncManager] _createWalletTransactionIfNeeded: failed: $e');
-    }
   }
 
   bool _isTerminalOrAdvancedStatus(String? status) {

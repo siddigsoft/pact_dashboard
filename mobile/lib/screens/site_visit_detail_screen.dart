@@ -609,6 +609,8 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
   }
 
   Widget _buildFeeBreakdownCard(bool isArabic) {
+    final status = (_siteVisit?['status'] ?? '').toString().trim().toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+    final paymentAvailable = status == 'wfp_confirmed';
     // Read fees from top level first
     final enumeratorFee =
         (_siteVisit?['enumerator_fee'] as num?)?.toDouble() ??
@@ -656,6 +658,21 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: paymentAvailable ? Colors.green.withValues(alpha: 0.10) : Colors.orange.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                paymentAvailable
+                    ? (isArabic ? 'الدفع متاح بعد تأكيد WFP' : 'Payment is available after WFP confirmation.')
+                    : (isArabic ? 'لا يُضاف الرصيد عند الإكمال. يصبح الدفع متاحاً بعد تأكيد WFP.' : 'Completed or submitted work does not credit your wallet. Payment becomes available after WFP confirmation.'),
+                style: GoogleFonts.poppins(fontSize: 12),
+              ),
             ),
             const Divider(height: 24),
             _buildInfoRow(

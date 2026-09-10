@@ -7,7 +7,6 @@ import { ensureValidSession } from '@/lib/session-health';
 import { withTimeout } from '@/utils/promise-with-timeout';
 import { useClassification } from '@/context/classification/ClassificationContext';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
-import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
 import {
   useWalletQuery,
   useTransactionsQuery,
@@ -1098,14 +1097,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       // Use centralized function to create the wallet transaction
       // This ensures consistency across all completion flows
-      const result = await createSiteVisitWalletTransaction({
-        siteVisitId: siteVisitId,
-        userId: userId,
-        amount: amount,
-        description: description,
-        showNotifications: true,
-        toast: toast,
-      });
+      const result = { success: false, message: 'Wallet credit is issued only after WFP confirmation.' };
 
       if (result.success) {
         console.log(`[Wallet] ✅ Successfully created wallet transaction: ${result.message}`);
@@ -1182,9 +1174,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         : '(from cost field)';
       console.log(`[Wallet Reconciliation] Adding fee of ${cost} SDG ${feeSource} for site entry ${siteVisitId} to user ${userIdToPay}`);
 
-      await addSiteVisitFeeToWallet(userIdToPay, siteVisitId, 1.0);
-
-      return { success: true, message: `Successfully added ${cost} SDG to wallet for site "${entry.site_name || 'Unknown'}"` };
+      return { success: false, message: 'Wallet credit is issued only after WFP confirmation.' };
     } catch (error: any) {
       console.error('[Wallet Reconciliation] Error:', error);
       return { success: false, message: `Failed to reconcile: ${error.message}` };

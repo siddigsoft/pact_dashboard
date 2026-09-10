@@ -498,7 +498,7 @@ export function ClaimSiteButton({
                     </div>
 
                     <p className="text-xs text-muted-foreground text-center">
-                      This amount will be credited to your wallet after completing the site visit.
+                       Completing the visit does not credit your wallet. Payment becomes available after WFP confirms this site.
                     </p>
                   </>
                 ) : (
@@ -537,7 +537,7 @@ export function ClaimSiteButton({
                     )}
 
                     <p className="text-xs text-muted-foreground text-center">
-                      This amount will be credited to your wallet after completing the site visit.
+                       Completing the visit records your work; payment becomes available after WFP confirmation.
                     </p>
                   </>
                 )}

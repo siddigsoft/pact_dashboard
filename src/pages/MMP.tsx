@@ -48,7 +48,6 @@ import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
 import { useWallet } from '@/context/wallet/WalletContext';
-import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
 import { StatePermitUpload } from '@/components/StatePermitUpload';
 import { DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -1402,36 +1401,12 @@ const MMP = () => {
           });
       }
 
-      // Process wallet payment for the user who completed the site entry
-      // Using centralized wallet transaction function (single point of truth)
-      try {
-        const result = await createSiteVisitWalletTransaction({
-          siteVisitId: site.id,
-          description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
-          showNotifications: true,
-          toast: toast,
-        });
-
-        if (result.success) {
-          console.log(`✅ Wallet transaction created successfully: ${result.message}`);
-        } else {
-          console.warn(`⚠️ Wallet transaction creation failed: ${result.message}`);
-          // Don't fail the entire operation if wallet payment fails
-          toast({
-            title: 'Payment Warning',
-            description: result.message || 'Site visit completed but wallet payment failed. Please contact support.',
-            variant: 'destructive',
-          });
-        }
-      } catch (walletErr: any) {
-        console.error('Failed to process wallet payment for completed site entry:', walletErr);
-        // Don't fail the entire operation if wallet payment fails
-        toast({
-          title: 'Payment Warning',
-          description: 'Site visit completed but wallet payment failed. Please contact support.',
-          variant: 'destructive',
-        });
-      }
+      // Completion records the field work only. Wallet/site-fee credit is
+      // intentionally deferred until the row reaches WFP Confirmed.
+      toast({
+        title: 'Visit completed',
+        description: 'No wallet credit was issued. Payment becomes available after WFP confirmation.',
+      });
 
       // Set the site for visit report and open dialog
       setSelectedSiteForVisit(site);
@@ -1804,51 +1779,12 @@ const MMP = () => {
         console.log('🔄 Offline mode - site status update included in completion sync');
       }
 
-      // CRITICAL: Create wallet transaction if it doesn't exist
-      // This ensures wallet transactions are created even if handleCompleteVisit wasn't called
-      if (isOnline) {
-        try {
-          console.log('💰 Creating wallet transaction for completed site:', site.id);
-          const walletResult = await createSiteVisitWalletTransaction({
-            siteVisitId: site.id,
-            description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
-            showNotifications: true,
-            toast: toast,
-          });
-
-          if (walletResult.success) {
-            console.log('✅ Wallet transaction created:', walletResult.message);
-            toast({
-              title: 'Payment Processed',
-              description: walletResult.message,
-              variant: 'default'
-            });
-          } else {
-            // If transaction already exists, that's okay - just log it
-            if (walletResult.message.includes('already exists')) {
-              console.log('ℹ️ Wallet transaction already exists (skipped duplicate)');
-            } else {
-              console.warn('⚠️ Wallet transaction creation failed:', walletResult.message);
-              toast({
-                title: 'Payment Warning',
-                description: walletResult.message || 'Wallet payment could not be processed. Please contact support.',
-                variant: 'destructive'
-              });
-            }
-          }
-        } catch (walletErr: any) {
-          console.error('❌ Wallet transaction error:', walletErr);
-          // Don't fail the entire operation if wallet transaction fails
-          toast({
-            title: 'Payment Warning',
-            description: 'Site visit completed but wallet payment failed. Please contact support.',
-            variant: 'destructive'
-          });
-        }
-      } else {
-        // Wallet transaction will be handled when syncing site_visit_complete
-        console.log('💰 Wallet transaction will be processed when syncing completion');
-      }
+      // Completion is not a payment event. Wallet credit is issued only by
+      // the WFP-confirmation flow, never for Completed/Submitted rows.
+      toast({
+        title: 'Visit completed',
+        description: 'No wallet credit was issued. Payment becomes available after WFP confirmation.',
+      });
 
       // Notify coordinator (or assignee) that site visit was completed
       try {

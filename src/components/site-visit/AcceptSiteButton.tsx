@@ -588,7 +588,7 @@ export function AcceptSiteButton({
                     </div>
 
                     <p className="text-xs text-muted-foreground text-center">
-                      This amount will be credited to your account after completing the site visit.
+                       This amount is not credited on completion. Payment becomes available after WFP confirms this site.
                     </p>
                   </>
                 ) : (
@@ -627,7 +627,7 @@ export function AcceptSiteButton({
                     )}
 
                     <p className="text-xs text-muted-foreground text-center">
-                      This amount will be credited to your account after completing the site visit.
+                       Completing the visit records your work; payment becomes available after WFP confirmation.
                     </p>
                   </>
                 )}

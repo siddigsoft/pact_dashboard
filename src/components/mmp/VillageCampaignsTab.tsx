@@ -221,6 +221,12 @@ function fmtDate(d?: string) {
   try { return format(parseISO(d), 'dd MMM yyyy'); } catch { return d; }
 }
 
+// Payment eligibility is deliberately narrower than workflow completion.
+// Only an exact WFP-confirmed status may trigger a fee payment.
+function isWfpConfirmed(status?: string | null) {
+  return (status || '').trim().toLowerCase().replace(/[\s-]+/g, '_') === 'wfp_confirmed';
+}
+
 function autoVillageCode(idx: number) {
   return `VLG-${String(idx + 1).padStart(2, '0')}`;
 }
@@ -371,7 +377,6 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   const [payDialog, setPayDialog] = useState<{ open: boolean; entry: SiteEntry | null }>({ open: false, entry: null });
   const [payForm, setPayForm]   = useState({ amount: '', notes: '', method: 'cash' });
   const [paying, setPaying]     = useState(false);
-  const [payingAll, setPayingAll] = useState(false);
 
   // ── Excel import state ────────────────────────────────────────────────────
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -595,7 +600,6 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     setAdvanceApproving({});
     setDispatchingAll(false);
     setApprovingAll(false);
-    setPayingAll(false);
     setCostsSubTab('pending');
     setPayDialog({ open: false, entry: null });
     setPayForm({ amount: '', notes: '', method: 'cash' });
@@ -1327,61 +1331,20 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   const markPaid = async () => {
     const entry = payDialog.entry;
     if (!entry) return;
+    if (!isWfpConfirmed(entry.status)) {
+      toast({ title: 'Payment blocked', description: 'Payment becomes available only after WFP confirmation.', variant: 'destructive' });
+      return;
+    }
     const amount = parseFloat(payForm.amount);
     if (!amount || amount <= 0) {
       toast({ title: 'Enter a valid amount', variant: 'destructive' }); return;
     }
-    setPaying(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      const now = new Date().toISOString();
-      const { data: updated, error } = await supabase
-        .from('mmp_site_entries')
-        .update({
-          fee_paid_status:    'paid',
-          fee_paid_amount:    amount,
-          fee_paid_at:        now,
-          fee_paid_by:        user.id,
-          fee_payment_method: payForm.method || 'cash',
-          fee_payment_notes:  payForm.notes || null,
-        })
-        .eq('id', entry.id)
-        .eq('fee_paid_status', 'unpaid')   // optimistic lock — 0 rows if already paid
-        .select('id');
-      if (error) throw error;
-
-      if (!updated || updated.length === 0) {
-        // Another user already recorded payment — fetch the winner's record
-        const { data: fresh } = await supabase
-          .from('mmp_site_entries')
-          .select('fee_paid_status, fee_paid_amount, fee_paid_at, fee_paid_by, fee_payment_method, fee_payment_notes')
-          .eq('id', entry.id)
-          .single();
-        if (fresh) {
-          setSiteEntries(es => es.map(e => e.id === entry.id ? { ...e, ...fresh } : e));
-          const recorder = profileName((fresh as any).fee_paid_by ?? undefined);
-          toast({
-            title: 'Already recorded',
-            description: `This entry was already marked paid by ${recorder} — local view refreshed.`,
-            variant: 'destructive',
-          });
-        }
-        setPayDialog({ open: false, entry: null });
-        return;
-      }
-
-      setSiteEntries(es => es.map(e => e.id === entry.id
-        ? { ...e, fee_paid_status: 'paid', fee_paid_amount: amount, fee_paid_at: now, fee_paid_by: user.id, fee_payment_method: payForm.method, fee_payment_notes: payForm.notes || null }
-        : e
-      ));
-      toast({ title: 'Payment recorded', description: `${entry.site_name} — SDG ${amount.toLocaleString()}` });
-      setPayDialog({ open: false, entry: null });
-    } catch (e: any) {
-      toast({ title: 'Error recording payment', description: e.message, variant: 'destructive' });
-    } finally {
-      setPaying(false);
+    if (!payForm.notes.trim()) {
+      toast({ title: 'Receipt required', description: 'Enter genuine receipt evidence before recording payment. Use Field Payments Centre to upload a receipt.', variant: 'destructive' });
+      return;
     }
+    toast({ title: 'Use Field Payments Centre', description: 'Upload a genuine receipt there before recording covered-site payment.', variant: 'destructive' });
+    return;
   };
 
   // ── Mark all unpaid entries as paid (bulk) ────────────────────────────────
@@ -1395,84 +1358,11 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     const pool   = subset ?? siteEntries;
     const unpaid = pool.filter(e => e.fee_paid_status !== 'paid');
     if (!unpaid.length) { toast({ title: 'All entries already paid' }); return; }
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setPayingAll(true);
-    try {
-      const now = new Date().toISOString();
-      type Result = { id: string; amount: number; skipped: boolean };
-      const results = await Promise.allSettled(
-        unpaid.map(async (e): Promise<Result> => {
-          const total = (e.transport_fee || 0) + (e.enumerator_fee || 0);
-          const { data: updated, error } = await supabase
-            .from('mmp_site_entries')
-            .update({
-              fee_paid_status: 'paid',
-              fee_paid_amount: total,
-              fee_paid_at: now,
-              fee_paid_by: user.id,
-              fee_payment_method: 'cash',
-            })
-            .eq('id', e.id)
-            .eq('fee_paid_status', 'unpaid')  // optimistic lock
-            .select('id');
-          if (error) throw error;
-          // 0 rows → already paid by another user; not an error, just skip
-          return { id: e.id, amount: total, skipped: !updated || updated.length === 0 };
-        })
-      );
-
-      const successes = results
-        .filter((r): r is PromiseFulfilledResult<Result> => r.status === 'fulfilled' && !r.value.skipped)
-        .map(r => r.value);
-      const skipped = results
-        .filter((r): r is PromiseFulfilledResult<Result> => r.status === 'fulfilled' && r.value.skipped)
-        .length;
-      const failCount = results.filter(r => r.status === 'rejected').length;
-
-      if (successes.length > 0) {
-        const successMap = new Map(successes.map(s => [s.id, s]));
-        setSiteEntries(es => es.map(e => {
-          const s = successMap.get(e.id);
-          if (!s) return e;
-          return { ...e, fee_paid_status: 'paid', fee_paid_amount: s.amount, fee_paid_at: now, fee_paid_by: user.id };
-        }));
-      }
-
-      if (failCount > 0 && successes.length === 0 && skipped === 0) {
-        toast({ title: 'Mark All Paid failed', description: `All ${failCount} updates failed.`, variant: 'destructive' });
-      } else if (failCount > 0) {
-        toast({ title: `${successes.length} marked paid, ${failCount} failed`, description: skipped ? `${skipped} already paid by another user.` : undefined, variant: 'destructive' });
-      } else if (skipped > 0 && successes.length === 0) {
-        toast({ title: 'Already paid', description: `All ${skipped} entr${skipped !== 1 ? 'ies' : 'y'} were already recorded by another user.`, variant: 'destructive' });
-      } else if (skipped > 0) {
-        toast({ title: `${successes.length} marked paid`, description: `${skipped} were already recorded by another user.` });
-      } else {
-        toast({ title: `${successes.length} entr${successes.length !== 1 ? 'ies' : 'y'} marked paid` });
-      }
-    } catch (e: any) {
-      toast({ title: 'Mark All Paid failed', description: e.message, variant: 'destructive' });
-    } finally {
-      setPayingAll(false);
+    if (!unpaid.some(e => isWfpConfirmed(e.status))) {
+      toast({ title: 'Payment blocked', description: 'Payment becomes available only after WFP confirmation.', variant: 'destructive' });
+      return;
     }
-  };
-
-  // ── Revert paid entry back to unpaid ─────────────────────────────────────
-  const revertPaid = async (entryId: string) => {
-    try {
-      const { error } = await supabase
-        .from('mmp_site_entries')
-        .update({ fee_paid_status: 'unpaid', fee_paid_amount: null, fee_paid_at: null, fee_paid_by: null, fee_payment_method: null, fee_payment_notes: null })
-        .eq('id', entryId);
-      if (error) throw error;
-      setSiteEntries(es => es.map(e => e.id === entryId
-        ? { ...e, fee_paid_status: 'unpaid', fee_paid_amount: null, fee_paid_at: null, fee_paid_by: null, fee_payment_method: null, fee_payment_notes: null }
-        : e
-      ));
-      toast({ title: 'Payment reverted to unpaid' });
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
-    }
+    toast({ title: 'Receipt required', description: 'Bulk payment requires genuine receipt evidence. Use Field Payments Centre to upload the receipt.', variant: 'destructive' });
   };
 
   // ── Export Costs & Fees to Excel ─────────────────────────────────────────
@@ -3234,10 +3124,10 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                       <Button
                         type="button" size="sm"
                         className="h-7 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-                        disabled={payingAll || dispatchedEntries.every(e => e.fee_paid_status === 'paid')}
+                         disabled
                         onClick={() => markAllPaid(dispatchedEntries)}
                       >
-                        {payingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <CreditCard className="h-3 w-3" />}
+                        <CreditCard className="h-3 w-3" />
                         Mark All Paid
                       </Button>
                     </>
@@ -3416,9 +3306,10 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                                 )}
 
                                 {/* Dispatched: Mark Paid / Revert */}
-                                {costsSubTab === 'dispatched' && canManage && payStatus !== 'paid' && (
+                                {costsSubTab === 'dispatched' && canManage && isWfpConfirmed(e.status) && payStatus !== 'paid' && (
                                   <Button type="button" size="sm"
                                     className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    disabled
                                     onClick={() => {
                                       const total = (e.transport_fee || 0) + (e.enumerator_fee || 0);
                                       setPayForm({ amount: String(total), notes: '', method: 'cash' });
@@ -3427,13 +3318,8 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                                     <CreditCard className="h-3 w-3" />
                                   </Button>
                                 )}
-                                {costsSubTab === 'dispatched' && canManage && payStatus === 'paid' && (
-                                  <Button type="button" size="sm" variant="ghost"
-                                    className="h-6 text-[10px] px-2 text-muted-foreground hover:text-destructive"
-                                    title="Revert to unpaid"
-                                    onClick={() => revertPaid(e.id)}>
-                                    <X className="h-3 w-3" />
-                                  </Button>
+                                {costsSubTab === 'dispatched' && canManage && payStatus !== 'paid' && !isWfpConfirmed(e.status) && (
+                                  <span className="text-[10px] text-muted-foreground">Available after WFP confirmation</span>
                                 )}
                               </div>
                             </TableCell>

@@ -15,7 +15,6 @@ import {
   cleanExpiredCache,
   type PendingSyncAction,
 } from './offline-db';
-import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
 import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 import { upsertVisitReport } from '@/lib/visitReport';
 
@@ -905,26 +904,7 @@ class SyncManager {
       }
     }
 
-    // Process wallet transaction for completed visit using centralized function
-    // This ensures consistency across all completion flows (online, offline, sync)
-    try {
-      const result = await createSiteVisitWalletTransaction({
-        siteVisitId: siteEntryId,
-        userId: userId, // Will be overridden by site entry values if available
-        description: `Site visit completion (offline sync): ${existing?.site_name || 'Unknown Site'}`,
-        showNotifications: false, // Don't show toasts during background sync
-      });
-
-      if (result.success) {
-        console.log(`[SyncManager] ✅ Wallet transaction created for site visit ${siteEntryId}: ${result.message}`);
-      } else {
-        // Log but don't throw - sync should continue even if wallet transaction fails
-        console.warn(`[SyncManager] ⚠️ Wallet transaction creation failed for site visit ${siteEntryId}: ${result.message}`);
-      }
-    } catch (error: any) {
-      // Log but don't throw - sync should continue even if wallet transaction fails
-      console.error(`[SyncManager] Error creating wallet transaction for site visit ${siteEntryId}:`, error);
-    }
+    // Ordinary fee earnings are created only by the trusted WFP transition.
   }
 
   // T05 — Personal task status updates queued while offline.

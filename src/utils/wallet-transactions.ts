@@ -13,16 +13,7 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
  * Statuses that indicate a site visit is complete enough to be eligible for payment.
  * A wallet earning transaction will be BLOCKED if the site is not in one of these statuses.
  */
-export const PAYABLE_SITE_STATUSES = [
-  'completed',
-  'submitted',
-  'wfp_confirmed',
-  'cp_verified',
-  'approved',
-  'costed',
-  'approved_and_costed',
-  'locality_permit_verified',
-] as const;
+export const PAYABLE_SITE_STATUSES = ['wfp_confirmed'] as const;
 
 export interface CreateSiteVisitTransactionOptions {
   /** The site entry ID (mmp_site_entries.id) */
@@ -71,6 +62,13 @@ export async function createSiteVisitWalletTransaction(
   } = options;
 
   try {
+    // Ordinary site-fee earnings are owned by the trusted WFP status
+    // transition (server trigger/RPC). Never insert them from a client flow.
+    return {
+      success: false,
+      message: 'Wallet credit is issued only after WFP confirmation by the server.',
+      error: 'CLIENT_EARNING_DISABLED',
+    };
     console.log(`[WalletTransaction] Starting transaction creation for site visit ${siteVisitId}`);
 
     // Step 1: Fetch site entry to get fee information and determine user to pay
