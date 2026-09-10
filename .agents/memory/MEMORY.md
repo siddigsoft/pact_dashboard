@@ -38,6 +38,8 @@
 - [immutable-gl-line-identifiers](immutable-gl-line-identifiers.md) — Add a final journal UUID in a line BEFORE INSERT; never rewrite immutable posted accounting lines.
 - [automatic-redirect-recall-authority](automatic-redirect-recall-authority.md) — Automatic legacy Redirect recall uses the original balanced journal and paid advance, not mutable later fee values.
 - [pre-fund-source-validity-cache](pre-fund-source-validity-cache.md) — When a payment source changes validity, refresh every linked fund cache from the event projection, including split-source payments.
+- [Pre-Fund period reporting](pre-fund-period-reporting.md) — Month summaries use verified ledger events; period net activity is not a balance variance and excludes opening balances.
+- [Month-end reporting basis](month-end-reporting-basis.md) — Payroll belongs to its period-end month; current-state receivables/subscriptions must not be described as historical as-of balances.
 - [wallet-payment-idempotency-identity](wallet-payment-idempotency-identity.md) — Retry responses must include the original ledger transaction ID as well as wallet evidence.
 - [safe-legacy-date-rendering](safe-legacy-date-rendering.md) — date-fns parseISO throws an internal `.split` error for absent dates; guard untrusted historical values before formatting.
 - [postgres-view-column-evolution](postgres-view-column-evolution.md) — CREATE OR REPLACE VIEW cannot insert or reorder existing output columns; preserve them and append new fields.
