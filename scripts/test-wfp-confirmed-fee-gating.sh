@@ -26,7 +26,7 @@ CREATE TABLE profiles (id uuid PRIMARY KEY, role text);
 CREATE TABLE mmp_files (id uuid PRIMARY KEY, country_id uuid);
 CREATE TABLE mmp_site_entries (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), mmp_file_id uuid,
- accepted_by text, claimed_by uuid, visit_completed_by uuid, status text,
+ accepted_by text, claimed_by uuid, visit_completed_by uuid, visit_started_by uuid, status text,
  enumerator_fee numeric, transport_fee numeric, cost numeric, site_name text,
  not_covered_flag boolean DEFAULT false, fee_paid_status text DEFAULT 'unpaid',
  fee_paid_amount numeric, fee_cash_paid_amount numeric, fee_advance_offset_amount numeric,
@@ -34,7 +34,8 @@ CREATE TABLE mmp_site_entries (
  fee_payment_method text, fee_payment_notes text, fee_receipt_url text,
  fee_receipt_uploaded_at timestamptz, fee_receipt_uploaded_by uuid,
  fee_payment_reference text, fee_pre_fund_id uuid, wfp_override_by uuid,
- wfp_override_justification text, wfp_override_at timestamptz
+ wfp_override_justification text, wfp_override_at timestamptz,
+ attribution_collector_id uuid, attribution_status text DEFAULT 'unresolved'
 );
 CREATE TABLE wallets (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE NOT NULL,
@@ -54,6 +55,12 @@ CREATE TABLE down_payment_requests (
  total_paid_amount numeric, approved_amount numeric, requested_amount numeric,
  metadata jsonb DEFAULT '{}', mmp_site_entry_id uuid, site_visit_id uuid,
  site_name text, updated_at timestamptz DEFAULT now()
+);
+CREATE TABLE pre_fund_transactions (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), source_table text, source_id uuid,
+ transaction_type text, amount numeric, currency text DEFAULT 'SDG',
+ source_is_verified boolean DEFAULT true, reversal_of_id uuid,
+ transaction_date date DEFAULT current_date, created_at timestamptz DEFAULT now()
 );
 CREATE TABLE acct_gl_bridge_log (
  source_table text, source_id text, event_type text, status text,
@@ -135,9 +142,11 @@ BEGIN
 END $$;
 
 -- Seed a non-WFP row and verify both paid INSERT and UPDATE guards.
-INSERT INTO mmp_site_entries(id,status,accepted_by,enumerator_fee,transport_fee,site_name)
+INSERT INTO mmp_site_entries(id,status,accepted_by,enumerator_fee,transport_fee,site_name,
+ attribution_collector_id,attribution_status)
  VALUES ('30000000-0000-0000-0000-000000000001','submitted',
-         '00000000-0000-0000-0000-000000000002',10,5,'Legacy');
+         '00000000-0000-0000-0000-000000000002',10,5,'Legacy',
+         '00000000-0000-0000-0000-000000000002','auto');
 DO $$
 BEGIN
  BEGIN INSERT INTO mmp_site_entries(id,status,fee_paid_status)
@@ -165,13 +174,69 @@ DO $$ BEGIN
 END $$;
 
 -- Positive WFP credit and protected payment workflow with genuine receipt.
-INSERT INTO mmp_site_entries(id,status,accepted_by,enumerator_fee,transport_fee,site_name)
+INSERT INTO mmp_site_entries(id,status,accepted_by,enumerator_fee,transport_fee,site_name,
+ attribution_collector_id,attribution_status)
  VALUES ('30000000-0000-0000-0000-000000000003','submitted',
-         '00000000-0000-0000-0000-000000000002',10,5,'Confirmed');
+         '00000000-0000-0000-0000-000000000002',10,5,'Confirmed',
+         '00000000-0000-0000-0000-000000000002','auto');
+INSERT INTO down_payment_requests(requested_by,status,mmp_site_entry_id,site_name)
+ VALUES ('00000000-0000-0000-0000-000000000002','fully_paid',
+         '30000000-0000-0000-0000-000000000003','Confirmed');
+INSERT INTO pre_fund_transactions(source_table,source_id,transaction_type,amount,currency)
+ SELECT 'down_payment_requests',id,'payment',5,'SDG'
+   FROM down_payment_requests WHERE mmp_site_entry_id='30000000-0000-0000-0000-000000000003';
 UPDATE mmp_site_entries SET status='WFP_CONFIRMED' WHERE id='30000000-0000-0000-0000-000000000003';
 SELECT record_covered_enumerator_fee_payments(
- '[{"site_id":"30000000-0000-0000-0000-000000000003","amount":15}]',
+ '[{"site_id":"30000000-0000-0000-0000-000000000003","amount":10}]',
  'Cash',current_date,'https://receipts.example/real.pdf','ref','note',NULL);
+
+DO $$
+DECLARE n integer;
+BEGIN
+  BEGIN
+    INSERT INTO site_advance_applications
+      (mmp_site_entry_id,down_payment_request_id,recipient_id,gross_cents,applied_cents,
+       remaining_paid_cents,source_payment_ids)
+    VALUES ('30000000-0000-0000-0000-000000000003',
+            (SELECT id FROM down_payment_requests
+              WHERE mmp_site_entry_id='30000000-0000-0000-0000-000000000003'),
+            auth.uid(),1500,1,4,'[]');
+    RAISE EXCEPTION 'ledger client insert passed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE site_advance_applications SET applied_cents=99;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    IF n <> 0 THEN RAISE EXCEPTION 'ledger client update passed'; END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+DO $$ BEGIN
+ IF (SELECT fee_advance_offset_amount FROM mmp_site_entries
+       WHERE id='30000000-0000-0000-0000-000000000003') <> 5
+ OR (SELECT fee_cash_paid_amount FROM mmp_site_entries
+       WHERE id='30000000-0000-0000-0000-000000000003') <> 10
+ THEN RAISE EXCEPTION 'advance offset/payment projection mismatch'; END IF;
+END $$;
+DO $$
+DECLARE rid uuid;
+BEGIN
+ rid := (SELECT id FROM down_payment_requests
+          WHERE mmp_site_entry_id='30000000-0000-0000-0000-000000000003');
+ BEGIN
+   INSERT INTO pre_fund_transactions(source_table,source_id,transaction_type,amount,
+                                      currency,source_is_verified,reversal_of_id)
+   VALUES ('down_payment_requests',rid,'reversal',1,'SDG',true,NULL);
+   RAISE EXCEPTION 'applied advance reversal passed';
+ EXCEPTION WHEN OTHERS THEN
+   IF SQLERRM NOT LIKE 'ADVANCE_REVERSAL_BLOCKED%' THEN RAISE; END IF;
+ END;
+ INSERT INTO down_payment_requests(requested_by,status) VALUES (auth.uid(),'fully_paid')
+ RETURNING id INTO rid;
+ INSERT INTO pre_fund_transactions(source_table,source_id,transaction_type,amount,
+                                   currency,source_is_verified)
+ VALUES ('down_payment_requests',rid,'reversal',1,'SDG',true);
+END $$;
 
 -- Canonical uniqueness covers the legacy related_site_visit_id column too.
 DO $$
@@ -204,7 +269,15 @@ END $$;
 
 DO $$ BEGIN
  IF (SELECT count(*) FROM wallet_transactions WHERE site_visit_id='30000000-0000-0000-0000-000000000003') <> 1
- OR (SELECT balance_cents FROM wallets WHERE user_id='00000000-0000-0000-0000-000000000002') <> 1500
+ OR (SELECT balance_cents FROM wallets WHERE user_id='00000000-0000-0000-0000-000000000002') <> 1000
+ OR (SELECT amount_cents FROM wallet_transactions
+       WHERE site_visit_id='30000000-0000-0000-0000-000000000003') <> 1000
+ OR NOT ((SELECT metadata FROM wallet_transactions
+            WHERE site_visit_id='30000000-0000-0000-0000-000000000003')
+           ? 'gross_cents')
+ OR NOT ((SELECT metadata FROM wallet_transactions
+            WHERE site_visit_id='30000000-0000-0000-0000-000000000003')
+           ? 'advance_application_ids')
  THEN RAISE EXCEPTION 'WFP earning/wallet mismatch'; END IF;
  IF (SELECT count(*) FROM pg_trigger WHERE tgname='trg_mmp_site_fee_gl_post') <> 1
  THEN RAISE EXCEPTION 'GL trigger inventory mismatch'; END IF;
