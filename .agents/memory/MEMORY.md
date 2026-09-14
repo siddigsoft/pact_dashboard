@@ -25,7 +25,7 @@
 - [recycle-bin-system](recycle-bin-system.md) — Global soft-delete recycle bin: recycle_bin table (28-day retention), softDelete() utility, /recycle-bin page (Super Admin only), Super Admin-only delete guards on Positions/PreFunding/UserDetail.
 - [senior-management-role](senior-management-role.md) — SeniorManagement AppRole fully wired: type, permissions, roleMapping, sidebar/nav; no admin hub access; maps DB name "Senior Management" via normalizeRole().
 - [project-duration-calendar](project-duration-calendar.md) — MS-Project durations: checklist item dates, stage assignee work periods, per-project calendar; migration must be run manually in Supabase Studio.
-- [unified-access-manager](unified-access-manager.md) — 5-tab access manager in RoleManagement; tab overrides stored in page_access_overrides with `hubSlug:tabId` slug; CurrentUserAccessContext filters hub tabs live; Finance/HR hubs not yet wired.
+- [unified-access-manager](unified-access-manager.md) — Role Management is the single inline surface for roles, pages, tabs, buttons, reports, columns, scope, and overrides.
 - [sql-migration-rule](sql-migration-rule.md) — every DB change must produce a file in supabase/migrations/YYYYMMDD_desc.sql; user runs it manually in Supabase Studio; never wait to be asked.
 - [gl-bridge-orphaned-triggers](gl-bridge-orphaned-triggers.md) — acct_trig_down_payment_requests + acct_trig_operational_cost_submissions functions existed but CREATE TRIGGER was never run; fixed in 20260817_gl_bridge_advances_ops.sql.
 - [gl-bridge-targeted-retries](gl-bridge-targeted-retries.md) — Retry one unresolved error-log record under a source-level lock; never route a row action through a bulk bridge backfill.

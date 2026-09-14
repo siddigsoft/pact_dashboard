@@ -3,12 +3,12 @@
  * dimension of access for any user: page access, hub-tab access, action
  * permissions, column visibility, and data scope.
  */
-import { useState, useMemo, type ReactNode } from 'react';
+import { useState, useMemo, useEffect, type ReactNode } from 'react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Search, Globe, Layers, Key, Database, Shield, User, ChevronRight } from 'lucide-react';
+import { Search, Globe, Layers, Key, Database, Shield, User, ChevronRight, BarChart3, Columns3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
 import { SelectedUserAccessProvider } from '@/context/role-management/SelectedUserAccessContext';
@@ -47,7 +47,7 @@ function getInitials(name?: string | null, email?: string): string {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type UAMUser = { id: string; name?: string | null; email: string; role: string };
-type TabKey = 'overview' | 'pages' | 'tabs' | 'permissions' | 'scope';
+type TabKey = 'overview' | 'pages' | 'tabs' | 'buttons' | 'reports' | 'columns' | 'scope' | 'overrides';
 
 // ── Component ──────────────────────────────────────────────────────────────
 export function UnifiedAccessManager({ containerClassName }: { containerClassName?: string } = {}) {
@@ -85,6 +85,12 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
   );
   const isSA = selectedUser?.role === 'superAdmin';
 
+  useEffect(() => {
+    if (selectedId && !filteredUsers.some(user => user.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [filteredUsers, selectedId]);
+
   const tabProps = selectedUser ? {
     userId: selectedUser.id,
     userRole: selectedUser.role,
@@ -96,7 +102,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
     <div className={containerClassName ?? "flex h-[calc(100vh-260px)] min-h-[600px] border rounded-xl overflow-hidden bg-background"}>
 
       {/* ── Left panel: user list ── */}
-      <div className="w-72 shrink-0 flex flex-col border-r bg-muted/20">
+      <div className="flex max-h-56 w-full shrink-0 flex-col border-b bg-muted/20 md:max-h-none md:w-72 md:border-b-0 md:border-r">
         {/* Search */}
         <div className="p-3 border-b space-y-2">
           <div className="relative">
@@ -105,9 +111,9 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
               placeholder="Search users…" className="pl-8 h-8 text-xs" />
           </div>
           {/* Role filter chips */}
-          <div className="flex flex-wrap gap-1">
+          <div className="flex max-w-full flex-nowrap gap-1 overflow-x-auto pb-1">
             <RoleChip value="all" active={roleFilter === 'all'} label="All" onClick={setRoleFilter} />
-            {allRoles.slice(0, 8).map(r => (
+            {allRoles.map(r => (
               <RoleChip key={r} value={r} active={roleFilter === r}
                 label={ROLE_LABEL[r] ?? r} onClick={setRoleFilter} />
             ))}
@@ -144,17 +150,21 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={v => setActiveTab(v as TabKey)}
+              aria-label="Access management sections"
               className="flex-1 flex flex-col overflow-hidden">
-              <TabsList className="shrink-0 w-full justify-start rounded-none border-b bg-card px-3 gap-0 h-9">
+              <TabsList className="h-auto min-h-9 w-full shrink-0 justify-start gap-0 overflow-x-auto rounded-none border-b bg-card px-3">
                 {([
                   { key: 'overview',     icon: User,   label: 'Overview' },
                   { key: 'pages',        icon: Globe,  label: 'Page Access' },
                   { key: 'tabs',         icon: Layers, label: 'Tab Access' },
-                  { key: 'permissions',  icon: Key,    label: 'Permissions' },
+                  { key: 'buttons',      icon: Key,    label: 'Buttons & Actions' },
+                  { key: 'reports',      icon: BarChart3, label: 'Reports' },
+                  { key: 'columns',      icon: Columns3, label: 'Columns' },
                   { key: 'scope',        icon: Database, label: 'Data Scope' },
+                  { key: 'overrides',    icon: Shield, label: 'Overrides' },
                 ] as const).map(({ key, icon: Icon, label }) => (
                   <TabsTrigger key={key} value={key}
-                    className="h-full rounded-none text-xs border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent gap-1.5">
+                    className="h-9 shrink-0 rounded-none text-xs border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent gap-1.5">
                     <Icon className="h-3 w-3" />
                     {label}
                   </TabsTrigger>
@@ -164,19 +174,28 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
               {tabProps && (
                 <>
                   <TabsContent value="overview" className="flex-1 overflow-hidden m-0">
-                    <OverviewTab {...tabProps} onTabChange={t => setActiveTab(t as TabKey)} />
+                    <OverviewTab {...tabProps} onTabChange={t => setActiveTab((t === 'permissions' ? 'buttons' : t) as TabKey)} />
                   </TabsContent>
                   <TabsContent value="pages" className="flex-1 overflow-hidden m-0">
-                    <PageAccessTab {...tabProps} onTabChange={t => setActiveTab(t as TabKey)} />
+                    <PageAccessTab {...tabProps} onTabChange={t => setActiveTab((t === 'permissions' ? 'buttons' : t) as TabKey)} />
                   </TabsContent>
                   <TabsContent value="tabs" className="flex-1 overflow-hidden m-0">
                     <TabAccessTab {...tabProps} />
                   </TabsContent>
-                  <TabsContent value="permissions" className="flex-1 overflow-hidden m-0">
-                    <PermissionsTab {...tabProps} />
+                  <TabsContent value="buttons" className="flex-1 overflow-hidden m-0">
+                    <PermissionsTab {...tabProps} section="actions" actionFilter="buttons" />
+                  </TabsContent>
+                  <TabsContent value="reports" className="flex-1 overflow-hidden m-0">
+                    <PermissionsTab {...tabProps} section="actions" actionFilter="reports" />
+                  </TabsContent>
+                  <TabsContent value="columns" className="flex-1 overflow-hidden m-0">
+                    <PermissionsTab {...tabProps} section="columns" />
                   </TabsContent>
                   <TabsContent value="scope" className="flex-1 overflow-hidden m-0">
                     <DataScopeTab {...tabProps} />
+                  </TabsContent>
+                  <TabsContent value="overrides" className="flex-1 overflow-hidden m-0">
+                    <PermissionsTab {...tabProps} section="grants" />
                   </TabsContent>
                 </>
               )}
@@ -194,8 +213,8 @@ function RoleChip({ value, active, label, onClick }: {
   value: string; active: boolean; label: string; onClick: (v: string) => void;
 }) {
   return (
-    <button onClick={() => onClick(value)}
-      className={cn('text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors',
+    <button type="button" onClick={() => onClick(value)} aria-pressed={active}
+      className={cn('shrink-0 text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         active ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted text-muted-foreground'
       )}>
       {label}
@@ -207,8 +226,9 @@ function UserListRow({ user, isSelected, onClick }: { user: UAMUser; isSelected:
   const initials = getInitials(user.name, user.email);
   const roleCls = ROLE_COLOR[user.role] ?? 'bg-gray-100 text-gray-600';
   return (
-    <button onClick={onClick}
-      className={cn('w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors',
+    <button type="button" onClick={onClick} aria-pressed={isSelected}
+      aria-label={`Manage access for ${user.name ?? user.email}`}
+      className={cn('w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary',
         isSelected ? 'bg-primary/10 border-r-2 border-primary' : 'hover:bg-muted/50'
       )}>
       <Avatar className="h-7 w-7 shrink-0">

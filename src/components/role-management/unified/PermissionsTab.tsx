@@ -294,7 +294,16 @@ function CsButtonAccessSection({ userId, userRole, isSelectedSuperAdmin }: { use
 }
 
 // ── Main PermissionsTab ───────────────────────────────────────────────────────
-export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabProps) {
+type PermissionsSection = 'actions' | 'columns' | 'grants' | 'all';
+type ActionFilter = 'all' | 'buttons' | 'reports';
+
+export function PermissionsTab({
+  userId,
+  userRole,
+  isSelectedSuperAdmin,
+  section = 'all',
+  actionFilter = 'all',
+}: TabProps & { section?: PermissionsSection; actionFilter?: ActionFilter }) {
   const { loading, savingKey, effectiveAction, toggleAction, columnConfigs, upsertColumnVisibility, removeColumnVisibility } = useSelectedUserAccess();
   const [activeSection, setActiveSection] = useState<'actions' | 'columns' | 'grants'>('actions');
   const [moduleSearch, setModuleSearch] = useState('');
@@ -306,20 +315,24 @@ export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabPr
   }
 
   const filteredModules = useMemo(() => {
-    if (!moduleSearch) return MODULE_REGISTRY;
     const q = moduleSearch.toLowerCase();
     return MODULE_REGISTRY.map(mod => ({
       ...mod,
       pages: mod.pages.map(pg => ({
         ...pg,
-        actions: pg.actions.filter(a =>
-          a.label.toLowerCase().includes(q) ||
-          a.resource.toLowerCase().includes(q) ||
-          a.description?.toLowerCase().includes(q)
-        ),
-      })).filter(pg => pg.actions.length > 0 || pg.page.toLowerCase().includes(q)),
-    })).filter(mod => mod.pages.length > 0 || mod.module.toLowerCase().includes(q));
-  }, [moduleSearch]);
+        actions: pg.actions.filter(a => {
+          const isReport = a.action === 'export' || /report|analytics/i.test(`${a.label} ${a.description || ''} ${pg.page}`);
+          const matchesType = actionFilter === 'all' || (actionFilter === 'reports' ? isReport : !isReport);
+          const matchesSearch = !q ||
+            a.label.toLowerCase().includes(q) ||
+            a.resource.toLowerCase().includes(q) ||
+            a.description?.toLowerCase().includes(q);
+          return matchesType && matchesSearch;
+        }),
+      })).filter(pg => pg.actions.length > 0),
+    })).filter(mod => mod.pages.length > 0);
+  }, [moduleSearch, actionFilter]);
+  const visibleSection = section === 'all' ? activeSection : section;
 
   const pageDef = COLUMN_REGISTRY.find(p => p.pageSlug === selectedPage);
   const userColMap = useMemo(() =>
@@ -349,7 +362,7 @@ export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabPr
     <TooltipProvider>
       <div className="flex flex-col h-full overflow-hidden">
         {/* Section tabs */}
-        <div className="px-5 pt-3 border-b bg-card/50">
+        {section === 'all' && <div className="px-5 pt-3 border-b bg-card/50">
           <div className="flex gap-1 mb-0">
             {([
               { key: 'actions', icon: Key,    label: 'Action Permissions' },
@@ -367,16 +380,16 @@ export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabPr
               </button>
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* ── Action Permissions ── */}
-        {activeSection === 'actions' && (
+        {visibleSection === 'actions' && (
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="px-5 py-2.5 border-b flex items-center gap-2">
               <div className="relative flex-1 max-w-xs">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input value={moduleSearch} onChange={e => setModuleSearch(e.target.value)}
-                  placeholder="Search actions, resources…" className="pl-8 h-7 text-xs" />
+                  placeholder={actionFilter === 'reports' ? 'Search reports and exports…' : 'Search buttons and actions…'} className="pl-8 h-7 text-xs" />
               </div>
               <div className="flex gap-2 text-[10px] text-muted-foreground items-center">
                 <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-400" /> Role default</span>
@@ -388,7 +401,7 @@ export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabPr
 
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
               {/* Pinned: Cost Submission fine-grained button access */}
-              {!moduleSearch && (
+              {!moduleSearch && actionFilter !== 'reports' && (
                 <CsButtonAccessSection
                   userId={userId}
                   userRole={userRole}
@@ -425,17 +438,17 @@ export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabPr
                             const hasOverride = eff === 'granted' || eff === 'blocked';
                             return (
                               <div key={`${a.resource}:${a.action}`}
-                                className={cn('flex items-center gap-2 px-3 py-1.5 rounded-lg',
+                                className={cn('flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg',
                                   eff === 'granted' ? 'bg-emerald-50/50 dark:bg-emerald-900/5' :
                                   eff === 'blocked' ? 'bg-red-50/50 dark:bg-red-900/5 opacity-60' :
                                   eff === 'role-yes' ? 'bg-blue-50/20' : 'opacity-40'
                                 )}>
                                 <StatusIcon eff={eff} small />
                                 <Icon className="h-3 w-3 text-muted-foreground shrink-0" />
-                                <div className="flex-1 min-w-0">
+                                <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1">
                                   <span className="text-xs font-medium">{a.label}</span>
                                   {a.description && (
-                                    <span className="text-[10px] text-muted-foreground ml-1.5">{a.description}</span>
+                                    <span className="basis-full text-[10px] leading-snug text-muted-foreground">{a.description}</span>
                                   )}
                                 </div>
                                 {hasOverride && (
@@ -475,7 +488,7 @@ export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabPr
         )}
 
         {/* ── Column Visibility ── */}
-        {activeSection === 'columns' && (
+        {visibleSection === 'columns' && (
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="px-5 py-2.5 border-b flex items-center gap-3">
               <div className="flex-1 max-w-xs">
@@ -495,14 +508,13 @@ export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabPr
               </p>
             </div>
 
-            {/* Column headers */}
-            <div className="px-5 py-1.5 border-b bg-muted/20 grid grid-cols-[1fr_auto_auto] gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-              <span>Column</span>
-              <span className="w-28 text-center">Role Default<br/><span className="font-normal text-[9px] normal-case">Applies to all {userRole}s</span></span>
-              <span className="w-28 text-center">User Override<br/><span className="font-normal text-[9px] normal-case">Only this user</span></span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-auto">
+              <div className="min-w-[34rem]">
+              <div className="px-5 py-1.5 border-b bg-muted/20 grid grid-cols-[1fr_auto_auto] gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <span>Column</span>
+                <span className="w-28 text-center">Role Default<br/><span className="font-normal text-[9px] normal-case">Applies to all {userRole}s</span></span>
+                <span className="w-28 text-center">User Override<br/><span className="font-normal text-[9px] normal-case">Only this user</span></span>
+              </div>
               {pageDef?.columns.map(col => {
                 const roleKey = `${selectedPage}:${col.key}`;
                 const roleRow = roleColMap[roleKey];
@@ -531,7 +543,8 @@ export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabPr
                             {roleRow.is_hidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                             {roleRow.is_hidden ? 'Hidden' : 'Visible'}
                           </span>
-                          <button disabled={roleRemoveSaving}
+                          <button type="button" disabled={roleRemoveSaving}
+                            aria-label={`Remove role column override for ${col.label}`}
                             onClick={() => removeColumnVisibility(roleRow.id)}
                             className="text-muted-foreground hover:text-destructive disabled:opacity-40">
                             {roleRemoveSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
@@ -564,7 +577,8 @@ export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabPr
                             {userRow.is_hidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                             {userRow.is_hidden ? 'Hidden' : 'Visible'}
                           </span>
-                          <button disabled={userRemoveSaving}
+                          <button type="button" disabled={userRemoveSaving}
+                            aria-label={`Remove user column override for ${col.label}`}
                             onClick={() => removeColumnVisibility(userRow.id)}
                             className="text-muted-foreground hover:text-destructive disabled:opacity-40">
                             {userRemoveSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
@@ -589,12 +603,13 @@ export function PermissionsTab({ userId, userRole, isSelectedSuperAdmin }: TabPr
                   </div>
                 );
               })}
+              </div>
             </div>
           </div>
         )}
 
         {/* ── Active Grants (cross-user overview) ── */}
-        {activeSection === 'grants' && (
+        {visibleSection === 'grants' && (
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="px-5 py-2.5 border-b bg-card/50">
               <p className="text-xs text-muted-foreground">

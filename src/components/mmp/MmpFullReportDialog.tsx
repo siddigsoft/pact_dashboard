@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getDownPaymentBalance, isDownPaymentSettledStatus } from '@/utils/downPaymentBalance';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 //
@@ -134,6 +135,8 @@ const clsCard: Record<EntryClass | 'total', { border: string; icon: string; num:
 };
 
 const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
+  const { checkPermission } = useAuthorization();
+  const canUseMmpReports = checkPermission('mmp', 'export');
   const [mmp, setMmp] = useState<any>(null);
   const [entries, setEntries] = useState<SiteEntry[]>([]);
   const [profileMap, setProfileMap] = useState<Record<string, string>>({});
@@ -153,6 +156,12 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
   // ── Fetch ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!open || !mmpId) return;
+    if (!canUseMmpReports) {
+      setLoading(false);
+      setFinanceLoading(false);
+      setAccessError('You do not have permission to view or export MMP reports.');
+      return;
+    }
     setLoading(true);
     setFinanceLoading(true);
     setEntries([]);
@@ -188,7 +197,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         setFinanceLoading(false);
       }
     })();
-  }, [open, mmpId]);
+  }, [open, mmpId, canUseMmpReports]);
 
   // ── Derived stats ─────────────────────────────────────────────────────────
   const stats = useMemo(() => {

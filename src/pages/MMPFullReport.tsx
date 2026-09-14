@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 // ── Status classification ────────────────────────────────────────────────────
 // Only truly terminal statuses count as "Covered/Done":
@@ -80,6 +81,8 @@ interface CoordStat {
 const MMPFullReport = () => {
   const { mmpId } = useParams<{ mmpId: string }>();
   const navigate = useNavigate();
+  const { checkPermission } = useAuthorization();
+  const canUseMmpReports = checkPermission('mmp', 'export');
 
   const [mmp, setMmp] = useState<any>(null);
   const [entries, setEntries] = useState<SiteEntry[]>([]);
@@ -90,6 +93,11 @@ const MMPFullReport = () => {
   // ── Fetch ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mmpId) return;
+    if (!canUseMmpReports) {
+      setLoading(false);
+      setError('You do not have permission to view or export MMP reports.');
+      return;
+    }
     (async () => {
       setLoading(true);
       setError(null);
@@ -109,7 +117,7 @@ const MMPFullReport = () => {
         setLoading(false);
       }
     })();
-  }, [mmpId]);
+  }, [mmpId, canUseMmpReports]);
 
   // ── Derived stats ────────────────────────────────────────────────────────
   const { overall, byState, byCoordinator } = useMemo(() => {

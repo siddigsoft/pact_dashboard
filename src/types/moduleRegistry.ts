@@ -308,7 +308,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'mmp:assign', label: 'Assign Coordinators', description: 'Assign enumerators to sites', resource: 'mmp', action: 'assign' },
           { key: 'mmp:archive', label: 'Archive / Close Cycle', description: 'Archive MMP or close monitoring cycle', resource: 'mmp', action: 'archive' },
           { key: 'mmp:delete', label: 'Delete MMP', description: 'Remove an MMP file', resource: 'mmp', action: 'delete', isDestructive: true },
-          { key: 'mmp:export', label: 'Export MMP Report', description: 'Download MMP data to Excel/PDF', resource: 'mmp', action: 'export' },
+          { key: 'mmp:export', label: 'View / Export MMP Reports', description: 'Open Full, State, or Hub reports and download MMP data to Excel/PDF', resource: 'mmp', action: 'export' },
         ],
       },
       {

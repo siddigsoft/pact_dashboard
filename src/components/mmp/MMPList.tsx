@@ -127,10 +127,11 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const canForwardMMP = !isSupervisor && !isCountryDirector && (checkPermission('mmp', 'update') || isAdmin || isICT);
   // Management sees the full report; supervisors receive the same report UI
   // with data constrained by the secure report RPC to their assigned hubs.
-  const canViewFullReport = !isSupervisor && canSeePage('mmp-full-report', effectiveCurrentUser?.role);
-  const canViewHubReport = isSupervisor && hubReportAllowed;
+  const canUseMmpReports = checkPermission('mmp', 'export');
+  const canViewFullReport = !isSupervisor && canUseMmpReports && canSeePage('mmp-full-report', effectiveCurrentUser?.role);
+  const canViewHubReport = isSupervisor && canUseMmpReports && hubReportAllowed;
   // State Report is visible to FOM — same dialog, scoped label, red styling
-  const canViewStateReport = isFOM && !canViewFullReport;
+  const canViewStateReport = isFOM && canUseMmpReports && !canViewFullReport;
 
   useEffect(() => {
     let active = true;

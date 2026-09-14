@@ -14,7 +14,7 @@ import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignm
 import { PermissionTester } from '@/components/role-management/PermissionTester';
 import { SecurityPanel } from '@/components/role-management/SecurityPanel';
 import { UnifiedAccessManager } from '@/components/role-management/UnifiedAccessManager';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -48,15 +48,6 @@ const RoleManagement = () => {
   const [selectedRole, setSelectedRole] = useState<RoleWithPermissions | null>(null);
   const [cloneSourceRole, setCloneSourceRole] = useState<RoleWithPermissions | null>(null);
   const [activeRoleTab, setActiveRoleTab] = useState('roles');
-  const [showAccessManagerDialog, setShowAccessManagerDialog] = useState(false);
-
-  function handleRoleTabChange(val: string) {
-    if (val === 'access-manager') {
-      setShowAccessManagerDialog(true);
-    } else {
-      setActiveRoleTab(val);
-    }
-  }
 
   // ── Access gates ─────────────────────────────────────────────────────────
   const canManageRoles = canManageRolesAuth();
@@ -221,7 +212,7 @@ const RoleManagement = () => {
   const customRoles = roles.filter(role => !role.is_system_role);
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto space-y-6 p-3 sm:p-4 lg:p-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
@@ -236,13 +227,13 @@ const RoleManagement = () => {
             إدارة الأدوار والصلاحيات وصلاحيات الصفحات وتجاوزات المستخدمين
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 lg:w-auto">
           <Button
             size="sm"
             variant="outline"
             onClick={() => setShowPermissionTester(true)}
             data-testid="button-open-permission-tester"
-            className="gap-1.5"
+            className="w-full gap-1.5 sm:w-auto"
           >
             <FlaskConical className="h-4 w-4" />
             <span>Test Permissions <span className="text-muted-foreground text-[10px]">/ اختبار الصلاحيات</span></span>
@@ -251,6 +242,7 @@ const RoleManagement = () => {
             size="sm"
             onClick={() => setShowCreateDialog(true)}
             data-testid="button-create-role"
+            className="w-full sm:w-auto"
           >
             <Plus className="h-4 w-4 mr-2" />
             <span>Create Role <span className="text-[10px] opacity-70">/ إنشاء دور</span></span>
@@ -301,7 +293,7 @@ const RoleManagement = () => {
       </div>
 
       {/* Tabbed content */}
-      <Tabs value={activeRoleTab} onValueChange={handleRoleTabChange}>
+      <Tabs value={activeRoleTab} onValueChange={setActiveRoleTab}>
         <TabsList className="mb-4 h-auto gap-1">
           {/* Tab 1: Roles */}
           <TabsTrigger value="roles" className="gap-2" data-testid="tab-roles">
@@ -309,10 +301,10 @@ const RoleManagement = () => {
             <span>Roles <span className="text-[10px] opacity-60">/ الأدوار</span></span>
           </TabsTrigger>
 
-          {/* Tab 2: Unified Access Manager — opens full-screen dialog */}
+          {/* Tab 2: Unified Access Control */}
           <TabsTrigger value="access-manager" className="gap-2" data-testid="tab-access-manager">
             <KeyRound className="h-4 w-4" />
-            <span>Access Manager <span className="text-[10px] opacity-60">/ مدير الوصول</span></span>
+            <span>Access Control <span className="text-[10px] opacity-60">/ التحكم في الوصول</span></span>
           </TabsTrigger>
         </TabsList>
 
@@ -378,27 +370,11 @@ const RoleManagement = () => {
           </div>
         </TabsContent>
 
-      </Tabs>
+        <TabsContent value="access-manager" className="mt-0">
+          <UnifiedAccessManager containerClassName="flex h-[calc(100dvh-13rem)] min-h-[520px] flex-col overflow-hidden rounded-xl border bg-background shadow-sm md:flex-row" />
+        </TabsContent>
 
-      {/* ── Access Manager — full-screen dialog ── */}
-      <Dialog open={showAccessManagerDialog} onOpenChange={setShowAccessManagerDialog}>
-        <DialogContent className="max-w-[100vw] w-screen h-screen max-h-screen p-0 rounded-none border-0 flex flex-col gap-0">
-          <DialogHeader className="shrink-0 flex flex-row items-center gap-3 px-5 py-3 border-b bg-gradient-to-r from-[#0F2041] to-[#1D3461]">
-            <KeyRound className="h-5 w-5 text-indigo-300 shrink-0" />
-            <div className="min-w-0">
-              <DialogTitle className="text-white text-base font-semibold leading-tight">
-                Access Manager <span className="text-white/50 font-normal text-sm" dir="rtl">/ مدير الوصول</span>
-              </DialogTitle>
-              <p className="text-white/60 text-xs mt-0.5 truncate">
-                Per-user control of page access, hub tabs, permissions, columns and data scope
-              </p>
-            </div>
-          </DialogHeader>
-          <div className="flex-1 overflow-hidden">
-            <UnifiedAccessManager />
-          </div>
-        </DialogContent>
-      </Dialog>
+      </Tabs>
 
       {/* Dialogs */}
       <CreateRoleDialog
