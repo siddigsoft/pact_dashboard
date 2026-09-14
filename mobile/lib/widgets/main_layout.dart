@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/agora_incoming_call.dart';
 import '../services/agora_call_service.dart';
+import '../services/presence_service.dart';
 import '../services/bilingual_notification_service.dart';
 import '../services/call_diagnostics_store.dart';
 import '../services/call_notification_service.dart';
@@ -132,10 +133,11 @@ class _MainLayoutState extends State<MainLayout> {
           );
         }
 
+        String? userRole;
         try {
           final response = await Supabase.instance.client
               .from('profiles')
-              .select('full_name, username, avatar_url')
+              .select('full_name, username, avatar_url, role')
               .eq('id', user.id)
               .maybeSingle();
 
@@ -145,6 +147,7 @@ class _MainLayoutState extends State<MainLayout> {
                 (response['username'] as String?) ??
                 userName;
             userAvatar = response['avatar_url'] as String?;
+            userRole = response['role'] as String?;
 
             final box = await Hive.openBox('user_profile_cache');
             await box.put('full_name', userName);
@@ -161,6 +164,13 @@ class _MainLayoutState extends State<MainLayout> {
           userName: userName,
           userAvatar: userAvatar,
           userEmail: user.email,
+        );
+
+        await PresenceService().initialize(
+          odId: user.id,
+          userName: userName,
+          userAvatar: userAvatar,
+          userRole: userRole,
         );
 
         // Ensure FCM token is saved to profiles now that user is authenticated

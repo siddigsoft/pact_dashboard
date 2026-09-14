@@ -62,6 +62,7 @@ import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 import { getStateName, normalizeStateId } from '@/utils/siteNormalization';
 import CycleCloseWizard from '@/components/cycle/CycleCloseWizard';
 import { getMmpCycleCloseAccess } from '@/components/cycle/cycleCloseAccess';
+import { canDeleteMmpItems, canViewMmpOperationalData, usesOversightMmpCategorization } from '@/utils/mmpPageAccess';
 import ErrorBoundary from '@/components/ErrorBoundary';
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 interface SitesDisplayTableProps {
@@ -239,10 +240,11 @@ interface VerifiedSitesDisplayProps {
   verifiedSites: SiteVisitRow[];
   onApproveForCosting?: (site: any) => Promise<void>;
   showApproveButton?: boolean;
+  editable?: boolean;
   onFilteredSiteIdsChange?: (filteredSiteIds: Set<string>, filteredCount: number, hasActiveFilter: boolean, filteredEntries: any[]) => void;
 }
 
-const VerifiedSitesDisplay = memo(function VerifiedSitesDisplay({ verifiedSites, onApproveForCosting, showApproveButton = false, onFilteredSiteIdsChange }: VerifiedSitesDisplayProps) {
+const VerifiedSitesDisplay = memo(function VerifiedSitesDisplay({ verifiedSites, onApproveForCosting, showApproveButton = false, editable = true, onFilteredSiteIdsChange }: VerifiedSitesDisplayProps) {
   const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
 
   // Derive site entries from context using the passed verifiedSites (already filtered by caller)
@@ -341,7 +343,7 @@ const VerifiedSitesDisplay = memo(function VerifiedSitesDisplay({ verifiedSites,
     <div className="mt-6">
       <MMPSiteEntriesTable 
         siteEntries={verifiedSiteEntries} 
-        editable={true}
+        editable={editable}
         showApproveButton={showApproveButton}
         onApproveForCosting={onApproveForCosting}
         onFilteredSiteIdsChange={onFilteredSiteIdsChange}
@@ -2148,10 +2150,14 @@ const MMP = () => {
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'Data Collector', 'data collector', 'enumerator', 'Enumerator']);
   const isDataTeam = hasRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
   const isCountryDirector = hasRole(['CountryDirector', 'countryDirector', 'country_director', 'Country Director']);
+  const mmpPageFlags = { isAdmin, isSuperAdmin, isICT, isFOM, isSupervisor, isCoordinator, isDataTeam, isCountryDirector };
+  const canViewMmpData = canViewMmpOperationalData(mmpPageFlags);
+  const usesOversightCats = usesOversightMmpCategorization(mmpPageFlags);
+  const canEditMmpSites = canViewMmpData && !isCountryDirector;
   // Data collectors and coordinators can claim/accept sites; supervisors, FOM, ICT and admins are oversight-only.
   // PRIORITY RULE: admin/ICT/FOM always override DataCollector, even when DataCollector appears
   // as a secondary entry in the user_roles table (same priority logic used in Dashboard routing).
-  const canClaimSites = !isAdmin && !isICT && !isFOM && (isDataCollector || isCoordinator);
+  const canClaimSites = !isAdmin && !isICT && !isFOM && !isCountryDirector && (isDataCollector || isCoordinator);
   const [showCycleWizard, setShowCycleWizard] = useState(false);
   const [cycleWizardInit, setCycleWizardInit] = useState<{ initialStep?: number; initialMmpId?: string | null }>({});
 
@@ -2482,7 +2488,7 @@ const MMP = () => {
   // The role check is the default gate; checkPermission allows Security Panel to revoke.
   const canApprove = (isFOM || isAdmin || isSuperAdmin || isICT) && checkPermission('mmp', 'approve');
   const canAssign  = (isFOM || isAdmin || isICT) && checkPermission('mmp', 'assign');
-  const canDelete  = (isAdmin || isSuperAdmin) && checkPermission('mmp', 'delete');
+  const canDelete  = canDeleteMmpItems(mmpPageFlags) && checkPermission('mmp', 'delete');
   const canExport  = checkPermission('mmp', 'export');
 
   useEffect(() => {
@@ -2520,7 +2526,7 @@ const MMP = () => {
     onSiteClaimed: () => {
       setAdminRefreshTrigger(prev => prev + 1);
     },
-    enabled: !canClaimSites && (isAdmin || isICT || isFOM || isSupervisor || isCoordinator),
+    enabled: !canClaimSites && canViewMmpData,
     channelName: 'admin_claim_updates',
     suppressToast: true
   });
@@ -2541,7 +2547,7 @@ const MMP = () => {
   
   // Derive coordinators and supervisors from context users
   useEffect(() => {
-    if (!isFOM && !isSupervisor && !isAdmin && !isICT) return;
+    if (!isFOM && !isSupervisor && !isAdmin && !isICT && !isCountryDirector) return;
     
     // Filter coordinators from context users
     const coords = contextUsers.filter(u => String(u.role || '').trim().toLowerCase() === 'coordinator');
@@ -2577,7 +2583,7 @@ const MMP = () => {
       }
     };
     loadHubStates();
-  }, [isFOM, isSupervisor, isAdmin, isICT, contextUsers]);
+  }, [isFOM, isSupervisor, isAdmin, isICT, isCountryDirector, contextUsers]);
 
   const resolveOriginalCoordinatorId = useCallback((site: any): string => {
     if (!site) return '';
@@ -2837,8 +2843,8 @@ const MMP = () => {
       } else if (isCoordinator) {
         // For Coordinator: They don't see "new" MMPs, only verified ones with sites to verify
         return false;
-      } else if (isAdmin || isICT || isDataTeam || isSupervisor) {
-        // For admin/ICT/DataTeam/Supervisor: New MMPs are those uploaded but not forwarded to any FOM yet
+      } else if (usesOversightCats) {
+        // For admin/ICT/DataTeam/Supervisor/Country Director: New MMPs are those uploaded but not forwarded to any FOM yet
         return mmp.status === 'pending' && 
                (!(mmp.workflow as any)?.forwardedToFomIds || (mmp.workflow as any)?.forwardedToFomIds.length === 0);
       }
@@ -2865,8 +2871,8 @@ const MMP = () => {
       } else if (isCoordinator) {
         // For Coordinator: They don't have a "forwarded" category
         return false;
-      } else if (isAdmin || isICT || isDataTeam || isSupervisor) {
-        // For admin/ICT/DataTeam/Supervisor: Forwarded means MMPs that have been forwarded to FOMs or coordinators
+      } else if (usesOversightCats) {
+        // For admin/ICT/DataTeam/Supervisor/Country Director: Forwarded means MMPs that have been forwarded to FOMs or coordinators
         const hasForwardedToFomIds = workflow?.forwardedToFomIds && workflow?.forwardedToFomIds.length > 0;
         const hasForwardedToCoordinators = workflow?.forwardedToCoordinators === true || 
                                            (workflow?.forwardedToCoordinatorAt && !workflow?.isRecalled) ||
@@ -2931,7 +2937,7 @@ const MMP = () => {
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, isDataTeam, isCountryDirector, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo, supervisorHubMmpIds]);
+  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, isDataTeam, isCountryDirector, usesOversightCats, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo, supervisorHubMmpIds]);
 
   // Hub-scoped MMP list for the MMP Tracker tab.
   // Supervisors and coordinators should only see their hub's MMPs in the tracker; for all other roles pass mmpFiles as-is.
@@ -2992,7 +2998,7 @@ const MMP = () => {
 
   // New MMP subcategories for FOM, Supervisor and Admin (Removed Rejected)
   const newFomSubcategories = useMemo(() => {
-    if (!isFOM && !isSupervisor && !isAdmin && !isICT && !isDataTeam) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
+    if (!isFOM && !isSupervisor && !isAdmin && !isICT && !isDataTeam && !isCountryDirector) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
     const base = categorizedMMPs.new || [];
     const pending = base.filter(mmp => {
       const status = (mmp.status || '').toLowerCase();
@@ -3019,7 +3025,7 @@ const MMP = () => {
         }).filter((mmp): mmp is NonNullable<typeof mmp> => mmp !== null)
       : allReturnedMMPs;
     return { pending, verified, returned };
-  }, [isFOM, isSupervisor, isAdmin, isICT, isDataTeam, categorizedMMPs.new, mmpFiles, applyHubFilter, hubAccessInfo]);
+  }, [isFOM, isSupervisor, isAdmin, isICT, isDataTeam, isCountryDirector, categorizedMMPs.new, mmpFiles, applyHubFilter, hubAccessInfo]);
 
   // Returned sites grouped by state for FOM/Supervisor view
   // Hub supervisors only see returned sites from their assigned hub states
@@ -4310,10 +4316,10 @@ const MMP = () => {
       return allVerified.filter(mmp => mmpIdsWithVerifiedSites.has(mmp.id));
     }
     
-    return (isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam)
+    return canViewMmpData
       ? (verifiedSubcategories[verifiedSubTab] || [])
       : allVerified;
-  }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, isDataTeam, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, filteredVerifiedCategorySiteRows]);
+  }, [canViewMmpData, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, filteredVerifiedCategorySiteRows]);
 
   const verifiedGroupedRows = useMemo(() => {
     // Group the precomputed site rows by MMP (using filtered data)
@@ -4326,18 +4332,18 @@ const MMP = () => {
 
   // Forwarded site rows per subcategory (FOM/Supervisor only for site data)
   const forwardedCategorySiteRows = useMemo(() => {
-    if (!isFOM && !isSupervisor) return [] as SiteVisitRow[];
+    if (!isFOM && !isSupervisor && !isCountryDirector) return [] as SiteVisitRow[];
     const mmps = forwardedSubcategories[forwardedSubTab] || [];
     if (mmps.length === 0) return [];
     return buildSiteRowsFromMMPs(mmps, (row) => {
       // Exclude terminal/completed sites from editable tables
       return !isTerminalCompletionRawStatus(row.status);
     });
-  }, [isFOM, forwardedSubTab, forwardedSubcategories, siteVisitRows]);
+  }, [isFOM, isSupervisor, isCountryDirector, forwardedSubTab, forwardedSubcategories, siteVisitRows]);
 
   // Aggregated site entries (raw MMP.siteEntries) for Forwarded section
   const forwardedEntries = useMemo(() => {
-    const mmps = (isAdmin || isICT || isFOM || isSupervisor || isDataTeam) ? (forwardedSubcategories[forwardedSubTab] || []) : (categorizedMMPs.forwarded || []);
+    const mmps = (isAdmin || isICT || isFOM || isSupervisor || isDataTeam || isCountryDirector) ? (forwardedSubcategories[forwardedSubTab] || []) : (categorizedMMPs.forwarded || []);
     const entries: any[] = [];
     for (const m of mmps) {
       const list = (m as any).siteEntries || [];
@@ -4353,16 +4359,18 @@ const MMP = () => {
       }
     }
     return entries;
-  }, [isAdmin, isICT, isFOM, isSupervisor, isDataTeam, forwardedSubTab, forwardedSubcategories, categorizedMMPs.forwarded]);
+  }, [isAdmin, isICT, isFOM, isSupervisor, isDataTeam, isCountryDirector, forwardedSubTab, forwardedSubcategories, categorizedMMPs.forwarded]);
 
-  // Derive site visit stats from context (Admin/ICT/FOM/Supervisor/Coordinator)
+  // Derive site visit stats from context (Admin/ICT/FOM/Supervisor/Coordinator/Country Director)
   const { siteVisitStats: derivedStats, siteVisitRows: derivedRows } = useMemo(() => {
-    if (!(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam)) {
+    if (!canViewMmpData) {
       return { siteVisitStats: {}, siteVisitRows: [] };
     }
     
     let list: any[] = [];
-    if (isFOM || isSupervisor) {
+    if (isCountryDirector) {
+      list = [ ...(categorizedMMPs.new || []), ...(categorizedMMPs.verified || []), ...(categorizedMMPs.forwarded || []) ];
+    } else if (isFOM || isSupervisor) {
       list = [ ...(categorizedMMPs.verified || []), ...(categorizedMMPs.forwarded || []) ];
     } else if (isAdmin || isICT || isCoordinator || isDataTeam) {
       list = [ ...(categorizedMMPs.verified || []) ];
@@ -4451,7 +4459,7 @@ const MMP = () => {
     }
     
     return { siteVisitStats: map, siteVisitRows: rows };
-  }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, categorizedMMPs.verified, categorizedMMPs.forwarded, mmpFiles]);
+  }, [canViewMmpData, isCountryDirector, isAdmin, isICT, isFOM, isSupervisor, isCoordinator, isDataTeam, categorizedMMPs.new, categorizedMMPs.verified, categorizedMMPs.forwarded, mmpFiles]);
 
   // Update state from derived values
   useEffect(() => {
@@ -4610,14 +4618,14 @@ const MMP = () => {
                     {t('mmpPage.tabs.mmpTracker')}
                   </TabsTrigger>
                 )}
-                {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isDataTeam) && !isTabBlocked('mmp:adhoc') && (
+                {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isDataTeam || isCountryDirector) && !isTabBlocked('mmp:adhoc') && (
                   <TabsTrigger value="adhoc" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all"
                     data-testid="tab-adhoc-visits">
                     <FilePlus className="h-3.5 w-3.5" />
                     Ad-hoc Visits
                   </TabsTrigger>
                 )}
-                {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isSupervisor) && !isTabBlocked('mmp:village-campaigns') && (
+                {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isSupervisor || isCountryDirector) && !isTabBlocked('mmp:village-campaigns') && (
                   <TabsTrigger value="village-campaigns" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all"
                     data-testid="tab-village-campaigns">
                     <Home className="h-3.5 w-3.5" />
@@ -4629,7 +4637,7 @@ const MMP = () => {
 
             {!canClaimSites && (
               <TabsContent value="new">
-                {(isFOM || isSupervisor || isAdmin || isICT || isDataTeam) && (
+                {(isFOM || isSupervisor || isAdmin || isICT || isDataTeam || isCountryDirector) && (
                   <div className="mb-3">
                     <div className="text-xs font-medium text-muted-foreground mb-2">{t('mmpPage.subcategory')}:</div>
                     <div className="flex gap-1.5 flex-wrap">
@@ -4670,7 +4678,7 @@ const MMP = () => {
                       </div>
                   </div>
                 )}
-                {(isFOM || isSupervisor || isAdmin || isICT) && newFomSubTab === 'returned' ? (
+                {(isFOM || isSupervisor || isAdmin || isICT || isCountryDirector) && newFomSubTab === 'returned' ? (
                   <Card>
                     <CardHeader>
                       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -5032,14 +5040,14 @@ const MMP = () => {
                     </CardContent>
                   </Card>
                 ) : (
-                  <MMPList mmpFiles={(isFOM || isSupervisor || isAdmin || isICT) ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
+                  <MMPList mmpFiles={(isFOM || isSupervisor || isAdmin || isICT || isCountryDirector) ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
                 )}
               </TabsContent>
             )}
 
             {!canClaimSites && (
               <TabsContent value="forwarded">
-                {(isAdmin || isICT || isFOM || isDataTeam) && (
+                {(isAdmin || isICT || isFOM || isDataTeam || isCountryDirector) && (
                   <div className="mb-3">
                     <div className="text-xs font-medium text-muted-foreground mb-2">{t('mmpPage.subcategory')}:</div>
                     <div className="flex gap-1.5 flex-wrap">
@@ -5076,12 +5084,12 @@ const MMP = () => {
                     </CardContent>
                   </Card>
                 ) : (
-                  <MMPList mmpFiles={(isAdmin || isICT || isFOM || isSupervisor || isDataTeam) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
+                  <MMPList mmpFiles={(isAdmin || isICT || isFOM || isSupervisor || isDataTeam || isCountryDirector) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
                 )}
-                {isFOM && (
+                {(isFOM || isCountryDirector) && (
                   <SitesDisplayTable 
                     siteRows={forwardedCategorySiteRows}
-                    editable={true}
+                    editable={canEditMmpSites}
                     title={`${t('mmpPage.siteEntries')} (${forwardedCategorySiteRows.length}) - ${t('mmpPage.forwardedSubcategory')}: ${t(`mmpPage.subcategories.${forwardedSubTab === 'pending' ? 'sitesPendingVerification' : 'verifiedSites'}`)}`}
                   />
                 )}
@@ -5090,7 +5098,7 @@ const MMP = () => {
 
             <TabsContent value="verified">
               {/* Global Site Entry Filters - above subcategory tabs */}
-              {(isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataTeam) && (
+              {canViewMmpData && (
                 <MmpFilterBar
                   mmpOptions={mmpFilterOptions.map(m => ({ id: m.id, label: m.label, count: m.siteCount }))}
                   mmpFilter={siteMmpFilter}
@@ -5115,7 +5123,7 @@ const MMP = () => {
               )}
 
               {/* Subcategory tabs - below filters */}
-              {(isAdmin || isICT || isFOM || isCoordinator || isDataTeam || isSupervisor) && (
+              {canViewMmpData && (
                 <div className="mb-3">
                   <div className="text-xs font-medium text-muted-foreground mb-2">{t('mmpPage.subcategory')}:</div>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 flex-wrap">
@@ -5164,7 +5172,7 @@ const MMP = () => {
                       {t('mmpPage.subcategories.dispatched')}
                       <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'dispatched' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>{verifiedTabSiteEntryCounts.dispatched}</Badge>
                     </Button>
-                    {(isAdmin || isICT || isFOM || isSupervisor) && (
+                    {(isAdmin || isICT || isFOM || isSupervisor || isCountryDirector) && (
                       <>
                         <Button 
                           variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} 
@@ -5266,7 +5274,7 @@ const MMP = () => {
                   <MMPList mmpFiles={verifiedVisibleMMPs} />
                 )
               )}
-              {(isAdminOrSuperUser || isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'newSites' && (
+              {(isAdminOrSuperUser || canViewMmpData) && verifiedSubTab === 'newSites' && (
                 <>
                   {(isAdminOrSuperUser || isAdmin || isICT) && filteredVerifiedCategorySiteRows.length > 0 && (
                     <div className="mb-4">
@@ -5446,6 +5454,7 @@ const MMP = () => {
                   <VerifiedSitesDisplay 
                     verifiedSites={filteredVerifiedCategorySiteRows} 
                     showApproveButton={canApprove}
+                    editable={canEditMmpSites}
                     onFilteredSiteIdsChange={(ids, count, hasFilter, entries) => {
                       setTableFilteredSiteIds(ids);
                       setTableFilteredCount(hasFilter ? count : 0);
@@ -5515,7 +5524,7 @@ const MMP = () => {
                   />
                 </>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'approvedCosted' && (
+              {canViewMmpData && verifiedSubTab === 'approvedCosted' && (
                 <div className="mt-6">
                   {loadingApprovedCosted ? (
                     <Card>
@@ -5586,7 +5595,7 @@ const MMP = () => {
                       )}
                       <MMPSiteEntriesTable 
                         siteEntries={applyGlobalFilters(approvedCostedSiteEntries)} 
-                        editable={true}
+                        editable={canEditMmpSites}
                         onUpdateSites={async (sites) => {
                           // Update mmp_site_entries in database
                           try {
@@ -5695,7 +5704,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'dispatched' && (
+              {canViewMmpData && verifiedSubTab === 'dispatched' && (
                 <div className="mt-6">
                   {loadingDispatched ? (
                     <Card>
@@ -5846,7 +5855,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isDataTeam) && verifiedSubTab === 'smartAssigned' && (
+              {canViewMmpData && verifiedSubTab === 'smartAssigned' && (
                 <div className="mt-6">
                   {loadingSmartAssigned ? (
                     <Card>
@@ -5874,7 +5883,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'accepted' && (
+              {canViewMmpData && verifiedSubTab === 'accepted' && (
                 <div className="mt-6">
                   {loadingAccepted ? (
                     <Card>
@@ -5961,7 +5970,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'ongoing' && (
+              {canViewMmpData && verifiedSubTab === 'ongoing' && (
                 <div className="mt-6">
                   {loadingOngoing ? (
                     <Card>
@@ -6047,7 +6056,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'completed' && (
+              {canViewMmpData && verifiedSubTab === 'completed' && (
                 <div className="mt-6">
                   {loadingCompleted ? (
                     <Card>
@@ -6075,7 +6084,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'rejected' && (
+              {canViewMmpData && verifiedSubTab === 'rejected' && (
                 <div className="mt-6">
                   {loadingRejected ? (
                     <Card>
@@ -6103,7 +6112,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'submitted' && (
+              {canViewMmpData && verifiedSubTab === 'submitted' && (
                 <div className="mt-6">
                   {filteredVerifiedCategorySiteRows.length === 0 ? (
                     <Card>
@@ -6122,7 +6131,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'wfpConfirmed' && (
+              {canViewMmpData && verifiedSubTab === 'wfpConfirmed' && (
                 <div className="mt-6">
                   {filteredVerifiedCategorySiteRows.length === 0 ? (
                     <Card>
@@ -6141,7 +6150,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'notCovered' && (
+              {canViewMmpData && verifiedSubTab === 'notCovered' && (
                 <div className="mt-6">
                   {filteredVerifiedCategorySiteRows.length === 0 ? (
                     <Card>
@@ -6160,7 +6169,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'submitted' && verifiedSubTab !== 'wfpConfirmed' && verifiedSubTab !== 'notCovered' && verifiedSubTab !== 'rejected' && (
+              {canViewMmpData && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'submitted' && verifiedSubTab !== 'wfpConfirmed' && verifiedSubTab !== 'notCovered' && verifiedSubTab !== 'rejected' && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Sites by MMP</h3>
@@ -6179,7 +6188,7 @@ const MMP = () => {
                           <SitesDisplayTable 
                             siteRows={rows}
                             mmpId={mmp.id}
-                            editable={true}
+                            editable={canEditMmpSites}
                             title={`Sites for ${mmp.name}`}
                           />
                         </AccordionContent>
@@ -6691,14 +6700,14 @@ const MMP = () => {
             )}
 
             {/* Ad-hoc Site Visits Tab */}
-            {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isDataTeam) && (
+            {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isDataTeam || isCountryDirector) && (
               <TabsContent value="adhoc">
-                <AdhocSiteVisitsTab canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator} />
+                <AdhocSiteVisitsTab canManage={(isSuperAdmin || isAdmin || isFOM || isCoordinator) && !isCountryDirector} />
               </TabsContent>
             )}
 
             {/* Village Campaigns Tab */}
-            {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isSupervisor) && (
+            {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isSupervisor || isCountryDirector) && (
               <TabsContent value="village-campaigns">
                 <ErrorBoundary fallback={(err: Error) => (
                   <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 space-y-2">
@@ -6707,10 +6716,10 @@ const MMP = () => {
                   </div>
                 )}>
                   <VillageCampaignsTab
-                    canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator}
-                    canDelete={isSuperAdmin}
-                    canApproveAdvance={isSuperAdmin || isAdmin || isFOM || isSupervisor}
-                    canTier2Approve={isSuperAdmin || isAdmin}
+                    canManage={(isSuperAdmin || isAdmin || isFOM || isCoordinator) && !isCountryDirector}
+                    canDelete={canDelete && isSuperAdmin}
+                    canApproveAdvance={(isSuperAdmin || isAdmin || isFOM || isSupervisor) && !isCountryDirector}
+                    canTier2Approve={(isSuperAdmin || isAdmin) && !isCountryDirector}
                   />
                 </ErrorBoundary>
               </TabsContent>

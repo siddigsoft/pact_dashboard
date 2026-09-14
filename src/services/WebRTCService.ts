@@ -259,54 +259,84 @@ class WebRTCService {
     }, delay);
   }
 
-  private async setupUserPresence() {
-    if (!this.currentUserId) return;
+  private presenceChannelOwned = false;
+  private presenceLeaveAttached = false;
 
-    if (this.userPresenceChannel) {
-      await supabase.removeChannel(this.userPresenceChannel);
-    }
+  private findSharedPresenceChannel(): RealtimeChannel | undefined {
+    return supabase.getChannels().find((ch) => {
+      const topic = ch.topic || '';
+      return (
+        topic === 'realtime:user-call-presence' ||
+        topic.endsWith(':user-call-presence') ||
+        topic === 'user-call-presence'
+      );
+    });
+  }
 
-    this.userPresenceChannel = supabase
-      .channel('user-call-presence')
-      .on('presence', { event: 'sync' }, () => {
-        // Presence sync handled
-      })
-      .on('presence', { event: 'leave' }, async ({ leftPresences }) => {
-        // If peer left during active call, verify they're really gone before ending
-        if (this.currentCallId && this.targetUserId) {
-          const peerLeft = leftPresences.some((p: any) => p.userId === this.targetUserId);
-          if (peerLeft) {
-            console.log('[WebRTC] Peer potentially left, verifying...');
-            // Wait a moment and check if they're truly gone (might have just reconnected)
-            setTimeout(async () => {
-              const stillGone = !this.isUserPresent(this.targetUserId!);
-              if (stillGone && this.currentCallId) {
-                console.log('[WebRTC] Peer confirmed gone, ending call');
-                this.eventHandlers?.onCallEnded();
-                this.cleanup();
-              } else {
-                console.log('[WebRTC] Peer is still present, not ending call');
-              }
-            }, 2000);
-          }
-        }
-      });
-
-    await this.userPresenceChannel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await this.userPresenceChannel?.track({
-          userId: this.currentUserId,
-          online: true,
-          inCall: false,
-          callId: null,
-          callToken: null,
+  private attachPresenceLeaveHandler(channel: RealtimeChannel) {
+    if (this.presenceLeaveAttached) return;
+    this.presenceLeaveAttached = true;
+    channel.on('presence', { event: 'leave' }, async ({ leftPresences }) => {
+      if (this.currentCallId && this.targetUserId) {
+        const peerLeft = leftPresences.some((p: any) => {
+          const id = p.userId || p.user_id || p.payload?.user_id || p.payload?.userId;
+          return id === this.targetUserId;
         });
+        if (peerLeft) {
+          console.log('[WebRTC] Peer potentially left, verifying...');
+          setTimeout(() => {
+            const stillGone = !this.isUserPresent(this.targetUserId!);
+            if (stillGone && this.currentCallId) {
+              console.log('[WebRTC] Peer confirmed gone, ending call');
+              this.eventHandlers?.onCallEnded();
+              this.cleanup();
+            } else {
+              console.log('[WebRTC] Peer is still present, not ending call');
+            }
+          }, 2000);
+        }
       }
     });
   }
 
+  private async setupUserPresence() {
+    if (!this.currentUserId) return;
+
+    // Online Now (GlobalPresenceProvider) already joins `user-call-presence`.
+    // A second JOIN on the same websocket topic drops presence sync, which is
+    // why the dashboard always showed 0 mobile devices. Reuse that channel
+    // and never track() as web — phones are the only publishers on this topic.
+    const shared = this.findSharedPresenceChannel();
+    if (shared) {
+      this.userPresenceChannel = shared;
+      this.presenceChannelOwned = false;
+      this.attachPresenceLeaveHandler(shared);
+      return;
+    }
+
+    if (this.userPresenceChannel && this.presenceChannelOwned) {
+      await supabase.removeChannel(this.userPresenceChannel);
+      this.userPresenceChannel = null;
+      this.presenceChannelOwned = false;
+    }
+
+    // CallProvider mounts before GlobalPresence. Retry until the observer joins
+    // instead of creating a competing channel.
+    window.setTimeout(() => {
+      if (!this.currentUserId) return;
+      const later = this.findSharedPresenceChannel();
+      if (later) {
+        this.userPresenceChannel = later;
+        this.presenceChannelOwned = false;
+        this.attachPresenceLeaveHandler(later);
+      } else {
+        console.warn('[WebRTC] user-call-presence observer not ready yet');
+      }
+    }, 800);
+  }
+
   private async updateUserPresence(inCall: boolean, callId: string | null = null) {
-    if (!this.userPresenceChannel || !this.currentUserId) return;
+    if (!this.presenceChannelOwned || !this.userPresenceChannel || !this.currentUserId) return;
     
     await this.userPresenceChannel.track({
       userId: this.currentUserId,
@@ -318,7 +348,7 @@ class WebRTCService {
   }
 
   private async updateUserPresenceWithToken(inCall: boolean, callId: string | null, callToken: string | null) {
-    if (!this.userPresenceChannel || !this.currentUserId) return;
+    if (!this.presenceChannelOwned || !this.userPresenceChannel || !this.currentUserId) return;
     
     await this.userPresenceChannel.track({
       userId: this.currentUserId,
@@ -336,7 +366,7 @@ class WebRTCService {
     for (const key in presenceState) {
       const presences = presenceState[key] as any[];
       for (const p of presences) {
-        if (p.userId === userId && p.inCall) {
+        if ((p.userId === userId || p.user_id === userId) && p.inCall) {
           if (p.callId && typeof p.callId === 'string') {
             const callTimestamp = parseInt(p.callId.split('_')[1] || '0', 10);
             const now = Date.now();
@@ -359,7 +389,7 @@ class WebRTCService {
     for (const key in presenceState) {
       const presences = presenceState[key] as any[];
       for (const p of presences) {
-        if (p.userId === userId) {
+        if (p.userId === userId || p.user_id === userId) {
           return true;
         }
       }
@@ -1179,10 +1209,12 @@ class WebRTCService {
       supabase.removeChannel(this.signalingChannel);
       this.signalingChannel = null;
     }
-    if (this.userPresenceChannel) {
+    if (this.userPresenceChannel && this.presenceChannelOwned) {
       supabase.removeChannel(this.userPresenceChannel);
-      this.userPresenceChannel = null;
     }
+    this.userPresenceChannel = null;
+    this.presenceChannelOwned = false;
+    this.presenceLeaveAttached = false;
     this.signalingRetryAttempts = 0;
     this.currentUserId = null;
     this.eventHandlers = null;

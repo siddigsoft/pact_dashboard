@@ -107,12 +107,13 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
     'field ops manager'
   ]);
   const isSupervisor = hasAnyRole(['Supervisor', 'supervisor', 'hubsupervisor', 'hub_supervisor']);
+  const isCountryDirector = hasAnyRole(['countryDirector', 'CountryDirector', 'country_director', 'Country Director']);
   const userRole = isSuperAdmin ? 'super_admin' : isAdmin ? 'admin' : isICT ? 'ict' : isFOM ? 'fom' : 'user';
   const userCanForceRecall = canForceRecall(userRole);
   // Supervisors are VIEW-ONLY on the MMP management page — they cannot create, edit, delete or forward MMPs.
   // Delete is restricted to Super Admins only — it is a destructive, irreversible operation.
-  const canDeleteMMP = isSuperAdmin;
-  const canEditMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
+  const canDeleteMMP = isSuperAdmin && !isCountryDirector;
+  const canEditMMP = !isSupervisor && !isCountryDirector && (checkPermission('mmp', 'update') || isAdmin || isICT);
 
   // Fetch linked submission counts + payment details whenever Stage 1 dialog opens
   useEffect(() => {
@@ -123,7 +124,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
       getMMPPaymentDetails(confirmId).then(setPaymentDetails);
     }
   }, [confirmId, deleteStage]);
-  const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
+  const canForwardMMP = !isSupervisor && !isCountryDirector && (checkPermission('mmp', 'update') || isAdmin || isICT);
   // Management sees the full report; supervisors receive the same report UI
   // with data constrained by the secure report RPC to their assigned hubs.
   const canViewFullReport = !isSupervisor && canSeePage('mmp-full-report', effectiveCurrentUser?.role);
@@ -664,7 +665,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                         </DropdownMenuItem>
                       )}
 
-                      {!isSupervisor && (
+                      {!isSupervisor && !isCountryDirector && (
                         <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/edit?tab=partial-update`)}>
                           MMP Update (Upload File)
                         </DropdownMenuItem>

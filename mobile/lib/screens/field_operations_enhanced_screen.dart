@@ -9,6 +9,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../utils/user_role.dart';
+import '../utils/mmp_enumerator_filters.dart';
 import 'my_tasks_screen.dart';
 import '../widgets/mmp_filter_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
@@ -52,6 +53,7 @@ class _MMPScreenState extends State<MMPScreen> {
   String? _userId;
   String? _userName;
   String? _userStateId;
+  String? _userHubId;
   String? _userLocalityId;
   String? _userStateName;
   String? _userLocalityName;
@@ -173,7 +175,7 @@ class _MMPScreenState extends State<MMPScreen> {
         // Get user profile to determine role
         final profileResponse = await Supabase.instance.client
             .from('profiles')
-            .select('role, state_id, locality_id')
+            .select('role, state_id, locality_id, hub_id')
             .eq('id', user.id)
             .maybeSingle();
 
@@ -508,6 +510,7 @@ class _MMPScreenState extends State<MMPScreen> {
         _userRole == 'data_collector';
 
     _userStateId = profileResponse['state_id'] as String?;
+    _userHubId = profileResponse['hub_id'] as String?;
     _userLocalityId = profileResponse['locality_id'] as String?;
 
     // Check if user is admin or supervisor (can see all projects)
@@ -994,28 +997,46 @@ class _MMPScreenState extends State<MMPScreen> {
     try {
       // Load state name from hub_states table
       if (_userStateId != null) {
-        final hubState = await Supabase.instance.client
-            .from('hub_states')
-            .select('state_name')
-            .eq('state_id', _userStateId!)
-            .maybeSingle();
+        String? hubStateName;
+        try {
+          // Same state_id can be mapped to multiple hubs (Central/West Darfur).
+          // Fetch the list and pick one — never use maybeSingle() here.
+          final response = await Supabase.instance.client
+              .from('hub_states')
+              .select('state_name, hub_id, state_id')
+              .eq('state_id', _userStateId!);
 
-        if (hubState != null) {
-          _userStateName = hubState['state_name'] as String?;
-        } else {
-          // Fallback: Try sites_registry if hub_states doesn't have it
-          final registryState = await Supabase.instance.client
-              .from('sites_registry')
-              .select('state_name')
-              .eq('state_id', _userStateId!)
-              .limit(1)
-              .maybeSingle();
-
-          _userStateName = registryState?['state_name'] as String?;
+          final rows = (response as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+          final hubState = pickHubStateRow(rows, preferredHubId: _userHubId);
+          hubStateName = hubState?['state_name'] as String?;
+        } catch (e) {
+          debugPrint('[_loadLocationNames] hub_states lookup failed: $e');
         }
 
+        if (hubStateName == null || hubStateName.isEmpty) {
+          try {
+            final registryState = await Supabase.instance.client
+                .from('sites_registry')
+                .select('state_name')
+                .eq('state_id', _userStateId!)
+                .limit(1)
+                .maybeSingle();
+            hubStateName = registryState?['state_name'] as String?;
+          } catch (e) {
+            debugPrint('[_loadLocationNames] sites_registry fallback failed: $e');
+          }
+        }
+
+        _userStateName = resolveCollectorStateName(
+          hubStateName: hubStateName,
+          stateId: _userStateId,
+        );
+
         debugPrint(
-          'Loaded state name: $_userStateName for state_id: $_userStateId',
+          'Loaded state name: $_userStateName for state_id: $_userStateId hub_id: $_userHubId',
         );
       }
 
@@ -1036,7 +1057,10 @@ class _MMPScreenState extends State<MMPScreen> {
       }
     } catch (e) {
       debugPrint('Error loading location names: $e');
-      // If lookup fails, we'll show all dispatched sites (fallback behavior)
+      _userStateName = resolveCollectorStateName(
+        hubStateName: _userStateName,
+        stateId: _userStateId,
+      );
     }
   }
 
@@ -1076,6 +1100,10 @@ class _MMPScreenState extends State<MMPScreen> {
       // Filter by state - must match web behavior exactly
       // Web app: Users MUST have a state_id assigned to see claimable sites
       // If user has no state assigned, return empty list (no sites to claim)
+      _userStateName ??= resolveCollectorStateName(
+        hubStateName: null,
+        stateId: _userStateId,
+      );
       if (_userStateName == null || _userStateName!.isEmpty) {
         debugPrint(
           '[_loadAvailableSites] No state assigned to user - returning empty list (matching web behavior)',
@@ -1102,13 +1130,9 @@ class _MMPScreenState extends State<MMPScreen> {
           .where((site) => site['accepted_by'] == null)
           .toList();
 
-      // Filter by project membership (for non-admin users).
-      // Village campaign entries (additional_data.source == 'village_campaign')
-      // have mmp_file_id = NULL so they have no mmp_files.project_id.
-      // They are filtered separately: only include them when the user leads
-      // the assignment's team (additional_data.team_id is in _userLeadTeamIds).
-      // If _userLeadTeamIds is empty (team data not yet loaded or user leads
-      // no teams), village_campaign entries are excluded from the queue.
+      // Match web /mmp: standard dispatched sites are claimable by state,
+      // without project membership. Village campaign entries still require
+      // that this user leads the assignment team.
       if (!_isAdminOrSuperUser) {
         final beforeCount = filteredSites.length;
         filteredSites = filteredSites.where((site) {
@@ -1117,22 +1141,12 @@ class _MMPScreenState extends State<MMPScreen> {
           );
 
           if (additionalData['source'] == 'village_campaign') {
-            // Only admit entries whose team this user leads
             final siteTeamId = additionalData['team_id']?.toString();
             if (siteTeamId == null || siteTeamId.isEmpty) return false;
             return _userLeadTeamIds.contains(siteTeamId);
           }
 
-          final mmpFile = site['mmp_files'] as Map<String, dynamic>? ?? {};
-          final projectId = mmpFile['project_id']?.toString();
-
-          // If site has no project ID, exclude it (standard MMP behaviour)
-          if (projectId == null || projectId.isEmpty) {
-            return false;
-          }
-
-          // Site must be in one of user's projects
-          return _userProjectIds.contains(projectId);
+          return true;
         }).toList();
 
         debugPrint(
@@ -4895,35 +4909,12 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   /// Extract MMP ID from a site map, trying multiple sources
-  String? _extractMmpId(Map<String, dynamic> site) {
-    // Try direct field first
-    var id = site['mmp_file_id']?.toString();
-    if (id != null && id.isNotEmpty) return id;
-
-    // Try from mmp_files relationship
-    final raw = site['mmp_files'];
-    if (raw is Map<String, dynamic>) {
-      id = raw['id']?.toString();
-      if (id != null && id.isNotEmpty) return id;
-    } else if (raw is List && raw.isNotEmpty && raw.first is Map) {
-      id = (raw.first as Map)['id']?.toString();
-      if (id != null && id.isNotEmpty) return id;
-    }
-
-    return null;
-  }
+  String? _extractMmpId(Map<String, dynamic> site) => extractMmpFileId(site);
 
   List<Map<String, dynamic>> _getFilteredSites(
     List<Map<String, dynamic>> sites,
   ) {
-    var result = sites;
-
-    // Apply MMP filter
-    if (_selectedMmpId != null) {
-      result = result
-          .where((site) => _extractMmpId(site) == _selectedMmpId)
-          .toList();
-    }
+    var result = filterSitesBySelectedMmp(sites, _selectedMmpId);
 
     if (_searchQuery.isEmpty) return result;
 
@@ -5356,7 +5347,7 @@ class _MMPScreenState extends State<MMPScreen> {
                       l10n?.mySites ?? 'My Sites',
                       'مواقعي',
                       Icons.location_on,
-                      _mySites.length,
+                      _getFilteredSites(_mySites).length,
                     ),
                   ),
                 ],

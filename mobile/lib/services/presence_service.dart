@@ -283,7 +283,10 @@ class PresenceService {
 
       _presenceChannel = _supabase.channel(
         _presenceChannelName,
-        opts: const RealtimeChannelConfig(self: true),
+        opts: RealtimeChannelConfig(
+          self: true,
+          key: _currentUserId ?? '',
+        ),
       );
 
       _presenceChannel!

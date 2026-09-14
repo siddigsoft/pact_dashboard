@@ -69,10 +69,10 @@ final List<SudanState> sudanStates = [
     ],
   ),
 
-  // 2. Al Jazirah (Gezira) State - 8 localities
+  // 2. Al Gezira (Gezira) State - 8 localities
   SudanState(
     id: 'gezira',
-    name: 'Aj Jazirah',
+    name: 'Al Gezira',
     code: 'GZ',
     localities: [
       Locality(
@@ -202,16 +202,26 @@ final List<SudanState> sudanStates = [
     ],
   ),
 
-  // 5. Gedaref (Al Qadarif) State - 13 localities
+  // 5. Gedarif (Al Qadarif) State — canonical id matches web/DB (`gedarif`)
   SudanState(
-    id: 'Gedaref',
-    name: 'Gedaref',
+    id: 'gedarif',
+    name: 'Gedarif',
     code: 'GD',
     localities: [
+      Locality(
+        id: 'gd-madeinat-al-gedarif',
+        name: 'Madeinat Al Gedarif',
+        nameAr: 'مدينة القضارف',
+      ),
       Locality(
         id: 'gd-madeinat-al-Gedaref',
         name: 'Madeinat Al Gedaref',
         nameAr: 'مدينة القضارف',
+      ),
+      Locality(
+        id: 'gd-wasat-al-gedarif',
+        name: 'Wasat Al Gedarif',
+        nameAr: 'وسط القضارف',
       ),
       Locality(
         id: 'gd-wasat-al-Gedaref',
@@ -616,7 +626,7 @@ final List<SudanState> sudanStates = [
 final List<Hub> hubs = [
   Hub(
     id: 'country-office',
-    name: 'Country Office (Khartoum)',
+    name: 'Country Office',
     states: ['khartoum', 'red-sea'],
     coordinates: {'latitude': 15.5007, 'longitude': 32.5599},
   ),
@@ -635,7 +645,7 @@ final List<Hub> hubs = [
   Hub(
     id: 'kassala-hub',
     name: 'Kassala Hub',
-    states: ['kassala', 'Gedaref', 'gezira', 'sennar', 'blue-nile'],
+    states: ['kassala', 'gedarif', 'gezira', 'sennar', 'blue-nile'],
     coordinates: {'latitude': 15.45, 'longitude': 36.4},
   ),
   Hub(
@@ -659,8 +669,12 @@ final List<Hub> hubs = [
 String _normalizeStateId(String stateId) {
   final lower = stateId.trim().toLowerCase();
   switch (lower) {
+    case 'gedaref':
     case 'gedarif':
-      return 'gedaref';
+    case 'al qadarif':
+    case 'al gedarif':
+    case 'qadarif':
+      return 'gedarif';
     default:
       return lower;
   }

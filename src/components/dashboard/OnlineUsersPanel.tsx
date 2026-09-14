@@ -56,22 +56,15 @@ export function OnlineUsersPanel({ isOpen, onClose }: OnlineUsersPanelProps) {
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  const otherUserIds = useMemo(
-    () => (isOpen ? onlineUserIds.filter((id) => id !== currentUser?.id) : []),
-    [isOpen, onlineUserIds, currentUser?.id]
+  const listedUserIds = useMemo(
+    () => (isOpen ? onlineUserIds : []),
+    [isOpen, onlineUserIds]
   );
 
-  const webCount = useMemo(
-    () => webUserIds.filter((id) => id !== currentUser?.id).length,
-    [webUserIds, currentUser?.id]
-  );
+  const webCount = webUserIds.length;
+  const mobileCount = mobileUserIds.length;
 
-  const mobileCount = useMemo(
-    () => mobileUserIds.filter((id) => id !== currentUser?.id).length,
-    [mobileUserIds, currentUser?.id]
-  );
-
-  const { data: profiles = [], isLoading } = useProfilesByIds(otherUserIds, isOpen && otherUserIds.length > 0);
+  const { data: profiles = [], isLoading } = useProfilesByIds(listedUserIds, isOpen && listedUserIds.length > 0);
 
   const onlineUsers = useMemo((): OnlineUserInfo[] => {
     return profiles.map((p) => ({
@@ -198,7 +191,7 @@ export function OnlineUsersPanel({ isOpen, onClose }: OnlineUsersPanelProps) {
                   <User className="h-12 w-12 text-muted-foreground/50 mb-3" />
                   <p className="text-muted-foreground">
                     {onlineUsers.length === 0
-                      ? 'No other users online right now'
+                      ? 'No users online right now'
                       : 'No users match your search'}
                   </p>
                 </div>
@@ -237,7 +230,7 @@ export function OnlineUsersPanel({ isOpen, onClose }: OnlineUsersPanelProps) {
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
+                      {user.id !== currentUser?.id && (
                       <div className="flex items-center gap-1">
                         <Button
                           variant="ghost"
@@ -267,6 +260,7 @@ export function OnlineUsersPanel({ isOpen, onClose }: OnlineUsersPanelProps) {
                           <Video className="h-4 w-4" />
                         </Button>
                       </div>
+                      )}
                     </div>
                   ))}
                 </div>

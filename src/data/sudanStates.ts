@@ -542,14 +542,14 @@ const hubAliases: Record<string, string> = {
   'khartoum': 'country-office',
   'khartoum hub': 'country-office',
 
-  // Port Sudan Hub / Red Sea variations (separate sub-office from Khartoum)
-  'port sudan': 'port-sudan-hub',
-  'port sudan hub': 'port-sudan-hub',
-  'port-sudan-hub': 'port-sudan-hub',
-  'port-sudan': 'port-sudan-hub',
-  'red sea': 'port-sudan-hub',
-  'red-sea': 'port-sudan-hub',
-  'red sea hub': 'port-sudan-hub',
+  // Port Sudan / Red Sea — covered by Country Office (no separate hub row)
+  'port sudan': 'country-office',
+  'port sudan hub': 'country-office',
+  'port-sudan-hub': 'country-office',
+  'port-sudan': 'country-office',
+  'red sea': 'country-office',
+  'red-sea': 'country-office',
+  'red sea hub': 'country-office',
   
   // Dongola Hub variations
   'dongola': 'dongola-hub',
@@ -561,6 +561,8 @@ const hubAliases: Record<string, string> = {
   'forchana': 'forchana-hub',
   'forchana hub': 'forchana-hub',
   'forchana-hub': 'forchana-hub',
+  // Leftover DB id: El Fasher is a North Darfur locality (Kosti), not a hub.
+  'el-fasher-hub': 'forchana-hub',
   'zalingei': 'forchana-hub',
   'zalingei hub': 'forchana-hub',
   'west darfur': 'forchana-hub',
