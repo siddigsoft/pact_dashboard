@@ -3,6 +3,22 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
+import {
+  classifyDownPaymentStatus,
+  getDownPaymentBalance,
+  getDownPaymentStatusLabel,
+  isDownPaymentSettledStatus,
+  type DownPaymentPaymentEvidence,
+} from '@/utils/downPaymentBalance';
+
+export type DownPaymentEvidenceMap = ReadonlyMap<string, readonly DownPaymentPaymentEvidence[]>;
+
+function balanceFor(
+  request: DownPaymentRequest,
+  evidenceByRequest?: DownPaymentEvidenceMap,
+) {
+  return getDownPaymentBalance(request, evidenceByRequest?.get(request.id) ?? []);
+}
 
 export function filterDownPayments(
   requests: DownPaymentRequest[],
@@ -54,7 +70,7 @@ export function filterDownPayments(
     }
     if (filters.preFundId === '__unlinked__') {
       const hasPaidAmount = (req.totalPaidAmount ?? 0) > 0;
-      const hasPaidStatus = ['partially_paid', 'fully_paid', 'paid', 'reconciled'].includes(req.status);
+      const hasPaidStatus = req.status === 'partially_paid' || isDownPaymentSettledStatus(req.status);
       if (!hasPaidAmount || !hasPaidStatus || (req.preFundNames?.length ?? 0) > 0) {
         return false;
       }
@@ -87,16 +103,7 @@ export function filterDownPayments(
 }
 
 function getStatusLabel(status: string): string {
-  const labels: Record<string, string> = {
-    pending_supervisor: 'Pending Supervisor',
-    pending_admin: 'Pending Admin',
-    approved: 'Approved',
-    rejected: 'Rejected',
-    partially_paid: 'Partially Paid',
-    fully_paid: 'Fully Paid',
-    cancelled: 'Cancelled',
-  };
-  return labels[status] || status;
+  return getDownPaymentStatusLabel(status);
 }
 
 function formatCurrency(amount: number): string {
@@ -113,7 +120,11 @@ function getApprovalTypeLabel(type: string): string {
   return labels[type] || type;
 }
 
-export function exportToCSV(requests: DownPaymentRequest[], filename: string = 'down-payments'): void {
+export function exportToCSV(
+  requests: DownPaymentRequest[],
+  filename: string = 'down-payments',
+  evidenceByRequest?: DownPaymentEvidenceMap,
+): void {
   const headers = [
     'Request ID',
     'MMP',
@@ -131,34 +142,41 @@ export function exportToCSV(requests: DownPaymentRequest[], filename: string = '
     'Paid Amount (SDG)',
     'Remaining (SDG)',
     'Status',
+    'Payment Basis',
+    'Reconciliation',
     'Supervisor Status',
     'Admin Status',
     'Rejection Reason',
     'Justification',
   ];
 
-  const rows = requests.map(req => [
-    req.id,
-    req.mmpName || 'N/A',
-    req.requestedByName || 'Unknown',
-    req.siteName,
-    req.stateName || 'N/A',
-    req.localityName || 'N/A',
-    req.hubName || 'N/A',
-    req.activityType || 'N/A',
-    req.projectName || 'N/A',
-    format(new Date(req.requestedAt), 'yyyy-MM-dd HH:mm'),
-    req.requestedAmount,
-    req.approvalType ? getApprovalTypeLabel(req.approvalType) : 'Pending',
-    req.approvedAmount || 0,
-    req.totalPaidAmount,
-    req.remainingAmount,
-    getStatusLabel(req.status),
-    req.supervisorStatus ? getStatusLabel(req.supervisorStatus) : 'Pending',
-    req.adminStatus ? getStatusLabel(req.adminStatus) : 'Pending',
-    req.supervisorRejectionReason || req.adminRejectionReason || '',
-    req.justification || '',
-  ]);
+  const rows = requests.map(req => {
+    const balance = balanceFor(req, evidenceByRequest);
+    return [
+      req.id,
+      req.mmpName || 'N/A',
+      req.requestedByName || 'Unknown',
+      req.siteName,
+      req.stateName || 'N/A',
+      req.localityName || 'N/A',
+      req.hubName || 'N/A',
+      req.activityType || 'N/A',
+      req.projectName || 'N/A',
+      format(new Date(req.requestedAt), 'yyyy-MM-dd HH:mm'),
+      req.requestedAmount,
+      req.approvalType ? getApprovalTypeLabel(req.approvalType) : 'Pending',
+      balance.approved,
+      balance.paid,
+      balance.remaining,
+      getStatusLabel(req.status),
+      balance.paymentBasis,
+      balance.reconciliationRequired ? (balance.reconciliationReason || 'Required') : '',
+      req.supervisorStatus ? (req.supervisorStatus === 'pending' ? 'Pending' : getStatusLabel(req.supervisorStatus)) : 'Pending',
+      req.adminStatus ? (req.adminStatus === 'pending' ? 'Pending' : getStatusLabel(req.adminStatus)) : 'Pending',
+      req.supervisorRejectionReason || req.adminRejectionReason || '',
+      req.justification || '',
+    ];
+  });
 
   const csvContent = [
     headers.join(','),
@@ -180,16 +198,19 @@ export function exportToCSV(requests: DownPaymentRequest[], filename: string = '
   link.click();
 }
 
-export function exportToExcel(requests: DownPaymentRequest[], filename: string = 'down-payments', tabLabel: string = 'All'): void {
+export function exportToExcel(
+  requests: DownPaymentRequest[],
+  filename: string = 'down-payments',
+  tabLabel: string = 'All',
+  evidenceByRequest?: DownPaymentEvidenceMap,
+): void {
   const wb = XLSX.utils.book_new();
 
-  const XLS_APPROVED_STATUSES = ['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'];
   const totalRequested = requests.reduce((s, r) => s + r.requestedAmount, 0);
-  const totalApproved = requests
-    .filter(r => XLS_APPROVED_STATUSES.includes(r.status))
-    .reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
-  const totalPaid = requests.reduce((s, r) => s + r.totalPaidAmount, 0);
-  const totalRemaining = requests.reduce((s, r) => s + r.remainingAmount, 0);
+  const excelBalances = requests.map(req => balanceFor(req, evidenceByRequest));
+  const totalApproved = excelBalances.reduce((s, balance) => s + balance.approved, 0);
+  const totalPaid = excelBalances.reduce((s, balance) => s + balance.paid, 0);
+  const totalRemaining = excelBalances.reduce((s, balance) => s + balance.remaining, 0);
 
   const titleRows: (string | number)[][] = [
     ['PACT Command Center - Down-Payment Requests Report'],
@@ -203,42 +224,48 @@ export function exportToExcel(requests: DownPaymentRequest[], filename: string =
     'Activity Type', 'CP Name', 'Requested At', 'Transportation Budget (SDG)',
     'Requested Amount (SDG)', 'Approval Type', 'Approval %', 'Approved Amount (SDG)',
     'Paid Amount (SDG)', 'Remaining (SDG)', 'Status', 'Payment Type',
+    'Payment Basis', 'Reconciliation',
     'Supervisor Status', 'Supervisor Approved By', 'Supervisor Approved At',
     'Supervisor Notes', 'Admin Status', 'Admin Processed By', 'Admin Processed At',
     'Admin Notes', 'Justification',
   ];
 
-  const dataRows = requests.map((req, idx) => [
-    idx + 1,
-    req.id,
-    req.mmpName || 'N/A',
-    req.requestedByName || 'Unknown',
-    req.siteName,
-    req.stateName || 'N/A',
-    req.localityName || 'N/A',
-    req.hubName || 'N/A',
-    req.activityType || 'N/A',
-    req.projectName || 'N/A',
-    format(new Date(req.requestedAt), 'yyyy-MM-dd HH:mm'),
-    req.totalTransportationBudget,
-    req.requestedAmount,
-    req.approvalType ? getApprovalTypeLabel(req.approvalType) : 'Pending',
-    req.approvalPercentage ? `${req.approvalPercentage}%` : (req.approvalType === 'full' ? '100%' : 'N/A'),
-    req.approvedAmount || 0,
-    req.totalPaidAmount,
-    req.remainingAmount,
-    getStatusLabel(req.status),
-    req.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
-    req.supervisorStatus ? getStatusLabel(req.supervisorStatus) : 'Pending',
-    req.supervisorApprovedByName || req.supervisorApprovedBy || 'N/A',
-    req.supervisorApprovedAt ? format(new Date(req.supervisorApprovedAt), 'yyyy-MM-dd HH:mm') : 'N/A',
-    req.supervisorNotes || '',
-    req.adminStatus ? getStatusLabel(req.adminStatus) : 'Pending',
-    req.adminProcessedByName || req.adminProcessedBy || 'N/A',
-    req.adminProcessedAt ? format(new Date(req.adminProcessedAt), 'yyyy-MM-dd HH:mm') : 'N/A',
-    req.adminNotes || '',
-    req.justification || '',
-  ]);
+  const dataRows = requests.map((req, idx) => {
+    const balance = balanceFor(req, evidenceByRequest);
+    return [
+      idx + 1,
+      req.id,
+      req.mmpName || 'N/A',
+      req.requestedByName || 'Unknown',
+      req.siteName,
+      req.stateName || 'N/A',
+      req.localityName || 'N/A',
+      req.hubName || 'N/A',
+      req.activityType || 'N/A',
+      req.projectName || 'N/A',
+      format(new Date(req.requestedAt), 'yyyy-MM-dd HH:mm'),
+      req.totalTransportationBudget,
+      req.requestedAmount,
+      req.approvalType ? getApprovalTypeLabel(req.approvalType) : 'Pending',
+      req.approvalPercentage ? `${req.approvalPercentage}%` : (req.approvalType === 'full' ? '100%' : 'N/A'),
+      balance.approved,
+      balance.paid,
+      balance.remaining,
+      getStatusLabel(req.status),
+      req.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
+      balance.paymentBasis,
+      balance.reconciliationRequired ? (balance.reconciliationReason || 'Required') : '',
+      req.supervisorStatus ? (req.supervisorStatus === 'pending' ? 'Pending' : getStatusLabel(req.supervisorStatus)) : 'Pending',
+      req.supervisorApprovedByName || req.supervisorApprovedBy || 'N/A',
+      req.supervisorApprovedAt ? format(new Date(req.supervisorApprovedAt), 'yyyy-MM-dd HH:mm') : 'N/A',
+      req.supervisorNotes || '',
+      req.adminStatus ? (req.adminStatus === 'pending' ? 'Pending' : getStatusLabel(req.adminStatus)) : 'Pending',
+      req.adminProcessedByName || req.adminProcessedBy || 'N/A',
+      req.adminProcessedAt ? format(new Date(req.adminProcessedAt), 'yyyy-MM-dd HH:mm') : 'N/A',
+      req.adminNotes || '',
+      req.justification || '',
+    ];
+  });
 
   const totalBudget = requests.reduce((s, r) => s + r.totalTransportationBudget, 0);
   const emptyRow: string[] = Array(headers.length).fill('');
@@ -271,18 +298,24 @@ export function exportToExcel(requests: DownPaymentRequest[], filename: string =
 
   XLSX.utils.book_append_sheet(wb, ws, 'Down Payments');
 
+  const summaryRows = (status: string) => requests.filter(r => r.status === status);
+  const summaryAmount = (status: string, rows: DownPaymentRequest[]) => rows.reduce((sum, row) => {
+    const balance = balanceFor(row, evidenceByRequest);
+    if (status === 'pending_supervisor' || status === 'pending_admin') return sum + row.requestedAmount;
+    if (status === 'approved') return sum + balance.approved;
+    return sum + balance.paid;
+  }, 0);
   const summaryData = [
     ['Summary Statistics'],
     [],
     ['Category', 'Count', 'Amount (SDG)'],
-    ['Total Requests', requests.length, totalRequested],
-    ['Pending Supervisor', requests.filter(r => r.status === 'pending_supervisor').length, requests.filter(r => r.status === 'pending_supervisor').reduce((s, r) => s + r.requestedAmount, 0)],
-    ['Pending Admin', requests.filter(r => r.status === 'pending_admin').length, requests.filter(r => r.status === 'pending_admin').reduce((s, r) => s + r.requestedAmount, 0)],
-    ['Approved', requests.filter(r => r.status === 'approved').length, requests.filter(r => r.status === 'approved').reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0)],
-    ['Partially Paid', requests.filter(r => r.status === 'partially_paid').length, requests.filter(r => r.status === 'partially_paid').reduce((s, r) => s + r.totalPaidAmount, 0)],
-    ['Fully Paid', requests.filter(r => r.status === 'fully_paid').length, requests.filter(r => r.status === 'fully_paid').reduce((s, r) => s + r.totalPaidAmount, 0)],
-    ['Rejected', requests.filter(r => r.status === 'rejected').length, ''],
-    ['Cancelled', requests.filter(r => r.status === 'cancelled').length, ''],
+    ['Total Requests (includes history)', requests.length, totalRequested],
+    ...(['pending_supervisor', 'pending_admin', 'approved', 'partially_paid', 'fully_paid', 'paid', 'reconciled', 'completed', 'closed', 'rejected', 'cancelled', 'deleted'] as const).map(status => [
+      getDownPaymentStatusLabel(status),
+      summaryRows(status).length,
+      summaryAmount(status, summaryRows(status)),
+    ]),
+    ['Note', 'Requested totals include rejected/cancelled history', ''],
     [],
     ['', 'Total Approved', totalApproved],
     ['', 'Total Paid', totalPaid],
@@ -298,10 +331,11 @@ export function exportToExcel(requests: DownPaymentRequest[], filename: string =
   requests.forEach(r => {
     const hub = r.hubName || 'Unknown';
     const existing = hubGroups.get(hub) || { count: 0, requested: 0, approved: 0, paid: 0 };
+    const balance = balanceFor(r, evidenceByRequest);
     existing.count++;
     existing.requested += r.requestedAmount;
-    existing.approved += r.approvedAmount || 0;
-    existing.paid += r.totalPaidAmount;
+    existing.approved += balance.approved;
+    existing.paid += balance.paid;
     hubGroups.set(hub, existing);
   });
   const hubData: (string | number)[][] = [
@@ -322,7 +356,8 @@ export function exportToExcel(requests: DownPaymentRequest[], filename: string =
 
 export function exportToPDF(
   requests: DownPaymentRequest[],
-  config: DownPaymentReportConfig
+  config: DownPaymentReportConfig,
+  evidenceByRequest?: DownPaymentEvidenceMap,
 ): void {
   const doc = new jsPDF('landscape', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -342,13 +377,11 @@ export function exportToPDF(
     doc.text(`Notes: ${config.reportNotes}`, 14, 34);
   }
 
-  const PDF_APPROVED_STATUSES = ['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'];
   const totalRequested = requests.reduce((sum, r) => sum + r.requestedAmount, 0);
-  const totalApproved = requests
-    .filter(r => PDF_APPROVED_STATUSES.includes(r.status))
-    .reduce((sum, r) => sum + (r.approvedAmount || r.requestedAmount), 0);
-  const totalPaid = requests.reduce((sum, r) => sum + r.totalPaidAmount, 0);
-  const totalRemaining = requests.reduce((sum, r) => sum + r.remainingAmount, 0);
+  const pdfBalances = requests.map(req => balanceFor(req, evidenceByRequest));
+  const totalApproved = pdfBalances.reduce((sum, balance) => sum + balance.approved, 0);
+  const totalPaid = pdfBalances.reduce((sum, balance) => sum + balance.paid, 0);
+  const totalRemaining = pdfBalances.reduce((sum, balance) => sum + balance.remaining, 0);
 
   const summaryY = config.reportNotes ? 40 : 34;
   doc.setFontSize(9);
@@ -360,20 +393,26 @@ export function exportToPDF(
   doc.text(`Total Paid: ${formatCurrency(totalPaid)}`, 146, summaryY + 5);
   doc.text(`Total Remaining: ${formatCurrency(totalRemaining)}`, 212, summaryY + 5);
 
-  const tableData = requests.map(req => [
-    req.siteName.substring(0, 25) + (req.siteName.length > 25 ? '...' : ''),
-    req.mmpName ? (req.mmpName.substring(0, 20) + (req.mmpName.length > 20 ? '...' : '')) : '-',
-    req.hubName || '-',
-    req.stateName || '-',
-    formatCurrency(req.requestedAmount),
-    formatCurrency(req.approvedAmount || req.requestedAmount),
-    formatCurrency(req.totalPaidAmount),
-    getStatusLabel(req.status),
-    format(new Date(req.requestedAt), 'yyyy-MM-dd'),
-  ]);
+  const tableData = requests.map(req => {
+    const balance = balanceFor(req, evidenceByRequest);
+    return [
+      req.siteName.substring(0, 25) + (req.siteName.length > 25 ? '...' : ''),
+      req.mmpName ? (req.mmpName.substring(0, 20) + (req.mmpName.length > 20 ? '...' : '')) : '-',
+      req.hubName || '-',
+      req.stateName || '-',
+      formatCurrency(req.requestedAmount),
+      formatCurrency(balance.approved),
+      formatCurrency(balance.paid),
+      formatCurrency(balance.remaining),
+      getStatusLabel(req.status),
+      balance.paymentBasis,
+      balance.reconciliationRequired ? 'Required' : '',
+      format(new Date(req.requestedAt), 'yyyy-MM-dd'),
+    ];
+  });
 
   autoTable(doc, {
-    head: [['Site', 'MMP', 'Hub', 'State', 'Requested', 'Approved', 'Paid', 'Status', 'Date']],
+    head: [['Site', 'MMP', 'Hub', 'State', 'Requested', 'Approved', 'Paid', 'Remaining', 'Status', 'Payment Basis', 'Reconciliation', 'Date']],
     body: tableData,
     startY: summaryY + 12,
     styles: { fontSize: 7, cellPadding: 2 },
@@ -387,8 +426,11 @@ export function exportToPDF(
       4: { cellWidth: 28, halign: 'right' },
       5: { cellWidth: 28, halign: 'right' },
       6: { cellWidth: 28, halign: 'right' },
-      7: { cellWidth: 30 },
-      8: { cellWidth: 24 },
+      7: { cellWidth: 28, halign: 'right' },
+      8: { cellWidth: 30 },
+      9: { cellWidth: 30 },
+      10: { cellWidth: 24 },
+      11: { cellWidth: 24 },
     },
   });
 
@@ -479,26 +521,32 @@ export function exportToPDF(
 export function getDownPaymentStats(
   requests: DownPaymentRequest[],
   getPaidAmount: (request: DownPaymentRequest) => number = request => request.totalPaidAmount || 0,
+  evidenceByRequest?: DownPaymentEvidenceMap,
 ) {
   const pendingSupervisor = requests.filter(r => r.status === 'pending_supervisor').length;
   const pendingAdmin = requests.filter(r => r.status === 'pending_admin').length;
   const approved = requests.filter(r => r.status === 'approved').length;
   const rejected = requests.filter(r => r.status === 'rejected').length;
   const cancelled = requests.filter(r => r.status === 'cancelled').length;
+  const deleted = requests.filter(r => r.status === 'deleted').length;
   const partiallyPaid = requests.filter(r => r.status === 'partially_paid').length;
   const fullyPaid = requests.filter(r => r.status === 'fully_paid').length;
-
-  const APPROVED_STATUSES = ['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'];
-  const PAID_ELIGIBLE_STATUSES = ['approved', 'partially_paid', 'fully_paid', 'completed', 'closed', 'paid', 'reconciled'];
+  const paid = requests.filter(r => r.status === 'paid').length;
+  const reconciled = requests.filter(r => r.status === 'reconciled').length;
+  const completed = requests.filter(r => r.status === 'completed').length;
+  const closed = requests.filter(r => r.status === 'closed').length;
+  const unknown = requests.filter(r => classifyDownPaymentStatus(r.status) === 'unknown').length;
   const totalRequested = requests.reduce((sum, r) => sum + r.requestedAmount, 0);
-  const totalApproved = requests
-    .filter(r => APPROVED_STATUSES.includes(r.status))
-    .reduce((sum, r) => sum + (r.approvedAmount || r.requestedAmount), 0);
-  const paidRequests = requests
-    .filter(r => PAID_ELIGIBLE_STATUSES.includes(r.status) && getPaidAmount(r) > 0);
-  const totalPaid = paidRequests
-    .reduce((sum, request) => sum + getPaidAmount(request), 0);
-  const totalRemaining = totalApproved - totalPaid;
+  const balances = requests.map(request => getDownPaymentBalance({
+    ...request,
+    // Preserve the optional historical callback while using the canonical
+    // per-row formula for all totals.
+    totalPaidAmount: getPaidAmount(request),
+  }, evidenceByRequest?.get(request.id) ?? []));
+  const totalApproved = balances.reduce((sum, balance) => sum + balance.approved, 0);
+  const totalPaid = balances.reduce((sum, balance) => sum + balance.paid, 0);
+  const totalRemaining = balances.reduce((sum, balance) => sum + balance.remaining, 0);
+  const paidRequests = requests.filter((request, index) => balances[index].paid > 0 && balances[index].approved > 0);
   const totalPendingAmount = requests
     .filter(r => r.status === 'pending_supervisor' || r.status === 'pending_admin')
     .reduce((sum, r) => sum + r.requestedAmount, 0);
@@ -511,9 +559,14 @@ export function getDownPaymentStats(
       approved,
       rejected,
       cancelled,
+      deleted,
       partiallyPaid,
       fullyPaid,
       paid: paidRequests.length,
+      reconciled,
+      completed,
+      closed,
+      unknown,
     },
     amounts: {
       totalRequested,

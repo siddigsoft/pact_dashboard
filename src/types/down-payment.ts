@@ -9,6 +9,11 @@ export type DownPaymentStatus =
   | 'rejected'            // Rejected by supervisor or admin
   | 'partially_paid'      // Some installments paid
   | 'fully_paid'          // All installments paid
+  // Legacy lifecycle values retained for imported historical rows.
+  | 'paid'
+  | 'reconciled'
+  | 'completed'
+  | 'closed'
   | 'cancelled'           // Cancelled by requester or system
   | 'deleted';            // Permanently removed by admin
 
@@ -102,6 +107,11 @@ export interface DownPaymentRequest {
   paymentType: PaymentType;
   /** Active immutable Pre-Fund payment events; legacy records may have none. */
   preFundNames?: string[];
+  /** How the payment amount used by the balance tracker was sourced. */
+  paymentEvidenceSource?: 'active_immutable_links' | 'legacy_source_total' | 'no_payment_evidence' | string;
+  /** True when Finance must verify a legacy or otherwise incomplete payment trail. */
+  reconciliationRequired?: boolean;
+  reconciliationReason?: string | null;
   
   // Installment details
   installmentPlan: InstallmentPlan[];

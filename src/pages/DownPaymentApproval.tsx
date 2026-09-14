@@ -34,6 +34,7 @@ import type { DownPaymentRequest, DownPaymentFilter, DownPaymentStatus } from '@
 import { filterDownPayments } from '@/utils/downPaymentExport';
 import { dispatchNotification } from '@/lib/notify';
 import { createRequiredPreFundPaymentEventKey, deleteLatestSourcePayment, fetchDeletedPreFundSourcePayments, fetchPreFundSourcePaymentGaps, fetchPreFundSourcePaymentLinks, isActivePreFundSourcePayment, type PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
+import { getDownPaymentBalance, isDownPaymentApprovedLifecycleStatus, isDownPaymentSettledStatus } from '@/utils/downPaymentBalance';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,12 @@ function getStatusBadge(status: string, metadata?: any) {
     rejected: { variant: 'destructive', label: 'Rejected / مرفوض', cls: '' },
     partially_paid: { variant: 'secondary', label: 'Partially Paid / مدفوع جزئياً', cls: 'bg-purple-100 text-purple-700' },
     fully_paid: { variant: 'default', label: 'Fully Paid / مدفوع بالكامل', cls: 'bg-emerald-500' },
+    paid: { variant: 'default', label: 'Paid / مدفوع', cls: 'bg-emerald-500' },
+    reconciled: { variant: 'default', label: 'Reconciled / تمت التسوية', cls: 'bg-teal-500' },
+    completed: { variant: 'default', label: 'Completed / مكتمل', cls: 'bg-emerald-600' },
+    closed: { variant: 'secondary', label: 'Closed / مغلق', cls: 'bg-slate-200 text-slate-700' },
     cancelled: { variant: 'secondary', label: 'Cancelled / ملغي', cls: 'bg-gray-100 text-gray-600' },
+    deleted: { variant: 'destructive', label: 'Deleted / محذوف', cls: '' },
   };
   const c = cfg[status] || { variant: 'outline' as const, label: status, cls: '' };
   return <Badge variant={c.variant} className={c.cls}>{c.label}</Badge>;
@@ -118,7 +124,8 @@ function RequestDetailsDialog({
   onDeletePayment?: (evidence: PaymentEvidence) => void;
 }) {
   if (!req) return null;
-  const remaining = req.remainingAmount ?? (req.requestedAmount - (req.totalPaidAmount || 0));
+  const balance = getDownPaymentBalance(req);
+  const remaining = balance.remaining;
   return (
     <Dialog open={!!req} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-lg">
@@ -149,7 +156,7 @@ function RequestDetailsDialog({
             </div>
             <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-2">
               <p className="text-xs text-muted-foreground">Paid</p>
-              <p className="font-bold text-base text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</p>
+               <p className="font-bold text-base text-green-600">{balance.paid.toLocaleString()}</p>
               <p className="text-xs text-muted-foreground">SDG</p>
             </div>
             <div className={`rounded-lg p-2 ${remaining > 0 ? 'bg-amber-50 dark:bg-amber-950/20' : 'bg-muted/40'}`}>
@@ -307,7 +314,7 @@ function GroupedSummaryTable({
                           </TableHeader>
                           <TableBody>
                             {row.items.map(req => {
-                              const rem = req.remainingAmount ?? (req.requestedAmount - (req.totalPaidAmount || 0));
+                              const rem = getDownPaymentBalance(req).remaining;
                               return (
                                 <TableRow key={req.id} className="hover:bg-background/60">
                                   <TableCell className="text-xs py-2">{fmtDate(req.requestedAt)}</TableCell>
@@ -316,7 +323,7 @@ function GroupedSummaryTable({
                                   <TableCell className="text-xs py-2 whitespace-nowrap">{req.hubName || '—'}</TableCell>
                                   <TableCell className="text-xs py-2 max-w-[110px] truncate text-muted-foreground">{req.activityType || '—'}</TableCell>
                                   {isColVisible('total_requested') && <TableCell className="text-xs py-2 text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>}
-                                  {isColVisible('total_paid') && <TableCell className="text-xs py-2 text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>}
+                                   {isColVisible('total_paid') && <TableCell className="text-xs py-2 text-right font-mono text-green-600">{getDownPaymentBalance(req).paid.toLocaleString()}</TableCell>}
                                   {isColVisible('remaining') && <TableCell className="text-xs py-2 text-right font-mono">{rem > 0 ? <span className="text-amber-600">{rem.toLocaleString()}</span> : '0'}</TableCell>}
                                   <TableCell className="text-xs py-2">{getStatusBadge(req.status, req.metadata)}</TableCell>
                                   <TableCell className="text-xs py-2 text-center">
@@ -401,7 +408,8 @@ function AllRequestsTable({
       {/* Mobile card fallback (< md) */}
       <div className="flex flex-col gap-3 md:hidden px-1 pb-2" data-testid="all-requests-mobile-cards">
         {requests.map(req => {
-          const rem = req.remainingAmount ?? (req.requestedAmount - (req.totalPaidAmount || 0));
+          const balance = getDownPaymentBalance(req);
+          const rem = balance.remaining;
           return (
             <div key={req.id} className="rounded-lg border bg-card shadow-sm p-3 space-y-2" data-testid={`card-all-${req.id}`}>
               <div className="flex items-start justify-between gap-2">
@@ -418,7 +426,7 @@ function AllRequestsTable({
                 </div>
                 <div>
                   <span className="text-muted-foreground block">Paid</span>
-                  <span className="font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</span>
+                  <span className="font-mono text-green-600">{balance.paid.toLocaleString()}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground block">Remaining</span>
@@ -458,7 +466,8 @@ function AllRequestsTable({
           </TableHeader>
           <TableBody>
             {requests.map(req => {
-              const rem = req.remainingAmount ?? (req.requestedAmount - (req.totalPaidAmount || 0));
+              const balance = getDownPaymentBalance(req);
+              const rem = balance.remaining;
               return (
                 <TableRow key={req.id} data-testid={`row-all-${req.id}`}>
                   <TableCell className="text-sm whitespace-nowrap">{fmtDate(req.requestedAt)}</TableCell>
@@ -470,7 +479,7 @@ function AllRequestsTable({
                   <TableCell className="max-w-[110px] truncate text-sm text-muted-foreground">{req.activityType || '—'}</TableCell>
                   <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
                   <TableCell>{getStatusBadge(req.status, req.metadata)}</TableCell>
-                  <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono text-green-600">{balance.paid.toLocaleString()}</TableCell>
                   <TableCell className="text-right font-mono">{rem > 0 ? <span className="text-amber-600">{rem.toLocaleString()}</span> : '0'}</TableCell>
                   <TableCell className="text-center">
                     <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setDetailsReq(req)} data-testid={`button-all-details-${req.id}`}>
@@ -701,7 +710,7 @@ export default function DownPaymentApproval() {
   }, [toast]);
 
   const handleMarkFullyPaid = useCallback((req: DownPaymentRequest) => {
-    const remaining = Math.max(0, (req.approvedAmount ?? req.requestedAmount) - (req.totalPaidAmount ?? 0));
+    const remaining = getDownPaymentBalance(req).remaining;
     void openPreFundPaymentDialog(req, remaining);
   }, [openPreFundPaymentDialog]);
 
@@ -710,9 +719,7 @@ export default function DownPaymentApproval() {
     const { req } = partialPayDialog;
     if (!req || !currentUser?.id) return;
     const partialAmt = parseFloat(partialPayDialog.partialAmount);
-    const maxAmt = req.approvedAmount ?? req.requestedAmount;
-    const alreadyPaid = req.totalPaidAmount ?? 0;
-    const remainingAmount = Math.max(0, maxAmt - alreadyPaid);
+    const remainingAmount = getDownPaymentBalance(req).remaining;
     if (isNaN(partialAmt) || partialAmt <= 0) {
       toast({ title: 'Invalid amount', description: 'Please enter a positive number.', variant: 'destructive' });
       return;
@@ -882,16 +889,16 @@ export default function DownPaymentApproval() {
     // Use the canonical typed ledger fields for filtering. The id/name aliases
     // are retained only for display compatibility with older child components.
     const uniqueFunds = new Map(links.map(link => [link.fundId, link.fundName]));
-    const ledgerPaid = links.reduce((sum, link) => sum + (link.paymentAmount || 0), 0);
-    const hasLedgerEvidence = links.length > 0;
-    const effectivePaid = hasLedgerEvidence ? ledgerPaid : (req.totalPaidAmount || 0);
-    const approvedAmount = req.approvedAmount || req.requestedAmount;
+    const balance = getDownPaymentBalance(req, links);
     return {
       ...req,
       // Active immutable events are authoritative when available. Source-side
       // totals can lag after historical imports or reconciliation operations.
-      totalPaidAmount: effectivePaid,
-      remainingAmount: Math.max(0, approvedAmount - effectivePaid),
+      totalPaidAmount: balance.paid,
+      remainingAmount: balance.remaining,
+      paymentEvidenceSource: balance.paymentBasis,
+      reconciliationRequired: balance.reconciliationRequired,
+      reconciliationReason: balance.reconciliationReason,
       preFundNames: [...uniqueFunds.values()],
       preFundIds: [...uniqueFunds.keys()],
     } as DownPaymentRequest;
@@ -911,7 +918,7 @@ export default function DownPaymentApproval() {
     };
 
     if (selectedFundId === '__unlinked__' || selectedFundId === '__multiple__') {
-      filteredRequests.forEach(request => add('SDG', request.totalPaidAmount ?? 0));
+       filteredRequests.forEach(request => add('SDG', getDownPaymentBalance(request).paid));
     } else {
       filteredRequests.forEach(request => {
         (preFundLinksByRequest.get(request.id) ?? [])
@@ -930,10 +937,11 @@ export default function DownPaymentApproval() {
       if (!map[k]) map[k] = { key: k, name: k, requests: 0, totalRequested: 0, totalApproved: 0, totalPaid: 0, totalRemaining: 0, pending: 0, originalBudget: 0, items: [] };
       map[k].requests++;
       map[k].totalRequested += req.requestedAmount;
-      map[k].totalPaid += req.totalPaidAmount || 0;
-      map[k].totalRemaining += req.remainingAmount ?? (req.requestedAmount - (req.totalPaidAmount || 0));
+       const balance = getDownPaymentBalance(req);
+       map[k].totalPaid += balance.paid;
+       map[k].totalRemaining += balance.remaining;
       map[k].items.push(req);
-      if (['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'].includes(req.status)) map[k].totalApproved += (req.approvedAmount || req.requestedAmount);
+       map[k].totalApproved += balance.approved;
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) map[k].pending++;
     });
     // Compute original transportation budget per group, deduplicating by mmpSiteEntryId
@@ -1052,6 +1060,7 @@ export default function DownPaymentApproval() {
   }
 
   const approvalRole = selectedTier === 'tier1' ? 'supervisor' : 'admin';
+  const partialBalance = partialPayDialog.req ? getDownPaymentBalance(partialPayDialog.req) : null;
 
   return (
     <div className="p-6 space-y-6">
@@ -1411,6 +1420,8 @@ export default function DownPaymentApproval() {
               )}
             </AlertDescription>
           </Alert>
+          {/* Panel userRole is workflow tier mode; never pass the signed-in
+              account role (e.g. financialadmin/superadmin) here. */}
           <DownPaymentApprovalPanel
             userRole={approvalRole}
             externalFilters={filters}
@@ -1502,9 +1513,7 @@ export default function DownPaymentApproval() {
         {/* ─── Disbursement Tracker ─── */}
         <TabsContent value="disbursement" className="space-y-4">
           {(() => {
-            const disbursed = filteredRequests.filter(r =>
-              r.status === 'fully_paid' || r.status === 'partially_paid' || r.status === 'approved'
-            );
+            const disbursed = filteredRequests.filter(r => isDownPaymentApprovedLifecycleStatus(r.status));
             const stuckCount = disbursed.filter(r => r.status === 'approved').length;
 
             // Unique option lists for filter dropdowns
@@ -1526,10 +1535,11 @@ export default function DownPaymentApproval() {
 
             const activeDisbFilters = [disbState, disbHub, disbLocality, disbMmp, disbEnumerator].filter(v => v !== 'all').length;
 
-            const totalApproved = filtered.reduce((s, r) => s + (r.approvedAmount ?? r.requestedAmount), 0);
-            const totalPaid = filtered.reduce((s, r) => s + r.totalPaidAmount, 0);
-            const totalRemaining = filtered.reduce((s, r) => s + r.remainingAmount, 0);
-            const fullyPaid = filtered.filter(r => r.status === 'fully_paid').length;
+            const disbursementBalances = filtered.map(r => getDownPaymentBalance(r));
+            const totalApproved = disbursementBalances.reduce((s, balance) => s + balance.approved, 0);
+            const totalPaid = disbursementBalances.reduce((s, balance) => s + balance.paid, 0);
+            const totalRemaining = disbursementBalances.reduce((s, balance) => s + balance.remaining, 0);
+            const fullyPaid = filtered.filter(r => isDownPaymentSettledStatus(r.status)).length;
             const partiallyPaid = filtered.filter(r => r.status === 'partially_paid').length;
             const pendingDisburse = filtered.filter(r => r.status === 'approved').length;
 
@@ -1556,8 +1566,9 @@ export default function DownPaymentApproval() {
             const groupKeys = Object.keys(groups).sort();
 
             const renderRow = (req: DownPaymentRequest) => {
-              const approved = req.approvedAmount ?? req.requestedAmount;
-              const pctPaid = approved > 0 ? Math.round((req.totalPaidAmount / approved) * 100) : 0;
+              const balance = getDownPaymentBalance(req);
+              const approved = balance.approved;
+              const pctPaid = approved > 0 ? Math.round((balance.paid / approved) * 100) : 0;
               return (
                 <TableRow key={req.id} data-testid={`row-disbursement-${req.id}`}>
                   <TableCell className="font-medium text-sm">{req.requestedByName || getProfileName(req.requestedBy)}</TableCell>
@@ -1567,19 +1578,19 @@ export default function DownPaymentApproval() {
                   <TableCell className="text-xs text-muted-foreground max-w-[90px] truncate" title={req.localityName}>{req.localityName || '—'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[90px] truncate" title={req.mmpName}>{req.mmpName || '—'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[90px] truncate" title={req.activityType}>{req.activityType || '—'}</TableCell>
-                  <TableCell className="text-right font-mono text-sm">{(req.approvedAmount ?? req.requestedAmount).toLocaleString()}</TableCell>
+                   <TableCell className="text-right font-mono text-sm">{balance.approved.toLocaleString()}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-col items-end gap-0.5">
-                      <span className="font-mono text-sm">{req.totalPaidAmount.toLocaleString()}</span>
+                       <span className="font-mono text-sm">{balance.paid.toLocaleString()}</span>
                       {pctPaid > 0 && <span className="text-xs text-muted-foreground">{pctPaid}%</span>}
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm text-amber-600 dark:text-amber-400">
-                    {req.remainingAmount > 0 ? req.remainingAmount.toLocaleString() : '—'}
+                     {balance.remaining > 0 ? balance.remaining.toLocaleString() : '—'}
                   </TableCell>
                   <TableCell>
                      <div className="space-y-1">
-                     {req.status === 'fully_paid' ? (
+                      {isDownPaymentSettledStatus(req.status) ? (
                       <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-200 gap-1 text-[10px]">
                         <CheckCircle2 className="h-3 w-3" />Paid
                       </Badge>
@@ -1592,7 +1603,7 @@ export default function DownPaymentApproval() {
                         <DollarSign className="h-3 w-3" />Approved
                       </Badge>
                     )}
-                     {(req.status === 'fully_paid' || req.status === 'partially_paid') && (
+                     {(isDownPaymentSettledStatus(req.status) || req.status === 'partially_paid') && (
                        <p className={`text-[10px] max-w-[150px] truncate ${(req.preFundNames?.length ?? 0) === 0 ? 'text-amber-700' : 'text-teal-700'}`} title={req.preFundNames?.join(', ')}>
                          {(req.preFundNames?.length ?? 0) === 0
                            ? 'Pre-Fund: unlinked historical'
@@ -1605,7 +1616,7 @@ export default function DownPaymentApproval() {
                     {req.updatedAt ? format(parseISO(req.updatedAt), 'dd/MM/yy') : '—'}
                   </TableCell>
                   <TableCell>
-                    {req.status === 'fully_paid' && (() => {
+                     {isDownPaymentSettledStatus(req.status) && (() => {
                       const gl = glLogMap.get(req.id);
                       if (gl === 'success') return <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300 whitespace-nowrap">GL Posted</Badge>;
                       if (gl === 'error')   return <Badge variant="outline" className="text-[10px] text-rose-700 border-rose-300 whitespace-nowrap">GL Error</Badge>;
@@ -1824,9 +1835,10 @@ export default function DownPaymentApproval() {
                       <div className="divide-y">
                         {groupKeys.map(gk => {
                           const rows = groups[gk];
-                          const gTotal = rows.reduce((s, r) => s + (r.approvedAmount ?? r.requestedAmount), 0);
-                          const gPaid = rows.reduce((s, r) => s + r.totalPaidAmount, 0);
-                          const gRemaining = rows.reduce((s, r) => s + r.remainingAmount, 0);
+                          const groupBalances = rows.map(r => getDownPaymentBalance(r));
+                          const gTotal = groupBalances.reduce((s, balance) => s + balance.approved, 0);
+                          const gPaid = groupBalances.reduce((s, balance) => s + balance.paid, 0);
+                          const gRemaining = groupBalances.reduce((s, balance) => s + balance.remaining, 0);
                           return (
                             <div key={gk}>
                               <div className="px-4 py-2 bg-muted/40 flex items-center justify-between gap-4 flex-wrap">
@@ -2066,7 +2078,7 @@ export default function DownPaymentApproval() {
                 <p className="font-medium">{partialPayDialog.req.requestedByName || 'Requester'}</p>
                 <p className="text-muted-foreground">{partialPayDialog.req.siteName}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Approved: <span className="font-mono font-medium">{(partialPayDialog.req.approvedAmount ?? partialPayDialog.req.requestedAmount).toLocaleString()} SDG</span>
+                  Approved: <span className="font-mono font-medium">{(partialBalance?.approved ?? 0).toLocaleString()} SDG</span>
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -2075,7 +2087,7 @@ export default function DownPaymentApproval() {
                   id="partial-amount"
                   type="number"
                   min={1}
-                  max={partialPayDialog.req.approvedAmount ?? partialPayDialog.req.requestedAmount}
+                  max={partialBalance?.remaining ?? 0}
                   step={1}
                   value={partialPayDialog.partialAmount}
                   onChange={e => setPartialPayDialog(p => ({ ...p, partialAmount: e.target.value }))}
@@ -2085,7 +2097,7 @@ export default function DownPaymentApproval() {
                   autoFocus
                 />
                  {partialPayDialog.partialAmount && (() => {
-                  const max = partialPayDialog.req!.approvedAmount ?? partialPayDialog.req!.requestedAmount;
+                   const max = partialBalance?.remaining ?? 0;
                   const val = parseFloat(partialPayDialog.partialAmount);
                   if (!isNaN(val) && val > 0 && val < max) {
                     return (

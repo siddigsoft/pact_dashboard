@@ -74,6 +74,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
+import type { DownPaymentEvidenceMap } from '@/utils/downPaymentExport';
 import { resolveDownPaymentExportSelection } from '@/utils/downPaymentExportSelection';
 import { allocateExactProportionally } from '@/utils/proportionalAllocation';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
@@ -93,8 +94,18 @@ import { voidUnpaidDownPaymentRequest } from '@/utils/downPaymentVoid';
 import { Mail, Wallet, Upload, ImageIcon } from 'lucide-react';
 import { PaymentHistoryPanel } from '@/components/financial/PaymentHistoryPanel';
 import type { PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
+import {
+  getDownPaymentBalance,
+  isDownPaymentApprovedLifecycleStatus,
+  isDownPaymentClosedStatus,
+  isDownPaymentSettledStatus,
+} from '@/utils/downPaymentBalance';
 
 interface DownPaymentApprovalPanelProps {
+  /**
+   * This is the workflow tier selected on the page, not the signed-in
+   * account's elevated role. The page maps tier1/tier2 to supervisor/admin.
+   */
   userRole: 'supervisor' | 'admin';
   externalFilters?: DownPaymentFilter;
   hideFiltersBar?: boolean;
@@ -125,7 +136,12 @@ const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
   { value: 'rejected', label: 'Rejected' },
   { value: 'partially_paid', label: 'Partially Paid' },
   { value: 'fully_paid', label: 'Fully Paid' },
+  { value: 'paid', label: 'Paid (legacy)' },
+  { value: 'reconciled', label: 'Reconciled (legacy)' },
+  { value: 'completed', label: 'Completed (legacy)' },
+  { value: 'closed', label: 'Closed (legacy)' },
   { value: 'cancelled', label: 'Cancelled' },
+  { value: 'deleted', label: 'Deleted' },
 ];
 
 type BulkSummaryEntry = { count: number; requested: number; approved: number };
@@ -136,7 +152,7 @@ type BulkSummaryEntry = { count: number; requested: number; approved: number };
 // prerequisite for wrapping RequestCard in useMemo([]) below.
 
 function isApprovedOrPaid(status: string) {
-  return ['approved', 'partially_paid', 'fully_paid'].includes(status);
+  return isDownPaymentApprovedLifecycleStatus(status);
 }
 
 function getStatusBadge(status: string) {
@@ -147,7 +163,12 @@ function getStatusBadge(status: string) {
     rejected: { variant: 'destructive', icon: XCircle, label: 'Rejected', labelAr: 'مرفوض' },
     partially_paid: { variant: 'outline', icon: DollarSign, label: 'Partially Paid', labelAr: 'مدفوع جزئياً' },
     fully_paid: { variant: 'default', icon: CheckCircle2, label: 'Fully Paid', labelAr: 'مدفوع بالكامل' },
+    paid: { variant: 'default', icon: CheckCircle2, label: 'Paid', labelAr: 'مدفوع' },
+    reconciled: { variant: 'default', icon: ShieldCheck, label: 'Reconciled', labelAr: 'تمت التسوية' },
+    completed: { variant: 'default', icon: CheckCircle2, label: 'Completed', labelAr: 'مكتمل' },
+    closed: { variant: 'secondary', icon: ShieldCheck, label: 'Closed', labelAr: 'مغلق' },
     cancelled: { variant: 'secondary', icon: X, label: 'Cancelled', labelAr: 'ملغي' },
+    deleted: { variant: 'destructive', icon: Trash2, label: 'Deleted', labelAr: 'محذوف' },
   };
   const config = statusMap[status] || { variant: 'secondary' as const, icon: Clock, label: status.replace(/_/g, ' '), labelAr: '' };
   const Icon = config.icon;
@@ -162,8 +183,8 @@ function getStatusBadge(status: string) {
 function WorkflowTimeline({ request }: { request: DownPaymentRequest }) {
   const status = request.status;
   const supervisorPassed = status !== 'pending_supervisor';
-  const adminPassed = status === 'approved' || status === 'partially_paid' || status === 'fully_paid';
-  const isPaid = status === 'partially_paid' || status === 'fully_paid';
+  const adminPassed = isDownPaymentApprovedLifecycleStatus(status);
+  const isPaid = status === 'partially_paid' || isDownPaymentSettledStatus(status);
   const receiptConfirmed = !!(request.metadata as any)?.receipt_confirmation?.confirmed;
   const isRejected = status === 'rejected';
   const steps = [
@@ -261,7 +282,11 @@ const BulkSummaryTable = memo(function BulkSummaryTable({ requests, users }: {
       requests.forEach(r => {
         const k = keyFn(r) || 'Unknown';
         const e = m.get(k) || { count: 0, requested: 0, approved: 0 };
-        m.set(k, { count: e.count + 1, requested: e.requested + r.requestedAmount, approved: e.approved + (r.approvedAmount || r.requestedAmount) });
+        const balance = getDownPaymentBalance({
+          ...(r as DownPaymentRequest),
+          status: (r as { status?: string }).status as DownPaymentRequest['status'] ?? 'approved',
+        });
+        m.set(k, { count: e.count + 1, requested: e.requested + r.requestedAmount, approved: e.approved + balance.approved });
       });
       return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
     };
@@ -283,7 +308,10 @@ const BulkSummaryTable = memo(function BulkSummaryTable({ requests, users }: {
   const active = tabs.find(t => t.key === activeTab)!;
   const { totalReq, totalApp } = useMemo(() => ({
     totalReq: requests.reduce((s, r) => s + r.requestedAmount, 0),
-    totalApp: requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0),
+    totalApp: requests.reduce((s, r) => s + getDownPaymentBalance({
+      ...(r as DownPaymentRequest),
+      status: (r as { status?: string }).status as DownPaymentRequest['status'] ?? 'approved',
+    }).approved, 0),
   }), [requests]);
 
   return (
@@ -465,7 +493,7 @@ export function DownPaymentApprovalPanel({
     return [...new Set(base.map(r => r.localityName).filter(Boolean))].sort() as string[];
   }, [requests, filters.hubId, filters.stateName]);
   const uniqueMMPs = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort(), [requests]);
-  const uniqueSites = useMemo(() => [...new Set(requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).map(r => r.siteName).filter(Boolean))].sort(), [requests]);
+  const uniqueSites = useMemo(() => [...new Set(requests.filter(r => isDownPaymentApprovedLifecycleStatus(r.status)).map(r => r.siteName).filter(Boolean))].sort(), [requests]);
 
   // Sites with more than one active (non-cancelled, non-rejected) request — used to flag duplicates.
   // Uses mmpSiteEntryId as the primary key so that the same site name in two DIFFERENT MMPs
@@ -488,7 +516,7 @@ export function DownPaymentApprovalPanel({
     return (u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown';
   };
   const uniqueSupervisors = useMemo(() => {
-    const approvedReqs = requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status));
+    const approvedReqs = requests.filter(r => isDownPaymentApprovedLifecycleStatus(r.status));
     const supervisorIds = [...new Set(approvedReqs.map(r => r.supervisorApprovedBy).filter(Boolean))];
     return supervisorIds.map(id => {
       const u = users?.find(u => u.id === id);
@@ -496,7 +524,7 @@ export function DownPaymentApprovalPanel({
     });
   }, [requests, users]);
   const uniqueEnumerators = useMemo(() => {
-    const approvedReqs = requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status));
+    const approvedReqs = requests.filter(r => isDownPaymentApprovedLifecycleStatus(r.status));
     const seen = new Map<string, string>();
     approvedReqs.forEach(r => {
       if (r.requestedBy && !seen.has(r.requestedBy as string)) {
@@ -530,8 +558,15 @@ export function DownPaymentApprovalPanel({
     [filteredRequests]
   );
   const stats = useMemo(
-    () => getDownPaymentStats(filteredRequests),
-    [filteredRequests],
+    () => getDownPaymentStats(filteredRequests, undefined, preFundPaymentEvidence as DownPaymentEvidenceMap | undefined),
+    [filteredRequests, preFundPaymentEvidence],
+  );
+  const reconciliationRequests = useMemo(
+    () => filteredRequests.filter(request => getDownPaymentBalance(
+      request,
+      preFundPaymentEvidence?.get(request.id) ?? [],
+    ).reconciliationRequired),
+    [filteredRequests, preFundPaymentEvidence],
   );
 
   // O(1) set lookup for recipient checkboxes — avoids O(n²) .includes() on every render
@@ -554,7 +589,8 @@ export function DownPaymentApprovalPanel({
       reqs.forEach(r => {
         const k = keyFn(r) || 'Unknown';
         const e = m.get(k) || { count: 0, requested: 0, approved: 0 };
-        m.set(k, { count: e.count + 1, requested: e.requested + r.requestedAmount, approved: e.approved + (r.approvedAmount || r.requestedAmount) });
+        const balance = getDownPaymentBalance(r);
+        m.set(k, { count: e.count + 1, requested: e.requested + r.requestedAmount, approved: e.approved + balance.approved });
       });
       return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
     };
@@ -588,11 +624,11 @@ export function DownPaymentApprovalPanel({
   }, [filteredRequests, userRole]);
 
   const completedRequests = useMemo(() => {
-    return filteredRequests.filter(req => req.status === 'fully_paid');
+    return filteredRequests.filter(req => isDownPaymentSettledStatus(req.status));
   }, [filteredRequests]);
 
   const closedRequests = useMemo(() => {
-    return filteredRequests.filter(req => req.status === 'rejected' || req.status === 'cancelled');
+    return filteredRequests.filter(req => isDownPaymentClosedStatus(req.status));
   }, [filteredRequests]);
 
   const paidWaitingRequests = useMemo(() => {
@@ -758,8 +794,9 @@ export function DownPaymentApprovalPanel({
       return;
     }
 
-    if (paymentAmount > selectedRequest.remainingAmount) {
-      toast({ title: 'Amount Exceeds Remaining / المبلغ يتجاوز المتبقي', description: `Payment of ${paymentAmount.toLocaleString()} SDG exceeds the remaining balance of ${selectedRequest.remainingAmount.toLocaleString()} SDG.`, variant: 'destructive' });
+    const selectedBalance = getDownPaymentBalance(selectedRequest);
+    if (paymentAmount > selectedBalance.remaining) {
+      toast({ title: 'Amount Exceeds Remaining / المبلغ يتجاوز المتبقي', description: `Payment of ${paymentAmount.toLocaleString()} SDG exceeds the remaining balance of ${selectedBalance.remaining.toLocaleString()} SDG.`, variant: 'destructive' });
       return;
     }
 
@@ -949,7 +986,8 @@ export function DownPaymentApprovalPanel({
     setSelectedRequest(request);
     setAction(actionType);
     if (actionType === 'pay') {
-      setPaymentAmount(request.remainingAmount || request.requestedAmount);
+       const balance = getDownPaymentBalance(request);
+       setPaymentAmount(balance.remaining || balance.approved);
       setSinglePayPreFundId(null);
       // Load active pre-funds for "Charge to Pre-Fund" selector,
       // filtered to funds the submitter is allocated to so Finance only sees
@@ -1006,23 +1044,29 @@ export function DownPaymentApprovalPanel({
     }
 
     const suffix = `down-payments-${tabLabel.toLowerCase()}`;
-    const exportRows = data.map(request => ({
-      ...request,
-      totalPaidAmount: request.totalPaidAmount || 0,
-    }));
+    const exportRows = data.map(request => {
+      const balance = getDownPaymentBalance(request, preFundPaymentEvidence?.get(request.id) ?? []);
+      return {
+        ...request,
+        totalPaidAmount: balance.paid,
+        remainingAmount: balance.remaining,
+        approvedAmount: balance.approved,
+        paymentEvidenceSource: balance.paymentBasis,
+      };
+    });
 
     try {
       if (type === 'csv') {
-        exportToCSV(exportRows, suffix);
+        exportToCSV(exportRows, suffix, preFundPaymentEvidence as DownPaymentEvidenceMap | undefined);
       } else if (type === 'excel') {
-        exportToExcel(exportRows, suffix, tabLabel);
+        exportToExcel(exportRows, suffix, tabLabel, preFundPaymentEvidence as DownPaymentEvidenceMap | undefined);
       } else {
         exportToPDF(exportRows, {
           filters: effectiveFilters,
           includeAuditLog: false,
           includeSignature: false,
           reportTitle: `Down-Payment Requests - ${tabLabel}`,
-        });
+        }, preFundPaymentEvidence as DownPaymentEvidenceMap | undefined);
       }
       toast({ title: 'Export Downloaded', description: `${type.toUpperCase()} report exported successfully.` });
     } catch (err) {
@@ -1039,13 +1083,19 @@ export function DownPaymentApprovalPanel({
     rejected: 'مرفوض',
     partially_paid: 'مدفوع جزئياً',
     fully_paid: 'مدفوع بالكامل',
+    paid: 'مدفوع',
+    reconciled: 'تمت التسوية',
+    completed: 'مكتمل',
+    closed: 'مغلق',
     cancelled: 'ملغي',
+    deleted: 'محذوف',
     all: 'الكل',
   };
 
   const getName = (u: any) => u?.fullName || u?.full_name || u?.name || u?.email || 'Unknown';
 
   const mapRequestToStatementRow = (req: DownPaymentRequest): StatementRow => {
+    const balance = getDownPaymentBalance(req, preFundPaymentEvidence?.get(req.id) ?? []);
     const reqUser = users?.find(u => u.id === req.requestedBy);
     const t1User = req.supervisorApprovedBy ? users?.find(u => u.id === req.supervisorApprovedBy) : null;
     const t2User = req.adminProcessedBy ? users?.find(u => u.id === req.adminProcessedBy) : null;
@@ -1071,8 +1121,8 @@ export function DownPaymentApprovalPanel({
       status: req.status,
       statusAr: STATUS_AR_MAP[req.status] || '',
       requestedAmount: req.requestedAmount,
-      approvedAmount: req.approvedAmount || req.requestedAmount,
-      paidAmount: req.totalPaidAmount || 0,
+      approvedAmount: balance.approved,
+      paidAmount: balance.paid,
       t1Approver: req.supervisorApprovedByName || (t1User ? getName(t1User) : undefined),
       t1Date: req.supervisorApprovedAt || undefined,
       t1Status: req.supervisorStatus || undefined,
@@ -1172,6 +1222,7 @@ export function DownPaymentApprovalPanel({
   };
 
   const buildCertData = (req: DownPaymentRequest, signatureImageData: string | null) => {
+    const balance = getDownPaymentBalance(req, preFundPaymentEvidence?.get(req.id) ?? []);
     const requester = users?.find(u => u.id === req.requestedBy);
     const supervisorApprover = req.supervisorApprovedBy ? users?.find(u => u.id === req.supervisorApprovedBy) : null;
     const adminApproverUser = req.adminProcessedBy ? users?.find(u => u.id === req.adminProcessedBy) : null;
@@ -1187,9 +1238,9 @@ export function DownPaymentApprovalPanel({
         hubName: req.hubName,
         activityType: req.activityType,
         requestedAmount: req.requestedAmount,
-        approvedAmount: req.approvedAmount || req.adminApprovedAmount || req.supervisorApprovedAmount,
-        totalPaidAmount: req.totalPaidAmount || 0,
-        remainingAmount: req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0)),
+        approvedAmount: balance.approved,
+        totalPaidAmount: balance.paid,
+        remainingAmount: balance.remaining,
         justification: req.justification,
         requestedAt: req.requestedAt,
         status: req.status,
@@ -1231,7 +1282,7 @@ export function DownPaymentApprovalPanel({
     try {
       const timestamp = new Date().toISOString().slice(0, 10);
       const safeName = (groupLabel || 'All').replace(/[^a-zA-Z0-9]/g, '_');
-      exportToExcel(reqs, `PACT_Bulk_${safeName}_${timestamp}`, groupLabel || 'All');
+      exportToExcel(reqs, `PACT_Bulk_${safeName}_${timestamp}`, groupLabel || 'All', preFundPaymentEvidence);
       toast({
         title: 'Bulk Excel Downloaded / تم تحميل ملف Excel الجماعي',
         description: `${reqs.length} request(s) exported to Excel. / تم تصدير ${reqs.length} طلب(ات) في ملف Excel.`,
@@ -1349,7 +1400,13 @@ export function DownPaymentApprovalPanel({
   };
 
   const openBulkPaymentRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
-    const meta = { count: reqs.length, total: reqs.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0) };
+    const meta = {
+      count: reqs.length,
+      total: reqs.reduce((sum, request) => sum + getDownPaymentBalance(
+        request,
+        preFundPaymentEvidence?.get(request.id) ?? [],
+      ).approved, 0),
+    };
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
       setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, bulkMeta: meta, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
@@ -1370,7 +1427,13 @@ export function DownPaymentApprovalPanel({
   };
 
   const openBulkExcelRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
-    const meta = { count: reqs.length, total: reqs.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0) };
+    const meta = {
+      count: reqs.length,
+      total: reqs.reduce((sum, request) => sum + getDownPaymentBalance(
+        request,
+        preFundPaymentEvidence?.get(request.id) ?? [],
+      ).approved, 0),
+    };
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
       setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, bulkMeta: meta, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
@@ -1424,7 +1487,10 @@ export function DownPaymentApprovalPanel({
     const effectiveRate = !isNaN(parsedRate) && parsedRate > 0 ? parsedRate : undefined;
 
     if (isBulk && bulkRequests.length > 0) {
-      const totalAmount = bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+      const totalAmount = bulkRequests.reduce((sum, request) => sum + getDownPaymentBalance(
+        request,
+        preFundPaymentEvidence?.get(request.id) ?? [],
+      ).approved, 0);
       const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : 'All Approved';
       const bulkMmps = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
       const mmpLabel = bulkMmps.length > 0 ? bulkMmps.join(', ') : groupLabel;
@@ -1496,7 +1562,10 @@ export function DownPaymentApprovalPanel({
       const approverEmail = currentUser.email || '';
 
       if (isBulk && bulkRequests.length > 0) {
-        const totalAmount = bulkRequests.reduce((sum, r) => sum + (r.approvedAmount || r.requestedAmount), 0);
+        const totalAmount = bulkRequests.reduce((sum, request) => sum + getDownPaymentBalance(
+          request,
+          preFundPaymentEvidence?.get(request.id) ?? [],
+        ).approved, 0);
         const requestIds = bulkRequests.map(r => r.id.slice(0, 8).toUpperCase()).join(', ');
         const requesterNames = [...new Set(bulkRequests.map(r => {
           const u = users?.find(u => u.id === r.requestedBy);
@@ -1898,10 +1967,7 @@ export function DownPaymentApprovalPanel({
    *  approval, or just the outstanding balance for a request that already
    *  received a partial payment (status === 'partially_paid'). */
   const getBatchPayBasis = (req: DownPaymentRequest): number => {
-    if (req.status === 'partially_paid') {
-      return req.remainingAmount || 0;
-    }
-    return req.approvedAmount || req.requestedAmount || 0;
+    return getDownPaymentBalance(req).remaining;
   };
 
   const handleConfirmBatchPay = async () => {
@@ -2411,6 +2477,7 @@ export function DownPaymentApprovalPanel({
     const [resending, setResending] = useState(false);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
     const shortId = request.id.substring(0, 8).toUpperCase();
+    const balance = getDownPaymentBalance(request);
     const receiptConfirmation = (request.metadata as any)?.receipt_confirmation;
     const isNotReceived = receiptConfirmation?.denied === true && !receiptConfirmation?.confirmed;
     const isConfirmed = receiptConfirmation?.confirmed === true;
@@ -2419,7 +2486,7 @@ export function DownPaymentApprovalPanel({
     const isDuplicate = duplicateSiteNames.has(dupKey);
     const requesterName = resolveUserName(request.requestedBy, request.requestedByName);
     const preFundNames = [...new Set(request.preFundNames ?? [])];
-    const hasRecordedPayment = (request.totalPaidAmount ?? 0) > 0;
+    const hasRecordedPayment = balance.paid > 0;
 
     // All OTHER active requests for the same site entry (siblings).
     // Match by mmpSiteEntryId when available so cross-MMP same-name sites are not confused.
@@ -2518,7 +2585,7 @@ export function DownPaymentApprovalPanel({
                         <TableCell className="py-2 capitalize">{request.requesterRole}</TableCell>
                         <TableCell className="py-2 max-w-[130px] truncate">{request.mmpName || '—'}</TableCell>
                         <TableCell className="py-2 max-w-[120px] truncate text-muted-foreground">{request.activityType || '—'}</TableCell>
-                        <TableCell className="py-2 text-right font-mono">{(request.approvedAmount || request.requestedAmount).toLocaleString()}</TableCell>
+                        <TableCell className="py-2 text-right font-mono">{balance.approved.toLocaleString()}</TableCell>
                         <TableCell className="py-2">{getStatusBadge(request.status)}</TableCell>
                         <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{request.justification || '—'}</TableCell>
                         <TableCell className="py-2">
@@ -2544,7 +2611,7 @@ export function DownPaymentApprovalPanel({
                             <TableCell className="py-2 capitalize">{s.requesterRole}</TableCell>
                             <TableCell className="py-2 max-w-[130px] truncate">{s.mmpName || '—'}</TableCell>
                             <TableCell className="py-2 max-w-[120px] truncate text-muted-foreground">{s.activityType || '—'}</TableCell>
-                            <TableCell className="py-2 text-right font-mono">{(s.approvedAmount || s.requestedAmount).toLocaleString()}</TableCell>
+                            <TableCell className="py-2 text-right font-mono">{getDownPaymentBalance(s).approved.toLocaleString()}</TableCell>
                             <TableCell className="py-2">{getStatusBadge(s.status)}</TableCell>
                             <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{s.justification || '—'}</TableCell>
                             <TableCell className="py-2">
@@ -2667,9 +2734,9 @@ export function DownPaymentApprovalPanel({
             <div className="flex flex-col items-end gap-1 flex-shrink-0">
               <div className="flex flex-col items-end" data-testid={`text-amount-${request.id}`}>
                 <span className="text-lg font-bold">
-                  SDG {(request.approvedAmount || request.requestedAmount).toLocaleString()}
+                  SDG {balance.approved.toLocaleString()}
                 </span>
-                {request.approvedAmount && request.approvedAmount !== request.requestedAmount && (
+                {balance.approved > 0 && request.approvedAmount != null && request.approvedAmount !== request.requestedAmount && (
                   <span className="text-xs text-muted-foreground line-through">
                     req. {request.requestedAmount.toLocaleString()}
                   </span>
@@ -2925,16 +2992,16 @@ export function DownPaymentApprovalPanel({
               <Label className="text-xs text-muted-foreground">Requested</Label>
               <p className="font-medium">{request.requestedAmount.toLocaleString()} SDG</p>
             </div>
-            {request.approvedAmount && (
+            {balance.approved > 0 && (
               <div>
                 <Label className="text-xs text-muted-foreground">Approved</Label>
-                <p className="font-medium text-green-600">{request.approvedAmount.toLocaleString()} SDG</p>
+                <p className="font-medium text-green-600">{balance.approved.toLocaleString()} SDG</p>
               </div>
             )}
-            {request.remainingAmount > 0 && (
+            {balance.remaining > 0 && (
               <div>
                 <Label className="text-xs text-muted-foreground">Remaining</Label>
-                <p className="font-medium text-orange-600">{request.remainingAmount.toLocaleString()} SDG</p>
+                <p className="font-medium text-orange-600">{balance.remaining.toLocaleString()} SDG</p>
               </div>
             )}
           </div>
@@ -3370,6 +3437,7 @@ export function DownPaymentApprovalPanel({
         <CardContent className="p-3">
           <div className="text-xl font-bold tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-total-count">{stats.counts.total.toLocaleString()}</div>
           <div className="text-xs text-muted-foreground mt-0.5">Total Requests</div>
+          <div className="text-[11px] text-muted-foreground mt-1">Includes rejected/cancelled history</div>
           {(stats.counts.rejected > 0 || stats.counts.cancelled > 0) && (
             <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1 flex-wrap">
               {stats.counts.rejected > 0 && (
@@ -3386,7 +3454,7 @@ export function DownPaymentApprovalPanel({
       <Card data-testid="card-stats-total-requested">
         <CardContent className="p-3">
           <div className="text-xl font-bold text-blue-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-total-requested">{stats.amounts.totalRequested.toLocaleString()}</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Total Requested (SDG)</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Total Requested (SDG, includes history)</div>
         </CardContent>
       </Card>
       <Card data-testid="card-stats-pending">
@@ -3417,7 +3485,7 @@ export function DownPaymentApprovalPanel({
           )}
           {stats.counts.approved > 0 && (
             <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 mt-0.5 tabular-nums" data-testid="text-stats-approved-count">
-              {stats.counts.approved.toLocaleString()} {stats.counts.approved === 1 ? 'request' : 'requests'}
+              {stats.counts.approved.toLocaleString()} {stats.counts.approved === 1 ? 'approved lifecycle request' : 'approved lifecycle requests'}
             </div>
           )}
         </CardContent>
@@ -3433,7 +3501,7 @@ export function DownPaymentApprovalPanel({
           )}
           {stats.counts.paid > 0 && (
             <div className="text-[11px] font-medium text-green-700 dark:text-green-400 mt-0.5 tabular-nums" data-testid="text-stats-paid-count">
-              {stats.counts.paid.toLocaleString()} {stats.counts.paid === 1 ? 'request' : 'requests'}
+              {stats.counts.paid.toLocaleString()} {stats.counts.paid === 1 ? 'request with payment' : 'requests with payments'}
             </div>
           )}
         </CardContent>
@@ -3616,6 +3684,9 @@ export function DownPaymentApprovalPanel({
   const renderCardWithCheckbox = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showCheckbox />, [RequestCard]);
   const renderCardPlain = useCallback((r: DownPaymentRequest) => <RequestCard request={r} />, [RequestCard]);
   const renderCardWithConfirmation = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showConfirmationDetails />, [RequestCard]);
+  const selectedRequestBalance = selectedRequest
+    ? getDownPaymentBalance(selectedRequest, preFundPaymentEvidence?.get(selectedRequest.id) ?? [])
+    : null;
 
   return (
     <>
@@ -3631,6 +3702,14 @@ export function DownPaymentApprovalPanel({
       )}
 
       <StatsCards />
+      {reconciliationRequests.length > 0 && (
+        <Alert className="mb-4 border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" data-testid="alert-reconciliation-warning">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Reconciliation required:</strong> {reconciliationRequests.length} Down Payment {reconciliationRequests.length === 1 ? 'row has' : 'rows have'} payment totals without active immutable evidence. Finance must verify the payment trail.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div className="flex items-center gap-2">
@@ -4604,7 +4683,7 @@ export function DownPaymentApprovalPanel({
                 <div className="bg-muted/50 p-3 rounded-md space-y-2">
                   <p><strong>Site:</strong> {selectedRequest.siteName}</p>
                   <p><strong>Requested:</strong> {selectedRequest.requestedAmount.toLocaleString()} SDG</p>
-                  <p><strong>Remaining:</strong> {selectedRequest.remainingAmount.toLocaleString()} SDG</p>
+                   <p><strong>Remaining:</strong> {selectedRequestBalance?.remaining.toLocaleString() ?? '0'} SDG</p>
                 </div>
 
                 <div>
@@ -4614,13 +4693,13 @@ export function DownPaymentApprovalPanel({
                     type="number"
                     value={paymentAmount}
                     onChange={e => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                    max={selectedRequest.remainingAmount}
+                     max={selectedRequestBalance?.remaining ?? 0}
                     data-testid="input-payment-amount"
                   />
-                  {paymentAmount > selectedRequest.remainingAmount && (
+                   {paymentAmount > (selectedRequestBalance?.remaining ?? 0) && (
                     <p className="text-xs text-destructive mt-1 flex items-center gap-1" data-testid="text-overpayment-warning">
                       <AlertTriangle className="h-3 w-3" />
-                      Exceeds remaining balance ({selectedRequest.remainingAmount.toLocaleString()} SDG)
+                       Exceeds remaining balance ({selectedRequestBalance?.remaining.toLocaleString() ?? '0'} SDG)
                     </p>
                   )}
                 </div>
@@ -5140,7 +5219,7 @@ export function DownPaymentApprovalPanel({
                       <div><p className="text-xs text-muted-foreground">State / الولاية</p><p className="font-medium text-sm">{req.stateName || 'N/A'}</p></div>
                       <div><p className="text-xs text-muted-foreground">Locality / المحلية</p><p className="font-medium text-sm">{req.localityName || 'N/A'}</p></div>
                       <div><p className="text-xs text-muted-foreground">Requested Amount / المبلغ المطلوب</p><p className="font-medium text-sm">SDG {req.requestedAmount.toLocaleString()}</p></div>
-                      <div><p className="text-xs text-muted-foreground">Approved Amount / المبلغ المعتمد</p><p className="font-semibold text-sm text-green-600">SDG {(req.approvedAmount || req.requestedAmount).toLocaleString()}</p></div>
+                       <div><p className="text-xs text-muted-foreground">Approved Amount / المبلغ المعتمد</p><p className="font-semibold text-sm text-green-600">SDG {getDownPaymentBalance(req).approved.toLocaleString()}</p></div>
                       {req.approvalPercentage && (
                         <div><p className="text-xs text-muted-foreground">Approval % / نسبة الموافقة</p><p className="font-medium text-sm">{req.approvalPercentage}%</p></div>
                       )}
@@ -5476,7 +5555,7 @@ export function DownPaymentApprovalPanel({
               <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
                 <p className="font-medium">{markAsPaidDialog.request.siteName}</p>
                 <p className="text-lg font-bold tabular-nums">
-                  {(markAsPaidDialog.request.approvedAmount || markAsPaidDialog.request.requestedAmount).toLocaleString()} SDG
+                  {getDownPaymentBalance(markAsPaidDialog.request).approved.toLocaleString()} SDG
                 </p>
                 {markAsPaidDialog.request.stateName && (
                   <p className="text-muted-foreground text-xs">State: {markAsPaidDialog.request.stateName}</p>
