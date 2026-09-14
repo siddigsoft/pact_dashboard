@@ -9,6 +9,7 @@ import {
   documentSourceRoute,
   groupSiteImages,
   isAdminOnlyDocument,
+  normalizeSiteLabel,
   type DocumentCategory,
   type DocumentMetadata,
 } from '@/lib/workspaceDocuments';
@@ -55,6 +56,9 @@ function RegistryRow({
   const text = textParts.join(' ');
   const source = documentSourceRoute(file);
   const when = file.updated_at ?? file.created_at;
+  const siteLabel = normalizeSiteLabel(file.site_label);
+  const structuredCategory = ['payment_receipt', 'site_image', 'mmp', 'project_document', 'report'].includes(category);
+  const showNoSiteLinked = structuredCategory && !file.project_label && !siteLabel;
 
   return (
     <div
@@ -79,10 +83,13 @@ function RegistryRow({
               <Badge variant="secondary" className="text-xs py-0 h-5 gap-1"><Lock className="h-3 w-3" />Admin only</Badge>
             )}
             {file.project_label && <span className="truncate max-w-[140px]">{file.project_label}</span>}
-            {file.site_label && (
+            {siteLabel && (
               <span className="inline-flex items-center gap-1 truncate max-w-[140px]">
-                <Home className="h-3 w-3" />{file.site_label}
+                <Home className="h-3 w-3" />{siteLabel}
               </span>
+            )}
+            {showNoSiteLinked && (
+              <span className="text-muted-foreground/80">No site linked</span>
             )}
             {file.reporting_period && <span className="tabular-nums">{file.reporting_period}</span>}
             {file._uploaderName && (
