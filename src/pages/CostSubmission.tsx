@@ -340,16 +340,12 @@ const CostSubmission = () => {
     retry: 1,
     queryFn: async (): Promise<OperationalCostSubmission[]> => {
       if (!currentUser?.id) return [];
-      const userRole = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
-      const isSuperAdminDirect = userRole === 'superadmin' || userRole === 'superadministrator';
-      const isAdminDirect = userRole === 'admin' || userRole === 'administrator' || userRole === 'ict';
-      const shouldFetchAll = canViewTeamSubmissions || isSuperAdmin || isSuperAdminDirect || isAdminDirect || isAdminOrSuperUser;
 
       // Reconciliation can resolve an Operational Cost Submission by a linked
-      // Pre-Fund payment even when the main list RPC omitted the source row.
+      // Pre-Fund payment. The supplemental RPC is still server-side scoped by
+      // the same authorization predicate as the main list RPC.
       // The supplemental RPC is restricted to Admins/Super Admins and performs
-      // the active-payment lookup in the database, rather than scanning ledger
-      // rows in the browser.
+      // the active-payment lookup in the database.
       const includePaymentLinkedSources = async (baseRows: OperationalCostSubmission[]) => {
         if (!isStrictCostSubmissionAdmin) return baseRows;
 
@@ -358,7 +354,7 @@ const CostSubmission = () => {
           const missingRpc = error.code === 'PGRST202'
             || (error.code === '42883' && /function .*does not exist/i.test(error.message));
           if (missingRpc) {
-            console.warn('[CostSubmission] Payment-linked visibility migration is not applied yet:', error.message);
+            // Do not broaden the list when the optional supplement is absent.
             return baseRows;
           }
           throw new Error(`Failed to load payment-linked submissions: ${error.message}`);
@@ -376,32 +372,10 @@ const CostSubmission = () => {
         );
       };
 
-      if (shouldFetchAll) {
-        // Try SECURITY DEFINER RPC first — bypasses RLS
-        const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
-        console.log(`[CostSubmission] RPC: ${(rpcResult.data as any[] | null)?.length ?? 'null'} rows, error: ${rpcResult.error?.message ?? 'none'} (role: ${currentUser.role})`);
-        if (!rpcResult.error && Array.isArray(rpcResult.data)) {
-          return includePaymentLinkedSources(rpcResult.data as OperationalCostSubmission[]);
-        }
-        console.warn('[CostSubmission] RPC failed, direct query fallback:', rpcResult.error?.message);
-        const { data, error } = await supabase
-          .from('operational_cost_submissions')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(5000);
-        console.log(`[CostSubmission] Direct: ${data?.length ?? 'null'} rows, error: ${error?.message ?? 'none'}`);
-        if (error) throw new Error(`Failed to load submissions: ${error.message}`);
-        return includePaymentLinkedSources((data || []) as OperationalCostSubmission[]);
-      } else {
-        const { data, error } = await supabase
-          .from('operational_cost_submissions')
-          .select('*')
-          .eq('submitted_by', currentUser.id)
-          .order('created_at', { ascending: false })
-          .limit(2000);
-        if (error) throw new Error(`Failed to load your submissions: ${error.message}`);
-        return (data || []) as OperationalCostSubmission[];
-      }
+      const { data, error } = await supabase.rpc('get_all_operational_cost_submissions');
+      if (error) throw new Error(`Failed to load submissions: ${error.message}`);
+      if (!Array.isArray(data)) throw new Error('Failed to load submissions: authorization RPC returned an invalid response');
+      return includePaymentLinkedSources(data as OperationalCostSubmission[]);
     },
   });
   // ----------------------------------------------------------
@@ -3165,23 +3139,18 @@ const CostSubmission = () => {
     let freshCosts: OperationalCostSubmission[] = [];
     try {
       const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
-      console.log('[BulkEmail] RPC result: error=', rpcResult.error?.message ?? 'none', '| data count=', (rpcResult.data as any[])?.length ?? 'null');
-      if (!rpcResult.error && rpcResult.data && (rpcResult.data as any[]).length > 0) {
-        freshCosts = rpcResult.data as OperationalCostSubmission[];
-      } else {
-        const directResult = await supabase
-          .from('operational_cost_submissions')
-          .select('*')
-          .order('created_at', { ascending: false });
-        console.log('[BulkEmail] Direct query result: error=', directResult.error?.message ?? 'none', '| data count=', directResult.data?.length ?? 'null');
-        freshCosts = (directResult.data as OperationalCostSubmission[]) || [];
+      if (rpcResult.error) throw new Error(`Failed to refresh submissions: ${rpcResult.error.message}`);
+      if (!Array.isArray(rpcResult.data)) {
+        throw new Error('Failed to refresh submissions: authorization RPC returned an invalid response');
       }
+      freshCosts = rpcResult.data as OperationalCostSubmission[];
       // Update the global state with the fresh data too
       if (freshCosts.length > 0) setOperationalCosts(freshCosts);
     } catch (err) {
-      // Fall back to current state if fetch fails
-      console.log('[BulkEmail] CATCH error:', err);
-      freshCosts = operationalCosts;
+      // Never replace an authorized RPC response with an unscoped direct read.
+      setBulkCostEmailDialog(prev => ({ ...prev, open: false, loading: false }));
+      toast({ title: 'Unable to refresh submissions', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
+      return;
     }
 
     console.log('[BulkEmail] freshCosts total:', freshCosts.length, '| sample keys:', freshCosts[0] ? Object.keys(freshCosts[0]).join(', ') : 'none');

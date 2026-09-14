@@ -11,6 +11,7 @@ import { PAGE_DEFS, hasDefaultAccess } from '@/pages/PageAccessControl';
 import { DEFAULT_ROLE_PERMISSIONS, AppRole, ResourceType, ActionType } from '@/types/roles';
 import {
   AccessEffect, PageOverride, PermissionOverride, ColumnVisibilityRow, DataScopeRow,
+  DataScopePolicyMode, DataScopeSelector, ScopePreview,
 } from '@/components/role-management/unified/types';
 
 // ── Role→AppRole mapping ──────────────────────────────────────────────────────
@@ -37,6 +38,8 @@ interface SelectedUserAccessValue {
   permOverrides: PermissionOverride[];
   columnConfigs: ColumnVisibilityRow[];
   dataScopeRows: DataScopeRow[];
+  scopePreview: ScopePreview | null;
+  scopePreviewError: string | null;
   pageOvMap: Record<string, PageOverride>;
   permOvMap: Record<string, boolean>;  // resource:action → is_granted
   effectivePage: (slug: string) => AccessEffect;
@@ -45,7 +48,18 @@ interface SelectedUserAccessValue {
   toggleAction: (resource: string, action: string) => Promise<void>;
   upsertColumnVisibility: (pageSlug: string, columnKey: string, isHidden: boolean, target: 'user' | 'role') => Promise<void>;
   removeColumnVisibility: (id: string) => Promise<void>;
-  upsertDataScope: (scopeType: DataScopeRow['scope_type'], scopeValue: string, scopeLabel: string, target: 'user' | 'role') => Promise<void>;
+  upsertDataScope: (
+    scopeType: DataScopeRow['scope_type'],
+    scopeValue: string,
+    scopeLabel: string,
+    target: 'user' | 'role',
+  ) => Promise<void>;
+  replaceCostSubmissionPolicy: (
+    target: 'user' | 'role',
+    mode: DataScopePolicyMode,
+    includeValues: DataScopeSelector[],
+    excludeValues: DataScopeSelector[],
+  ) => Promise<ScopePreview | null>;
   removeDataScope: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -69,6 +83,15 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   const [permOverrides, setPermOverrides] = useState<PermissionOverride[]>([]);
   const [columnConfigs, setColumnConfigs] = useState<ColumnVisibilityRow[]>([]);
   const [dataScopeRows, setDataScopeRows] = useState<DataScopeRow[]>([]);
+  const [scopePreview, setScopePreview] = useState<ScopePreview | null>(null);
+  const [scopePreviewError, setScopePreviewError] = useState<string | null>(null);
+
+  function isMigrationError(error: any): boolean {
+    const message = String(error?.message ?? error ?? '').toLowerCase();
+    return error?.code === '42P01' || error?.code === '42883' || error?.code === 'PGRST202'
+      || message.includes('does not exist') || message.includes('could not find the function')
+      || message.includes('schema cache') || message.includes('row-level security');
+  }
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -89,7 +112,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       if (colRes.error) {
         const isRls = colRes.error.message?.includes('row-level security') || (colRes.error as any).code === '42501';
         console.error('[SelectedUserAccess] column_visibility_config load error:', colRes.error);
-        if (isRls) {
+        if (isRls || isMigrationError(colRes.error)) {
           toast({
             title: 'Column visibility rules unavailable',
             description: 'Database access policy not yet applied. Run the access_config_tables_rls migration in Supabase Studio.',
@@ -100,7 +123,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       if (scopeRes.error) {
         const isRls = scopeRes.error.message?.includes('row-level security') || (scopeRes.error as any).code === '42501';
         console.error('[SelectedUserAccess] data_scope_config load error:', scopeRes.error);
-        if (isRls) {
+        if (isRls || isMigrationError(scopeRes.error)) {
           toast({
             title: 'Data scope rules unavailable',
             description: 'Database access policy not yet applied. Run the access_config_tables_rls migration in Supabase Studio.',
@@ -247,18 +270,80 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   // ── Data scope ───────────────────────────────────────────────────────────
   async function upsertDataScope(
     scopeType: DataScopeRow['scope_type'], scopeValue: string, scopeLabel: string, target: 'user' | 'role',
-  ) {
+  ): Promise<void> {
     setSavingKey(`scope:${target}:${scopeType}:${scopeValue}`);
     try {
       const row = target === 'user'
-        ? { user_id: userId, role: null, scope_type: scopeType, scope_value: scopeValue, scope_label: scopeLabel, set_by: currentUser?.id ?? null }
-        : { user_id: null, role: userRole, scope_type: scopeType, scope_value: scopeValue, scope_label: scopeLabel, set_by: currentUser?.id ?? null };
+        ? {
+          user_id: userId, role: null, scope_type: scopeType, scope_value: scopeValue,
+          scope_label: scopeLabel, set_by: currentUser?.id ?? null,
+        }
+        : {
+          user_id: null, role: userRole, scope_type: scopeType, scope_value: scopeValue,
+          scope_label: scopeLabel, set_by: currentUser?.id ?? null,
+        };
       const { error } = await supabase.from('data_scope_config').upsert(row as any);
       if (error) throw error;
       toast({ title: 'Scope rule added', description: `${target === 'role' ? 'Role default' : 'User override'} saved.` });
       await load();
     } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      const description = isMigrationError(e)
+        ? 'The data scope migration has not been applied. Apply the access-scope migration, then try again.'
+        : e.message;
+      toast({ title: 'Unable to save scope', description, variant: 'destructive' });
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  async function replaceCostSubmissionPolicy(
+    target: 'user' | 'role',
+    mode: DataScopePolicyMode,
+    includeValues: DataScopeSelector[],
+    excludeValues: DataScopeSelector[],
+  ): Promise<ScopePreview | null> {
+    setSavingKey(`scope:replace:${target}`);
+    setScopePreviewError(null);
+    try {
+      const { data, error } = await (supabase as any).rpc(
+        'replace_operational_cost_data_scope',
+        {
+          p_target_user_id: target === 'user' ? userId : null,
+          p_target_role: target === 'role' ? userRole : null,
+          p_mode: mode,
+          p_include_values: includeValues,
+          p_exclude_values: excludeValues,
+        },
+      );
+      if (error) throw error;
+
+      const result = Array.isArray(data) ? data[0] : data;
+      let count = Number(result?.visible_count ?? result?.count ?? result?.matching_count ?? result?.total_count);
+      if (!Number.isFinite(count)) {
+        const preview = await (supabase as any).rpc(
+          'preview_operational_cost_submission_scope',
+          { p_target_user_id: userId },
+        );
+        if (preview.error) throw preview.error;
+        const previewRow = Array.isArray(preview.data) ? preview.data[0] : preview.data;
+        count = Number(previewRow?.visible_count ?? previewRow?.count);
+      }
+      const scopePreview = { count: Number.isFinite(count) ? count : null };
+      setScopePreview(scopePreview);
+      toast({
+        title: 'Cost Submission scope saved',
+        description: target === 'role' ? 'Role default saved atomically.' : 'User override saved atomically.',
+      });
+      await load();
+      return scopePreview;
+    } catch (e: any) {
+      const description = isMigrationError(e)
+        ? 'The Cost Submission scope migration has not been applied. Apply it before saving this policy.'
+        : e.message;
+      setScopePreview(null);
+      setScopePreviewError(description);
+      toast({ title: 'Unable to save Cost Submission scope', description, variant: 'destructive' });
+      return null;
     } finally {
       setSavingKey(null);
     }
@@ -280,12 +365,12 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
 
   const value: SelectedUserAccessValue = {
     loading, savingKey,
-    pageOverrides, permOverrides, columnConfigs, dataScopeRows,
+    pageOverrides, permOverrides, columnConfigs, dataScopeRows, scopePreview, scopePreviewError,
     pageOvMap, permOvMap,
     effectivePage, effectiveAction,
     togglePage, toggleAction,
     upsertColumnVisibility, removeColumnVisibility,
-    upsertDataScope, removeDataScope,
+    upsertDataScope, replaceCostSubmissionPolicy, removeDataScope,
     refresh: load,
   };
 

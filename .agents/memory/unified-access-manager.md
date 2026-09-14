@@ -52,7 +52,14 @@ Visible launch, export, download, and generate controls belong under Buttons & A
 **Why:** administrators expect every UI button to be managed in one place, even when the button opens or downloads a report.
 
 ## Migration status
-`column_visibility_config` and `data_scope_config` tables exist in migration file `20260811_access_management_tables.sql` but must be run manually in Supabase Studio. Column visibility and data scope UI is built; query-level enforcement is not yet implemented in individual components.
+`column_visibility_config` and `data_scope_config` originate in the access-management migrations and must be applied manually in Supabase Studio. Cost Submission now has resource-specific, database-enforced scope; other resources still need their own query-level enforcement.
+
+## Resource-specific Data Scope
+Cost Submission scope is enforced by one shared database predicate used by RLS and every list/payment RPC. Policy replacement and arbitrary-user preview are restricted to the canonical Super Admin database helper and saved atomically.
+
+**Why:** client filtering and permissive RPC fallbacks let direct reads disagree with the access editor; multi-request policy saves could also leave partial or stale scope.
+
+**How to apply:** each new scoped resource needs one server predicate shared by RLS and RPCs, a fail-closed client path, and one transactional Super Admin-only policy replacement operation. User Role Default means inheritance, not a stored bypass row.
 
 ## Component locations
 - `src/components/role-management/UnifiedAccessManager.tsx` — main assembler
