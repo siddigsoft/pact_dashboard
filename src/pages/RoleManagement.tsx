@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Shield, Sparkles, Award, FlaskConical, KeyRound } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Shield, Sparkles, Award, FlaskConical, KeyRound } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -373,8 +373,46 @@ const RoleManagement = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="access-manager" className="mt-0 min-h-0 flex-1">
-          <UnifiedAccessManager containerClassName="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background shadow-sm md:flex-row" />
+        <TabsContent
+          value="access-manager"
+          className="fixed inset-0 z-[250] m-0 flex min-h-0 flex-col bg-background p-0 data-[state=inactive]:hidden"
+        >
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-card px-3 py-2 shadow-sm sm:px-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setActiveRoleTab('roles')}
+                className="shrink-0 gap-1.5"
+                aria-label="Back to role management"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Back to Roles</span>
+              </Button>
+              <div className="min-w-0">
+                <h1 className="flex items-center gap-2 truncate text-base font-bold sm:text-xl">
+                  <KeyRound className="h-5 w-5 shrink-0 text-blue-600" />
+                  Access Control Workspace
+                </h1>
+                <p className="hidden truncate text-xs text-muted-foreground sm:block">
+                  Manage pages, tabs, buttons, reports, columns, data scope, and user overrides
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setShowPermissionTester(true)}
+              className="gap-1.5"
+            >
+              <FlaskConical className="h-4 w-4" />
+              <span className="hidden sm:inline">Test Permissions</span>
+              <span className="sm:hidden">Test</span>
+            </Button>
+          </div>
+          <UnifiedAccessManager containerClassName="flex min-h-0 flex-1 flex-col overflow-hidden bg-background md:flex-row" />
         </TabsContent>
 
       </Tabs>
