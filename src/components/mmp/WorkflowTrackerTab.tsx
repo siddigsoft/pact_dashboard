@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ArrowRight, Clock, CheckCircle2, AlertCircle, RotateCcw, Users, MapPin, Calendar, Search, ChevronDown, ChevronRight, Building2, Download, Send, Eye, Shield, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface SiteDetail {
   id: string;
@@ -1370,15 +1371,17 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
           </SelectContent>
         </Select>
         
-        <Button 
-          variant="outline" 
-          onClick={exportStatusReport}
-          disabled={filteredMMPs.length === 0}
-          data-testid="button-export-status-report"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Export Status Report
-        </Button>
+        <ReportExportGate resource="mmp">
+          <Button
+            variant="outline"
+            onClick={exportStatusReport}
+            disabled={filteredMMPs.length === 0}
+            data-testid="button-export-status-report"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export Status Report
+          </Button>
+        </ReportExportGate>
       </div>
 
       <div className="flex gap-2 flex-wrap">

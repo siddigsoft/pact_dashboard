@@ -11,11 +11,14 @@ import { Notification } from '@/types';
 import { format, isToday, isYesterday, isThisWeek, isThisMonth, subDays } from 'date-fns';
 import { Bell, Search, Download, Filter, Clock, AlertCircle, AlertTriangle, CheckCircle2, Info, ChevronRight, Calendar, X, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const ITEMS_PER_PAGE = 25;
 
 export default function NotificationHistory() {
   const { notifications, markNotificationAsRead, clearAllNotifications } = useNotifications();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('notifications', 'export');
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -91,6 +94,7 @@ export default function NotificationHistory() {
   };
 
   const exportNotifications = () => {
+    if (!canExport) return;
     const csv = [
       ['Date', 'Title', 'Message', 'Type', 'Category', 'Priority', 'Read'].join(','),
       ...filteredNotifications.map(n => [
@@ -156,10 +160,10 @@ export default function NotificationHistory() {
               <Filter className="h-5 w-5" />
               Filters
             </CardTitle>
-            <Button variant="outline" size="sm" onClick={exportNotifications} data-testid="button-export">
+            {canExport && <Button variant="outline" size="sm" onClick={exportNotifications} data-testid="button-export">
               <Download className="h-4 w-4 mr-2" />
               Export CSV
-            </Button>
+            </Button>}
           </div>
         </CardHeader>
         <CardContent>

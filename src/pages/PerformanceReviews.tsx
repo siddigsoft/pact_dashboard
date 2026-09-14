@@ -21,6 +21,7 @@ import { Progress } from '@/components/ui/progress';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { cn } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
@@ -140,7 +141,8 @@ function PhaseBadge({ phase }: { phase: string }) {
 export default function PerformanceReviews() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr_analytics', 'export');
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_admin', 'manager']);
 
   // ── Core data ──────────────────────────────────────────────────────────────
@@ -710,6 +712,7 @@ export default function PerformanceReviews() {
 
   // ── Export ─────────────────────────────────────────────────────────────────
   function exportReviews() {
+    if (!checkPermission('hr_analytics', 'export')) return;
     exportToExcel(filtered.map(r => ({
       'Employee': r.reviewee_name ?? '',
       'Review Period': r.review_period,
@@ -852,9 +855,11 @@ export default function PerformanceReviews() {
               <Input className="pl-8 w-44" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
             </div>
           )}
-          <Button size="sm" variant="outline" onClick={exportReviews} data-testid="button-export-reviews">
-            <Download className="h-4 w-4 mr-1" />Export
-          </Button>
+          {canExport && <ReportExportGate resource="hr_analytics">
+            <Button size="sm" variant="outline" onClick={exportReviews} data-testid="button-export-reviews">
+              <Download className="h-4 w-4 mr-1" />Export
+            </Button>
+          </ReportExportGate>}
         </div>
       </div>
 

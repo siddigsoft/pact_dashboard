@@ -47,6 +47,8 @@ import { BUDGET_STATUS_COLORS, BUDGET_ALERT_SEVERITY_COLORS } from '@/types/budg
 import { exportBudgetToPDF, exportBudgetToExcel, exportBudgetToCSV } from '@/utils/budget-export';
 import type { BudgetExportData } from '@/utils/budget-export';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 
 const formatCurrency = (cents: number) => {
@@ -59,6 +61,8 @@ const formatCurrency = (cents: number) => {
 };
 
 const BudgetPage = () => {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('finances', 'export');
   const currentUser = useAppContextSelector((c) => c.currentUser);
   const hasGranularPermission = useAppContextSelector((c) => c.hasGranularPermission);
   const { toast } = useToast();
@@ -221,6 +225,7 @@ const BudgetPage = () => {
   };
 
   const handleExport = (format: 'pdf' | 'excel' | 'csv') => {
+    if (!checkPermission('finances', 'export')) return;
     const exportData: BudgetExportData = {
       projectBudgets,
       mmpBudgets,
@@ -335,38 +340,42 @@ const BudgetPage = () => {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                data-testid="button-export"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem 
-                onClick={() => handleExport('pdf')} 
-                data-testid="menu-export-pdf"
-              >
-                Export as PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => handleExport('excel')} 
-                data-testid="menu-export-excel"
-              >
-                Export as Excel
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => handleExport('csv')} 
-                data-testid="menu-export-csv"
-              >
-                Export as CSV
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {canExport && (
+            <ReportExportGate resource="finances">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid="button-export"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem
+                    onClick={() => handleExport('pdf')}
+                    data-testid="menu-export-pdf"
+                  >
+                    Export as PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleExport('excel')}
+                    data-testid="menu-export-excel"
+                  >
+                    Export as Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleExport('csv')}
+                    data-testid="menu-export-csv"
+                  >
+                    Export as CSV
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ReportExportGate>
+          )}
           <Button
             variant="ghost"
             size="sm"

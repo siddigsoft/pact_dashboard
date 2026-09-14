@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Download, RefreshCw, BarChart3, TrendingUp, TrendingDown } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface JELine { account_code: string; account_name: string; account_type: string; analytic_code: string | null; debit: number; credit: number; }
 interface DeptRow { dept: string; revenue: number; expense: number; net: number; }
@@ -74,7 +75,9 @@ export default function AccountingPLByDepartment() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void run()} disabled={loading}><RefreshCw className={cn('w-4 h-4 mr-1', loading && 'animate-spin')} /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={() => exportToExcel(rows, 'pl-by-department')} disabled={!rows.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={() => exportToExcel(rows, 'pl-by-department')} disabled={!rows.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          </ReportExportGate>
         </div>
       </div>
 

@@ -17,6 +17,7 @@ import { exportToExcel } from '@/utils/report-export';
 import { format, parseISO, differenceInDays, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Record_ {
   id: string;
@@ -60,7 +61,8 @@ const BLANK = {
 
 export default function TrainingCertificationsPage() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
 
@@ -217,6 +219,7 @@ export default function TrainingCertificationsPage() {
   }, [enriched, tab, search, currentUser?.id, profileMap]);
 
   function exportTraining() {
+    if (!checkPermission('hr', 'export')) return;
     const rows = visible.map(({ r, days, isExpired, isExpiring }) => ({
       'Employee': profileMap[r.user_id] ?? '',
       'Title': r.title,
@@ -245,9 +248,13 @@ export default function TrainingCertificationsPage() {
         <Award className="h-5 w-5 text-amber-500" />
         <h1 className="text-xl font-semibold">Training & Certifications</h1>
         <div className="ml-auto flex gap-2">
-          <Button size="sm" variant="outline" onClick={exportTraining} data-testid="button-export-training">
-            <Download className="h-4 w-4 mr-1" /> Export
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="hr">
+              <Button size="sm" variant="outline" onClick={exportTraining} data-testid="button-export-training">
+                <Download className="h-4 w-4 mr-1" /> Export
+              </Button>
+            </ReportExportGate>
+          )}
           {isAdmin && (
             <Button size="sm" onClick={openNew} data-testid="button-new-training">
               <Plus className="h-4 w-4 mr-1" /> New record

@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import { Download, FileText, Printer, CheckCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -28,6 +30,8 @@ function computeDeductions(sc: any): number {
 function fmtN(n: number) { return Math.round(n).toLocaleString(); }
 
 export default function PayrollSummaryReport() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('payroll', 'export');
   const today = new Date();
   const [month, setMonth] = useState(today.getMonth());
   const [year,  setYear]  = useState(today.getFullYear());
@@ -111,6 +115,7 @@ export default function PayrollSummaryReport() {
   const currency = salaryConfigs[0]?.currency ?? 'SDG';
 
   const exportPDF = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
     const periodLabel = `${MONTHS[month]} ${year}`;
@@ -207,9 +212,13 @@ export default function PayrollSummaryReport() {
                 <CheckCircle className={cn('h-3.5 w-3.5 mr-1', approved ? 'text-green-600' : '')} />
                 {approved ? 'Approved ✓' : 'Mark Approved'}
               </Button>
-              <Button size="sm" className="text-xs h-8 bg-[#0F2041] hover:bg-[#1D3461] text-white" onClick={exportPDF} disabled={isLoading}>
-                <Download className="h-3.5 w-3.5 mr-1" />Export PDF
-              </Button>
+              {canExport && (
+                <ReportExportGate resource="payroll">
+                  <Button size="sm" className="text-xs h-8 bg-[#0F2041] hover:bg-[#1D3461] text-white" onClick={exportPDF} disabled={isLoading}>
+                    <Download className="h-3.5 w-3.5 mr-1" />Export PDF
+                  </Button>
+                </ReportExportGate>
+              )}
             </div>
           </div>
         </CardContent>

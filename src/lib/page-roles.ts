@@ -12,6 +12,167 @@
  */
 import { PAGE_DEFS } from '@/pages/PageAccessControl';
 import { supabase } from '@/integrations/supabase/client';
+import { MODULE_REGISTRY } from '@/types/moduleRegistry';
+import { DEFAULT_ROLE_PERMISSIONS } from '@/types/roles';
+import type { ActionType, ResourceType } from '@/types/roles';
+import {
+  resolveReportsDirectoryAction,
+  resolveReportsDirectoryRoutePermission,
+} from '@/lib/reports-directory-permissions';
+
+export interface RoutePermission {
+  resource: ResourceType;
+  action: ActionType;
+}
+
+/**
+ * A route can be opened from a page which has a different URL (for example,
+ * the MMP full report is opened from /mmp).  Keep those aliases here rather
+ * than adding a one-off check to each report component.  The values are
+ * resolved from MODULE_REGISTRY below, so the route guard and the visible
+ * entry point use the same resource/action pair.
+ */
+const REPORT_ROUTE_ALIASES: Array<{
+  pattern: RegExp;
+  registryRoute: string;
+  action?: ActionType;
+  query?: RegExp;
+}> = [
+  { pattern: /^\/mmp\/[^/]+\/full-report\/?$/, registryRoute: '/mmp', action: 'export' },
+  { pattern: /^\/accounting\/reports\/?$/, registryRoute: '/accounting', action: 'read' },
+  { pattern: /^\/accounting\/donor-reports\/?$/, registryRoute: '/accounting', action: 'read' },
+  { pattern: /^\/pre-funding\/report\/?$/, registryRoute: '/pre-funding', action: 'read' },
+  { pattern: /^\/incident-reports\/?$/, registryRoute: '/field-ops?tab=incidents', action: 'read' },
+  { pattern: /^\/data-export-center\/?$/, registryRoute: '/data-export-center', action: 'read' },
+  { pattern: /^\/field-data\/exports\/?$/, registryRoute: '/field-data', action: 'export' },
+  { pattern: /^\/analytics\/?$/, query: /(?:^|&)tab=(?:reports|data-export-center)(?:&|$)/, registryRoute: '/reports', action: 'read' },
+  { pattern: /^\/finance-hub\/?$/, query: /(?:^|&)tab=advance-report(?:&|$)/, registryRoute: '/advance-requests-report', action: 'read' },
+  { pattern: /^\/finance-hub\/?$/, query: /(?:^|&)tab=month-end(?:&|$)/, registryRoute: '/month-end-summary', action: 'read' },
+  { pattern: /^\/finance-hub\/?$/, query: /(?:^|&)tab=wallet-reports(?:&|$)/, registryRoute: '/wallet-reports', action: 'read' },
+  { pattern: /^\/finance-hub\/?$/, query: /(?:^|&)tab=salary-retainer(?:&|$)/, registryRoute: '/salary-retainer-report', action: 'read' },
+  { pattern: /^\/field-payments\/?$/, query: /(?:^|&)tab=fees(?:&|$)/, registryRoute: '/enumerator-fees-report', action: 'read' },
+  { pattern: /^\/field-ops\/?$/, query: /(?:^|&)tab=incident-reports(?:&|$)/, registryRoute: '/field-ops?tab=incidents', action: 'read' },
+  { pattern: /^\/field-data\/?$/, query: /(?:^|&)tab=exports(?:&|$)/, registryRoute: '/field-data', action: 'export' },
+  { pattern: /^\/pre-funding\/?$/, query: /(?:^|&)tab=report(?:&|$)/, registryRoute: '/pre-funding', action: 'read' },
+  { pattern: /^\/hr\/?$/, query: /(?:^|&)tab=salary-retainer(?:&|$)/, registryRoute: '/salary-retainer-report', action: 'read' },
+  { pattern: /^\/accounting\/?$/, query: /(?:^|&)tab=(?:reports|donor-reports)(?:&|$)/, registryRoute: '/accounting', action: 'read' },
+];
+
+const REPORT_ROUTES = new Set([
+  '/reports',
+  '/cost-submission/reports',
+  '/wallet-reports',
+  '/advance-requests-report',
+  '/down-payment-advance-report',
+  '/enumerator-fees-report',
+  '/month-end-summary',
+  '/salary-retainer-report',
+]);
+
+function pathOnly(route: string): string {
+  return route.split(/[?#]/, 1)[0].replace(/\/+$/, '') || '/';
+}
+
+function registryPermission(route: string, action?: ActionType): RoutePermission | null {
+  const normalizedRoute = route.replace(/\/+$/, '') || '/';
+  const page = MODULE_REGISTRY
+    .flatMap(module => module.pages)
+    .find(candidate =>
+      candidate.route.replace(/\/+$/, '') === normalizedRoute
+    ) ?? MODULE_REGISTRY
+      .flatMap(module => module.pages)
+      .find(candidate => pathOnly(candidate.route) === pathOnly(route));
+  if (!page) return null;
+
+  // Opening a report is a read operation.  MMP deliberately uses export:
+  // its registry action covers both opening and downloading its reports.
+  const selected = action
+    ? page.actions.find(candidate => candidate.action === action)
+    : page.actions.find(candidate => candidate.action === 'read') ?? page.actions[0];
+  return selected ? { resource: selected.resource, action: selected.action } : null;
+}
+
+/**
+ * Resolves the resource/action which protects a direct URL.
+ *
+ * This is intentionally pure.  It is used by App's route guard and can be
+ * tested without rendering the application or creating a Supabase client.
+ * `null` means that the URL has no report/action-specific requirement and the
+ * normal PAGE_DEFS guard should decide.
+ */
+export function resolveRoutePermission(
+  pathname: string,
+  search = '',
+  hash = '',
+): RoutePermission | null {
+  if (pathname.startsWith('#')) {
+    return resolveReportsDirectoryAction(pathname);
+  }
+  const cleanPath = pathOnly(pathname);
+  const query = search.startsWith('?') ? search.slice(1) : search;
+  // ReportsDirectory destinations are the canonical action map. Resolve them
+  // before the broader registry aliases so query tabs do not inherit the
+  // parent hub's permission (for example fixed-assets must not become
+  // accounting access, and payroll-admin must not become HR overview access).
+  const directoryPermission = resolveReportsDirectoryRoutePermission(pathname, query, hash);
+  if (directoryPermission) return directoryPermission;
+  const alias = REPORT_ROUTE_ALIASES.find(candidate =>
+    candidate.pattern.test(cleanPath) && (!candidate.query || candidate.query.test(query))
+  );
+  if (alias) return registryPermission(alias.registryRoute, alias.action);
+  if (!REPORT_ROUTES.has(cleanPath)) return null;
+  return registryPermission(cleanPath);
+}
+
+export interface ResourcePermissionOverride {
+  resource: string;
+  action: string;
+  is_granted: boolean;
+  expires_at?: string | null;
+}
+
+function isActiveResourcePermissionOverride(override: ResourcePermissionOverride): boolean {
+  return !override.expires_at || new Date(override.expires_at).getTime() > Date.now();
+}
+
+/**
+ * Applies the explicit action override used by visible report entry points.
+ * When there is no matching override, the caller's role/page baseline is
+ * retained.
+ */
+export function resolveResourcePermissionOverride(
+  baseline: boolean,
+  requirement: RoutePermission,
+  overrides: ResourcePermissionOverride[],
+): boolean {
+  const override = overrides.find(candidate =>
+    candidate.resource === requirement.resource &&
+    candidate.action === requirement.action &&
+    isActiveResourcePermissionOverride(candidate)
+  );
+  return override ? override.is_granted : baseline;
+}
+
+/** Role baseline for a route whose visible entry point checks a registry action. */
+export function canSeeRoutePermission(
+  requirement: RoutePermission,
+  role: string | null | undefined,
+): boolean {
+  const normalized = normalizeRoleCode(role);
+  if (!normalized) return false;
+  if (normalized.toLowerCase() === 'superadmin') return true;
+
+  const key = Object.keys(DEFAULT_ROLE_PERMISSIONS).find(candidate =>
+    candidate.toLowerCase().replace(/[\s_-]/g, '') ===
+    normalized.toLowerCase().replace(/[\s_-]/g, '')
+  );
+  if (!key) return false;
+  return DEFAULT_ROLE_PERMISSIONS[key as keyof typeof DEFAULT_ROLE_PERMISSIONS]
+    .some(permission =>
+      permission.resource === requirement.resource &&
+      permission.action === requirement.action
+    );
+}
 
 const ROLE_ALIASES: Record<string, string> = {
   super_admin: 'superAdmin',
@@ -145,12 +306,33 @@ export function canSeePage(
   return false;
 }
 
+export type PageAccessLookupErrorSource = 'action' | 'page';
+
+/**
+ * Result of resolving the asynchronous access layers.
+ *
+ * `allowed: false` is a normal denial when an override explicitly blocks a
+ * route (or when the role baseline is denied).  `error` is set when an
+ * override lookup could not be completed.  Keeping that state distinct from
+ * "no override row" lets action-guarded routes fail closed without changing
+ * the historical baseline fallback for ordinary page routes.
+ */
+export interface PageAccessResult {
+  allowed: boolean;
+  error?: {
+    type: 'override_lookup_failed';
+    source: PageAccessLookupErrorSource;
+  };
+}
+
 /** Async variant that layers page_role_configs + per-user page_access_overrides. */
-export async function canSeePageWithOverrides(
+export async function canSeePageWithOverridesResult(
   slug: string,
   role: string | null | undefined,
   userId: string | null | undefined,
-): Promise<boolean> {
+  routePermission?: RoutePermission,
+  routeBaseline?: boolean,
+): Promise<PageAccessResult> {
   let effectiveRoles: string[] | undefined;
   try {
     const { data: cfg } = await supabase
@@ -165,18 +347,100 @@ export async function canSeePageWithOverrides(
     // ignore — fall back to PAGE_DEFS
   }
 
-  const baseline = canSeePage(slug, role, effectiveRoles);
-  if (!userId) return baseline;
+  const baseline = routeBaseline ?? canSeePage(slug, role, effectiveRoles);
+  if (!userId) return { allowed: baseline };
+
+  // Action-level overrides are the same permission checked by report buttons.
+  // Resolve these before the page-level override so a direct URL cannot drift
+  // from its visible entry point (and an explicit grant can open a role-hidden
+  // report, while an explicit block closes a role-allowed report).
+  if (routePermission) {
+    try {
+      const { data: actionOverride, error } = await supabase
+        .from('user_permission_overrides')
+        .select('resource, action, is_granted, expires_at')
+        .eq('user_id', userId)
+        .eq('resource', routePermission.resource)
+        .eq('action', routePermission.action)
+        .maybeSingle();
+      if (error) {
+        return {
+          allowed: false,
+          error: { type: 'override_lookup_failed', source: 'action' },
+        };
+      }
+      // An expired action override is not an override at all. Continue to the
+      // page-level override lookup so expiry cannot accidentally bypass an
+      // explicit page block/grant.
+      if (actionOverride && isActiveResourcePermissionOverride(actionOverride as ResourcePermissionOverride)) {
+        return {
+          allowed: resolveResourcePermissionOverride(
+            baseline,
+            routePermission,
+            [actionOverride as ResourcePermissionOverride],
+          ),
+        };
+      }
+    } catch {
+      // Network or schema-cache miss — action routes fail closed.  A thrown
+      // query is different from a successful no-row lookup and must not be
+      // treated as an implicit absence of an override.
+      return {
+        allowed: false,
+        error: { type: 'override_lookup_failed', source: 'action' },
+      };
+    }
+  }
+
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('page_access_overrides')
       .select('is_blocked')
       .eq('page_slug', slug)
       .eq('user_id', userId)
       .maybeSingle();
-    if (data) return !data.is_blocked;
+    if (error) {
+      // Preserve the baseline fallback for ordinary page routes, but never
+      // admit an action-guarded route when its page override lookup failed.
+      return routePermission
+        ? {
+            allowed: false,
+            error: { type: 'override_lookup_failed', source: 'page' },
+          }
+        : { allowed: baseline, error: { type: 'override_lookup_failed', source: 'page' } };
+    }
+    if (data) return { allowed: !data.is_blocked };
   } catch {
-    // Network or schema-cache miss — fall back to baseline.
+    // Same distinction as the response error above: ordinary pages retain
+    // their baseline behavior, while action routes fail closed.
+    return routePermission
+      ? {
+          allowed: false,
+          error: { type: 'override_lookup_failed', source: 'page' },
+        }
+      : { allowed: baseline, error: { type: 'override_lookup_failed', source: 'page' } };
   }
-  return baseline;
+  return { allowed: baseline };
+}
+
+/**
+ * Backwards-compatible boolean helper for component-level visibility checks.
+ * Route guards use canSeePageWithOverridesResult so they can distinguish an
+ * override lookup error from a successful no-row result.
+ */
+export async function canSeePageWithOverrides(
+  slug: string,
+  role: string | null | undefined,
+  userId: string | null | undefined,
+  routePermission?: RoutePermission,
+  routeBaseline?: boolean,
+): Promise<boolean> {
+  const result = await canSeePageWithOverridesResult(
+    slug,
+    role,
+    userId,
+    routePermission,
+    routeBaseline,
+  );
+  return result.allowed;
 }

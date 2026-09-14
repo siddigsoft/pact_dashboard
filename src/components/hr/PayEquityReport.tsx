@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Download, Search, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { differenceInMonths, parseISO, isValid } from 'date-fns';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Grade {
   id: string;
@@ -133,6 +135,8 @@ function GradeGroup({ grade, rows, collapsed, onToggle }: {
 }
 
 export default function PayEquityReport() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr_analytics', 'export');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'below_min' | 'above_max' | 'in_range' | 'no_grade'>('all');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -234,6 +238,7 @@ export default function PayEquityReport() {
   const totalOutliers    = outliersBelowMin + outliersAboveMax;
 
   const exportReport = () => {
+    if (!checkPermission('hr_analytics', 'export')) return;
     const rows = filtered.map(e => ({
       'Employee':         e.full_name,
       'Department':       e.department,
@@ -262,9 +267,13 @@ export default function PayEquityReport() {
             {employees.length} employees · Compa-ratio = Salary ÷ Grade Midpoint · Outlier = salary outside band min/max
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={exportReport} className="gap-1.5 h-9 text-xs">
-          <Download className="h-3.5 w-3.5" />Export Excel
-        </Button>
+        {canExport && (
+          <ReportExportGate resource="hr_analytics">
+            <Button variant="outline" size="sm" onClick={exportReport} className="gap-1.5 h-9 text-xs">
+              <Download className="h-3.5 w-3.5" />Export Excel
+            </Button>
+          </ReportExportGate>
+        )}
       </div>
 
       {/* KPI cards */}

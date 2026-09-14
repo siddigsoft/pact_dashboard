@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface BankAccount { id: string; account_name: string; account_number: string | null; bank_name: string | null }
 interface APInvoice { id: string; invoice_number: string; total_amount: number; currency: string }
@@ -69,8 +70,9 @@ const BLANK = {
 };
 
 export default function AccountingChequeRegister() {
-  const { hasAnyRole } = useAuthorization();
-  const allowed    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { checkPermission, hasAnyRole } = useAuthorization();
+  const allowed    = checkPermission('procurement', 'read');
+  const canExport  = checkPermission('procurement', 'export');
   const canAction  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
   const { toast } = useToast();
 
@@ -95,6 +97,7 @@ export default function AccountingChequeRegister() {
   const [actioning, setActioning]     = useState(false);
 
   const load = useCallback(async () => {
+    if (!allowed) return;
     setLoading(true);
     const [{ data: chequeData }, { data: bankData }, { data: invData }, { data: vData }, { data: fData }, { data: cData }] = await Promise.all([
       supabase.from('acct_cheque_register').select('*').order('created_at', { ascending: false }),
@@ -111,7 +114,7 @@ export default function AccountingChequeRegister() {
     setFunds((fData ?? []) as Fund[]);
     setCountries((cData ?? []) as {id:string;name_en:string}[]);
     setLoading(false);
-  }, []);
+  }, [allowed]);
 
   useEffect(() => { if (allowed) void load(); }, [allowed]);
 
@@ -189,6 +192,7 @@ export default function AccountingChequeRegister() {
   };
 
   const exportCsv = () => {
+    if (!canExport) return;
     downloadCsv('cheque_register.csv', [
       ['Cheque #', 'Type', 'Payee', 'Status', 'Amount', 'Currency', 'Issue Date', 'Clearance Date', 'Bank Ref', 'Memo'],
       ...filtered.map(c => [
@@ -201,6 +205,7 @@ export default function AccountingChequeRegister() {
   };
 
   const exportExcel = () => {
+    if (!canExport) return;
     const rows = filtered.map(c => ({
       'Cheque #': c.cheque_number,
       'Type': TYPE_LABELS[c.payment_type] ?? c.payment_type,
@@ -240,8 +245,10 @@ export default function AccountingChequeRegister() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-cheque"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-cheque-register"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
+          <ReportExportGate resource="procurement" action="export">
+            <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-cheque-register"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
+          </ReportExportGate>
           {canAction && <Button size="sm" onClick={openCreate} data-testid="button-create-cheque"><Plus className="w-4 h-4 mr-1" /> New Payment</Button>}
         </div>
       </div>

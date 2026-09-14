@@ -17,6 +17,8 @@ import {
 import { format, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import type { DownPaymentRequest } from '@/types/down-payment';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -70,6 +72,7 @@ interface DuplicateGroup {
 export default function DuplicatePaymentsReport() {
   const { requests, loading, refreshRequests } = useDownPayment();
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
 
   // ── Filter state ────────────────────────────────────────────────────────────
   const [search,           setSearch]           = useState('');
@@ -230,6 +233,7 @@ export default function DuplicatePaymentsReport() {
 
   // ── Excel export ───────────────────────────────────────────────────────────
   const handleExport = () => {
+    if (!checkPermission('down_payments', 'export')) return;
     const rows = filteredGroups.flatMap(g =>
       g.requests.map((r, i) => ({
         'Group Key':         g.groupKey,
@@ -311,9 +315,11 @@ export default function DuplicatePaymentsReport() {
           <Button variant="outline" size="sm" onClick={refreshRequests}>
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={filteredGroups.length === 0}>
-            <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" /> Export Excel
-          </Button>
+          <ReportExportGate resource="down_payments">
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={filteredGroups.length === 0}>
+              <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" /> Export Excel
+            </Button>
+          </ReportExportGate>
         </div>
       </div>
 

@@ -22,6 +22,7 @@ import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface PO { id: string; po_number: string; title: string; vendor_id: string | null; amount: number; currency: string }
 interface Vendor { id: string; name_en: string }
@@ -234,8 +235,10 @@ export default function AccountingGRN() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-grn"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-grn-excel"><Download className="w-4 h-4 mr-1" /> Excel</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-grn-csv"><FileText className="w-4 h-4 mr-1" /> CSV</Button>
+          <ReportExportGate resource="procurement">
+            <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-grn-excel"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-grn-csv"><FileText className="w-4 h-4 mr-1" /> CSV</Button>
+          </ReportExportGate>
           <Button size="sm" onClick={openCreate} data-testid="button-create-grn"><Plus className="w-4 h-4 mr-1" /> New GRN</Button>
         </div>
       </div>

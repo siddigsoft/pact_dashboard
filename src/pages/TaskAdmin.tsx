@@ -11,6 +11,7 @@ import {
 import { useAllProjectFieldTasks, type FieldTaskStatus, type FieldTaskPriority } from '@/hooks/useProjectTasks';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { useUser } from '@/context/user/UserContext';
 import { useDailyTaskDefinitions, type DailyTaskDefinition, type PersonalTaskPriority } from '@/hooks/usePersonalTasks';
 import { Button } from '@/components/ui/button';
@@ -826,6 +827,8 @@ function EarningsTrendChart() {
 }
 
 function PayrollPanel() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('tasks', 'export');
   const { toast } = useToast();
   const { data: departments = [] } = useDepartments();
   const [deptId, setDeptId] = useState('all');
@@ -842,6 +845,7 @@ function PayrollPanel() {
   }), [rows]);
 
   const exportPDF = () => {
+    if (!checkPermission('tasks', 'export')) return;
     const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFontSize(14);
     doc.text('Payroll Summary Report', 14, 16);
@@ -871,6 +875,7 @@ function PayrollPanel() {
   };
 
   const exportExcel = () => {
+    if (!checkPermission('tasks', 'export')) return;
     const exportData = rows.map(r => ({
       'Name': r.userName,
       'Department': r.deptName,
@@ -943,12 +948,16 @@ function PayrollPanel() {
           <Button size="sm" variant="outline" onClick={() => refetch()} className="h-8 gap-1">
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
           </Button>
-          <Button size="sm" variant="outline" onClick={exportPDF} className="h-8 gap-1" disabled={!rows.length}>
-            <FileDown className="h-3.5 w-3.5" /> PDF
-          </Button>
-          <Button size="sm" variant="outline" onClick={exportExcel} className="h-8 gap-1" disabled={!rows.length}>
-            <FileDown className="h-3.5 w-3.5" /> Excel
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="tasks">
+              <Button size="sm" variant="outline" onClick={exportPDF} className="h-8 gap-1" disabled={!rows.length}>
+                <FileDown className="h-3.5 w-3.5" /> PDF
+              </Button>
+              <Button size="sm" variant="outline" onClick={exportExcel} className="h-8 gap-1" disabled={!rows.length}>
+                <FileDown className="h-3.5 w-3.5" /> Excel
+              </Button>
+            </ReportExportGate>
+          )}
           <Button size="sm" variant="outline" onClick={notifyDeptMembers} className="h-8 gap-1" disabled={!rows.length}>
             <Users className="h-3.5 w-3.5" /> Email Members
           </Button>

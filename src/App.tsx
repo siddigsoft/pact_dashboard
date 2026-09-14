@@ -262,7 +262,16 @@ import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useFCM } from './hooks/useFCM';
 import { useAuthorization } from './hooks/use-authorization';
-import { canSeePage, canSeePageWithOverrides, resolveSlug, getPageLabel } from './lib/page-roles';
+import {
+  canSeePage,
+  canSeePageWithOverridesResult,
+  canSeeRoutePermission,
+  resolveRoutePermission,
+  resolveSlug,
+  getPageLabel,
+  type RoutePermission,
+} from './lib/page-roles';
+import { resolveReportsDirectoryRoutePermission } from './lib/reports-directory-permissions';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 import SessionManager from './components/layout/SessionManager';
@@ -307,20 +316,49 @@ const FinanceAdminRoute = ({ children }: { children: React.ReactNode }) => {
 
 /** Accounting is readable by finance staff and auditors; panels retain their own action gates. */
 const AccountingRoute = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
   const { hasAnyRole } = useAuthorization();
-  if (!hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor'])) {
+  const directoryPermission = resolveReportsDirectoryRoutePermission(
+    location.pathname,
+    location.search,
+    location.hash,
+  );
+  // Accounting contains several resource-specific report tabs (fixed assets
+  // and procurement in particular).  The outer PageRouteGuard may have
+  // admitted a user through an explicit action grant; do not reject that
+  // grant with the legacy accounting-role wrapper.
+  // It also owns explicit blocks, so preserving the outer guard as the sole
+  // gate for registered directory destinations prevents a stale permission
+  // cache in this wrapper from rejecting a valid grant.
+  if (
+    !directoryPermission
+    && !hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor'])
+  ) {
     return <PageRoleDenied pageLabel="Accounting" />;
   }
   return <>{children}</>;
 };
 
-// Pre-Funding: Finance/Admin roles always pass through.
-// Any other user who is assigned as holder_user_id on at least one fund also gets access.
-// A quick async DB check gates the second path; a spinner shows while checking.
+// Pre-Funding: Finance/Admin roles and users with an explicit pre_funding read
+// grant always pass through. Any other user who is assigned as holder_user_id
+// on at least one fund also gets access. A quick async DB check gates the
+// holder path; a spinner shows while checking.
 const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
-  const { hasAnyRole } = useAuthorization();
+  const location = useLocation();
+  const { hasAnyRole, checkPermission } = useAuthorization();
   const { currentUser } = useAppContext();
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const hasPreFundingRead = checkPermission('pre_funding', 'read');
+  // Report tabs are resolved by PageRouteGuard using the resource/action
+  // override.  Do not make the holder lookup a second role-only gate: an
+  // explicit pre_funding:read grant must be enough to mount the report after
+  // the outer guard has confirmed it.  The outer guard still owns explicit
+  // blocks and remains pending until that lookup completes.
+  const isActionGuardedReport = Boolean(
+    resolveRoutePermission(location.pathname, location.search, location.hash)
+  );
+  const isAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin'])
+    || hasPreFundingRead
+    || isActionGuardedReport;
   const [holderCheck, setHolderCheck] = useState<'loading' | 'yes' | 'no'>(
     isAdmin ? 'yes' : 'loading'
   );
@@ -365,6 +403,8 @@ const PageRouteGuardAsync = ({
   role,
   children,
   startDenied = false,
+  routePermission,
+  routeBaseline,
 }: {
   slug: string;
   role: string | undefined;
@@ -372,23 +412,39 @@ const PageRouteGuardAsync = ({
   /** When true, the role check already failed — show nothing until the DB
    *  confirms whether a grant override exists. Prevents a flash of content. */
   startDenied?: boolean;
+  routePermission?: RoutePermission | null;
+  routeBaseline?: boolean;
 }) => {
   const { currentUser } = useAppContext();
-  // If role already denied (startDenied), start as 'checking' so we show
-  // nothing until the grant lookup resolves. Otherwise start as 'ok' and
-  // only flip to 'denied' if the async check finds an explicit block.
+  // Direct report routes have an action-level permission which must be
+  // resolved before mounting their children. Starting those routes as "ok"
+  // would allow report components to fetch data before an explicit action
+  // block is read. Role-denied routes also wait so an explicit grant can open
+  // them without flashing the restricted page.
+  const waitsForActionOverride = Boolean(routePermission);
   const [status, setStatus] = useState<'ok' | 'checking' | 'denied'>(
-    startDenied ? 'checking' : 'ok',
+    startDenied || waitsForActionOverride ? 'checking' : 'ok',
   );
 
   useEffect(() => {
-    setStatus(startDenied ? 'checking' : 'ok');
+    setStatus(startDenied || waitsForActionOverride ? 'checking' : 'ok');
     if (!currentUser?.id) {
-      if (startDenied) setStatus('denied');
+      if (startDenied || waitsForActionOverride) setStatus('denied');
       return;
     }
-    canSeePageWithOverrides(slug, role, currentUser.id).then(allowed => {
-      if (startDenied) {
+    canSeePageWithOverridesResult(
+      slug,
+      role,
+      currentUser.id,
+      routePermission ?? undefined,
+      routeBaseline,
+    ).then(({ allowed }) => {
+      if (waitsForActionOverride) {
+        // Action overrides are authoritative for direct report routes. This
+        // deliberately does not render from the role baseline while lookup
+        // is pending: an explicit block must not be ORed away by a default.
+        setStatus(allowed ? 'ok' : 'denied');
+      } else if (startDenied) {
         // Grant check: only open the page if DB explicitly grants access
         setStatus(allowed ? 'ok' : 'denied');
       } else {
@@ -396,7 +452,16 @@ const PageRouteGuardAsync = ({
         if (!allowed) setStatus('denied');
       }
     });
-  }, [slug, role, currentUser?.id, startDenied]);
+  }, [
+    slug,
+    role,
+    currentUser?.id,
+    startDenied,
+    waitsForActionOverride,
+    routePermission?.resource,
+    routePermission?.action,
+    routeBaseline,
+  ]);
 
   if (status === 'denied') {
     return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
@@ -412,7 +477,7 @@ const PageRouteGuardAsync = ({
 const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { currentUser } = useAppContext();
-  const { isSuperAdmin } = useAuthorization();
+  const { isSuperAdmin, checkPermission } = useAuthorization();
 
   // SuperAdmin bypasses all page-level checks
   if (isSuperAdmin()) return <>{children}</>;
@@ -436,10 +501,25 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
       return key === 'supervisor' || key === 'hubsupervisor';
     });
   const guardRole = hasAdditionalSupervisorRole ? 'supervisor' : role;
-  const roleAllowed = canSeePage(slug, guardRole);
+  const routePermission = resolveRoutePermission(
+    location.pathname,
+    location.search,
+    location.hash,
+  );
+  const roleAllowed = routePermission
+    ? checkPermission(routePermission.resource, routePermission.action) ||
+      canSeeRoutePermission(routePermission, guardRole)
+    : canSeePage(slug, guardRole);
 
   return (
-    <PageRouteGuardAsync slug={slug} role={guardRole} startDenied={!roleAllowed}>
+    <PageRouteGuardAsync
+      key={`${slug}:${guardRole ?? ''}:${currentUser?.id ?? ''}:${routePermission?.resource ?? ''}:${routePermission?.action ?? ''}`}
+      slug={slug}
+      role={guardRole}
+      startDenied={!roleAllowed}
+      routePermission={routePermission}
+      routeBaseline={routePermission ? roleAllowed : undefined}
+    >
       {children}
     </PageRouteGuardAsync>
   );
@@ -737,7 +817,7 @@ const AppRoutes = () => {
         <Route path="/field-data/monitoring" element={<Navigate to="/field-data" replace />} />
         <Route path="/field-data/cases" element={<Navigate to="/field-data" replace />} />
         <Route path="/field-data/workflow" element={<Navigate to="/field-data" replace />} />
-        <Route path="/field-data/exports" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/exports" element={<Navigate to="/field-data?tab=exports" replace />} />
         <Route path="/field-data/languages" element={<Navigate to="/field-data" replace />} />
         <Route path="/field-data/collaboration" element={<Navigate to="/field-data" replace />} />
         <Route path="/field-data/backup" element={<Navigate to="/field-data" replace />} />

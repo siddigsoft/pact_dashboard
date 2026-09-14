@@ -22,6 +22,7 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
 import { exportMultiSheetExcel } from '@/utils/report-export';
 import { format, isWithinInterval, parseISO } from 'date-fns';
 import { PageLoader } from '@/components/ui/page-loader';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Plan {
   id: string; name: string;
@@ -71,7 +72,8 @@ const BLANK_PERIOD = {
 
 export default function BenefitsAdministration() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('benefits', 'export');
   const { toast } = useToast();
   const isAdmin = hasAnyRole(['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin', 'hr', 'hr_manager']);
 
@@ -301,6 +303,7 @@ export default function BenefitsAdministration() {
 
   // ── Cost Report Export ────────────────────────────────────────────────────
   function handleExport() {
+    if (!checkPermission('benefits', 'export')) return;
     const activeEnrollments = enrollments.filter(e => e.status === 'active');
     const byPlan = plans.map(pl => {
       const enr = activeEnrollments.filter(e => e.plan_id === pl.id);
@@ -510,9 +513,13 @@ export default function BenefitsAdministration() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm text-muted-foreground">Manage benefit plans, enrollments, and open enrollment periods.</p>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport} data-testid="button-export-cost-report">
-            <FileDown className="h-4 w-4 mr-1" />Cost Report (Excel)
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="benefits">
+              <Button variant="outline" onClick={handleExport} data-testid="button-export-cost-report">
+                <FileDown className="h-4 w-4 mr-1" />Cost Report (Excel)
+              </Button>
+            </ReportExportGate>
+          )}
         </div>
       </div>
 

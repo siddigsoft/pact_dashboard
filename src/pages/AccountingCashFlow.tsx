@@ -16,6 +16,7 @@ import { exportStandardExcel } from '@/utils/standardExcelExport';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, Legend } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Account { id: string; code: string; name_en: string; account_type: string; subtype: string | null }
 interface FiscalYear { id: string; code: string }
@@ -266,9 +267,11 @@ export default function AccountingCashFlow() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={runReport} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={loading} data-testid="button-csv"><Download className="h-4 w-4 mr-1" />CSV</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={loading} data-testid="button-export-cash-flow"><Download className="h-4 w-4 mr-1" />Excel</Button>
-          <Button variant="outline" size="sm" onClick={exportPdf} disabled={loading || pdfBusy} data-testid="button-pdf">{pdfBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}PDF</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={loading} data-testid="button-csv"><Download className="h-4 w-4 mr-1" />CSV</Button>
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={loading} data-testid="button-export-cash-flow"><Download className="h-4 w-4 mr-1" />Excel</Button>
+            <Button variant="outline" size="sm" onClick={exportPdf} disabled={loading || pdfBusy} data-testid="button-pdf">{pdfBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}PDF</Button>
+          </ReportExportGate>
         </div>
       </div>
 

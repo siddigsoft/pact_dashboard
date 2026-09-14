@@ -24,13 +24,15 @@ import {
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { getDefaultAccountingPeriod } from '@/lib/accountingReporting';
 import { AccountingReportReadiness } from '@/components/accounting/AccountingReportReadiness';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 const PAGE_SIZE = 100;
 
 export default function AccountingGeneralLedger() {
   const isColVisible = useColumnVisibility('accounting-general-ledger');
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { hasAnyRole, isAuthenticated, checkPermission } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const canExport = checkPermission('accounting', 'export');
   const [searchParams] = useSearchParams();
 
   const bootstrapQuery = useGlBootstrapQuery(allowed && isAuthenticated);
@@ -128,6 +130,7 @@ export default function AccountingGeneralLedger() {
   };
 
   const exportExcel = () => {
+    if (!checkPermission('accounting', 'export')) return;
     if (!selectedAccount || !selectedPeriod) return;
     const rows = linesWithBalance.map(l => ({
       'Date': l.posting_date,
@@ -165,6 +168,7 @@ export default function AccountingGeneralLedger() {
   };
 
   const exportCsv = () => {
+    if (!checkPermission('accounting', 'export')) return;
     if (!selectedAccount || !selectedPeriod) return;
     const header = ['Date', 'Entry#', 'Description', 'DR', 'CR', 'Balance', 'Currency'];
     const opening = [selectedPeriod.start_date, '', 'Opening Balance', '', '', formatNumber(displayedOpeningBalance), selectedCurrency];
@@ -201,12 +205,16 @@ export default function AccountingGeneralLedger() {
           <Button variant="outline" size="sm" onClick={runLedger} disabled={loading || !accountId} data-testid="button-refresh">
             <RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} /> Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!lines.length} data-testid="button-export-gl">
-            <Download className="h-4 w-4 mr-1" /> Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!lines.length} data-testid="button-export-csv">
-            <FileDown className="h-4 w-4 mr-1" /> CSV
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="accounting">
+              <Button variant="outline" size="sm" onClick={exportExcel} disabled={!lines.length} data-testid="button-export-gl">
+                <Download className="h-4 w-4 mr-1" /> Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportCsv} disabled={!lines.length} data-testid="button-export-csv">
+                <FileDown className="h-4 w-4 mr-1" /> CSV
+              </Button>
+            </ReportExportGate>
+          )}
         </div>
       </div>
 

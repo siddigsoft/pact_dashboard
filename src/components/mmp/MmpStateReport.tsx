@@ -22,6 +22,7 @@ import {
   ReportAuditRow,
   AttentionRow,
 } from '@/utils/mmpOperationalReportExport';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface AdvanceInfo {
   id: string;
@@ -908,16 +909,18 @@ export default function MmpStateReport({
                   <Unlock className="h-3 w-3" /> Cycle Open
                 </Badge>
               )}
-              <Button
-                onClick={handleExport}
-                disabled={loading || exporting}
-                size="sm"
-                variant="outline"
-                className="gap-1.5 text-xs whitespace-nowrap"
-              >
-                {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                Export Excel (6 sheets)
-              </Button>
+              <ReportExportGate resource="mmp">
+                <Button
+                  onClick={handleExport}
+                  disabled={loading || exporting}
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs whitespace-nowrap"
+                >
+                  {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  Export Excel (6 sheets)
+                </Button>
+              </ReportExportGate>
               {/* Explicit close — kept visually separate from Export button */}
               <div style={{ width: 1, height: 24, background: 'var(--border)', flexShrink: 0 }} />
               <Button

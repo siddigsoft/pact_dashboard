@@ -17,7 +17,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import {
-  FileBarChart2, Download, RefreshCw, AlertTriangle,
+  FileBarChart2, Download, RefreshCw,
   DollarSign, TrendingDown, CheckCircle2, Clock,
   FileSpreadsheet, Wallet, Activity, GitBranch,
   Users, Receipt, ExternalLink, ChevronDown, ChevronRight,
@@ -29,6 +29,7 @@ import {
 import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { exportFormattedMultiSheetExcel } from '@/utils/formattedExcelExport';
@@ -136,11 +137,10 @@ function kpiCard(title: string, value: string, sub: string, icon: React.ElementT
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PreFundingReport() {
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
   const { currentUser } = useAppContext();
   const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
   const isCD = hasAnyRole(['countryDirector']);
-  const canAccess = isFinanceAdmin || isCD;
   // Finance admins see all funds; CDs (and other holders) see only their assigned fund(s)
   const holderUserId = isFinanceAdmin ? null : (currentUser?.id ?? null);
 
@@ -509,6 +509,7 @@ export default function PreFundingReport() {
   // ─── Export handlers ──────────────────────────────────────────────────────────
 
   const exportPDF = () => {
+    if (!checkPermission('pre_funding', 'export')) return;
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const now = format(new Date(), 'MMM d, yyyy HH:mm');
 
@@ -593,6 +594,7 @@ export default function PreFundingReport() {
   };
 
   const exportExcel = async () => {
+    if (!checkPermission('pre_funding', 'export')) return;
     const currency = filteredFunds[0]?.currency ?? 'USD';
     const filteredFundIds = new Set(filteredFunds.map(fund => fund.id));
     const filteredAllocations = allocations.filter(allocation =>
@@ -802,13 +804,6 @@ export default function PreFundingReport() {
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
-  if (!canAccess) return (
-    <div className="p-8 text-center">
-      <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
-      <p className="text-muted-foreground">Access denied.</p>
-    </div>
-  );
-
   // Approvals tab body — only for Finance Admin, hidden from CD
   let approvalsTabBody: ReactNode = null;
   if (!isCD) {
@@ -931,12 +926,16 @@ export default function PreFundingReport() {
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
             <RefreshCw className={cn('h-4 w-4 mr-1.5', loading && 'animate-spin')} />Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={loading}>
-            <FileSpreadsheet className="h-4 w-4 mr-1.5 text-emerald-600" />Excel
-          </Button>
-          <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white" onClick={exportPDF} disabled={loading}>
-            <Download className="h-4 w-4 mr-1.5" />PDF
-          </Button>
+          <ReportExportGate resource="pre_funding">
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={loading}>
+              <FileSpreadsheet className="h-4 w-4 mr-1.5 text-emerald-600" />Excel
+            </Button>
+          </ReportExportGate>
+          <ReportExportGate resource="pre_funding">
+            <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white" onClick={exportPDF} disabled={loading}>
+              <Download className="h-4 w-4 mr-1.5" />PDF
+            </Button>
+          </ReportExportGate>
         </div>
       </div>
 

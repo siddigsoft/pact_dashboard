@@ -657,7 +657,8 @@ function MilestoneTimeline({
 
 export default function PortfolioDashboard() {
   const navigate = useNavigate();
-  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin, checkPermission } = useAuthorization();
+  const canExport = checkPermission('portfolio', 'export');
   const canFinance = hasAnyRole(['super_admin', 'admin', 'finance', 'fom', 'financial_admin']);
 
   // Access control: only Country Director, Super Admin, Admin, PM can access executive view
@@ -1782,6 +1783,7 @@ export default function PortfolioDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
 
   function exportExecutivePDF() {
+    if (!canExport) return;
     const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
     const pw = doc.internal.pageSize.width;
     const ph = doc.internal.pageSize.height;
@@ -1967,7 +1969,7 @@ export default function PortfolioDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {canAccessExecutive && (
+            {canAccessExecutive && canExport && (
               <Button variant="outline" size="sm" onClick={exportExecutivePDF}
                 className="border-white/30 text-white hover:bg-white/10 gap-1.5"
                 data-testid="button-export-report">

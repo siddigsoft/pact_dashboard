@@ -20,6 +20,7 @@ import {
 } from 'date-fns';
 import { Navigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface AuditRow {
   id: string;
@@ -207,7 +208,8 @@ function ActivityChart({ rows }: { rows: AuditRow[] }) {
 }
 
 export default function HierarchyAuditLogPage() {
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('audit_logs', 'export');
   const { currentUser } = useUser();
   const isAdmin = hasAnyRole(['super_admin', 'admin']);
 
@@ -292,6 +294,7 @@ export default function HierarchyAuditLogPage() {
 
   // ── CSV export ───────────────────────────────────────────────────────────
   function exportCsv() {
+    if (!checkPermission('audit_logs', 'export')) return;
     const header = ['When', 'Person', 'Person ID', 'Field', 'From', 'From ID', 'To', 'To ID', 'Changed by', 'Changed by ID', 'Reason', 'Audit Row ID'];
     const fmtVal = (field: string, val: string | null) => {
       if (!val) return '';
@@ -350,10 +353,14 @@ export default function HierarchyAuditLogPage() {
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           Refresh
         </Button>
-        <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={exportCsv} disabled={visible.length === 0} data-testid="btn-export-audit">
-          <Download className="h-3.5 w-3.5" />
-          Export CSV
-        </Button>
+        {canExport && (
+          <ReportExportGate resource="audit_logs">
+            <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={exportCsv} disabled={visible.length === 0} data-testid="btn-export-audit">
+              <Download className="h-3.5 w-3.5" />
+              Export CSV
+            </Button>
+          </ReportExportGate>
+        )}
       </header>
 
       {/* Cross-link banner — surfaces sibling audit pages */}

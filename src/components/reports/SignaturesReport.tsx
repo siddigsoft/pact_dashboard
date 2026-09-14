@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { 
-  Download, 
+  Download,
   PenTool, 
   AlertTriangle,
   RefreshCw,
@@ -32,6 +32,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import { subDays, format, differenceInHours } from 'date-fns';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 export function SignaturesReport() {
   const [data, setData] = useState<SignaturesSummary | null>(null);
@@ -41,8 +43,17 @@ export function SignaturesReport() {
     to: new Date(),
   });
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canViewSignatures = checkPermission('signatures', 'read');
+  // This report is rendered inside the Reports hub.  The registry exposes
+  // report downloads as reports:export (not signatures:export).
+  const canExportReports = checkPermission('reports', 'export');
 
   const fetchData = async () => {
+    if (!canViewSignatures) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       let txnSigQuery = supabase
@@ -204,9 +215,10 @@ export function SignaturesReport() {
 
   useEffect(() => {
     fetchData();
-  }, [dateRange]);
+  }, [dateRange, canViewSignatures]);
 
   const handleExportExcel = () => {
+    if (!checkPermission('reports', 'export')) return;
     if (!data) return;
     const exportData = data.recentSignatures.map(sig => ({
       'Signature ID': sig.id,
@@ -225,6 +237,7 @@ export function SignaturesReport() {
   };
 
   const handleExportCSV = () => {
+    if (!checkPermission('reports', 'export')) return;
     if (!data) return;
     const csvData = [
       { Metric: 'Total Signatures', Value: data.totalSignatures },
@@ -282,6 +295,16 @@ export function SignaturesReport() {
     );
   }
 
+  if (!canViewSignatures) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          You do not have permission to view signature reports.
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!data) {
     return (
       <Card>
@@ -309,14 +332,18 @@ export function SignaturesReport() {
             dateRange={dateRange}
             onDateRangeChange={setDateRange}
           />
-          <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
-            <Download className="w-4 h-4 mr-1" />
-            CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
-            <FileSpreadsheet className="w-4 h-4 mr-1" />
-            Excel
-          </Button>
+          {canExportReports && <ReportExportGate resource="reports">
+            <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
+              <Download className="w-4 h-4 mr-1" />
+              CSV
+            </Button>
+          </ReportExportGate>}
+          {canExportReports && <ReportExportGate resource="reports">
+            <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
+              <FileSpreadsheet className="w-4 h-4 mr-1" />
+              Excel
+            </Button>
+          </ReportExportGate>}
         </div>
       </div>
 

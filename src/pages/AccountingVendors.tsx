@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Vendor { id: string; vendor_code: string | null; name_en: string; name_ar: string | null; vendor_type: string; tax_id: string | null; country_id: string | null; gl_account_id: string | null; payment_terms: number; currency: string; contact_name: string | null; contact_email: string | null; contact_phone: string | null; address: string | null; bank_name: string | null; bank_account_no: string | null; swift_code: string | null; is_active: boolean; notes: string | null; created_at: string }
 interface JournalLine { id: string; entry_id: string; line_no: number; debit_credit: string; functional_amount: number; functional_currency: string; description: string | null; acct_journal_entries: { entry_no: number; posting_date: string; description_en: string; status: string } | null }
@@ -194,8 +195,10 @@ export default function AccountingVendors() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadVendors} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv"><Download className="h-4 w-4 mr-1" />CSV</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-excel"><Download className="h-4 w-4 mr-1" />Excel</Button>
+          <ReportExportGate resource="procurement">
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv"><Download className="h-4 w-4 mr-1" />CSV</Button>
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-excel"><Download className="h-4 w-4 mr-1" />Excel</Button>
+          </ReportExportGate>
           {canEdit && <Button size="sm" onClick={() => openDialog()} data-testid="button-add"><Plus className="h-4 w-4 mr-1" />Add Vendor</Button>}
         </div>
       </div>

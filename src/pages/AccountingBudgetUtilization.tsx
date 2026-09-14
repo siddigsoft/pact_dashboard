@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Download, RefreshCw, PiggyBank, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface BudgetLine {
   id: string; account_id: string | null; description: string; budget_amount: number;
@@ -98,7 +99,9 @@ export default function AccountingBudgetUtilization() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void run()} disabled={loading}><RefreshCw className={cn('w-4 h-4 mr-1', loading && 'animate-spin')} /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={() => exportToExcel(filtered, 'budget-utilization')} disabled={!filtered.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <ReportExportGate resource="finances">
+            <Button variant="outline" size="sm" onClick={() => exportToExcel(filtered, 'budget-utilization')} disabled={!filtered.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          </ReportExportGate>
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 import { format, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 type AttendanceLog = {
   id: string; user_id: string; log_date: string;
@@ -71,6 +73,8 @@ const remoteLocationFromNotes = (notes: string | null): string | null => {
 
 export default function Attendance() {
   const { user, profile } = useUser();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<CheckInMethod | 'out' | null>(null);
@@ -550,11 +554,13 @@ export default function Attendance() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5"/> Team Attendance Today / حضور الفريق اليوم</CardTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  data-testid="button-export-attendance"
-                  onClick={() => {
+                {canExport && <ReportExportGate resource="hr">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    data-testid="button-export-attendance"
+                    onClick={() => {
+                      if (!checkPermission('hr', 'export')) return;
                     const rows = teamToday.map(l => ({
                       'Employee': l.user_name ?? '',
                       'Date': l.log_date,
@@ -566,10 +572,11 @@ export default function Attendance() {
                       'Notes': l.notes ?? '',
                     }));
                     exportToExcel(rows, 'Team Attendance', `team-attendance-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-                  }}
-                >
-                  <Download className="h-4 w-4 mr-1" /> Export
-                </Button>
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-1" /> Export
+                  </Button>
+                </ReportExportGate>}
               </CardHeader>
               <CardContent>
                 {loadingTeam ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div> :

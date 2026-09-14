@@ -21,6 +21,7 @@ import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format, parseISO } from 'date-fns';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Account { id: string; code: string; name_en: string; name_ar: string; account_type: string; country_id: string | null }
 interface FiscalYear { id: string; code: string; name_en: string }
@@ -44,8 +45,9 @@ const TYPE_LABEL: Record<string, { label: string; color: string }> = {
 };
 
 export default function AccountingBudgetPlanning() {
-  const { hasAnyRole } = useAuthorization();
-  const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { checkPermission, hasAnyRole } = useAuthorization();
+  const allowed  = checkPermission('finances', 'read');
+  const canExport = checkPermission('finances', 'export');
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
   const overrideCanEdit = usePageManageOverride('acct-budget-planning', roleCanEdit);
@@ -57,6 +59,7 @@ export default function AccountingBudgetPlanning() {
   const [periods, setPeriods]   = useState<Period[]>([]);
   const [funds, setFunds]       = useState<Fund[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [, setCountries] = useState<{ id: string; name_en: string }[]>([]);
   const [budgetLines, setBudgetLines] = useState<BudgetLine[]>([]);
 
   const [yearId, setYearId]     = useState('');
@@ -81,6 +84,7 @@ export default function AccountingBudgetPlanning() {
 
   /* ── bootstrap ── */
   useEffect(() => {
+    if (!allowed) return;
     (async () => {
       const [yRes, pRes, fRes, aRes, cRes] = await Promise.all([
         supabase.from('acct_fiscal_years').select('id, code, name_en').order('code', { ascending: false }),
@@ -104,33 +108,33 @@ export default function AccountingBudgetPlanning() {
       }
       setLoading(false);
     })();
-  }, []);
+  }, [allowed]);
 
 
   /* ── load budget lines for selected period/fund ── */
   const loadBudgetLines = useCallback(async (pid: string, fid: string) => {
-    if (!pid) return;
+    if (!allowed || !pid) return;
     const q = supabase.from('acct_budget_lines').select('id, account_id, period_id, fund_id, fiscal_year_id, budget_amount, obr_id, obr_notes').eq('period_id', pid);
     if (fid !== 'all') (q as any).eq('fund_id', fid);
     const { data, error } = await q;
     if (error?.code === '42P01') { setTableExists(false); return; }
     setTableExists(true);
     setBudgetLines((data ?? []) as BudgetLine[]);
-  }, []);
+  }, [allowed]);
 
-  useEffect(() => { if (periodId) void loadBudgetLines(periodId, fundId); }, [periodId, fundId, loadBudgetLines]);
+  useEffect(() => { if (allowed && periodId) void loadBudgetLines(periodId, fundId); }, [allowed, periodId, fundId, loadBudgetLines]);
 
   /* ── load approval record for current period/fund ── */
   const loadApproval = useCallback(async (pid: string, fid: string) => {
-    if (!pid || !approvalTableExists) return;
+    if (!allowed || !pid || !approvalTableExists) return;
     const q = supabase.from('acct_budget_approvals' as any).select('*').eq('period_id', pid);
     if (fid !== 'all') (q as any).eq('fund_id', fid); else (q as any).is('fund_id', null);
     const { data, error } = await (q as any).maybeSingle();
     if (error?.code === '42P01') { setApprovalTableExists(false); return; }
     setApprovalRecord((data as any) ?? null);
-  }, [approvalTableExists]);
+  }, [allowed, approvalTableExists]);
 
-  useEffect(() => { if (periodId) void loadApproval(periodId, fundId); }, [periodId, fundId, loadApproval]);
+  useEffect(() => { if (allowed && periodId) void loadApproval(periodId, fundId); }, [allowed, periodId, fundId, loadApproval]);
 
   /* ── budget approval actions ── */
   const submitForApproval = async () => {
@@ -440,6 +444,7 @@ export default function AccountingBudgetPlanning() {
 
   /* ── export CSV ── */
   const exportCsv = () => {
+    if (!canExport) return;
     downloadCsv(`budget-plan-${periodId}.csv`, [
       ['Account Code', 'Account Name', 'Type', 'Budget Amount'],
       ...rows.map(r => [r.code, r.name_en, r.type, r.budget]),
@@ -447,6 +452,7 @@ export default function AccountingBudgetPlanning() {
   };
 
   const exportExcel = () => {
+    if (!canExport) return;
     const rowsMap = rows.map(r => ({
       'Account Code': r.code,
       'Account Name': r.name_en,
@@ -507,8 +513,10 @@ export default function AccountingBudgetPlanning() {
             {importing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />} Import CSV
           </Button>
           <Button variant="outline" size="sm" onClick={downloadTemplate} disabled={!accounts.length} data-testid="button-download-template"><FileDown className="w-4 h-4 mr-1" /> Template</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-budget-planning"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
+          <ReportExportGate resource="finances" action="export">
+            <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-budget-planning"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
+          </ReportExportGate>
           <Button variant="outline" size="sm" onClick={() => void loadBudgetLines(periodId, fundId)} data-testid="button-refresh-budget"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCsv} data-testid="input-import-csv" />
         </div>

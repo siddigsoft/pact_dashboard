@@ -48,6 +48,7 @@ import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import { subDays, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, subQuarters, subYears } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 interface MMPOption {
   id: string;
@@ -101,6 +102,9 @@ export function AnalyticsReports() {
   const [timePeriodPreset, setTimePeriodPreset] = useState<TimePeriodPreset>('custom');
   
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canViewAnalytics = checkPermission('analytics', 'read');
+  const canExportAnalytics = checkPermission('analytics', 'export');
 
   const getDateRangeFromPreset = (preset: TimePeriodPreset): DateRange | undefined => {
     const now = new Date();
@@ -154,6 +158,7 @@ export function AnalyticsReports() {
   };
 
   const fetchFilterOptions = async () => {
+    if (!canViewAnalytics) return;
     try {
       const [mmpRes, projectRes] = await Promise.all([
         supabase.from('mmp_files').select('id, name').order('created_at', { ascending: false }),
@@ -173,9 +178,13 @@ export function AnalyticsReports() {
 
   useEffect(() => {
     fetchFilterOptions();
-  }, []);
+  }, [canViewAnalytics]);
 
   const fetchData = async () => {
+    if (!canViewAnalytics) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const range = dateRange?.from && dateRange?.to 
@@ -289,9 +298,10 @@ export function AnalyticsReports() {
 
   useEffect(() => {
     fetchData();
-  }, [dateRange, selectedMmp, selectedProject]);
+  }, [dateRange, selectedMmp, selectedProject, canViewAnalytics]);
 
   const handleExportProductivityPDF = async () => {
+    if (!canExportAnalytics) return;
     setExporting(true);
     try {
       const range = dateRange?.from && dateRange?.to 
@@ -307,6 +317,7 @@ export function AnalyticsReports() {
   };
 
   const handleExportEfficiencyPDF = async () => {
+    if (!canExportAnalytics) return;
     if (!efficiencyData) return;
     setExporting(true);
     try {
@@ -323,6 +334,7 @@ export function AnalyticsReports() {
   };
 
   const handleExportProductivityExcel = () => {
+    if (!canExportAnalytics) return;
     const excelData = productivityData.map(m => ({
       'Enumerator': m.enumeratorName,
       'Role': m.role,
@@ -339,6 +351,7 @@ export function AnalyticsReports() {
   };
 
   const handleExportProductivityCSV = () => {
+    if (!canExportAnalytics) return;
     const csvData = productivityData.map(m => ({
       Enumerator: m.enumeratorName,
       Role: m.role,
@@ -355,6 +368,7 @@ export function AnalyticsReports() {
   };
 
   const handleExportEfficiencyCSV = () => {
+    if (!canExportAnalytics) return;
     if (!efficiencyData) return;
     const csvData = [
       { Metric: 'Total Visits', Value: efficiencyData.totalVisits },
@@ -370,6 +384,7 @@ export function AnalyticsReports() {
   };
 
   const handleExportCoverageExcel = (type: string) => {
+    if (!canExportAnalytics) return;
     let excelData: any[] = [];
     if (type === 'hub' && efficiencyData?.coverageByHub) {
       excelData = efficiencyData.coverageByHub.map(h => ({
@@ -412,6 +427,16 @@ export function AnalyticsReports() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32" />)}</div>
         <Skeleton className="h-[500px]" />
       </div>
+    );
+  }
+
+  if (!canViewAnalytics) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          You do not have permission to view analytics reports.
+        </CardContent>
+      </Card>
     );
   }
 
@@ -630,9 +655,9 @@ export function AnalyticsReports() {
                 <p className="text-sm text-muted-foreground">Performance metrics for field team members</p>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleExportProductivityPDF} disabled={exporting} data-testid="button-export-productivity-pdf"><Download className="w-4 h-4 mr-2" />PDF</Button>
-                <Button variant="outline" size="sm" onClick={handleExportProductivityExcel} data-testid="button-export-productivity-excel"><FileSpreadsheet className="w-4 h-4 mr-2" />Excel</Button>
-                <Button variant="outline" size="sm" onClick={handleExportProductivityCSV} data-testid="button-export-productivity-csv"><FileText className="w-4 h-4 mr-2" />CSV</Button>
+                {canExportAnalytics && <Button size="sm" onClick={handleExportProductivityPDF} disabled={exporting} data-testid="button-export-productivity-pdf"><Download className="w-4 h-4 mr-2" />PDF</Button>}
+                {canExportAnalytics && <Button variant="outline" size="sm" onClick={handleExportProductivityExcel} data-testid="button-export-productivity-excel"><FileSpreadsheet className="w-4 h-4 mr-2" />Excel</Button>}
+                {canExportAnalytics && <Button variant="outline" size="sm" onClick={handleExportProductivityCSV} data-testid="button-export-productivity-csv"><FileText className="w-4 h-4 mr-2" />CSV</Button>}
               </div>
             </div>
             <ScrollArea className="h-[400px]">
@@ -672,8 +697,8 @@ export function AnalyticsReports() {
                 <p className="text-sm text-muted-foreground">System-wide performance metrics</p>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleExportEfficiencyPDF} disabled={exporting} data-testid="button-export-efficiency-pdf"><Download className="w-4 h-4 mr-2" />PDF</Button>
-                <Button variant="outline" size="sm" onClick={handleExportEfficiencyCSV} data-testid="button-export-efficiency-csv"><FileText className="w-4 h-4 mr-2" />CSV</Button>
+                {canExportAnalytics && <Button size="sm" onClick={handleExportEfficiencyPDF} disabled={exporting} data-testid="button-export-efficiency-pdf"><Download className="w-4 h-4 mr-2" />PDF</Button>}
+                {canExportAnalytics && <Button variant="outline" size="sm" onClick={handleExportEfficiencyCSV} data-testid="button-export-efficiency-csv"><FileText className="w-4 h-4 mr-2" />CSV</Button>}
               </div>
             </div>
             {efficiencyData && (
@@ -708,7 +733,7 @@ export function AnalyticsReports() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <div><h3 className="text-lg font-semibold flex items-center gap-2"><Building2 className="w-5 h-5" />Coverage by Hub</h3><p className="text-sm text-muted-foreground">Site visit coverage across field hubs</p></div>
-                    <Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('hub')} data-testid="button-export-coverage-hub"><FileSpreadsheet className="w-4 h-4 mr-2" />Export</Button>
+                     {canExportAnalytics && <Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('hub')} data-testid="button-export-coverage-hub"><FileSpreadsheet className="w-4 h-4 mr-2" />Export</Button>}
                   </div>
                   <ScrollArea className="h-[350px]">
                     <Table>
@@ -735,7 +760,7 @@ export function AnalyticsReports() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <div><h3 className="text-lg font-semibold flex items-center gap-2"><Globe2 className="w-5 h-5" />Coverage by State</h3><p className="text-sm text-muted-foreground">Site visit coverage across states</p></div>
-                    <Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('state')} data-testid="button-export-coverage-state"><FileSpreadsheet className="w-4 h-4 mr-2" />Export</Button>
+                     {canExportAnalytics && <Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('state')} data-testid="button-export-coverage-state"><FileSpreadsheet className="w-4 h-4 mr-2" />Export</Button>}
                   </div>
                   <ScrollArea className="h-[350px]">
                     <Table>
@@ -762,7 +787,7 @@ export function AnalyticsReports() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <div><h3 className="text-lg font-semibold flex items-center gap-2"><Layers className="w-5 h-5" />Coverage by Locality</h3><p className="text-sm text-muted-foreground">Site visit coverage across localities</p></div>
-                    <Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('locality')} data-testid="button-export-coverage-locality"><FileSpreadsheet className="w-4 h-4 mr-2" />Export</Button>
+                     {canExportAnalytics && <Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('locality')} data-testid="button-export-coverage-locality"><FileSpreadsheet className="w-4 h-4 mr-2" />Export</Button>}
                   </div>
                   <ScrollArea className="h-[350px]">
                     <Table>
@@ -789,7 +814,7 @@ export function AnalyticsReports() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <div><h3 className="text-lg font-semibold flex items-center gap-2"><Activity className="w-5 h-5" />Coverage by Activity</h3><p className="text-sm text-muted-foreground">Site visit coverage by activity type</p></div>
-                    <Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('activity')} data-testid="button-export-coverage-activity"><FileSpreadsheet className="w-4 h-4 mr-2" />Export</Button>
+                     {canExportAnalytics && <Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('activity')} data-testid="button-export-coverage-activity"><FileSpreadsheet className="w-4 h-4 mr-2" />Export</Button>}
                   </div>
                   <ScrollArea className="h-[350px]">
                     <Table>

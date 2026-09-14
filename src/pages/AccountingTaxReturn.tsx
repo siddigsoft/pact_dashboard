@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Download, RefreshCw, FileText, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { cn } from '@/lib/utils';
 
 interface TaxSummaryRow { tax_name: string; tax_rate: number; taxable_base: number; output_tax: number; input_tax: number; net_tax: number; }
@@ -85,7 +86,9 @@ export default function AccountingTaxReturn() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void run()} disabled={loading}><RefreshCw className={cn('w-4 h-4 mr-1', loading && 'animate-spin')} /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={() => exportToExcel(exportData, `tax-return-${year}-${quarter}`)} disabled={!rows.length && !whtRows.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={() => exportToExcel(exportData, `tax-return-${year}-${quarter}`)} disabled={!rows.length && !whtRows.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          </ReportExportGate>
         </div>
       </div>
 

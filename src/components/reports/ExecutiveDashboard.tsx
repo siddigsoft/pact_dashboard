@@ -23,6 +23,7 @@ import { ReportingService } from '@/services/reporting.service';
 import { exportExecutiveSummaryPDF, exportToExcel, exportToCSV } from '@/utils/report-export';
 import type { ExecutiveSummary, RAGStatus } from '@/types/reports';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const RAGIndicator = ({ status, size = 'md' }: { status: RAGStatus; size?: 'sm' | 'md' | 'lg' }) => {
   const colors = {
@@ -88,8 +89,15 @@ export function ExecutiveDashboard() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canViewExecutive = checkPermission('analytics', 'read');
+  const canExportExecutive = checkPermission('analytics', 'export');
 
   const fetchData = async () => {
+    if (!canViewExecutive) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const summary = await ReportingService.getExecutiveSummary();
@@ -108,9 +116,10 @@ export function ExecutiveDashboard() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [canViewExecutive]);
 
   const handleExportPDF = async () => {
+    if (!canExportExecutive) return;
     if (!data) return;
     setExporting(true);
     try {
@@ -131,6 +140,7 @@ export function ExecutiveDashboard() {
   };
 
   const handleExportExcel = () => {
+    if (!canExportExecutive) return;
     if (!data) return;
     const excelData = [
       { Metric: 'Portfolio Health', Value: data.portfolioHealth.toUpperCase() },
@@ -157,6 +167,7 @@ export function ExecutiveDashboard() {
   };
 
   const handleExportCSV = () => {
+    if (!canExportExecutive) return;
     if (!data) return;
     const csvData = [
       { Metric: 'Portfolio Health', Value: data.portfolioHealth },
@@ -192,6 +203,16 @@ export function ExecutiveDashboard() {
           <Skeleton className="h-64" />
         </div>
       </div>
+    );
+  }
+
+  if (!canViewExecutive) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          You do not have permission to view the executive dashboard.
+        </CardContent>
+      </Card>
     );
   }
 
@@ -236,18 +257,18 @@ export function ExecutiveDashboard() {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-executive-pdf">
+          {canExportExecutive && <Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-executive-pdf">
             <Download className="w-4 h-4 mr-2" />
             {exporting ? 'Exporting...' : 'PDF'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-executive-excel">
+          </Button>}
+          {canExportExecutive && <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-executive-excel">
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-executive-csv">
+          </Button>}
+          {canExportExecutive && <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-executive-csv">
             <FileText className="w-4 h-4 mr-2" />
             CSV
-          </Button>
+          </Button>}
         </div>
       </div>
 

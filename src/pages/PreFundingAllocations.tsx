@@ -19,6 +19,7 @@ import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
 import { format } from 'date-fns';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 /** Auto-paginates through all rows 1000 at a time — bypasses Supabase default cap. */
 async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
@@ -426,9 +427,11 @@ export default function PreFundingAllocations() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={exportAllocations} disabled={!detailsReady} data-testid="button-export-allocations">
-            <Download className="h-4 w-4 mr-1.5" />Export
-          </Button>
+          <ReportExportGate resource="pre_funding">
+            <Button variant="outline" size="sm" onClick={exportAllocations} disabled={!detailsReady} data-testid="button-export-allocations">
+              <Download className="h-4 w-4 mr-1.5" />Export
+            </Button>
+          </ReportExportGate>
           <Button variant="outline" size="sm" onClick={load} data-testid="button-refresh-allocs">
             <RefreshCw className="h-4 w-4 mr-1.5" />Refresh
           </Button>

@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { exportToExcel } from '@/utils/report-export';
 
 // ── types ────────────────────────────────────────────────────────────────────
@@ -165,6 +166,8 @@ export default function EnumeratorFeesReport() {
   const { toast } = useToast();
   const { currentUser } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('finances', 'export');
 
   const userRole = currentUser?.role?.toLowerCase();
   const isFinance = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || isSuperAdmin;
@@ -443,6 +446,7 @@ export default function EnumeratorFeesReport() {
 
   // ── export ────────────────────────────────────────────────────────────────
   const exportCsv = () => {
+    if (!canExport) return;
     const data = filtered.map(r => ({
       Enumerator: r.enumeratorName,
       'Site Name': r.siteName,
@@ -508,6 +512,7 @@ export default function EnumeratorFeesReport() {
   };
 
   const exportExcel = async () => {
+    if (!canExport) return;
     const XLSX = await import('xlsx');
     const data = filtered.map(r => ({
       'Enumerator': r.enumeratorName,
@@ -746,12 +751,12 @@ export default function EnumeratorFeesReport() {
               </SelectContent>
             </Select>
             <div className="flex gap-1.5 ml-auto">
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={exportCsv} data-testid="button-export-fees-csv">
+              {canExport && <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={exportCsv} data-testid="button-export-fees-csv">
                 <Download className="h-3 w-3" /> CSV
-              </Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={exportExcel} data-testid="button-export-fees-xlsx">
+              </Button>}
+              {canExport && <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={exportExcel} data-testid="button-export-fees-xlsx">
                 <FileSpreadsheet className="h-3 w-3" /> Excel
-              </Button>
+              </Button>}
             </div>
           </div>
           <div className="flex items-center justify-between mt-2 gap-2 flex-wrap">

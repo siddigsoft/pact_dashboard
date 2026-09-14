@@ -22,6 +22,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
 import { PageLoader } from '@/components/ui/page-loader';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Position {
   id: string;
@@ -73,7 +74,8 @@ const BLANK = {
 
 export default function PositionsPage() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin, checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const isSA = isSuperAdmin();
   const { toast } = useToast();
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
@@ -208,6 +210,7 @@ export default function PositionsPage() {
   }, [positions, criticalPositions, activeTab, statusFilter, deptFilter, search, profileMap]);
 
   function exportPositions() {
+    if (!checkPermission('hr', 'export')) return;
     const rows = visible.map(p => ({
       'Title': p.title,
       'Department': p.department_id ? (deptMap[p.department_id] ?? '') : '',
@@ -241,9 +244,11 @@ export default function PositionsPage() {
         <Briefcase className="h-5 w-5 text-blue-500" />
         <h1 className="text-xl font-semibold">Positions & Vacancies</h1>
         <div className="ml-auto flex gap-2">
-          <Button size="sm" variant="outline" onClick={exportPositions} data-testid="button-export-positions">
-            <Download className="h-4 w-4 mr-1" /> Export
-          </Button>
+          {canExport && <ReportExportGate resource="hr">
+            <Button size="sm" variant="outline" onClick={exportPositions} data-testid="button-export-positions">
+              <Download className="h-4 w-4 mr-1" /> Export
+            </Button>
+          </ReportExportGate>}
           {isAdmin && (
             <Button size="sm" onClick={openNew} data-testid="button-new-position">
               <Plus className="h-4 w-4 mr-1" /> New position

@@ -39,6 +39,7 @@ import MMPSiteEntriesTable from "@/components/mmp/MMPSiteEntriesTable";
 import MMPFileManagement from "@/components/mmp/MMPFileManagement";
 import RecallHistory from "@/components/mmp/RecallHistory";
 import { useAuthorization } from "@/hooks/use-authorization";
+import { ReportExportGate } from "@/components/auth/ReportExportGate";
 import ForwardToFOMDialog from "@/components/mmp/ForwardToFOMDialog";
 import { ReclaimFromCoordinatorDialog } from "@/components/mmp/ReclaimFromCoordinatorDialog";
 import ForwardToCoordinatorsDialog from "@/components/mmp/ForwardToCoordinatorsDialog";
@@ -144,6 +145,7 @@ const MMPDetailView = () => {
   const canApprove = (checkPermission('mmp', 'approve') || isAdmin) && mmpFile?.status === 'pending';
   const canReject = (checkPermission('mmp', 'approve') || isAdmin) && (mmpFile?.status === 'pending' || mmpFile?.status === 'verified');
   const canForward = hasAnyRole(['admin', 'ict', 'superAdmin', 'superadmin', 'super_admin']);
+  const canExport = checkPermission('mmp', 'export');
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
   // Move useMemo hooks here to ensure consistent hook order
@@ -292,6 +294,7 @@ const MMPDetailView = () => {
   };
   
   const exportToExcel = () => {
+    if (!checkPermission('mmp', 'export')) return;
     try {
       const exportData = siteEntries.map((site: any) => {
         const ad = site.additional_data || {};
@@ -333,6 +336,7 @@ const MMPDetailView = () => {
   };
 
   const exportToPdf = () => {
+    if (!checkPermission('mmp', 'export')) return;
     try {
       const doc = new jsPDF({ orientation: 'landscape' });
       doc.setFontSize(16);
@@ -545,24 +549,28 @@ const MMPDetailView = () => {
           >
             {mmpFile?.status || 'Unknown'}
           </Badge>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" data-testid="button-export-mmp">
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportToExcel} data-testid="menu-export-excel">
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Export as Excel
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportToPdf} data-testid="menu-export-pdf">
-                <FileText className="h-4 w-4 mr-2" />
-                Export as PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {canExport && (
+            <ReportExportGate resource="mmp">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" data-testid="button-export-mmp">
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={exportToExcel} data-testid="menu-export-excel">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Export as Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportToPdf} data-testid="menu-export-pdf">
+                    <FileText className="h-4 w-4 mr-2" />
+                    Export as PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ReportExportGate>
+          )}
           <Button variant="outline" size="sm" onClick={() => setShowAuditTrail(true)} data-testid="button-audit-trail">
             <History className="h-4 w-4 mr-2" />
             Audit

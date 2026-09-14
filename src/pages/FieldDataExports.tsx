@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, subDays } from 'date-fns';
 import {
@@ -479,6 +480,8 @@ function NewExportDialog({
 
 export default function FieldDataExports() {
   const { user } = useUser();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('analytics', 'export');
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -536,6 +539,7 @@ export default function FieldDataExports() {
       form_id: string; format: ExportFormat; options: ExportOptions;
       save_as_template: boolean; template_name: string;
     }) => {
+      if (!canExport) throw new Error('You do not have permission to export field data.');
       const jobPayload = {
         form_id:     payload.form_id || null,
         form_name:   forms.find(f => f.id === payload.form_id)?.name ?? null,
@@ -633,9 +637,9 @@ export default function FieldDataExports() {
           <Button variant="outline" size="sm" onClick={() => refetchJobs()} data-testid="btn-refresh-exports">
             <RefreshCw className="w-4 h-4 mr-1.5" />Refresh
           </Button>
-          <Button size="sm" onClick={() => setShowNew(true)} data-testid="btn-new-export">
+          {canExport && <Button size="sm" onClick={() => setShowNew(true)} data-testid="btn-new-export">
             <Plus className="w-4 h-4 mr-1.5" />New Export
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -683,9 +687,9 @@ export default function FieldDataExports() {
               <FileDown className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p className="font-medium">No exports in queue</p>
               <p className="text-sm mt-1">Start a new export and it will appear here.</p>
-              <Button className="mt-4" size="sm" onClick={() => setShowNew(true)} data-testid="btn-new-export-empty">
+              {canExport && <Button className="mt-4" size="sm" onClick={() => setShowNew(true)} data-testid="btn-new-export-empty">
                 <Plus className="w-4 h-4 mr-1.5" />New Export
-              </Button>
+              </Button>}
             </div>
           ) : (
             activeJobs.map(job => (
@@ -693,6 +697,7 @@ export default function FieldDataExports() {
                 key={job.id}
                 job={job}
                 onDelete={() => deleteJob.mutate(job.id)}
+                canExport={canExport}
               />
             ))
           )}
@@ -702,7 +707,7 @@ export default function FieldDataExports() {
             <div className="mt-6">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Recently Completed</p>
               {doneJobs.slice(0, 5).map(job => (
-                <ExportJobCard key={job.id} job={job} onDelete={() => deleteJob.mutate(job.id)} />
+                <ExportJobCard key={job.id} job={job} onDelete={() => deleteJob.mutate(job.id)} canExport={canExport} />
               ))}
               {doneJobs.length > 5 && (
                 <button onClick={() => setTab('history')} className="text-xs text-indigo-600 hover:underline mt-2 ml-1">
@@ -754,6 +759,7 @@ export default function FieldDataExports() {
                 key={job.id}
                 job={job}
                 onDelete={() => deleteJob.mutate(job.id)}
+                canExport={canExport}
                 onRepeat={() => {
                   setPrefillFormId(job.form_id ?? undefined);
                   setPrefillOpts(job.options as Partial<ExportOptions>);
@@ -787,6 +793,7 @@ export default function FieldDataExports() {
                     setPrefillOpts(tpl.options as Partial<ExportOptions>);
                     setShowNew(true);
                   }}
+                  canExport={canExport}
                   onDelete={() => deleteTemplate.mutate(tpl.id)}
                 />
               ))}
@@ -815,10 +822,12 @@ function ExportJobCard({
   job,
   onDelete,
   onRepeat,
+  canExport,
 }: {
   job: ExportJob;
   onDelete: () => void;
   onRepeat?: () => void;
+  canExport: boolean;
 }) {
   return (
     <div
@@ -854,7 +863,7 @@ function ExportJobCard({
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
-        {job.status === 'completed' && job.file_url && (
+        {canExport && job.status === 'completed' && job.file_url && (
           <a href={job.file_url} target="_blank" rel="noopener noreferrer">
             <Button size="sm" variant="default" data-testid={`btn-download-${job.id}`}>
               <Download className="w-4 h-4 mr-1.5" />Download
@@ -873,7 +882,7 @@ function ExportJobCard({
                 <Copy className="w-4 h-4 mr-2" />Repeat Export
               </DropdownMenuItem>
             )}
-            {job.status === 'completed' && job.file_url && (
+            {canExport && job.status === 'completed' && job.file_url && (
               <DropdownMenuItem
                 onClick={() => { navigator.clipboard.writeText(job.file_url!); }}
                 data-testid={`btn-copy-url-${job.id}`}
@@ -901,10 +910,12 @@ function TemplateCard({
   template,
   onUse,
   onDelete,
+  canExport,
 }: {
   template: ExportTemplate;
   onUse: () => void;
   onDelete: () => void;
+  canExport: boolean;
 }) {
   return (
     <div
@@ -930,9 +941,9 @@ function TemplateCard({
       </div>
 
       <div className="flex gap-2">
-        <Button size="sm" className="flex-1" onClick={onUse} data-testid={`btn-use-template-${template.id}`}>
+        {canExport && <Button size="sm" className="flex-1" onClick={onUse} data-testid={`btn-use-template-${template.id}`}>
           <FileDown className="w-3.5 h-3.5 mr-1.5" />Use Template
-        </Button>
+        </Button>}
         <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={onDelete} data-testid={`btn-delete-template-${template.id}`}>
           <Trash2 className="w-4 h-4" />
         </Button>

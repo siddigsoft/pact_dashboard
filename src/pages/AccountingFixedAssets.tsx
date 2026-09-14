@@ -21,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Asset {
   id: string; asset_tag: string | null; name_en: string; name_ar: string | null; category: string;
@@ -456,7 +457,9 @@ export default function AccountingFixedAssets() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadAssets} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-fixed-assets"><Download className="h-4 w-4 mr-1" />Export</Button>
+          <ReportExportGate resource="fixed_assets">
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-fixed-assets"><Download className="h-4 w-4 mr-1" />Export</Button>
+          </ReportExportGate>
           {canEdit && <Button variant="outline" size="sm" onClick={() => { setDepRunResults([]); setDepRunDialog(true); }} disabled={assets.filter(a => a.status === 'active').length === 0} data-testid="button-run-dep"><TrendingDown className="h-4 w-4 mr-1" />Run Depreciation</Button>}
           {canEdit && <Button size="sm" onClick={() => openDialog()} data-testid="button-add"><Plus className="h-4 w-4 mr-1" />Add Asset</Button>}
         </div>

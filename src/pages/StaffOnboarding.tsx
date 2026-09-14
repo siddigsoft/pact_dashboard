@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { format } from 'date-fns';
 import { Download } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
@@ -17,6 +18,8 @@ interface PendingHire {
 }
 
 function TrackerView() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const [profiles, setProfiles] = useState<any[]>([]);
   const [salaryMap, setSalaryMap] = useState<Record<string, boolean>>({});
   const [retainerMap, setRetainerMap] = useState<Record<string, boolean>>({});
@@ -97,6 +100,7 @@ function TrackerView() {
   }, [rows]);
 
   function exportStaffOnboarding() {
+    if (!checkPermission('hr', 'export')) return;
     const rowsForExport = filtered.map(x => ({
       'Employee Name': x.profile.full_name ?? '—',
       'Employee ID': x.profile.employee_id ?? '—',
@@ -189,21 +193,23 @@ function TrackerView() {
 
         {/* Filters */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
-          <button
-            onClick={exportStaffOnboarding}
-            data-testid="button-export-staff-onboarding"
-            style={{
-              padding: '8px 18px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: '1.5px solid #0F2041',
-              background: '#fff',
-              color:      '#0F2041',
-              transition: 'all 0.15s',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Download style={{ width: 14, height: 14 }} /> Export
-          </button>
+          {canExport && <ReportExportGate resource="hr">
+            <button
+              onClick={exportStaffOnboarding}
+              data-testid="button-export-staff-onboarding"
+              style={{
+                padding: '8px 18px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: '1.5px solid #0F2041',
+                background: '#fff',
+                color:      '#0F2041',
+                transition: 'all 0.15s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Download style={{ width: 14, height: 14 }} /> Export
+            </button>
+          </ReportExportGate>}
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -295,14 +301,18 @@ function TrackerView() {
 /*  Main component — Guide | Tracker toggle                  */
 /* ══════════════════════════════════════════════════════════ */
 export default function StaffOnboarding() {
-  const { isSuperAdmin, hasAnyRole } = useAuthorization();
-  const isAdmin = isSuperAdmin() || hasAnyRole(['super_admin','superAdmin','SuperAdmin','admin','Admin','finance','Finance']);
+  const { isSuperAdmin, hasAnyRole, checkPermission } = useAuthorization();
+  const roleCanManage = isSuperAdmin() || hasAnyRole(['super_admin','superAdmin','SuperAdmin','admin','Admin','finance','Finance']);
+  // HR read grants are sufficient for tracker visibility; write/create
+  // controls remain role/action gated inside the tracker.
+  const canRead = checkPermission('hr', 'read');
+  const canViewTracker = roleCanManage || canRead;
   const [view, setView] = useState<'guide' | 'tracker'>('guide');
 
   return (
     <div style={{ fontFamily: "'Segoe UI', 'Inter', Arial, sans-serif", background: '#EEF2F7', minHeight: '100vh' }}>
       {/* ── Mode toggle bar (admin only) ── */}
-      {isAdmin && (
+      {canViewTracker && (
         <div style={{ background: '#0F2041', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>View:</span>
           {([
@@ -325,7 +335,7 @@ export default function StaffOnboarding() {
         </div>
       )}
 
-      {view === 'tracker' && isAdmin ? (
+      {view === 'tracker' && canViewTracker ? (
         <TrackerView />
       ) : (
         <GuideView />
@@ -338,6 +348,8 @@ export default function StaffOnboarding() {
 /*  Guide view — original printable onboarding document      */
 /* ══════════════════════════════════════════════════════════ */
 function GuideView() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   return (
     <div>
       <style>{`
@@ -809,9 +821,13 @@ function GuideView() {
 
       <div className="ob-wrap">
 
-        <div className="ob-print-bar">
-          <button className="ob-print-btn" onClick={() => window.print()}>🖨️ Print / Save as PDF</button>
-        </div>
+        {canExport && <ReportExportGate resource="hr">
+          <div className="ob-print-bar">
+            <button className="ob-print-btn" onClick={() => {
+              if (checkPermission('hr', 'export')) window.print();
+            }}>🖨️ Print / Save as PDF</button>
+          </div>
+        </ReportExportGate>}
 
         <div className="ob-hero">
           <img className="ob-hero-logo" src="/pact-logo.png" alt="PACT" />

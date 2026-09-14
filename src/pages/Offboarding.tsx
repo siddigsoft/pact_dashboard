@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
@@ -20,6 +21,7 @@ import { LogOut, Plus, FileText, Download, CheckCircle2, Package, RotateCcw, Ale
 import { format, differenceInMonths, parseISO } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 type Offboarding = {
   id: string; user_id: string; initiated_by: string;
@@ -58,9 +60,15 @@ const isHrAdmin = (role?: string | null) => {
 
 export default function Offboarding() {
   const { user, profile } = useUser();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
   const qc = useQueryClient();
-  const isAdmin = isHrAdmin(profile?.role);
+  const roleCanManage = isHrAdmin(profile?.role);
+  const canRead = checkPermission('hr', 'read');
+  const canView = roleCanManage || canRead;
+  const canCreate = roleCanManage || checkPermission('hr', 'create');
+  const canUpdate = roleCanManage || checkPermission('hr', 'update');
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editing, setEditing] = useState<Offboarding | null>(null);
@@ -83,7 +91,7 @@ export default function Offboarding() {
 
   const { data: cases = [], isLoading } = useQuery<Offboarding[]>({
     queryKey: ['offboarding-cases'],
-    enabled: isAdmin,
+    enabled: canView,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('offboarding_cases').select('*').order('created_at', { ascending: false });
@@ -98,7 +106,7 @@ export default function Offboarding() {
 
   const { data: employees = [] } = useQuery<Profile[]>({
     queryKey: ['offboarding-employees'],
-    enabled: isAdmin,
+    enabled: canView,
     queryFn: async () => {
       const { data, error } = await supabase.from('profiles')
         .select('id, full_name, role, email, contract_start_date')
@@ -113,7 +121,7 @@ export default function Offboarding() {
   //  (b) departing employee IS a named successor in another position's plan
   const { data: successionPositions = [] } = useQuery({
     queryKey: ['offboarding-succession-positions'],
-    enabled: isAdmin,
+    enabled: canView,
     queryFn: async () => {
       const { data } = await supabase
         .from('positions')
@@ -300,6 +308,7 @@ export default function Offboarding() {
   };
 
   const exportPdf = (c: Offboarding) => {
+    if (!checkPermission('hr', 'export')) return;
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.text('Final Settlement Worksheet', 14, 18);
@@ -332,7 +341,7 @@ export default function Offboarding() {
     doc.save(`offboarding-${c.user_name ?? c.user_id}-${c.last_working_date}.pdf`);
   };
 
-  if (!isAdmin) {
+  if (!canView) {
     return (
       <div className="container mx-auto p-6 max-w-2xl text-center text-muted-foreground" data-testid="page-offboarding-no-access">
         <LogOut className="w-12 h-12 mx-auto opacity-50 mb-3" />
@@ -353,9 +362,11 @@ export default function Offboarding() {
             Manage employee exits: settlement worksheet, checklist, account revocation. / إدارة مغادرة الموظفين: التسوية والمهام وإلغاء الحسابات.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)} data-testid="button-new-offboarding">
-          <Plus className="w-4 h-4 mr-2" /> Initiate Offboarding / بدء إجراء
-        </Button>
+        {canCreate && (
+          <Button onClick={() => setOpen(true)} data-testid="button-new-offboarding">
+            <Plus className="w-4 h-4 mr-2" /> Initiate Offboarding / بدء إجراء
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -385,11 +396,13 @@ export default function Offboarding() {
                       <TableCell><span className="text-sm">{done}/{CHECKLIST_ITEMS.length}</span></TableCell>
                       <TableCell className="text-right space-x-1">
                         <Button size="sm" variant="ghost" onClick={() => setEditing(c)} data-testid={`button-view-${c.id}`}>View</Button>
-                        <Button size="sm" variant="ghost" onClick={() => exportPdf(c)} data-testid={`button-pdf-${c.id}`}><Download className="w-3 h-3"/></Button>
-                        {c.status === 'settlement_review' && (
+                        {canExport && <ReportExportGate resource="hr">
+                          <Button size="sm" variant="ghost" onClick={() => exportPdf(c)} data-testid={`button-pdf-${c.id}`}><Download className="w-3 h-3"/></Button>
+                        </ReportExportGate>}
+                        {canUpdate && c.status === 'settlement_review' && (
                           <Button size="sm" onClick={() => approve(c)} data-testid={`button-approve-${c.id}`}>Approve</Button>
                         )}
-                        {c.status === 'approved' && (
+                        {canUpdate && c.status === 'approved' && (
                           <Button size="sm" variant="default" onClick={() => complete(c)} data-testid={`button-complete-${c.id}`}>
                             <CheckCircle2 className="w-3 h-3 mr-1"/>Complete
                           </Button>
@@ -599,17 +612,19 @@ export default function Offboarding() {
                               <span className="text-sm font-medium truncate">{a.name}</span>
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">{a.asset_type}</Badge>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs gap-1 shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100"
-                              disabled={returningAssetId === a.assignment_id}
-                              onClick={() => setAssetReturnDialog({ assignmentId: a.assignment_id, assetId: a.id, assetName: a.name, condition: 'good', notes: '' })}
-                              data-testid={`button-offboarding-return-${a.assignment_id}`}
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              {returningAssetId === a.assignment_id ? 'Returning…' : 'Mark Returned'}
-                            </Button>
+                            {canUpdate && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs gap-1 shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100"
+                                disabled={returningAssetId === a.assignment_id}
+                                onClick={() => setAssetReturnDialog({ assignmentId: a.assignment_id, assetId: a.id, assetName: a.name, condition: 'good', notes: '' })}
+                                data-testid={`button-offboarding-return-${a.assignment_id}`}
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                {returningAssetId === a.assignment_id ? 'Returning…' : 'Mark Returned'}
+                              </Button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -624,7 +639,8 @@ export default function Offboarding() {
                       <label key={it.key} className="flex items-start gap-2 cursor-pointer">
                         <Checkbox
                           checked={!!editing.checklist?.[it.key]}
-                          onCheckedChange={() => toggleChecklist(editing.id, editing.checklist || {}, it.key)}
+                          disabled={!canUpdate}
+                          onCheckedChange={() => canUpdate && toggleChecklist(editing.id, editing.checklist || {}, it.key)}
                           data-testid={`checkbox-${it.key}`}
                         />
                         <span className="text-sm">{it.en} <span className="text-muted-foreground">/ {it.ar}</span></span>
@@ -635,7 +651,9 @@ export default function Offboarding() {
                 {editing.notes && <div className="text-sm bg-muted p-3 rounded-md"><strong>Notes:</strong> {editing.notes}</div>}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => exportPdf(editing)}><Download className="w-4 h-4 mr-2"/>Export PDF</Button>
+                {canExport && <ReportExportGate resource="hr">
+                  <Button variant="outline" onClick={() => exportPdf(editing)}><Download className="w-4 h-4 mr-2"/>Export PDF</Button>
+                </ReportExportGate>}
                 <Button onClick={() => { setEditing(null); setEditingAssets([]); }}>Close</Button>
               </DialogFooter>
             </>

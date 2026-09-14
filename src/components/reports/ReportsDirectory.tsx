@@ -11,6 +11,11 @@ import {
   ShieldCheck, UserPlus, LogOut, Gauge, DollarSign, FileSpreadsheet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuthorization } from "@/hooks/use-authorization";
+import type { ResourceType } from "@/types/roles";
+import {
+  resolveReportsDirectoryAction,
+} from "@/lib/reports-directory-permissions";
 
 interface ReportItem {
   label: string;
@@ -27,6 +32,25 @@ interface ReportCategory {
   accent: string;
   items: ReportItem[];
 }
+
+interface ReportPermission {
+  resource: ResourceType;
+  canExport: boolean;
+}
+
+/**
+ * Keep directory cards aligned with the module registry rather than treating
+ * every report as the generic reports resource.  In particular, finance, HR,
+ * operational, and audit cards each have their own registry permission.
+ */
+export const getReportPermission = (path: string): ReportPermission => {
+  const readPermission = resolveReportsDirectoryAction(path, 'read');
+  if (!readPermission) return { resource: 'reports', canExport: false };
+  return {
+    resource: readPermission.resource,
+    canExport: Boolean(resolveReportsDirectoryAction(path, 'export')),
+  };
+};
 
 const CATEGORIES: ReportCategory[] = [
   {
@@ -126,12 +150,18 @@ const CATEGORIES: ReportCategory[] = [
   },
 ];
 
+/** Exported for completeness tests: every card must have a canonical map row. */
+export const REPORTS_DIRECTORY_PATHS = CATEGORIES.flatMap(category =>
+  category.items.map(item => item.path),
+);
+
 interface ReportsDirectoryProps {
   onSelectInternal?: (tab: string) => void;
 }
 
 export const ReportsDirectory: FC<ReportsDirectoryProps> = ({ onSelectInternal }) => {
   const navigate = useNavigate();
+  const { checkPermission } = useAuthorization();
 
   const handleClick = (path: string) => {
     if (path.startsWith("#")) {
@@ -152,6 +182,14 @@ export const ReportsDirectory: FC<ReportsDirectoryProps> = ({ onSelectInternal }
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {category.items.map((item) => {
+                const readPermission = resolveReportsDirectoryAction(item.path, 'read');
+                const exportPermission = resolveReportsDirectoryAction(item.path, 'export');
+                // Every directory item is registered in the canonical map.
+                // Keep an explicit fallback for type/runtime safety, but fail
+                // closed rather than showing an unprotected card.
+                if (!readPermission) return null;
+                const canView = checkPermission(readPermission.resource, readPermission.action);
+                if (!canView) return null;
                 const Icon = item.icon;
                 return (
                   <button
@@ -165,7 +203,7 @@ export const ReportsDirectory: FC<ReportsDirectoryProps> = ({ onSelectInternal }
                       <span className="text-sm font-medium leading-tight">{item.label}</span>
                     </div>
                     <p className="text-xs text-muted-foreground leading-snug">{item.description}</p>
-                    {item.exportTypes && (
+                    {item.exportTypes && exportPermission && checkPermission(exportPermission.resource, exportPermission.action) && (
                       <div className="flex gap-1 flex-wrap mt-0.5">
                         {item.exportTypes.map((t) => (
                           <Badge key={t} variant="secondary" className="text-[10px] px-1.5 py-0">{t}</Badge>

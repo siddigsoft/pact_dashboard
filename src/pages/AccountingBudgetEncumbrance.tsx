@@ -23,6 +23,7 @@ import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { PageLoader } from '@/components/ui/page-loader';
 import { useBudgetEncumbranceQuery } from '@/hooks/useAccountingQueries';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 type Encumbrance = NonNullable<
   ReturnType<typeof useBudgetEncumbranceQuery>['data']
@@ -40,8 +41,9 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 export default function AccountingBudgetEncumbrance() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { checkPermission, hasAnyRole, isAuthenticated } = useAuthorization();
+  const allowed  = checkPermission('finances', 'read');
+  const canExport = checkPermission('finances', 'export');
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
 
   const overrideCanEdit = usePageManageOverride('acct-budget-enc', roleCanEdit);
@@ -118,6 +120,7 @@ export default function AccountingBudgetEncumbrance() {
   };
 
   const exportCsv = () => {
+    if (!canExport) return;
     downloadCsv('budget_encumbrances.csv', [
       ['Source Type', 'Source ID', 'Amount', 'Currency', 'Status', 'Fund', 'Created'],
       ...filtered.map(e => {
@@ -128,6 +131,7 @@ export default function AccountingBudgetEncumbrance() {
   };
 
   const exportExcel = () => {
+    if (!canExport) return;
     const rows = filtered.map(e => {
       const fund = funds.find(f => f.id === e.fund_id);
       return {
@@ -184,8 +188,10 @@ export default function AccountingBudgetEncumbrance() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-enc"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-budget-enc"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
+          <ReportExportGate resource="finances" action="export">
+            <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-budget-enc"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
+          </ReportExportGate>
         </div>
       </div>
 

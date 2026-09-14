@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Plus, Pencil, Trash2, Loader2, ChevronLeft, MapPin, Users, Target,
@@ -2577,9 +2578,11 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={exportCompletion}>
-            <Download className="h-3.5 w-3.5" /> Export Report
-          </Button>
+          <ReportExportGate resource="mmp">
+            <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={exportCompletion}>
+              <Download className="h-3.5 w-3.5" /> Export Report
+            </Button>
+          </ReportExportGate>
           {canManage && (
             <>
               <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setShowAddVillage(true)}>
@@ -3071,9 +3074,11 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                   </button>
                 ))}
                 <div className="ml-auto">
-                  <Button type="button" size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={exportFeesExcel}>
-                    <Download className="h-3.5 w-3.5" />Export Excel
-                  </Button>
+                  <ReportExportGate resource="mmp">
+                    <Button type="button" size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={exportFeesExcel}>
+                      <Download className="h-3.5 w-3.5" />Export Excel
+                    </Button>
+                  </ReportExportGate>
                 </div>
               </div>
 
@@ -3631,9 +3636,11 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h3 className="font-semibold text-sm flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" />Completion Summary</h3>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={exportCompletion}>
-                <Download className="h-3.5 w-3.5" /> Export Excel
-              </Button>
+              <ReportExportGate resource="mmp">
+                <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={exportCompletion}>
+                  <Download className="h-3.5 w-3.5" /> Export Excel
+                </Button>
+              </ReportExportGate>
               {canManage && selectedCampaign.status !== 'completed' && (
                 <Button
                   size="sm"
@@ -3833,9 +3840,11 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
             <div className="flex flex-col items-center gap-5 py-8">
               <div className="text-center space-y-1">
                 <p className="text-sm text-muted-foreground">Start with the template so your column names are recognised automatically.</p>
-                <Button variant="outline" size="sm" className="gap-1.5 mt-2" onClick={downloadVillageTemplate}>
-                  <Download className="h-3.5 w-3.5" /> Download Template (.xlsx)
-                </Button>
+                <ReportExportGate resource="mmp">
+                  <Button variant="outline" size="sm" className="gap-1.5 mt-2" onClick={downloadVillageTemplate}>
+                    <Download className="h-3.5 w-3.5" /> Download Template (.xlsx)
+                  </Button>
+                </ReportExportGate>
               </div>
               <div
                 className="w-full border-2 border-dashed rounded-lg p-10 flex flex-col items-center gap-3 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"

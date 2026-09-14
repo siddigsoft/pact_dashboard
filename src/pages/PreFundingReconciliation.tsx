@@ -61,6 +61,7 @@ import { exportStandardExcel } from '@/utils/standardExcelExport';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { FilePreviewDialog } from '@/components/ui/FilePreviewDialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface PreFundSummary {
   id: string; name: string; source: string | null; currency: string;
@@ -2447,15 +2448,17 @@ export default function PreFundingReconciliation() {
                       <p className="text-[11px] text-muted-foreground">{selectedFund.source}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleDonorPDF} disabled={generatingPdf}>
-                        <FileText className="h-3.5 w-3.5 mr-1" />Donor PDF
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportPDF} disabled={generatingPdf}>
-                        <Download className="h-3.5 w-3.5 mr-1" />{generatingPdf ? 'Generating…' : 'Recon PDF'}
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportExcel} disabled={exportingExcel} data-testid="button-export-excel">
-                        <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />{exportingExcel ? 'Exporting…' : 'Export Excel'}
-                      </Button>
+                      <ReportExportGate resource="pre_funding">
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleDonorPDF} disabled={generatingPdf}>
+                          <FileText className="h-3.5 w-3.5 mr-1" />Donor PDF
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportPDF} disabled={generatingPdf}>
+                          <Download className="h-3.5 w-3.5 mr-1" />{generatingPdf ? 'Generating…' : 'Recon PDF'}
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportExcel} disabled={exportingExcel} data-testid="button-export-excel">
+                          <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />{exportingExcel ? 'Exporting…' : 'Export Excel'}
+                        </Button>
+                      </ReportExportGate>
                       {!isCD && ['active', 'low_balance'].includes(selectedFund.status) && (
                         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleMatchBankFeed} disabled={matchingFeed} data-testid="button-match-bank-feed">
                           <Shuffle className="h-3.5 w-3.5 mr-1" />{matchingFeed ? 'Matching…' : 'Match Bank Feed'}

@@ -19,6 +19,7 @@ import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Vendor { id: string; vendor_code: string | null; name_en: string; vendor_type: string }
 interface Country { id: string; code: string; name_en: string; flag_emoji: string | null }
@@ -228,8 +229,10 @@ export default function AccountingPurchaseOrders() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-excel"><Download className="h-4 w-4 mr-1" />Excel</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv"><ShoppingCart className="h-4 w-4 mr-1" />CSV</Button>
+          <ReportExportGate resource="procurement">
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-excel"><Download className="h-4 w-4 mr-1" />Excel</Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv"><ShoppingCart className="h-4 w-4 mr-1" />CSV</Button>
+          </ReportExportGate>
           <Button size="sm" onClick={() => openDialog()} data-testid="button-new"><Plus className="h-4 w-4 mr-1" />New PO</Button>
         </div>
       </div>

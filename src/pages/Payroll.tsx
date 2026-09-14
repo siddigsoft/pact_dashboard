@@ -27,6 +27,8 @@ import {
 import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
 import { PageLoader } from '@/components/ui/page-loader';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface PersonalTask {
@@ -81,6 +83,8 @@ function downloadCSV(rows: string[][], filename: string) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Payroll({ embedded = false }: { embedded?: boolean }) {
   const { currentUser } = useUser();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('payroll', 'export');
   const userId = currentUser?.id;
 
   const [monthOffset,  setMonthOffset]  = useState(0);
@@ -231,24 +235,24 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
 
   const isLoading = loadingWallet || loadingTx || loadingTasks;
 
-  const exportPeriodTasks = () => downloadCSV([
+  const exportPeriodTasks = () => { if (!checkPermission('payroll', 'export')) return; downloadCSV([
     ['Task', 'Category', 'Priority', 'Completed', 'Reward (SDG)'],
     ...periodTasks.map(t => [t.title, t.category ?? '', t.priority ?? '', t.completed_at ? format(parseISO(t.completed_at), 'dd MMM yyyy') : '', String(t.completion_reward_amount ?? 0)]),
     ['', '', '', 'TOTAL', String(periodEarnings)],
-  ], `payroll-tasks-${format(periodStart, 'yyyy-MM')}.csv`);
+  ], `payroll-tasks-${format(periodStart, 'yyyy-MM')}.csv`); };
 
-  const exportAnnualReport = () => downloadCSV([
+  const exportAnnualReport = () => { if (!checkPermission('payroll', 'export')) return; downloadCSV([
     ['Month', 'Tasks', 'Task Rewards (SDG)', 'Withdrawals (SDG)', 'Net'],
     ...annualRows.map(r => [r.label, String(r.taskCount), String(r.taskEarned), String(r.withdrawn), String(r.taskEarned - r.withdrawn)]),
     ['TOTAL', String(annualTotal.taskCount), String(annualTotal.taskEarned), String(annualTotal.withdrawn), String(annualTotal.taskEarned - annualTotal.withdrawn)],
-  ], `payroll-annual-${format(new Date(), 'yyyy')}.csv`);
+  ], `payroll-annual-${format(new Date(), 'yyyy')}.csv`); };
 
-  const exportAllTx = () => downloadCSV([
+  const exportAllTx = () => { if (!checkPermission('payroll', 'export')) return; downloadCSV([
     ['Date', 'Type', 'Description', 'Amount', 'Currency', 'Status'],
     ...filteredAllTx.map(t => [format(parseISO(t.created_at), 'dd MMM yyyy HH:mm'), t.tx_type, t.description ?? '', String(t.amount), t.currency, t.status ?? '']),
-  ], `payroll-transactions-${format(new Date(), 'yyyy-MM')}.csv`);
+  ], `payroll-transactions-${format(new Date(), 'yyyy-MM')}.csv`); };
 
-  const exportPeriodTasksExcel = () => exportToExcel(
+  const exportPeriodTasksExcel = () => { if (!checkPermission('payroll', 'export')) return; exportToExcel(
     periodTasks.map(t => ({
       'Task': t.title, 'Category': t.category ?? '', 'Priority': t.priority ?? '',
       'Completed': t.completed_at ? format(parseISO(t.completed_at), 'dd MMM yyyy') : '',
@@ -256,25 +260,25 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
     })),
     'Payroll Tasks',
     `payroll-tasks-${format(periodStart, 'yyyy-MM')}.xlsx`
-  );
+  ); };
 
-  const exportAnnualReportExcel = () => exportToExcel(
+  const exportAnnualReportExcel = () => { if (!checkPermission('payroll', 'export')) return; exportToExcel(
     annualRows.map(r => ({
       'Month': r.label, 'Tasks': r.taskCount, 'Task Rewards (SDG)': r.taskEarned,
       'Withdrawals (SDG)': r.withdrawn, 'Net': r.taskEarned - r.withdrawn,
     })),
     'Payroll Annual Report',
     `payroll-annual-${format(new Date(), 'yyyy')}.xlsx`
-  );
+  ); };
 
-  const exportAllTxExcel = () => exportToExcel(
+  const exportAllTxExcel = () => { if (!checkPermission('payroll', 'export')) return; exportToExcel(
     filteredAllTx.map(t => ({
       'Date': format(parseISO(t.created_at), 'dd MMM yyyy HH:mm'), 'Type': t.tx_type,
       'Description': t.description ?? '', 'Amount': t.amount, 'Currency': t.currency, 'Status': t.status ?? '',
     })),
     'Payroll Transactions',
     `payroll-transactions-${format(new Date(), 'yyyy-MM')}.xlsx`
-  );
+  ); };
 
   // ── Layout ───────────────────────────────────────────────────────────────
   return (
@@ -338,8 +342,10 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setMonthOffset(o => o + 1)} disabled={monthOffset >= 0}><ChevronRight className="h-4 w-4" /></Button>
               </div>
               {monthOffset !== 0 && <Button variant="ghost" size="sm" onClick={() => setMonthOffset(0)}>This month</Button>}
-              <Button variant="outline" size="sm" className="ml-auto gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportPeriodTasks} data-testid="button-export-csv-period-tasks"><Download className="h-3.5 w-3.5" />CSV</Button>
-              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportPeriodTasksExcel} data-testid="button-export-excel-period-tasks"><Download className="h-3.5 w-3.5" />Excel</Button>
+              {canExport && <ReportExportGate resource="payroll"><>
+                <Button variant="outline" size="sm" className="ml-auto gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportPeriodTasks} data-testid="button-export-csv-period-tasks"><Download className="h-3.5 w-3.5" />CSV</Button>
+                <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportPeriodTasksExcel} data-testid="button-export-excel-period-tasks"><Download className="h-3.5 w-3.5" />Excel</Button>
+              </></ReportExportGate>}
             </div>
 
             {/* Chart + breakdown */}
@@ -408,8 +414,10 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
           <TabsContent value="annual" className="mt-4 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">12-Month Earnings Report</h2>
-              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAnnualReport} data-testid="button-export-csv-annual"><Download className="h-3.5 w-3.5" />CSV</Button>
-              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAnnualReportExcel} data-testid="button-export-excel-annual"><Download className="h-3.5 w-3.5" />Excel</Button>
+              {canExport && <ReportExportGate resource="payroll"><>
+                <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAnnualReport} data-testid="button-export-csv-annual"><Download className="h-3.5 w-3.5" />CSV</Button>
+                <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAnnualReportExcel} data-testid="button-export-excel-annual"><Download className="h-3.5 w-3.5" />Excel</Button>
+              </></ReportExportGate>}
             </div>
 
             <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
@@ -552,8 +560,10 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
                 <option value="all">All types</option>
                 {txTypes.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
               </select>
-              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAllTx} data-testid="button-export-csv-all-tx"><Download className="h-3.5 w-3.5" />CSV</Button>
-              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAllTxExcel} data-testid="button-export-excel-all-tx"><Download className="h-3.5 w-3.5" />Excel</Button>
+              {canExport && <ReportExportGate resource="payroll"><>
+                <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAllTx} data-testid="button-export-csv-all-tx"><Download className="h-3.5 w-3.5" />CSV</Button>
+                <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAllTxExcel} data-testid="button-export-excel-all-tx"><Download className="h-3.5 w-3.5" />Excel</Button>
+              </></ReportExportGate>}
             </div>
 
             <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
@@ -921,6 +931,8 @@ interface PayslipRun {
 
 function MyPayslipsTab({ userId }: { userId: string }) {
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('payroll', 'export');
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const SLIP_CACHE = { staleTime: 5 * 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false } as const;
@@ -955,6 +967,7 @@ function MyPayslipsTab({ userId }: { userId: string }) {
   });
 
   const downloadPDF = (item: PayslipRunItem, run: PayslipRun) => {
+    if (!checkPermission('payroll', 'export')) return;
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const W = 210;
     const currency = item.currency;
@@ -1193,9 +1206,11 @@ function MyPayslipsTab({ userId }: { userId: string }) {
                   ))}
                 </div>
                 <div className="flex gap-2 justify-end">
-                  <Button size="sm" className="h-8 gap-2 text-xs bg-[#0F2041] hover:bg-[#1D3461] text-white" onClick={() => downloadPDF(item, run)}>
-                    <Download className="h-3.5 w-3.5" />Download PDF
-                  </Button>
+                  {canExport && <ReportExportGate resource="payroll">
+                    <Button size="sm" className="h-8 gap-2 text-xs bg-[#0F2041] hover:bg-[#1D3461] text-white" onClick={() => downloadPDF(item, run)}>
+                      <Download className="h-3.5 w-3.5" />Download PDF
+                    </Button>
+                  </ReportExportGate>}
                 </div>
               </div>
             )}

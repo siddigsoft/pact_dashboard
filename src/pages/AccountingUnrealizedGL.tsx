@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, Download, RefreshCw, TrendingUp, TrendingDown, ArrowLeftRight } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { formatNumber } from '@/lib/accountingFormat';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface ExchangeRate { from_currency: string; to_currency: string; rate: number; effective_date: string }
 interface FxLine { id: string; account_id: string; account_code: string; account_name: string;
@@ -127,7 +128,9 @@ export default function AccountingUnrealizedGL() {
           {['USD','SDG','EUR','GBP','SAR','AED','EGP'].map(c=><option key={c} value={c}>{c}</option>)}
         </select>
         <Button size="sm" variant="outline" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
-        <Button size="sm" variant="outline" onClick={exportData}><Download className="h-4 w-4 mr-1" />Export</Button>
+        <ReportExportGate resource="accounting">
+          <Button size="sm" variant="outline" onClick={exportData}><Download className="h-4 w-4 mr-1" />Export</Button>
+        </ReportExportGate>
       </div>
 
       <div className="grid grid-cols-3 gap-3">

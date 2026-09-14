@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface FiscalYear { id: string; code: string; start_date: string; end_date: string; is_closed: boolean }
 interface Period {
@@ -255,9 +256,11 @@ export default function AccountingPeriodClose() {
           <p className="text-sm text-muted-foreground mt-0.5">Manage fiscal period close workflow with pre-close health checks.</p>
         </div>
         <div className="flex flex-wrap gap-2 ml-auto">
-          <Button variant="outline" size="sm" onClick={exportPeriods} disabled={!visiblePeriods.length} data-testid="button-export-accounting-period-close">
-            <ClipboardCheck className="w-4 h-4 mr-1" /> Export
-          </Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={exportPeriods} disabled={!visiblePeriods.length} data-testid="button-export-accounting-period-close">
+              <ClipboardCheck className="w-4 h-4 mr-1" /> Export
+            </Button>
+          </ReportExportGate>
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-close">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
           </Button>

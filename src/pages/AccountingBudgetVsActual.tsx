@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -40,8 +41,9 @@ function usageBand(pct: number): 'ok' | 'warn' | 'over' {
 }
 
 export default function AccountingBudgetVsActual() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { checkPermission, hasAnyRole, isAuthenticated } = useAuthorization();
+  const allowed = checkPermission('finances', 'read');
+  const canExport = checkPermission('finances', 'export');
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
   const overrideCanEdit = usePageManageOverride('acct-budget-variance', roleCanEdit);
@@ -71,6 +73,7 @@ export default function AccountingBudgetVsActual() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (!allowed) return;
     (async () => {
       const [yRes, pRes, fRes, aRes] = await Promise.all([
         supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
@@ -88,18 +91,19 @@ export default function AccountingBudgetVsActual() {
       if (first) setPeriodId(first.id);
       setBootstrap(false);
     })();
-  }, []);
+  }, [allowed]);
 
   const loadBudgetLines = useCallback(async (pid: string, fid: string) => {
+    if (!allowed) return;
     const q = supabase.from('acct_budget_lines').select('id, account_id, period_id, fund_id, budget_amount').eq('period_id', pid);
     if (fid !== 'all') q.eq('fund_id', fid);
     const { data, error: bErr } = await q;
     if (bErr && bErr.code !== '42P01') throw new Error(bErr.message);
     setBudgetLines((data ?? []) as BudgetLine[]);
-  }, []);
+  }, [allowed]);
 
   const runReport = useCallback(async () => {
-    if (!periodId) return;
+    if (!allowed || !periodId) return;
     setLoading(true);
     setError(null);
     try {
@@ -169,9 +173,9 @@ export default function AccountingBudgetVsActual() {
     } finally {
       setLoading(false);
     }
-  }, [periodId, fundId, loadBudgetLines]);
+  }, [allowed, periodId, fundId, loadBudgetLines]);
 
-  useEffect(() => { if (!bootstrap && periodId) void runReport(); }, [periodId, fundId, bootstrap]);
+  useEffect(() => { if (allowed && !bootstrap && periodId) void runReport(); }, [allowed, periodId, fundId, bootstrap, runReport]);
 
   const selectedPeriod = useMemo(() => periods.find(p => p.id === periodId), [periods, periodId]);
   const selectedCurrency = 'SDG';
@@ -252,6 +256,7 @@ export default function AccountingBudgetVsActual() {
   };
 
   const exportCsv = () => {
+    if (!canExport) return;
     const header = ['Code', 'Account', 'Type', 'Budget', 'Actual', 'Encumbered', 'Available', '% Used'];
     const body = rows.map(r => [r.account_code, r.account_name_en, r.account_type, r.budget.toFixed(2), r.actual.toFixed(2), r.encumbrance.toFixed(2), r.variance.toFixed(2), `${r.pct}%`]);
     const footer = ['', 'TOTAL', '', totals.budget.toFixed(2), totals.actual.toFixed(2), totals.encumbrance.toFixed(2), totals.variance.toFixed(2), `${totals.pct}%`];
@@ -259,6 +264,7 @@ export default function AccountingBudgetVsActual() {
   };
 
   const exportExcel = () => {
+    if (!canExport) return;
     const data = rows.map(r => ({
       'Code': r.account_code,
       'Account': r.account_name_en,
@@ -273,6 +279,7 @@ export default function AccountingBudgetVsActual() {
   };
 
   const exportPdf = async () => {
+    if (!canExport) return;
     setPdfBusy(true);
     try {
       const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
@@ -319,15 +326,17 @@ export default function AccountingBudgetVsActual() {
           <Button variant="outline" size="sm" onClick={runReport} disabled={loading} data-testid="button-refresh">
             <RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!rows.length} data-testid="button-export-csv">
-            <Download className="h-4 w-4 mr-1" />CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!rows.length} data-testid="button-export-budget-vs-actual">
-            <Download className="h-4 w-4 mr-1" />Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportPdf} disabled={!rows.length || pdfBusy} data-testid="button-export-pdf">
-            {pdfBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}PDF
-          </Button>
+          <ReportExportGate resource="finances" action="export">
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!rows.length} data-testid="button-export-csv">
+              <Download className="h-4 w-4 mr-1" />CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={!rows.length} data-testid="button-export-budget-vs-actual">
+              <Download className="h-4 w-4 mr-1" />Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportPdf} disabled={!rows.length || pdfBusy} data-testid="button-export-pdf">
+              {pdfBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}PDF
+            </Button>
+          </ReportExportGate>
         </div>
       </div>
 

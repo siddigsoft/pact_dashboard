@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, RefreshCw, Download, RotateCcw, Pencil, Trash2, Play, CalendarDays } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { cn } from '@/lib/utils';
 
 interface RecurringJournal {
@@ -108,7 +109,9 @@ export default function AccountingRecurringJournals() {
         <div className="flex gap-2">
           {canManage && <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-1" /> New Recurring</Button>}
           <Button variant="outline" size="sm" onClick={() => void load()}><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={() => exportToExcel(rows, 'recurring-journals')} disabled={!rows.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={() => exportToExcel(rows, 'recurring-journals')} disabled={!rows.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          </ReportExportGate>
         </div>
       </div>
 

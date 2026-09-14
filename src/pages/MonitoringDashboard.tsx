@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { insertNotifications } from '@/services/mmpActions';
 import EmailNotificationService from '@/services/email-notification.service';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -206,6 +207,8 @@ function DashboardSkeleton() {
 // ── Main content ──────────────────────────────────────────────────────────────
 
 function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('mmp', 'export');
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -785,6 +788,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
   // ── CSV Export ─────────────────────────────────────────────────────────────
   const handleExportCSV = useCallback(async () => {
+    if (!canExport) return;
     const headers = ['action_id','action_type','sender_name','sender_email','sender_phone','native_status','dashboard_status','created_at'];
     const rows = allActions.map(a =>
       headers.map(h => `"${String((a as Record<string, unknown>)[h] ?? '').replace(/"/g,'""')}"`).join(',')
@@ -795,7 +799,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     const a = document.createElement('a');
     a.href = url; a.download = `monitoring-${format(new Date(), 'yyyy-MM-dd')}.csv`; a.click();
     URL.revokeObjectURL(url);
-  }, [allActions]);
+  }, [allActions, canExport]);
 
   // ── Pipeline filter application ────────────────────────────────────────────
   // When a stage box is clicked, displayedActions narrows to just that type+status.
@@ -895,9 +899,9 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           >
             <RefreshCw className={`h-4 w-4 mr-1 ${isFetching && !isLoading ? 'animate-spin' : ''}`} />Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={allActions.length === 0} data-testid="button-export-csv">
+          {canExport && <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={allActions.length === 0} data-testid="button-export-csv">
             <Download className="h-4 w-4 mr-1" />Export CSV
-          </Button>
+          </Button>}
           <Button
             size="sm"
             className="bg-violet-600 hover:bg-violet-700 text-white"

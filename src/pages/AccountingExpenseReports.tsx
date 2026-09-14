@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Search, Download, RefreshCw, Receipt, DollarSign, Clock, CheckCircle2, Pencil, Send, ThumbsUp, ThumbsDown, Eye, XCircle, Calculator } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface ExpenseReport {
   id: string; report_number: string; title: string; employee_id: string | null;
@@ -193,7 +194,9 @@ export default function AccountingExpenseReports() {
         <div className="flex gap-2">
           <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-1" /> New Report</Button>
           <Button variant="outline" size="sm" onClick={() => void load()}><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={() => exportToExcel(filtered, 'expense-reports')} disabled={!filtered.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={() => exportToExcel(filtered, 'expense-reports')} disabled={!filtered.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          </ReportExportGate>
         </div>
       </div>
 

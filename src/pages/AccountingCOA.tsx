@@ -37,6 +37,7 @@ import {
 } from '@/lib/accountingBalances';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Account {
   id: string;
@@ -119,11 +120,12 @@ const BLANK_FORM = {
 type FormState = typeof BLANK_FORM;
 
 export default function AccountingCOA() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { hasAnyRole, isAuthenticated, checkPermission } = useAuthorization();
   const { authReady } = useAppContext();
   const navigate = useNavigate();
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanManage = hasAnyRole(['super_admin', 'admin']);
+  const canExport = checkPermission('accounting', 'export');
 
   const overrideCanManage = usePageManageOverride('acct-coa', roleCanManage);
 
@@ -419,6 +421,7 @@ export default function AccountingCOA() {
 
   // ── export ────────────────────────────────────────────────
   const exportCsv = () => {
+    if (!checkPermission('accounting', 'export')) return;
     const header = [
       'Code', 'Name (EN)', 'Name (AR)', 'Type', 'Subtype',
       'Allow Reconciliation', 'Account Currency', 'Company', 'Country',
@@ -439,6 +442,7 @@ export default function AccountingCOA() {
   };
 
   const exportExcel = () => {
+    if (!checkPermission('accounting', 'export')) return;
     const codeOf = (id: string | null) => rows.find(r => r.id === id)?.code ?? '';
     const data = filtered.map(r => {
       const ctr = countries.find(c => c.id === r.country_id);
@@ -812,12 +816,16 @@ export default function AccountingCOA() {
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-coa">
-            <Download className="w-4 h-4 mr-1" /> Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
-            <Download className="w-4 h-4 mr-1" /> CSV
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="accounting">
+              <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-coa">
+                <Download className="w-4 h-4 mr-1" /> Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
+                <Download className="w-4 h-4 mr-1" /> CSV
+              </Button>
+            </ReportExportGate>
+          )}
         </div>
       </div>
 

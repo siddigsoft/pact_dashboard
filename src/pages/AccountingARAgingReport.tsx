@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Download, RefreshCw, Clock, AlertTriangle, CheckCircle2, DollarSign } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Invoice {
   id: string; invoice_number: string; invoice_date: string; due_date: string | null;
@@ -88,7 +89,9 @@ export default function AccountingARAgingReport() {
           <p className="text-sm text-muted-foreground mt-1">Outstanding customer invoice balances by overdue bucket as of a selected date</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => exportToExcel(rows, `ar-aging-${asOf}`)} disabled={!rows.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={() => exportToExcel(rows, `ar-aging-${asOf}`)} disabled={!rows.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          </ReportExportGate>
         </div>
       </div>
 

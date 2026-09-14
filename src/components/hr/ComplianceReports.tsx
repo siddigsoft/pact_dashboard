@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Download, Shield, FileText, TrendingUp } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { format, subMonths, startOfMonth } from 'date-fns';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface PayrollItem {
   user_id: string;
@@ -66,6 +68,8 @@ function KpiCard({ label, value, color }: { label: string; value: string; color:
 type TabId = 'social-insurance' | 'tax-withholding';
 
 export default function ComplianceReports() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('payroll', 'export');
   const [activeTab, setActiveTab] = useState<TabId>('social-insurance');
   const [selectedRunId, setSelectedRunId] = useState<string>('');
 
@@ -123,6 +127,7 @@ export default function ComplianceReports() {
   const currency = runItems[0]?.currency ?? 'SDG';
 
   const exportSocialInsurance = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const rows = report.map(r => ({
       'Employee': r.user_name,
       'Department': r.department_name,
@@ -137,6 +142,7 @@ export default function ComplianceReports() {
   };
 
   const exportTaxWithholding = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const rows = report.map(r => ({
       'Employee': r.user_name,
       'Department': r.department_name,
@@ -216,9 +222,13 @@ export default function ComplianceReports() {
               </div>
 
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={exportSocialInsurance} className="gap-1.5 h-9 text-xs">
-                  <Download className="h-3.5 w-3.5" />Export Excel
-                </Button>
+                {canExport && (
+                  <ReportExportGate resource="payroll">
+                    <Button variant="outline" size="sm" onClick={exportSocialInsurance} className="gap-1.5 h-9 text-xs">
+                      <Download className="h-3.5 w-3.5" />Export Excel
+                    </Button>
+                  </ReportExportGate>
+                )}
               </div>
 
               <div className="rounded-xl border border-border overflow-hidden">
@@ -273,9 +283,13 @@ export default function ComplianceReports() {
               </div>
 
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={exportTaxWithholding} className="gap-1.5 h-9 text-xs">
-                  <Download className="h-3.5 w-3.5" />Export Excel
-                </Button>
+                {canExport && (
+                  <ReportExportGate resource="payroll">
+                    <Button variant="outline" size="sm" onClick={exportTaxWithholding} className="gap-1.5 h-9 text-xs">
+                      <Download className="h-3.5 w-3.5" />Export Excel
+                    </Button>
+                  </ReportExportGate>
+                )}
               </div>
 
               <div className="rounded-xl border border-border overflow-hidden">

@@ -27,6 +27,7 @@ import {
   Lock, ShieldCheck, User, Loader2, RefreshCw, RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import * as XLSX from 'xlsx';
 import {
   buildIncentivePreapprovalArgs,
@@ -728,10 +729,12 @@ export default function IncentivesTab({ mmpId, mmpHubName, siteEntries, isClosed
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
             Refresh
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} className="h-8">
-            <Download className="h-3.5 w-3.5 mr-1.5" />
-            Export Excel
-          </Button>
+          <ReportExportGate resource="mmp">
+            <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} className="h-8">
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export Excel
+            </Button>
+          </ReportExportGate>
           {canPreApprove && (
             <Button
               type="button"

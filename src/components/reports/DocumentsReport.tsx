@@ -31,6 +31,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import { subDays, format } from 'date-fns';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 export function DocumentsReport() {
   const [data, setData] = useState<DocumentsSummary | null>(null);
@@ -40,8 +41,15 @@ export function DocumentsReport() {
     to: new Date(),
   });
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canViewDocuments = checkPermission('reports', 'read');
+  const canExportDocuments = checkPermission('reports', 'export');
 
   const fetchData = async () => {
+    if (!canViewDocuments) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       let query = supabase
@@ -160,9 +168,10 @@ export function DocumentsReport() {
 
   useEffect(() => {
     fetchData();
-  }, [dateRange]);
+  }, [dateRange, canViewDocuments]);
 
   const handleExportExcel = () => {
+    if (!canExportDocuments) return;
     if (!data) return;
     const exportData = data.recentDocuments.map(doc => ({
       'Document ID': doc.id,
@@ -180,6 +189,7 @@ export function DocumentsReport() {
   };
 
   const handleExportCSV = () => {
+    if (!canExportDocuments) return;
     if (!data) return;
     const csvData = [
       { Metric: 'Total Documents', Value: data.totalDocuments },
@@ -229,6 +239,16 @@ export function DocumentsReport() {
     );
   }
 
+  if (!canViewDocuments) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          You do not have permission to view document reports.
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!data) {
     return (
       <Card>
@@ -256,14 +276,14 @@ export function DocumentsReport() {
             dateRange={dateRange}
             onDateRangeChange={setDateRange}
           />
-          <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
+          {canExportDocuments && <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
             <Download className="w-4 h-4 mr-1" />
             CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
+          </Button>}
+          {canExportDocuments && <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
             <FileSpreadsheet className="w-4 h-4 mr-1" />
             Excel
-          </Button>
+          </Button>}
         </div>
       </div>
 

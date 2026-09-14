@@ -12,6 +12,7 @@ import { Loader2, Plus, Download, RefreshCw, Package, TrendingUp, TrendingDown, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { cn } from '@/lib/utils';
 
 interface Reval {
@@ -97,7 +98,9 @@ export default function AccountingAssetRevaluation() {
         <div className="flex gap-2">
           {canManage && <Button size="sm" onClick={() => { setForm(BLANK); setFormOpen(true); }}><Plus className="w-4 h-4 mr-1" /> New Revaluation</Button>}
           <Button variant="outline" size="sm" onClick={() => void load()}><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={() => exportToExcel(rows, 'asset-revaluations')} disabled={!rows.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <ReportExportGate resource="fixed_assets">
+            <Button variant="outline" size="sm" onClick={() => exportToExcel(rows, 'asset-revaluations')} disabled={!rows.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          </ReportExportGate>
         </div>
       </div>
 

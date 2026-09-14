@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, Download, RefreshCw, BarChart2, Filter } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { formatNumber } from '@/lib/accountingFormat';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Fund { id: string; code: string; name_en: string; restriction_type: string }
 interface Project { id: string; name: string }
@@ -119,7 +120,9 @@ export default function AccountingAnalyticReport() {
           </SelectContent>
         </Select>
         <Button size="sm" variant="outline" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
-        <Button size="sm" variant="outline" onClick={exportData}><Download className="h-4 w-4 mr-1" />Export</Button>
+        <ReportExportGate resource="accounting">
+          <Button size="sm" variant="outline" onClick={exportData}><Download className="h-4 w-4 mr-1" />Export</Button>
+        </ReportExportGate>
       </div>
 
       <div className="flex flex-wrap gap-2">

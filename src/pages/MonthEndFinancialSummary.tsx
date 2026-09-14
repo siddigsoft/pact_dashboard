@@ -177,7 +177,8 @@ interface OperationalCostSubmission {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function MonthEndFinancialSummary() {
-  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const { isSuperAdmin, hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('finances', 'export');
   const navigate = useNavigate();
   const isAuthorized = isSuperAdmin() || hasAnyRole([
     'admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin',
@@ -543,6 +544,7 @@ export default function MonthEndFinancialSummary() {
 
   // ── Export PDF ─────────────────────────────────────────────────────────────
   function exportPDF() {
+    if (!canExport) return;
     if (reportIncomplete) return;
     setExportError(null);
     try {
@@ -603,6 +605,7 @@ export default function MonthEndFinancialSummary() {
   }
 
   async function exportExcel() {
+    if (!canExport) return;
     if (reportIncomplete) return;
     setExportError(null);
     try {
@@ -665,7 +668,7 @@ export default function MonthEndFinancialSummary() {
               </Button>
             </div>
             {monthOffset !== 0 && <Button variant="ghost" size="sm" onClick={() => setMonthOffset(0)}>This month</Button>}
-            <DropdownMenu>
+            {canExport && <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900" data-testid="button-export" disabled={reportIncomplete || isLoading}>
                   <Download className="h-3.5 w-3.5" />Export
@@ -675,7 +678,7 @@ export default function MonthEndFinancialSummary() {
                 <DropdownMenuItem onClick={exportPDF}><FileText className="h-3.5 w-3.5 mr-2" />Export PDF</DropdownMenuItem>
                 <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="h-3.5 w-3.5 mr-2" />Export Excel</DropdownMenuItem>
               </DropdownMenuContent>
-            </DropdownMenu>
+            </DropdownMenu>}
           </div>
         </div>
 

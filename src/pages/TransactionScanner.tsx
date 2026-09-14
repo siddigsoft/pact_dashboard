@@ -17,6 +17,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { ToastAction } from '@/components/ui/toast';
 import { ensureValidSession } from '@/lib/session-health';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 type TxRow = {
   id: string;
@@ -390,8 +392,11 @@ function computeUniqueRecipients(sourceRows: Array<any>) {
 
 export default function TransactionScanner() {
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('transactions', 'export');
 
   const handleExportToExcel = (rows: Array<Partial<TxRow> & Record<string, any>>, sessionName?: string) => {
+    if (!checkPermission('transactions', 'export')) return;
     try {
       exportToExcel(rows, sessionName);
     } catch (err: any) {
@@ -813,6 +818,7 @@ export default function TransactionScanner() {
   }, [previewUrl]);
 
   const exportToPdf = useCallback(async () => {
+    if (!checkPermission('transactions', 'export')) return;
     if (!doneRows.length) return;
     try {
       const jsPDFMod = await import('jspdf');
@@ -894,28 +900,32 @@ export default function TransactionScanner() {
           )}
           {doneRows.length > 0 && (
             <>
-              <Button
-                onClick={() => {
-                  const recs = computeUniqueRecipients(doneRows);
-                  setFilterExportSource(doneRows);
-                  setFilterExportSessionName(undefined);
-                  setSelectedAccounts(new Set(recs.map(r => r.account || r.name)));
-                  setFilterExportOpen(true);
-                }}
-                variant="outline"
-                className="gap-2 h-8 text-sm border-emerald-600/40 text-emerald-700 hover:bg-emerald-50"
-              >
-                <Filter className="h-3.5 w-3.5" />
-                Export by Account
-              </Button>
-              <Button onClick={() => handleExportToExcel(rows)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-sm">
-                <Download className="h-4 w-4" />
-                All ({doneCount})
-              </Button>
-              <Button onClick={exportToPdf} variant="outline" className="gap-2 h-8 text-sm border-[#1D3461]/30 text-[#1D3461]">
-                <FileText className="h-3.5 w-3.5" />
-                PDF
-              </Button>
+              {canExport && (
+                <ReportExportGate resource="transactions">
+                  <Button
+                    onClick={() => {
+                      const recs = computeUniqueRecipients(doneRows);
+                      setFilterExportSource(doneRows);
+                      setFilterExportSessionName(undefined);
+                      setSelectedAccounts(new Set(recs.map(r => r.account || r.name)));
+                      setFilterExportOpen(true);
+                    }}
+                    variant="outline"
+                    className="gap-2 h-8 text-sm border-emerald-600/40 text-emerald-700 hover:bg-emerald-50"
+                  >
+                    <Filter className="h-3.5 w-3.5" />
+                    Export by Account
+                  </Button>
+                  <Button onClick={() => handleExportToExcel(rows)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-sm">
+                    <Download className="h-4 w-4" />
+                    All ({doneCount})
+                  </Button>
+                  <Button onClick={exportToPdf} variant="outline" className="gap-2 h-8 text-sm border-[#1D3461]/30 text-[#1D3461]">
+                    <FileText className="h-3.5 w-3.5" />
+                    PDF
+                  </Button>
+                </ReportExportGate>
+              )}
             </>
           )}
           {rows.length > 0 && !processing && (

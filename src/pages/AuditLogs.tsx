@@ -87,7 +87,8 @@ interface UserProfile {
 const AuditLogs = () => {
   const navigate = useNavigate();
   const { isSuperAdmin } = useSuperAdmin();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('audit_logs', 'export');
   const canAccessAuditCompliance = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'ict', 'ICT']);
   const { logs, loading, getAuditStats, refreshLogs, exportLogs } = useAudit();
   
@@ -692,6 +693,7 @@ const AuditLogs = () => {
   };
 
   const handleExportJSON = () => {
+    if (!canExport) return;
     // Export all filtered logs (respects all active filters including dates, success, actor)
     const data = JSON.stringify(filteredLogs, null, 2);
     
@@ -707,6 +709,7 @@ const AuditLogs = () => {
   };
 
   const handleExportExcel = () => {
+    if (!canExport) return;
     const exportData = filteredLogs.map(log => ({
       'Timestamp': format(parseISO(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
       'Module': AUDIT_MODULE_LABELS[log.module],
@@ -729,6 +732,7 @@ const AuditLogs = () => {
   };
 
   const handleExportCSV = () => {
+    if (!canExport) return;
     const exportData = filteredLogs.map(log => ({
       'Timestamp': format(parseISO(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
       'Module': AUDIT_MODULE_LABELS[log.module],
@@ -833,7 +837,7 @@ const AuditLogs = () => {
           </Button>
           
           {/* Export Dropdown */}
-          <DropdownMenu>
+          {canExport && <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" data-testid="button-export-dropdown">
                 <Download className="h-4 w-4 mr-2" />
@@ -856,7 +860,7 @@ const AuditLogs = () => {
                 Export to JSON
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu>}
         </div>
       </div>
 

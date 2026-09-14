@@ -27,6 +27,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend
 import { exportMultiSheetExcel } from '@/utils/report-export';
 import { PageLoader } from '@/components/ui/page-loader';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
+import { resolveReportsDirectoryRoutePermission } from '@/lib/reports-directory-permissions';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 const PayrollPanel         = lazy(() => import('./Payroll'));
 const RetainerPanel        = lazy(() => import('./RetainerManagement'));
@@ -158,8 +160,18 @@ export default function HRHub() {
   const isColVisible = useColumnVisibility('hr');
   const [params, setParams] = useSearchParams();
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
-  const isAdmin = isSuperAdmin() || hasAnyRole(ADMIN_ROLES);
+  const isAdminRole = isSuperAdmin() || hasAnyRole(ADMIN_ROLES);
   const { isTabBlocked } = useCurrentUserAccess();
+  const rawTab = params.get('tab') ?? '';
+  const requestedDirectoryPermission = rawTab
+    ? resolveReportsDirectoryRoutePermission('/hr', `?tab=${rawTab}`)
+    : null;
+  // The outer PageRouteGuard has already resolved this action (including
+  // explicit per-user grants).  Let the same action grant through HR's
+  // historical admin-only nested checks without making every HR tab visible.
+  const canUseRequestedDirectoryTab = Boolean(requestedDirectoryPermission);
+  const canRenderRestrictedTab = isAdminRole
+    || (canUseRequestedDirectoryTab && rawTab !== '');
 
   // Section accent colours (defined early — used in hrSections useMemo)
   const SECTION_ACCENT: Record<HRSection, string> = {
@@ -172,22 +184,28 @@ export default function HRHub() {
   // Sections and tabs visible to this user (role + per-user override)
   const hrSections = useMemo(() =>
     SECTIONS
-      .filter(s => !s.adminOnly || isAdmin)
+      .filter(s =>
+        !s.adminOnly
+        || isAdminRole
+        || s.tabs.some(t => t.id === rawTab && canUseRequestedDirectoryTab)
+      )
       .map(s => ({
         ...s,
         color: SECTION_ACCENT[s.id as HRSection],
-        tabs: s.tabs.filter(t => (!t.adminOnly || isAdmin) && !isTabBlocked(`hr-hub:${t.id}`)),
+        tabs: s.tabs.filter(t =>
+          (!t.adminOnly || isAdminRole || (t.id === rawTab && canUseRequestedDirectoryTab))
+          && !isTabBlocked(`hr-hub:${t.id}`),
+        ),
       }))
       .filter(s => s.tabs.length > 0),
-    [isAdmin, isTabBlocked],
+    [isAdminRole, isTabBlocked, rawTab, canUseRequestedDirectoryTab],
   );
 
   const allVisibleTabs = useMemo(() => hrSections.flatMap(s => s.tabs), [hrSections]);
 
   // Resolve requested tab — handle legacy aliases
-  const rawTab = params.get('tab') ?? '';
   const resolvedTab = (LEGACY_TAB_MAP[rawTab] ?? rawTab) as HRTab;
-  const defaultTab: HRTab = allVisibleTabs[0]?.id as HRTab ?? (isAdmin ? 'overview' : 'payroll');
+  const defaultTab: HRTab = allVisibleTabs[0]?.id as HRTab ?? (isAdminRole ? 'overview' : 'payroll');
 
   const _savedHR = localStorage.getItem('hub_last_tab_hr') as HRTab | null;
   const _resolvedDefault: HRTab =
@@ -231,42 +249,42 @@ export default function HRHub() {
 
         {/* Pay & Compensation */}
         {tab === 'payroll' && <Suspense fallback={<PanelLoader />}><PayrollPanel embedded /></Suspense>}
-        {tab === 'payroll-admin' && isAdmin && <Suspense fallback={<PanelLoader />}><PayrollAdminPanel /></Suspense>}
-        {tab === 'retainer' && isAdmin && <Suspense fallback={<PanelLoader />}><RetainerPanel /></Suspense>}
-        {tab === 'eosb' && isAdmin && <EOSBPanel />}
-        {tab === 'salary-advances' && isAdmin && <SalaryAdvancesPanel />}
-        {tab === 'salary-increments' && isAdmin && <Suspense fallback={<PanelLoader />}><SalaryIncrPanel /></Suspense>}
-        {tab === 'field-wallet' && isAdmin && <Suspense fallback={<PanelLoader />}><FieldWalletPanel /></Suspense>}
-        {tab === 'payroll-summary' && isAdmin && <Suspense fallback={<PanelLoader />}><PayrollReportPanel /></Suspense>}
-        {tab === 'comp-bands' && isAdmin && <Suspense fallback={<PanelLoader />}><CompensationBandsPanel /></Suspense>}
-        {tab === 'compliance-reports' && isAdmin && <Suspense fallback={<PanelLoader />}><ComplianceReportsPanel /></Suspense>}
+        {tab === 'payroll-admin' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><PayrollAdminPanel /></Suspense>}
+        {tab === 'retainer' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><RetainerPanel /></Suspense>}
+        {tab === 'eosb' && canRenderRestrictedTab && <EOSBPanel />}
+        {tab === 'salary-advances' && canRenderRestrictedTab && <SalaryAdvancesPanel />}
+        {tab === 'salary-increments' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><SalaryIncrPanel /></Suspense>}
+        {tab === 'field-wallet' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><FieldWalletPanel /></Suspense>}
+        {tab === 'payroll-summary' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><PayrollReportPanel /></Suspense>}
+        {tab === 'comp-bands' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><CompensationBandsPanel /></Suspense>}
+        {tab === 'compliance-reports' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><ComplianceReportsPanel /></Suspense>}
 
         {/* Time & Leave */}
         {tab === 'timesheet' && <Suspense fallback={<PanelLoader />}><TimesheetPanel /></Suspense>}
         {tab === 'leave-requests' && <Suspense fallback={<PanelLoader />}><LeaveRequestsPanel /></Suspense>}
-        {tab === 'leave-calendar' && isAdmin && <Suspense fallback={<PanelLoader />}><LeaveCalendarPanel /></Suspense>}
-        {tab === 'attendance' && isAdmin && <Suspense fallback={<PanelLoader />}><AttendancePanel /></Suspense>}
+        {tab === 'leave-calendar' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><LeaveCalendarPanel /></Suspense>}
+        {tab === 'attendance' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><AttendancePanel /></Suspense>}
 
         {/* People & Development */}
-        {tab === 'performance' && isAdmin && <Suspense fallback={<PanelLoader />}><PerformancePanel /></Suspense>}
+        {tab === 'performance' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><PerformancePanel /></Suspense>}
         {tab === 'training' && <Suspense fallback={<PanelLoader />}><TrainingPanel /></Suspense>}
-        {tab === 'contracts' && isAdmin && <Suspense fallback={<PanelLoader />}><ContractRenewalPanel /></Suspense>}
+        {tab === 'contracts' && isAdminRole && <Suspense fallback={<PanelLoader />}><ContractRenewalPanel /></Suspense>}
         {tab === 'positions' && <Suspense fallback={<PanelLoader />}><PositionsPanel /></Suspense>}
-        {tab === 'onboarding' && isAdmin && <Suspense fallback={<PanelLoader />}><OnboardingPanel /></Suspense>}
-        {tab === 'offboarding' && isAdmin && <Suspense fallback={<PanelLoader />}><OffboardingPanel /></Suspense>}
-        {tab === 'recruitment' && isAdmin && <Suspense fallback={<PanelLoader />}><RecruitmentPanel /></Suspense>}
-        {tab === 'disciplinary' && isAdmin && <Suspense fallback={<PanelLoader />}><DisciplinaryPanel /></Suspense>}
+        {tab === 'onboarding' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><OnboardingPanel /></Suspense>}
+        {tab === 'offboarding' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><OffboardingPanel /></Suspense>}
+        {tab === 'recruitment' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><RecruitmentPanel /></Suspense>}
+        {tab === 'disciplinary' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><DisciplinaryPanel /></Suspense>}
         {tab === 'org-chart' && <Suspense fallback={<PanelLoader />}><OrgChartPanel /></Suspense>}
         {tab === 'benefits' && <Suspense fallback={<PanelLoader />}><BenefitsPanel /></Suspense>}
-        {tab === 'headcount' && isAdmin && <Suspense fallback={<PanelLoader />}><HeadcountPanel /></Suspense>}
-        {tab === 'equipment' && isAdmin && <Suspense fallback={<PanelLoader />}><AssetsPanel /></Suspense>}
-        {tab === 'policy-library' && isAdmin && <Suspense fallback={<PanelLoader />}><PolicyLibraryPanel /></Suspense>}
+        {tab === 'headcount' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><HeadcountPanel /></Suspense>}
+        {tab === 'equipment' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><AssetsPanel /></Suspense>}
+        {tab === 'policy-library' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><PolicyLibraryPanel /></Suspense>}
 
         {/* Analytics & Comms */}
-        {tab === 'overview' && isAdmin && <HROverviewPanel />}
-        {tab === 'hr-analytics' && isAdmin && <Suspense fallback={<PanelLoader />}><HRAnalyticsPanel /></Suspense>}
-        {tab === 'pay-equity' && isAdmin && <Suspense fallback={<PanelLoader />}><PayEquityPanel /></Suspense>}
-        {tab === 'wa-broadcast' && isAdmin && <Suspense fallback={<PanelLoader />}><HRBroadcastPanel /></Suspense>}
+        {tab === 'overview' && canRenderRestrictedTab && <HROverviewPanel />}
+        {tab === 'hr-analytics' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><HRAnalyticsPanel /></Suspense>}
+        {tab === 'pay-equity' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><PayEquityPanel /></Suspense>}
+        {tab === 'wa-broadcast' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><HRBroadcastPanel /></Suspense>}
         {tab === 'pulse-surveys' && <Suspense fallback={<PanelLoader />}><PulseSurveysPanel /></Suspense>}
       </div>
     </HubLayout>
@@ -1784,6 +1802,8 @@ function OrgNode({ person, depth = 0, expandAll, childrenOf, navigate }: OrgNode
 }
 
 function OrgChartView() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const navigate = useNavigate();
   const [searchQ, setSearchQ] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
@@ -1792,6 +1812,7 @@ function OrgChartView() {
   const [exporting, setExporting] = useState<null | 'png' | 'pdf'>(null);
 
   async function handleExport(kind: 'png' | 'pdf') {
+    if (!checkPermission('hr', 'export')) return;
     if (!chartRef.current) return;
     setExporting(kind);
     // Force-expand everything before snapshot so the full hierarchy is in the image.
@@ -1937,20 +1958,22 @@ function OrgChartView() {
             </button>
           </div>
           {/* Export */}
-          <div className="flex border rounded-lg overflow-hidden">
-            <button onClick={() => handleExport('png')} disabled={!!exporting} title="Export as PNG"
-              data-testid="button-export-orgchart-png"
-              className="h-8 px-2.5 text-xs flex items-center gap-1 bg-white dark:bg-slate-900 text-muted-foreground hover:bg-slate-50 hover:text-foreground transition-colors border-r disabled:opacity-50">
-              {exporting === 'png' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline">PNG</span>
-            </button>
-            <button onClick={() => handleExport('pdf')} disabled={!!exporting} title="Export as PDF"
-              data-testid="button-export-orgchart-pdf"
-              className="h-8 px-2.5 text-xs flex items-center gap-1 bg-white dark:bg-slate-900 text-muted-foreground hover:bg-slate-50 hover:text-foreground transition-colors disabled:opacity-50">
-              {exporting === 'pdf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline">PDF</span>
-            </button>
-          </div>
+          {canExport && <ReportExportGate resource="hr">
+            <div className="flex border rounded-lg overflow-hidden">
+              <button onClick={() => handleExport('png')} disabled={!!exporting} title="Export as PNG"
+                data-testid="button-export-orgchart-png"
+                className="h-8 px-2.5 text-xs flex items-center gap-1 bg-white dark:bg-slate-900 text-muted-foreground hover:bg-slate-50 hover:text-foreground transition-colors border-r disabled:opacity-50">
+                {exporting === 'png' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">PNG</span>
+              </button>
+              <button onClick={() => handleExport('pdf')} disabled={!!exporting} title="Export as PDF"
+                data-testid="button-export-orgchart-pdf"
+                className="h-8 px-2.5 text-xs flex items-center gap-1 bg-white dark:bg-slate-900 text-muted-foreground hover:bg-slate-50 hover:text-foreground transition-colors disabled:opacity-50">
+                {exporting === 'pdf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">PDF</span>
+              </button>
+            </div>
+          </ReportExportGate>}
         </div>
       </div>
       <div ref={chartRef} className="bg-white dark:bg-slate-950 rounded-lg p-2">

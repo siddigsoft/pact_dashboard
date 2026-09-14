@@ -23,6 +23,7 @@ import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface AllocationRule {
   id: string; pool_name: string; source_account_id: string; source_account_code: string;
@@ -258,9 +259,11 @@ export default function AccountingCostAllocation() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!runs.length} data-testid="button-export-cost-allocation">
-            <Download className="h-4 w-4 mr-1" />Excel
-          </Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={!runs.length} data-testid="button-export-cost-allocation">
+              <Download className="h-4 w-4 mr-1" />Excel
+            </Button>
+          </ReportExportGate>
           {canEdit && !migrationNeeded && (
             <>
               <Button variant="outline" size="sm" onClick={() => setShowAdd(true)} data-testid="button-add-rule">

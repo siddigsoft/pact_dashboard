@@ -17,6 +17,8 @@ import { format, parseISO, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { exportToExcel } from '@/utils/report-export';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import * as XLSX from 'xlsx';
 
 interface Advance {
@@ -68,6 +70,8 @@ const ADVANCE_CURRENCIES = ['SDG', 'USD'];
 const BLANK_RECOVERY = { recovery_date: '', amount: '', payroll_period: '', notes: '' };
 
 export default function SalaryAdvancesPanel() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -246,6 +250,7 @@ export default function SalaryAdvancesPanel() {
   };
 
   const exportXlsx = () => {
+    if (!checkPermission('hr', 'export')) return;
     const data = filtered.map(a => ({
       'Staff':           a.staff_name,
       'Issue Date':      a.issue_date,
@@ -279,9 +284,13 @@ export default function SalaryAdvancesPanel() {
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
             <RefreshCw className={cn('h-4 w-4 mr-1', isLoading && 'animate-spin')} />Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportXlsx} disabled={!filtered.length}>
-            <Download className="h-4 w-4 mr-1" />Export
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="hr">
+              <Button variant="outline" size="sm" onClick={exportXlsx} disabled={!filtered.length}>
+                <Download className="h-4 w-4 mr-1" />Export
+              </Button>
+            </ReportExportGate>
+          )}
           {!migrationNeeded && (
             <Button size="sm" onClick={() => setShowAdd(true)} data-testid="button-add-advance">
               <Plus className="h-4 w-4 mr-1" />Issue Advance

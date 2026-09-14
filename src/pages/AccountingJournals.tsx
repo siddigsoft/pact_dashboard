@@ -18,6 +18,7 @@ import { exportToExcel } from '@/utils/report-export';
 import { ACCT_STATUS_TONE, formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { Textarea } from '@/components/ui/textarea';
 import {
   JOURNAL_PAGE_SIZE,
@@ -366,12 +367,14 @@ export default function AccountingJournals() {
           <Button variant="outline" size="sm" onClick={() => void loadAll()} data-testid="button-refresh">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={() => void exportExcel()} disabled={!totalMatching} data-testid="button-export-excel">
-            <Download className="w-4 h-4 mr-1" /> Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void exportCsv()} disabled={!totalMatching} data-testid="button-export-csv">
-            <FileText className="w-4 h-4 mr-1" /> CSV
-          </Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={() => void exportExcel()} disabled={!totalMatching} data-testid="button-export-excel">
+              <Download className="w-4 h-4 mr-1" /> Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void exportCsv()} disabled={!totalMatching} data-testid="button-export-csv">
+              <FileText className="w-4 h-4 mr-1" /> CSV
+            </Button>
+          </ReportExportGate>
         </div>
       </div>
 

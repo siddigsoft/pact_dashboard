@@ -31,6 +31,7 @@ import { Progress } from '@/components/ui/progress';
 import { getProjectFlow } from '@/config/projectFlows';
 import { normaliseProjectType } from '@/types/project';
 import { cn } from '@/lib/utils';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 class ChartErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -206,6 +207,8 @@ type SortDir = 'asc' | 'desc';
 type AnalyticsTab = 'overview' | 'financial' | 'operational' | 'projects';
 
 export default function ProjectAnalytics() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('analytics', 'export');
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<AnalyticsTab>('overview');
@@ -399,7 +402,7 @@ export default function ProjectAnalytics() {
         return tot(b) - tot(a);
       })
       .slice(0, 15);
-  }, [projects]);
+  }, [projects, canExport]);
 
   const completionByType = useMemo(() => {
     const byType: Record<string, { label: string; total: number; reachedFinal: number }> = {};
@@ -754,6 +757,7 @@ export default function ProjectAnalytics() {
   }, []);
 
   const downloadCSV = useCallback(() => {
+    if (!canExport) return;
     const rows = projects.map(p => {
       const flow = getProjectFlow(normaliseProjectType(p.project_type));
       const stageId = p.current_flow_stage ?? flow.stages[0]?.id ?? '';
@@ -794,10 +798,10 @@ export default function ProjectAnalytics() {
           <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
           {isFetching ? 'Refreshing…' : 'Refresh'}
         </Button>
-        <Button variant="outline" size="sm" onClick={downloadCSV} disabled={projects.length === 0} className="h-8 text-xs gap-1.5">
+        {canExport && <Button variant="outline" size="sm" onClick={downloadCSV} disabled={projects.length === 0} className="h-8 text-xs gap-1.5">
           <Download className="h-3.5 w-3.5" />
           Export CSV
-        </Button>
+        </Button>}
       </div>
     </div>
   );

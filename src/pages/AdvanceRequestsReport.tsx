@@ -60,6 +60,7 @@ import { generateWriteOffCertificatePdf } from '@/utils/writeOffCertificatePdf';
 import { exportToExcel, exportToCSV, exportMultiSheetExcel } from '@/utils/report-export';
 import { exportOverviewToFormattedExcel, exportAgingToFormattedExcel, exportGroupedToFormattedExcel } from '@/utils/advanceReportExcelUtils';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
 import type { DownPaymentRequest } from '@/types/down-payment';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { notificationDigestService } from '@/services/notification-digest.service';
@@ -84,6 +85,8 @@ function AdvanceRequestsReportContent() {
   const { requests, loading, refreshRequests } = useDownPayment();
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('down_payments', 'export');
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -1364,6 +1367,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const exportAgingToExcel = () => {
+    if (!canExport) return;
     exportAgingToFormattedExcel({
       totalCount: agingData.totalCount,
       totalAmount: agingData.totalAmount,
@@ -1401,10 +1405,12 @@ function AdvanceRequestsReportContent() {
   }, [requests]);
 
   const exportToExcel = () => {
+    if (!canExport) return;
     exportOverviewToFormattedExcel(filteredRequests, stats, getProfileName).catch(() => {});
   };
 
   const exportToPDF = () => {
+    if (!canExport) return;
     const doc = new jsPDF();
     let yPos = 20;
 
@@ -1513,6 +1519,7 @@ function AdvanceRequestsReportContent() {
 
   // Export By Team Member
   const exportTeamToExcel = () => {
+    if (!canExport) return;
     exportGroupedToFormattedExcel(
       'Team Member',
       byTeamMember.map(m => ({ name: m.name, requests: m.requests, totalRequested: m.totalRequested, totalApproved: m.totalApproved, pending: m.pending })),
@@ -1524,6 +1531,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const exportTeamToPDF = () => {
+    if (!canExport) return;
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by Team Member');
     const teamTotals = byTeamMember.reduce((acc, m) => ({
@@ -1568,6 +1576,7 @@ function AdvanceRequestsReportContent() {
 
   // Export By Hub
   const exportHubToExcel = () => {
+    if (!canExport) return;
     exportGroupedToFormattedExcel(
       'Hub',
       byHub.map(h => ({ name: h.name, requests: h.requests, totalRequested: h.totalRequested, totalApproved: h.totalApproved, pending: h.pending })),
@@ -1580,6 +1589,7 @@ function AdvanceRequestsReportContent() {
 
   // Export By Site
   const exportSiteToExcel = () => {
+    if (!canExport) return;
     exportGroupedToFormattedExcel(
       'Site',
       bySite.map(s => ({ name: s.name, requests: s.requests, totalRequested: s.totalRequested, totalApproved: s.totalApproved, pending: s.pending })),
@@ -1591,6 +1601,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const exportSiteToPDF = () => {
+    if (!canExport) return;
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Transportation Advance Cost — Summary by Site');
     const siteTotals = bySite.reduce((acc, s) => ({
@@ -1634,6 +1645,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const exportHubToPDF = () => {
+    if (!canExport) return;
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by Hub');
     const hubTotals = byHub.reduce((acc, h) => ({
@@ -1678,6 +1690,7 @@ function AdvanceRequestsReportContent() {
 
   // Export By Status
   const exportStatusToExcel = () => {
+    if (!canExport) return;
     exportGroupedToFormattedExcel(
       'Status',
       byStatus.map(s => ({ name: s.name, requests: s.requests, totalRequested: s.totalRequested, totalApproved: s.totalApproved })),
@@ -1689,6 +1702,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const exportStatusToPDF = () => {
+    if (!canExport) return;
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by Status');
     const statusTotals = byStatus.reduce((acc, s) => ({
@@ -1731,6 +1745,7 @@ function AdvanceRequestsReportContent() {
 
   // Export By State
   const exportStateToExcel = () => {
+    if (!canExport) return;
     exportGroupedToFormattedExcel(
       'State',
       byState.map(s => ({ name: s.name, requests: s.requests, totalRequested: s.totalRequested, totalApproved: s.totalApproved, pending: s.pending })),
@@ -1742,6 +1757,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const exportStateToPDF = () => {
+    if (!canExport) return;
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by State');
     const stateTotals = byState.reduce((acc, s) => ({
@@ -1787,6 +1803,7 @@ function AdvanceRequestsReportContent() {
 
   // Export By Locality
   const exportLocalityToExcel = () => {
+    if (!canExport) return;
     exportGroupedToFormattedExcel(
       'Locality',
       byLocality.map(l => ({ name: l.name, requests: l.requests, totalRequested: l.totalRequested, totalApproved: l.totalApproved, pending: l.pending })),
@@ -1798,6 +1815,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const exportLocalityToPDF = () => {
+    if (!canExport) return;
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by Locality');
     const localityTotals = byLocality.reduce((acc, l) => ({
@@ -1844,6 +1862,7 @@ function AdvanceRequestsReportContent() {
 
   // Export By Project
   const exportProjectToExcel = () => {
+    if (!canExport) return;
     exportGroupedToFormattedExcel(
       'Project',
       byProject.map(p => ({ name: p.name, requests: p.requests, totalRequested: p.totalRequested, totalApproved: p.totalApproved, pending: p.pending })),
@@ -1855,6 +1874,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const exportProjectToPDF = () => {
+    if (!canExport) return;
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by Project');
     const projectTotals = byProject.reduce((acc, p) => ({
@@ -1900,6 +1920,7 @@ function AdvanceRequestsReportContent() {
 
   // Export By MMP
   const exportMMPToExcel = () => {
+    if (!canExport) return;
     exportGroupedToFormattedExcel(
       'MMP',
       byMMP.map(m => ({ name: m.name, requests: m.requests, totalRequested: m.totalRequested, totalApproved: m.totalApproved, pending: m.pending })),
@@ -1911,6 +1932,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const exportMMPToPDF = () => {
+    if (!canExport) return;
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by MMP');
     const mmpTotals = byMMP.reduce((acc, m) => ({
@@ -1995,6 +2017,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const handleStatementExport = async (exportFormat: 'pdf' | 'excel') => {
+    if (!canExport) return;
     const dataToExport = filteredRequests;
     if (dataToExport.length === 0) {
       toast({ title: 'No Data', description: 'No requests match the current filters.', variant: 'destructive' });
@@ -2589,7 +2612,7 @@ function AdvanceRequestsReportContent() {
                 variant="outline"
                 size="sm"
                 onClick={() => handleStatementExport('pdf')}
-                disabled={filteredRequests.length === 0}
+                disabled={!canExport || filteredRequests.length === 0}
                 data-testid="button-statement-pdf"
               >
                 <FileText className="h-4 w-4 mr-1" />
@@ -2598,7 +2621,7 @@ function AdvanceRequestsReportContent() {
               <Button
                 size="sm"
                 onClick={() => handleStatementExport('excel')}
-                disabled={filteredRequests.length === 0}
+                disabled={!canExport || filteredRequests.length === 0}
                 data-testid="button-statement-excel"
               >
                 <Download className="h-4 w-4 mr-1" />
@@ -2612,11 +2635,11 @@ function AdvanceRequestsReportContent() {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={exportToPDF} data-testid="button-overview-pdf">
+            <Button variant="outline" size="sm" onClick={exportToPDF} disabled={!canExport} data-testid="button-overview-pdf">
                 <FileText className="h-4 w-4 mr-1" />
                 Report PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={exportToExcel} data-testid="button-overview-excel">
+            <Button variant="outline" size="sm" onClick={exportToExcel} disabled={!canExport} data-testid="button-overview-excel">
                 <Download className="h-4 w-4 mr-1" />
                 Report Excel
               </Button>
@@ -2910,11 +2933,11 @@ function AdvanceRequestsReportContent() {
 
         <TabsContent value="byTeam" className="space-y-4">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={exportTeamToPDF} data-testid="button-team-pdf">
+            <Button variant="outline" size="sm" onClick={exportTeamToPDF} disabled={!canExport} data-testid="button-team-pdf">
               <FileText className="h-4 w-4 mr-1" />
               PDF
             </Button>
-            <Button size="sm" onClick={exportTeamToExcel} data-testid="button-team-excel">
+            <Button size="sm" onClick={exportTeamToExcel} disabled={!canExport} data-testid="button-team-excel">
               <Download className="h-4 w-4 mr-1" />
               Excel
             </Button>
@@ -3098,11 +3121,11 @@ function AdvanceRequestsReportContent() {
 
         <TabsContent value="byHub" className="space-y-4">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={exportHubToPDF} data-testid="button-hub-pdf">
+            <Button variant="outline" size="sm" onClick={exportHubToPDF} disabled={!canExport} data-testid="button-hub-pdf">
               <FileText className="h-4 w-4 mr-1" />
               PDF
             </Button>
-            <Button size="sm" onClick={exportHubToExcel} data-testid="button-hub-excel">
+            <Button size="sm" onClick={exportHubToExcel} disabled={!canExport} data-testid="button-hub-excel">
               <Download className="h-4 w-4 mr-1" />
               Excel
             </Button>
@@ -3238,11 +3261,11 @@ function AdvanceRequestsReportContent() {
 
         <TabsContent value="bySite" className="space-y-4">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={exportSiteToPDF} data-testid="button-site-pdf">
+            <Button variant="outline" size="sm" onClick={exportSiteToPDF} disabled={!canExport} data-testid="button-site-pdf">
               <FileText className="h-4 w-4 mr-1" />
               PDF
             </Button>
-            <Button size="sm" onClick={exportSiteToExcel} data-testid="button-site-excel">
+            <Button size="sm" onClick={exportSiteToExcel} disabled={!canExport} data-testid="button-site-excel">
               <Download className="h-4 w-4 mr-1" />
               Excel
             </Button>
@@ -3325,11 +3348,11 @@ function AdvanceRequestsReportContent() {
 
         <TabsContent value="byStatus" className="space-y-4">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={exportStatusToPDF} data-testid="button-status-pdf">
+            <Button variant="outline" size="sm" onClick={exportStatusToPDF} disabled={!canExport} data-testid="button-status-pdf">
               <FileText className="h-4 w-4 mr-1" />
               PDF
             </Button>
-            <Button size="sm" onClick={exportStatusToExcel} data-testid="button-status-excel">
+            <Button size="sm" onClick={exportStatusToExcel} disabled={!canExport} data-testid="button-status-excel">
               <Download className="h-4 w-4 mr-1" />
               Excel
             </Button>
@@ -3447,11 +3470,11 @@ function AdvanceRequestsReportContent() {
 
         <TabsContent value="byState" className="space-y-4">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={exportStateToPDF} data-testid="button-state-pdf">
+            <Button variant="outline" size="sm" onClick={exportStateToPDF} disabled={!canExport} data-testid="button-state-pdf">
               <FileText className="h-4 w-4 mr-1" />
               PDF
             </Button>
-            <Button size="sm" onClick={exportStateToExcel} data-testid="button-state-excel">
+            <Button size="sm" onClick={exportStateToExcel} disabled={!canExport} data-testid="button-state-excel">
               <Download className="h-4 w-4 mr-1" />
               Excel
             </Button>
@@ -3576,11 +3599,11 @@ function AdvanceRequestsReportContent() {
 
         <TabsContent value="byLocality" className="space-y-4">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={exportLocalityToPDF} data-testid="button-locality-pdf">
+            <Button variant="outline" size="sm" onClick={exportLocalityToPDF} disabled={!canExport} data-testid="button-locality-pdf">
               <FileText className="h-4 w-4 mr-1" />
               PDF
             </Button>
-            <Button size="sm" onClick={exportLocalityToExcel} data-testid="button-locality-excel">
+            <Button size="sm" onClick={exportLocalityToExcel} disabled={!canExport} data-testid="button-locality-excel">
               <Download className="h-4 w-4 mr-1" />
               Excel
             </Button>
@@ -3707,11 +3730,11 @@ function AdvanceRequestsReportContent() {
 
         <TabsContent value="byProject" className="space-y-4">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={exportProjectToPDF} data-testid="button-project-pdf">
+            <Button variant="outline" size="sm" onClick={exportProjectToPDF} disabled={!canExport} data-testid="button-project-pdf">
               <FileText className="h-4 w-4 mr-1" />
               PDF
             </Button>
-            <Button size="sm" onClick={exportProjectToExcel} data-testid="button-project-excel">
+            <Button size="sm" onClick={exportProjectToExcel} disabled={!canExport} data-testid="button-project-excel">
               <Download className="h-4 w-4 mr-1" />
               Excel
             </Button>
@@ -3836,11 +3859,11 @@ function AdvanceRequestsReportContent() {
 
         <TabsContent value="byMMP" className="space-y-4">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={exportMMPToPDF} data-testid="button-mmp-pdf">
+            <Button variant="outline" size="sm" onClick={exportMMPToPDF} disabled={!canExport} data-testid="button-mmp-pdf">
               <FileText className="h-4 w-4 mr-1" />
               PDF
             </Button>
-            <Button size="sm" onClick={exportMMPToExcel} data-testid="button-mmp-excel">
+            <Button size="sm" onClick={exportMMPToExcel} disabled={!canExport} data-testid="button-mmp-excel">
               <Download className="h-4 w-4 mr-1" />
               Excel
             </Button>
@@ -3976,7 +3999,7 @@ function AdvanceRequestsReportContent() {
 
         <TabsContent value="aging" className="space-y-4">
           <div className="flex justify-end gap-2">
-            <Button size="sm" onClick={exportAgingToExcel} data-testid="button-aging-excel">
+            <Button size="sm" onClick={exportAgingToExcel} disabled={!canExport} data-testid="button-aging-excel">
               <Download className="h-4 w-4 mr-1" />
               Excel
             </Button>
@@ -4126,6 +4149,7 @@ function AdvanceRequestsReportContent() {
             );
 
             const exportReclaimImpactPdf = () => {
+              if (!canExport) return;
               const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
               doc.setFontSize(16);
               doc.setFont('helvetica', 'bold');
@@ -4179,6 +4203,7 @@ function AdvanceRequestsReportContent() {
             };
 
             const exportReclaimImpactExcel = async () => {
+              if (!canExport) return;
               const { utils, writeFile } = await import('xlsx');
               const summaryWsData = [
                 ['Reclaim Impact Report', '', `Generated: ${format(new Date(), 'MMM dd, yyyy HH:mm')}`],
@@ -4264,11 +4289,11 @@ function AdvanceRequestsReportContent() {
                         {digestSending ? 'Sending…' : 'Send Digest Email'}
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" onClick={exportReclaimImpactPdf} disabled={filteredReclaimHistory.length === 0 && allReclaimedAdvances.length === 0} data-testid="button-reclaim-impact-pdf">
+                    <Button variant="outline" size="sm" onClick={exportReclaimImpactPdf} disabled={!canExport || (filteredReclaimHistory.length === 0 && allReclaimedAdvances.length === 0)} data-testid="button-reclaim-impact-pdf">
                       <FileText className="h-4 w-4 mr-1" />
                       Export PDF
                     </Button>
-                    <Button size="sm" onClick={exportReclaimImpactExcel} disabled={filteredReclaimHistory.length === 0 && allReclaimedAdvances.length === 0} data-testid="button-reclaim-impact-excel">
+                    <Button size="sm" onClick={exportReclaimImpactExcel} disabled={!canExport || (filteredReclaimHistory.length === 0 && allReclaimedAdvances.length === 0)} data-testid="button-reclaim-impact-excel">
                       <Download className="h-4 w-4 mr-1" />
                       Export Excel
                     </Button>

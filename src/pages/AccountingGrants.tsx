@@ -26,6 +26,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PageLoader } from '@/components/ui/page-loader';
 import { useGrantsWithSpendQuery } from '@/hooks/useAccountingQueries';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Grant {
   id: string; grant_name: string; donor_name: string; reference_number: string | null;
@@ -415,8 +416,10 @@ export default function AccountingGrants() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length}><Download className="h-4 w-4 mr-1" />CSV</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-grants"><Download className="h-4 w-4 mr-1" />Excel</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length}><Download className="h-4 w-4 mr-1" />CSV</Button>
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-grants"><Download className="h-4 w-4 mr-1" />Excel</Button>
+          </ReportExportGate>
           {canEdit && !migrationNeeded && <Button size="sm" onClick={() => setShowAdd(true)} data-testid="button-add-grant"><Plus className="h-4 w-4 mr-1" />Add Grant</Button>}
         </div>
       </div>

@@ -23,8 +23,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { exportFieldPaymentsExcel } from '@/utils/fieldPaymentsExcel';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import {
   getFieldPaymentEnumeratorReference,
   isProfileUuid,
@@ -322,6 +324,7 @@ function DataLoadError({ message, onRetry }: { message: string; onRetry: () => v
 export default function FieldPaymentsCentre() {
   const { currentUser } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
+  const { checkPermission } = useAuthorization();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1323,6 +1326,17 @@ export default function FieldPaymentsCentre() {
   }), [sharedFilteredRecovery]);
 
   const handleExcelExport = async (reportTab: 'fees' | 'advances' | 'exceptions' | 'recovery') => {
+    // Keep each tab tied to the action registered for its source report:
+    // Enumerator Fees / exception finance reports use finances:export, while
+    // advance and recovery reports use down_payments:export.
+    const exportResourceByTab = {
+      fees: 'finances',
+      advances: 'down_payments',
+      exceptions: 'finances',
+      recovery: 'down_payments',
+    } as const;
+    if (!checkPermission(exportResourceByTab[reportTab], 'export')) return;
+
     const readyByTab = {
       fees: feesLoaded && !feesLoading,
       advances: advancesLoaded && !advancesLoading,
@@ -1813,16 +1827,18 @@ export default function FieldPaymentsCentre() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadFees}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => handleExcelExport('fees')}
-              disabled={exportingTab === 'fees' || feesLoading || !feesLoaded}
-            >
-              <Download className="h-3 w-3 mr-1" />
-              {exportingTab === 'fees' ? 'Exporting…' : 'Export Excel'}
-            </Button>
+            <ReportExportGate resource="finances">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => handleExcelExport('fees')}
+                disabled={exportingTab === 'fees' || feesLoading || !feesLoaded}
+              >
+                <Download className="h-3 w-3 mr-1" />
+                {exportingTab === 'fees' ? 'Exporting…' : 'Export Excel'}
+              </Button>
+            </ReportExportGate>
             {feeSelected.size > 0 && (
               <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => openPayDialog(filteredFees.filter(r => feeSelected.has(r.id)))}>
                 <Banknote className="h-3 w-3 mr-1" /> Pay {feeSelected.size} selected
@@ -1978,16 +1994,18 @@ export default function FieldPaymentsCentre() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadAdvances}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => handleExcelExport('advances')}
-              disabled={exportingTab === 'advances' || advancesLoading || !advancesLoaded}
-            >
-              <Download className="h-3 w-3 mr-1" />
-              {exportingTab === 'advances' ? 'Exporting…' : 'Export Excel'}
-            </Button>
+            <ReportExportGate resource="down_payments">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => handleExcelExport('advances')}
+                disabled={exportingTab === 'advances' || advancesLoading || !advancesLoaded}
+              >
+                <Download className="h-3 w-3 mr-1" />
+                {exportingTab === 'advances' ? 'Exporting…' : 'Export Excel'}
+              </Button>
+            </ReportExportGate>
           </div>
 
           {advancesLoadError ? (
@@ -2102,16 +2120,18 @@ export default function FieldPaymentsCentre() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadExceptions}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => handleExcelExport('exceptions')}
-              disabled={exportingTab === 'exceptions' || excLoading || !exceptionsLoaded}
-            >
-              <Download className="h-3 w-3 mr-1" />
-              {exportingTab === 'exceptions' ? 'Exporting…' : 'Export Excel'}
-            </Button>
+            <ReportExportGate resource="finances">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => handleExcelExport('exceptions')}
+                disabled={exportingTab === 'exceptions' || excLoading || !exceptionsLoaded}
+              >
+                <Download className="h-3 w-3 mr-1" />
+                {exportingTab === 'exceptions' ? 'Exporting…' : 'Export Excel'}
+              </Button>
+            </ReportExportGate>
           </div>
 
           {exceptionsLoadError ? (
@@ -2258,16 +2278,18 @@ export default function FieldPaymentsCentre() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadRecovery}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => handleExcelExport('recovery')}
-              disabled={exportingTab === 'recovery' || recoveryLoading || !recoveryLoaded}
-            >
-              <Download className="h-3 w-3 mr-1" />
-              {exportingTab === 'recovery' ? 'Exporting…' : 'Export Excel'}
-            </Button>
+            <ReportExportGate resource="down_payments">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => handleExcelExport('recovery')}
+                disabled={exportingTab === 'recovery' || recoveryLoading || !recoveryLoaded}
+              >
+                <Download className="h-3 w-3 mr-1" />
+                {exportingTab === 'recovery' ? 'Exporting…' : 'Export Excel'}
+              </Button>
+            </ReportExportGate>
           </div>
 
           {recoveryLoadError ? (

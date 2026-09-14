@@ -15,6 +15,8 @@ import { differenceInMonths, differenceInYears, parseISO, isValid, format } from
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
+import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
 
 interface StaffRow {
@@ -95,6 +97,8 @@ function currentYearMonth() {
 }
 
 export default function EOSBPanel() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -254,6 +258,7 @@ export default function EOSBPanel() {
   };
 
   const exportXlsx = useCallback(() => {
+    if (!checkPermission('hr', 'export')) return;
     const data = filtered.map(r => {
       const { serviceYears, accrualLabel, eosb } = calcEOSB(r.salary, r.hire_date, activeEosbSettings);
       return {
@@ -290,9 +295,13 @@ export default function EOSBPanel() {
           <Button variant="outline" size="sm" onClick={() => { void refetchProfiles(); void refetchAccruals(); }} disabled={profLoading}>
             <RefreshCw className={cn('h-4 w-4 mr-1', profLoading && 'animate-spin')} />Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportXlsx} disabled={filtered.length === 0}>
-            <Download className="h-4 w-4 mr-1" />Export
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="hr">
+              <Button variant="outline" size="sm" onClick={exportXlsx} disabled={filtered.length === 0}>
+                <Download className="h-4 w-4 mr-1" />Export
+              </Button>
+            </ReportExportGate>
+          )}
         </div>
       </div>
 

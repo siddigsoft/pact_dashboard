@@ -43,6 +43,7 @@ import {
 import { exportToExcel as exportStandardExcel } from "@/utils/report-export";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const STATUS_CONFIG: Record<CostSubmissionStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof Clock }> = {
   pending: { label: 'Pending', variant: 'secondary', icon: Clock },
@@ -70,6 +71,8 @@ export default function CostSubmissionReports({
 }: CostSubmissionReportsProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('cost_submissions', 'export');
   
   const [activeTab, setActiveTab] = useState<'all' | 'advances' | 'reimbursements' | 'outstanding'>('all');
   const [filters, setFilters] = useState({
@@ -179,6 +182,7 @@ export default function CostSubmissionReports({
   };
 
   const exportToExcel = () => {
+    if (!canExport) return;
     const data = prepareReportData();
     exportStandardExcel(
       data,
@@ -193,6 +197,7 @@ export default function CostSubmissionReports({
   };
 
   const exportToPDF = () => {
+    if (!canExport) return;
     const data = prepareReportData();
     const doc = new jsPDF('landscape');
     
@@ -257,7 +262,7 @@ export default function CostSubmissionReports({
         </div>
         
         <div className="flex items-center gap-2">
-          <Button 
+          {canExport && <Button
             variant="outline" 
             onClick={exportToExcel}
             disabled={filteredRequests.length === 0}
@@ -265,8 +270,8 @@ export default function CostSubmissionReports({
           >
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Export Excel
-          </Button>
-          <Button 
+          </Button>}
+          {canExport && <Button
             variant="outline" 
             onClick={exportToPDF}
             disabled={filteredRequests.length === 0}
@@ -274,7 +279,7 @@ export default function CostSubmissionReports({
           >
             <Download className="h-4 w-4 mr-2" />
             Export PDF
-          </Button>
+          </Button>}
         </div>
       </div>
 

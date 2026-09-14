@@ -19,6 +19,7 @@ import { usePreFundPaymentGate } from '@/hooks/usePreFundPaymentGate';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { exportToExcel } from '@/utils/report-export';
 
 /** Fetch ALL rows from a Supabase query — auto-paginates 1000 rows at a time so no rows are ever silently dropped. */
@@ -642,9 +643,11 @@ export default function PreFundingOverview() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={exportBalances} data-testid="button-export-prefunding-overview">
-            <Download className="h-4 w-4 mr-1.5" />Export
-          </Button>
+          <ReportExportGate resource="pre_funding">
+            <Button variant="outline" size="sm" onClick={exportBalances} data-testid="button-export-prefunding-overview">
+              <Download className="h-4 w-4 mr-1.5" />Export
+            </Button>
+          </ReportExportGate>
           <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} data-testid="button-refresh-overview">
             <RefreshCw className={cn('h-4 w-4 mr-1.5', refreshing && 'animate-spin')} />
             Refresh

@@ -20,6 +20,8 @@ import { exportTransactionsToCSV, exportTransactionsToPDF } from '@/lib/wallet/e
 import { useToast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 const fmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'NGN', currencyDisplay: 'narrowSymbol' }).format((c||0)/100);
 
@@ -28,6 +30,8 @@ const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 let _walletCache: { rows: any[]; currency: string; ts: number } | null = null;
 
 const AdminWallets: FC = () => {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('wallets', 'export');
   const isColVisible = useColumnVisibility('admin-wallets');
   const [rows, setRows] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -491,6 +495,7 @@ const AdminWallets: FC = () => {
   };
 
   const handleExportCSV = async (wallet: any) => {
+    if (!checkPermission('wallets', 'export')) return;
     try {
       const wId = wallet.id;
       if (!wId) {
@@ -542,6 +547,7 @@ const AdminWallets: FC = () => {
   };
 
   const handleExportPDF = async (wallet: any) => {
+    if (!checkPermission('wallets', 'export')) return;
     try {
       const wId = wallet.id;
       if (!wId) {
@@ -1034,20 +1040,24 @@ const AdminWallets: FC = () => {
                                   <DollarSign className="w-4 h-4 mr-2" />
                                   Adjust Balance
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleExportCSV(wallet)}
-                                  data-testid={`button-export-csv-${wallet.user_id}`}
-                                >
-                                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                                  Export CSV
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleExportPDF(wallet)}
-                                  data-testid={`button-export-pdf-${wallet.user_id}`}
-                                >
-                                  <Download className="w-4 h-4 mr-2" />
-                                  Export PDF
-                                </DropdownMenuItem>
+                                 {canExport && (
+                                   <ReportExportGate resource="wallets">
+                                     <DropdownMenuItem
+                                       onClick={() => handleExportCSV(wallet)}
+                                       data-testid={`button-export-csv-${wallet.user_id}`}
+                                     >
+                                       <FileSpreadsheet className="w-4 h-4 mr-2" />
+                                       Export CSV
+                                     </DropdownMenuItem>
+                                     <DropdownMenuItem
+                                       onClick={() => handleExportPDF(wallet)}
+                                       data-testid={`button-export-pdf-${wallet.user_id}`}
+                                     >
+                                       <Download className="w-4 h-4 mr-2" />
+                                       Export PDF
+                                     </DropdownMenuItem>
+                                   </ReportExportGate>
+                                 )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>

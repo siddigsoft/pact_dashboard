@@ -31,6 +31,7 @@ import {
 } from '@/utils/report-export';
 import type { ProjectCostAnalysis, RAGStatus } from '@/types/reports';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const RAGBadge = ({ status }: { status: RAGStatus }) => {
   const variants = {
@@ -51,8 +52,15 @@ export function ProjectCostReports() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canViewProjectAnalytics = checkPermission('analytics', 'read');
+  const canExportProjectAnalytics = checkPermission('analytics', 'export');
 
   const fetchData = async () => {
+    if (!canViewProjectAnalytics) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const projectCosts = await ReportingService.getProjectCostAnalysis();
@@ -71,9 +79,10 @@ export function ProjectCostReports() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [canViewProjectAnalytics]);
 
   const handleExportPDF = async () => {
+    if (!canExportProjectAnalytics) return;
     setExporting(true);
     try {
       await exportProjectCostAnalysisPDF(data);
@@ -93,6 +102,7 @@ export function ProjectCostReports() {
   };
 
   const handleExportExcel = () => {
+    if (!canExportProjectAnalytics) return;
     const excelData = data.map(p => ({
       'Project': p.projectName,
       'Code': p.projectCode || '-',
@@ -116,6 +126,7 @@ export function ProjectCostReports() {
   };
 
   const handleExportCSV = () => {
+    if (!canExportProjectAnalytics) return;
     const csvData = data.map(p => ({
       Project: p.projectName,
       Code: p.projectCode || '',
@@ -164,6 +175,16 @@ export function ProjectCostReports() {
     );
   }
 
+  if (!canViewProjectAnalytics) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          You do not have permission to view project analytics reports.
+        </CardContent>
+      </Card>
+    );
+  }
+
   const totalBudget = data.reduce((sum, p) => sum + p.totalBudget, 0);
   const totalSpent = data.reduce((sum, p) => sum + p.totalSpent, 0);
   const projectsOnTrack = data.filter(p => p.ragStatus === 'green').length;
@@ -180,18 +201,18 @@ export function ProjectCostReports() {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-pdf">
+          {canExportProjectAnalytics && <Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-pdf">
             <Download className="w-4 h-4 mr-2" />
             {exporting ? 'Exporting...' : 'PDF'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
+          </Button>}
+          {canExportProjectAnalytics && <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
+          </Button>}
+          {canExportProjectAnalytics && <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
             <Download className="w-4 h-4 mr-2" />
             CSV
-          </Button>
+          </Button>}
         </div>
       </div>
 

@@ -24,6 +24,8 @@ import autoTable from 'jspdf-autotable';
 import type { Project } from '@/types/project';
 import type { ProjectBudget } from '@/types/budget';
 import { calcMemberTotalCost } from '@/types/project';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface BudgetSummary {
   total?: number | null;
@@ -86,6 +88,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow }: ProjectReportsTabProps) {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('projects', 'export');
   const [opsCosts, setOpsCosts] = useState<OpsCost[]>([]);
   const [advances, setAdvances] = useState<Advance[]>([]);
   const [preFunds, setPreFunds] = useState<PreFundRow[]>([]);
@@ -175,6 +179,7 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
 
   // ── Excel export ────────────────────────────────────────────────────────────
   const handleExportExcel = async () => {
+    if (!checkPermission('projects', 'export')) return;
     setExporting(true);
     try {
       const now = format(new Date(), 'MMMM d, yyyy HH:mm');
@@ -298,6 +303,7 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
 
   // ── PDF export ──────────────────────────────────────────────────────────────
   const handleExportPDF = () => {
+    if (!checkPermission('projects', 'export')) return;
     setExportingPdf(true);
     try {
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -487,16 +493,20 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
           <Button size="sm" variant="outline" onClick={loadData} data-testid="button-refresh-reports">
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh
           </Button>
-          <Button size="sm" variant="outline" onClick={handleExportExcel} disabled={exporting}
-            data-testid="button-export-excel-report">
-            {exporting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />}
-            Export Excel
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleExportPDF} disabled={exportingPdf}
-            data-testid="button-export-pdf-report">
-            {exportingPdf ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5 mr-1.5" />}
-            Export PDF
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="projects">
+              <Button size="sm" variant="outline" onClick={handleExportExcel} disabled={exporting}
+                data-testid="button-export-excel-report">
+                {exporting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />}
+                Export Excel
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleExportPDF} disabled={exportingPdf}
+                data-testid="button-export-pdf-report">
+                {exportingPdf ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5 mr-1.5" />}
+                Export PDF
+              </Button>
+            </ReportExportGate>
+          )}
         </div>
       </div>
 

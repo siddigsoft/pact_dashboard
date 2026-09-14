@@ -6,6 +6,8 @@ import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import XLSXStyle from 'xlsx-js-style';
@@ -351,6 +353,8 @@ export default function SurveyDetail() {
   const { currentUser, hasRole } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('surveys', 'export');
 
   const isAdmin = isSuperAdmin || hasRole('admin') || hasRole('super_admin');
   const roleCanManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer');
@@ -1204,6 +1208,7 @@ export default function SurveyDetail() {
   };
 
   const exportCSV = async () => {
+    if (!checkPermission('surveys', 'export')) return;
     if (!responses.length) return;
     const rIds = responses.map(r => r.id);
     const ans = await fetchAllAnswersForResponses(rIds);
@@ -1271,6 +1276,7 @@ export default function SurveyDetail() {
   };
 
   const exportExcel = async () => {
+    if (!checkPermission('surveys', 'export')) return;
     if (!responses.length) return;
 
     // ── 1. Fetch answers (paginated — avoids the 1000-row Supabase cap) ──
@@ -1683,6 +1689,7 @@ export default function SurveyDetail() {
   };
 
   const exportNotSubmitted = async () => {
+    if (!checkPermission('surveys', 'export')) return;
     if (!pendingTargetUsers.length) return;
 
     // Fetch manager names for pending users
@@ -2625,12 +2632,16 @@ export default function SurveyDetail() {
                 </button>
               </div>
               {/* Export */}
-              <Button size="sm" variant="outline" onClick={exportCSV} className="gap-1.5 text-xs h-8 shrink-0" data-testid="btn-export-csv">
-                <Download className="w-3.5 h-3.5" />CSV
-              </Button>
-              <Button size="sm" variant="outline" onClick={exportExcel} className="gap-1.5 text-xs h-8 shrink-0" data-testid="btn-export-excel">
-                <FileSpreadsheet className="w-3.5 h-3.5" />Excel
-              </Button>
+              {canExport && (
+                <ReportExportGate resource="surveys">
+                  <Button size="sm" variant="outline" onClick={exportCSV} className="gap-1.5 text-xs h-8 shrink-0" data-testid="btn-export-csv">
+                    <Download className="w-3.5 h-3.5" />CSV
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={exportExcel} className="gap-1.5 text-xs h-8 shrink-0" data-testid="btn-export-excel">
+                    <FileSpreadsheet className="w-3.5 h-3.5" />Excel
+                  </Button>
+                </ReportExportGate>
+              )}
               <Button size="sm" variant="outline" onClick={downloadAttachmentsZip} disabled={downloadingAttachments} className="gap-1.5 text-xs h-8 shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50" data-testid="btn-download-attachments">
                 {downloadingAttachments ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
                 Attachments
@@ -3100,9 +3111,13 @@ export default function SurveyDetail() {
 
           {/* Analytics export */}
           <div className="flex justify-end">
-            <Button size="sm" variant="outline" onClick={() => window.print()} className="gap-1.5 text-xs">
-              <Download className="w-3.5 h-3.5" />Export Analytics
-            </Button>
+            {canExport && (
+              <ReportExportGate resource="surveys">
+                <Button size="sm" variant="outline" onClick={() => window.print()} className="gap-1.5 text-xs">
+                  <Download className="w-3.5 h-3.5" />Export Analytics
+                </Button>
+              </ReportExportGate>
+            )}
           </div>
 
           {/* ── KPI Cards ──────────────────────────────────────────────────── */}

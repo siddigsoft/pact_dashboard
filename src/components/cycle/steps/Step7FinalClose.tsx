@@ -19,6 +19,8 @@ import { allExceptionActionsExecuted } from '../exceptionExecution';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { exportCycleCloseWorkbook, type CheckResult } from '@/utils/cycleCloseExport';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface CheckItem {
   id: number;        // stable key used for overrides storage — never renumber
@@ -44,6 +46,8 @@ interface Props {
 }
 
 export default function Step7FinalClose({ wizardState, updateWizardState, onBack, canGoBack, canOverride, canFinalizeClose, roleFlags, currentUser, goToStep }: Props) {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('mmp', 'export');
   const navigate = useNavigate();
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [closingDialog, setClosingDialog] = useState(false);
@@ -226,6 +230,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   };
 
   const generateCycleCloseReports = async () => {
+    if (!checkPermission('mmp', 'export')) return;
     const cname = wizardState.selectedMmp?.name ?? 'cycle';
 
     // ── PDF summary (kept as official one-page signed record) ────────────────
@@ -407,10 +412,14 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
         )}
 
         <div className="flex flex-col items-center gap-2">
-          <Button type="button" onClick={generateCycleCloseReports} variant="outline" data-testid="button-re-download-reports">
-            <Download className="h-4 w-4 mr-1.5" />
-            Download Reports Again
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="mmp">
+              <Button type="button" onClick={generateCycleCloseReports} variant="outline" data-testid="button-re-download-reports">
+                <Download className="h-4 w-4 mr-1.5" />
+                Download Reports Again
+              </Button>
+            </ReportExportGate>
+          )}
         </div>
       </div>
     );
@@ -626,10 +635,14 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
 
       <div className="flex items-center justify-between pt-4 border-t">
         {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step7">← Back</Button>}
-        <Button type="button" variant="outline" size="sm" onClick={generateCycleCloseReports} data-testid="button-download-reports">
-          <Download className="h-3.5 w-3.5 mr-1.5" />
-          Download Draft Reports
-        </Button>
+        {canExport && (
+          <ReportExportGate resource="mmp">
+            <Button type="button" variant="outline" size="sm" onClick={generateCycleCloseReports} data-testid="button-download-reports">
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Download Draft Reports
+            </Button>
+          </ReportExportGate>
+        )}
       </div>
     </div>
   );

@@ -40,6 +40,7 @@ import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import { subDays, format, isWithinInterval } from 'date-fns';
 import { useAudit } from '@/context/audit/AuditContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 export function AuditingReports() {
   const [data, setData] = useState<AuditSummary | null>(null);
@@ -51,6 +52,9 @@ export function AuditingReports() {
   });
   const { toast } = useToast();
   const { logs: auditLogs, syncToDatabase } = useAudit();
+  const { checkPermission } = useAuthorization();
+  const canViewAuditLogs = checkPermission('audit_logs', 'read');
+  const canExportAuditLogs = checkPermission('audit_logs', 'export');
 
   const filteredAuditLogs = auditLogs.filter(log => {
     if (!dateRange?.from || !dateRange?.to) return true;
@@ -78,6 +82,10 @@ export function AuditingReports() {
   };
 
   const fetchData = async () => {
+    if (!canViewAuditLogs) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const range = dateRange?.from && dateRange?.to 
@@ -99,9 +107,10 @@ export function AuditingReports() {
 
   useEffect(() => {
     fetchData();
-  }, [dateRange]);
+  }, [dateRange, canViewAuditLogs]);
 
   const handleExportPDF = async () => {
+    if (!canExportAuditLogs) return;
     if (!data) return;
     setExporting(true);
     try {
@@ -125,6 +134,7 @@ export function AuditingReports() {
   };
 
   const handleExportExcel = () => {
+    if (!canExportAuditLogs) return;
     if (!data) return;
     const actionsData = data.actionsByType.map(a => ({
       'Action Type': a.type,
@@ -138,6 +148,7 @@ export function AuditingReports() {
   };
 
   const handleExportCSV = () => {
+    if (!canExportAuditLogs) return;
     if (!data) return;
     const overrideCount = data.recentOverrides?.length || 0;
     const overrideRate = data.totalActions > 0 ? (overrideCount / data.totalActions * 100).toFixed(1) : 0;
@@ -190,6 +201,16 @@ export function AuditingReports() {
     );
   }
 
+  if (!canViewAuditLogs) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          You do not have permission to view audit reports.
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!data) {
     return (
       <Card>
@@ -218,18 +239,18 @@ export function AuditingReports() {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-pdf">
+          {canExportAuditLogs && <Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-pdf">
             <Download className="w-4 h-4 mr-2" />
             {exporting ? 'Exporting...' : 'PDF'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
+          </Button>}
+          {canExportAuditLogs && <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
+          </Button>}
+          {canExportAuditLogs && <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
             <FileText className="w-4 h-4 mr-2" />
             CSV
-          </Button>
+          </Button>}
         </div>
       </div>
 

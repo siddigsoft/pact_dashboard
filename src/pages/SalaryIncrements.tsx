@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { cn } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
@@ -64,7 +65,8 @@ function calcPct(prev: number | null, next: number): number | null {
 export default function SalaryIncrements() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('payroll', 'export');
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hrManager', 'financialAdmin']);
 
   const invalidateIncrements = useInvalidateSalaryIncrements();
@@ -269,6 +271,7 @@ export default function SalaryIncrements() {
     : myIncrements;
 
   function exportIncrements() {
+    if (!checkPermission('payroll', 'export')) return;
     const rows = filtered.map(r => ({
       'Employee': r.user_name ?? profiles.find(p => p.id === r.user_id)?.full_name ?? '',
       'Effective Date': format(new Date(r.effective_date), 'yyyy-MM-dd'),
@@ -400,9 +403,11 @@ export default function SalaryIncrements() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input className="pl-8 w-48" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <Button size="sm" variant="outline" onClick={exportIncrements} data-testid="button-export-increments">
-            <Download className="h-4 w-4 mr-1" /> Export
-          </Button>
+          {canExport && <ReportExportGate resource="payroll">
+            <Button size="sm" variant="outline" onClick={exportIncrements} data-testid="button-export-increments">
+              <Download className="h-4 w-4 mr-1" /> Export
+            </Button>
+          </ReportExportGate>}
         </div>
       </div>
 

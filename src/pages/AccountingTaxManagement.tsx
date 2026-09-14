@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface TaxCode {
   id: string; code: string; name_en: string; name_ar: string | null;
@@ -240,8 +241,10 @@ export default function AccountingTaxManagement() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-tax"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv-tax"><Download className="w-4 h-4 mr-1" /> CSV</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-excel-tax"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv-tax"><Download className="w-4 h-4 mr-1" /> CSV</Button>
+            <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-excel-tax"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          </ReportExportGate>
           {canEdit && <Button size="sm" onClick={openCreate} data-testid="button-create-tax"><Plus className="w-4 h-4 mr-1" /> New Tax Code</Button>}
         </div>
       </div>

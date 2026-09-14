@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { useRestrictedAction } from '@/hooks/useRestrictedAction';
 import { PageAccessDenied } from '@/components/access/PageAccessDenied';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
@@ -88,7 +89,8 @@ function calcDays(start: string, end: string): number {
 export default function LeaveRequests() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('leave', 'export');
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
   const { check: checkLeaveWrite, perms: leavePerms } = useRestrictedAction('leave');
   const invalidateLeave = useInvalidateLeaveQueries();
@@ -171,6 +173,7 @@ export default function LeaveRequests() {
   }, [requests, statusFilter, typeFilter]);
 
   function exportLeaveRequests() {
+    if (!checkPermission('leave', 'export')) return;
     const rows = filtered.map(r => ({
       'Employee': r.user_name ?? '',
       'Leave Type': LEAVE_TYPES.find(t => t.value === r.leave_type)?.label ?? r.leave_type,
@@ -547,10 +550,12 @@ export default function LeaveRequests() {
               className={cn('border-white/30 text-white hover:bg-white/10', showBalance && 'bg-white/20')}>
               <PieChart className="h-4 w-4 mr-1" />My Balance
             </Button>
-            <Button size="sm" variant="outline" onClick={exportLeaveRequests}
-              className="border-white/30 text-white hover:bg-white/10" data-testid="button-export-leave-requests">
-              <Download className="h-4 w-4 mr-1" />Export
-            </Button>
+            {canExport && <ReportExportGate resource="leave">
+              <Button size="sm" variant="outline" onClick={exportLeaveRequests}
+                className="border-white/30 text-white hover:bg-white/10" data-testid="button-export-leave-requests">
+                <Download className="h-4 w-4 mr-1" />Export
+              </Button>
+            </ReportExportGate>}
           </div>
         </div>
 

@@ -1,6 +1,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -48,6 +50,8 @@ interface PaymentQueueRow {
 
 export default function Step6Reconciliation({ wizardState, updateWizardState, onNext, onBack, canGoBack }: Props) {
   const navigate = useNavigate();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('mmp', 'export');
   const [rows, setRows] = useState<EnumRow[]>([]);
   const [paymentQueue, setPaymentQueue] = useState<PaymentQueueRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -315,10 +319,17 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
     setLoading(false);
   };
 
-  const exportReconciliation = () => void exportFormattedReconciliation(rows, wizardState);
-  const exportPaymentRunSheet = () => void exportFormattedPaymentRun(rows, wizardState);
+  const exportReconciliation = () => {
+    if (!checkPermission('mmp', 'export')) return;
+    void exportFormattedReconciliation(rows, wizardState);
+  };
+  const exportPaymentRunSheet = () => {
+    if (!checkPermission('mmp', 'export')) return;
+    void exportFormattedPaymentRun(rows, wizardState);
+  };
 
   const exportFinancialSummaryPDF = () => {
+    if (!checkPermission('mmp', 'export')) return;
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.text('Cycle Financial Summary', 14, 20);
@@ -682,15 +693,19 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex flex-wrap items-center gap-2">
           {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step6">← Back</Button>}
-          <Button type="button" variant="outline" size="sm" onClick={exportReconciliation} data-testid="button-export-reconciliation">
-            <Download className="h-3.5 w-3.5 mr-1" />Reconciliation (Excel)
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={exportPaymentRunSheet} data-testid="button-export-payment-run">
-            <Download className="h-3.5 w-3.5 mr-1" />Payment Run Sheet
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={exportFinancialSummaryPDF} data-testid="button-export-financial-pdf">
-            <Download className="h-3.5 w-3.5 mr-1" />Financial Summary (PDF)
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="mmp">
+              <Button type="button" variant="outline" size="sm" onClick={exportReconciliation} data-testid="button-export-reconciliation">
+                <Download className="h-3.5 w-3.5 mr-1" />Reconciliation (Excel)
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={exportPaymentRunSheet} data-testid="button-export-payment-run">
+                <Download className="h-3.5 w-3.5 mr-1" />Payment Run Sheet
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={exportFinancialSummaryPDF} data-testid="button-export-financial-pdf">
+                <Download className="h-3.5 w-3.5 mr-1" />Financial Summary (PDF)
+              </Button>
+            </ReportExportGate>
+          )}
         </div>
         <Button type="button" onClick={onNext} data-testid="button-next-step6">
           Next: Final Review &amp; Close →

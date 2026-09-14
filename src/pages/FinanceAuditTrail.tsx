@@ -12,6 +12,7 @@ import { Loader2, Download, RefreshCw, ShieldAlert, Search, FileSearch, AlertTri
 import { format, parseISO, subDays } from 'date-fns';
 import { downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface AuditLog {
   id: string;
@@ -256,9 +257,11 @@ export default function FinanceAuditTrail() {
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-base">Finance table changes</CardTitle>
-              <Button variant="outline" size="sm" onClick={exportLogs} disabled={!filteredLogs.length} data-testid="button-export-logs">
-                <Download className="w-4 h-4 mr-1" /> CSV
-              </Button>
+              <ReportExportGate resource="accounting">
+                <Button variant="outline" size="sm" onClick={exportLogs} disabled={!filteredLogs.length} data-testid="button-export-logs">
+                  <Download className="w-4 h-4 mr-1" /> CSV
+                </Button>
+              </ReportExportGate>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -329,9 +332,11 @@ export default function FinanceAuditTrail() {
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-base">Sanctions / AML alerts</CardTitle>
-              <Button variant="outline" size="sm" onClick={exportAlerts} disabled={!alerts.length} data-testid="button-export-alerts">
-                <Download className="w-4 h-4 mr-1" /> CSV
-              </Button>
+              <ReportExportGate resource="accounting">
+                <Button variant="outline" size="sm" onClick={exportAlerts} disabled={!alerts.length} data-testid="button-export-alerts">
+                  <Download className="w-4 h-4 mr-1" /> CSV
+                </Button>
+              </ReportExportGate>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -376,9 +381,11 @@ export default function FinanceAuditTrail() {
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-base">Segregation-of-Duties violations</CardTitle>
-              <Button variant="outline" size="sm" onClick={exportSod} disabled={!sods.length} data-testid="button-export-sod">
-                <Download className="w-4 h-4 mr-1" /> CSV
-              </Button>
+              <ReportExportGate resource="accounting">
+                <Button variant="outline" size="sm" onClick={exportSod} disabled={!sods.length} data-testid="button-export-sod">
+                  <Download className="w-4 h-4 mr-1" /> CSV
+                </Button>
+              </ReportExportGate>
             </CardHeader>
             <CardContent>
               {loading ? (

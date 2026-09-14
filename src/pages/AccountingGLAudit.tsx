@@ -21,6 +21,7 @@ import { format, parseISO, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface ImbalancedEntry {
   id: string;
@@ -428,10 +429,12 @@ export default function AccountingGLAudit() {
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
           </Button>
           {tab === 'log' && (
-            <Button variant="outline" size="sm" onClick={exportLog} disabled={filteredLog.length === 0}
-              data-testid="button-export-audit">
-              <Download className="w-4 h-4 mr-1" /> Export
-            </Button>
+            <ReportExportGate resource="accounting">
+              <Button variant="outline" size="sm" onClick={exportLog} disabled={filteredLog.length === 0}
+                data-testid="button-export-audit">
+                <Download className="w-4 h-4 mr-1" /> Export
+              </Button>
+            </ReportExportGate>
           )}
         </div>
       </div>
@@ -728,9 +731,11 @@ export default function AccountingGLAudit() {
             </div>
             <div className="flex gap-2">
               {imbalanced.length > 0 && (
-                <Button variant="outline" size="sm" onClick={exportIntegrity} data-testid="button-export-integrity">
-                  <Download className="w-4 h-4 mr-1" /> Export
-                </Button>
+                <ReportExportGate resource="accounting">
+                  <Button variant="outline" size="sm" onClick={exportIntegrity} data-testid="button-export-integrity">
+                    <Download className="w-4 h-4 mr-1" /> Export
+                  </Button>
+                </ReportExportGate>
               )}
               <Button variant="outline" size="sm" onClick={loadIntegrity} disabled={integrityLoading} data-testid="button-refresh-integrity">
                 {integrityLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}

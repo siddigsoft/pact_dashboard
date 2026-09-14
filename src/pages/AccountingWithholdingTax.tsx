@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Search, Download, RefreshCw, Percent, CheckCircle2, Clock, Pencil } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { cn } from '@/lib/utils';
 
 interface WHTRate { id: string; name_en: string; code: string | null; rate_pct: number; applies_to: string; is_active: boolean; }
@@ -120,7 +121,9 @@ export default function AccountingWithholdingTax() {
           {canManage && <Button size="sm" onClick={() => setRateFormOpen(true)}><Plus className="w-4 h-4 mr-1" /> Add Rate</Button>}
           {canManage && <Button size="sm" variant="outline" onClick={() => { setEntryForm(BLANK_ENTRY); setEntryFormOpen(true); }}><Plus className="w-4 h-4 mr-1" /> Record WHT</Button>}
           <Button variant="outline" size="sm" onClick={() => void load()}><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={() => exportToExcel(filteredEntries, 'wht-entries')} disabled={!filteredEntries.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={() => exportToExcel(filteredEntries, 'wht-entries')} disabled={!filteredEntries.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          </ReportExportGate>
         </div>
       </div>
 

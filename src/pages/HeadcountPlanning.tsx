@@ -17,6 +17,7 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
 import { exportToExcel } from '@/utils/report-export';
 import { format } from 'date-fns';
 import { PageLoader } from '@/components/ui/page-loader';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Plan {
   id: string; department_id: string | null; position_title: string; fiscal_year: number; quarter: number | null;
@@ -34,10 +35,15 @@ const BLANK = {
 
 export default function HeadcountPlanning() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager', 'finance']);
-  const canEdit = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']);
+  const roleCanView = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager', 'finance']);
+  const canRead = checkPermission('hr', 'read');
+  const canView = roleCanView || canRead;
+  const canCreate = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']) || checkPermission('hr', 'create');
+  const canUpdate = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']) || checkPermission('hr', 'update');
+  const canDelete = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']) || checkPermission('hr', 'delete');
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [depts, setDepts] = useState<Dept[]>([]);
@@ -49,7 +55,9 @@ export default function HeadcountPlanning() {
   const [form, setForm] = useState({ ...BLANK });
   const [missingTable, setMissingTable] = useState(false);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    if (canView) fetchAll();
+  }, [canView]);
 
   async function fetchAll() {
     setLoading(true);
@@ -116,6 +124,7 @@ export default function HeadcountPlanning() {
   }
 
   function handleExport() {
+    if (!checkPermission('hr', 'export')) return;
     const rows = filtered.map(p => ({
       Position: p.position_title,
       Department: depts.find(d => d.id === p.department_id)?.name ?? '',
@@ -138,7 +147,7 @@ export default function HeadcountPlanning() {
     else { toast({ title: 'Plan deleted' }); fetchAll(); }
   }
 
-  if (!isAdmin) return <Card className="border-dashed"><CardContent className="py-16 text-center text-sm text-muted-foreground">Headcount planning is restricted to HR, admin, and finance roles.</CardContent></Card>;
+  if (!canView) return <Card className="border-dashed"><CardContent className="py-16 text-center text-sm text-muted-foreground">Headcount planning is restricted to HR, admin, and finance roles.</CardContent></Card>;
   if (loading) return <PageLoader compact />;
   if (missingTable) {
     return (
@@ -162,8 +171,10 @@ export default function HeadcountPlanning() {
           </SelectContent>
         </Select>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport} data-testid="button-export-headcount"><FileDown className="h-4 w-4 mr-1" />Export</Button>
-          {canEdit && <Button onClick={openNew} data-testid="button-new-headcount-plan"><Plus className="h-4 w-4 mr-1" />New Plan Row</Button>}
+          {canExport && <ReportExportGate resource="hr">
+            <Button variant="outline" onClick={handleExport} data-testid="button-export-headcount"><FileDown className="h-4 w-4 mr-1" />Export</Button>
+          </ReportExportGate>}
+          {canCreate && <Button onClick={openNew} data-testid="button-new-headcount-plan"><Plus className="h-4 w-4 mr-1" />New Plan Row</Button>}
         </div>
       </div>
 
@@ -195,10 +206,10 @@ export default function HeadcountPlanning() {
                     <span>{p.planned_hires} planned hires · {p.planned_salary_cost.toLocaleString()} {p.currency}</span>
                   </div>
                 </div>
-                {canEdit && (
+                {(canUpdate || canDelete) && (
                   <div className="flex gap-1 shrink-0">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(p)}><Edit2 className="h-3.5 w-3.5" /></Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 text-red-600" onClick={() => remove(p)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    {canUpdate && <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(p)}><Edit2 className="h-3.5 w-3.5" /></Button>}
+                    {canDelete && <Button size="icon" variant="ghost" className="h-7 w-7 text-red-600" onClick={() => remove(p)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                   </div>
                 )}
               </CardContent>

@@ -101,7 +101,8 @@ const Users = () => {
   const { currentUser, users, approveUser, rejectUser, refreshUsers, sendPasswordRecoveryEmail } = useUser();
   const { roles: allRoles, getUserRolesByUserId } = useRoleManagement();
   const { projects, updateProjectTeam, fetchProjects } = useProjectContext();
-  const { canManageRoles } = useAuthorization();
+  const { canManageRoles, checkPermission } = useAuthorization();
+  const canExportUsers = checkPermission('users', 'export');
   const { toast } = useToast();
   const roles = useAppContextSelector((c) => c.roles);
   const { hubs, states, localities, hubStates } = useLocationData();
@@ -454,6 +455,7 @@ const Users = () => {
   };
 
   const handleExportUsers = async () => {
+    if (!canExportUsers) return;
     if (users.length === 0) {
       toast({ title: 'No users to export', description: 'Refresh the user directory and try again.', variant: 'destructive' });
       return;
@@ -1274,7 +1276,7 @@ const Users = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
+          {canExportUsers && <Button
             variant="outline"
             size="sm"
             className="h-9 px-3 rounded-lg"
@@ -1285,7 +1287,7 @@ const Users = () => {
           >
             {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
             <span className="hidden sm:inline ml-1.5">{isExporting ? 'Exporting…' : 'Export Excel'}</span>
-          </Button>
+          </Button>}
           <Button 
             variant="outline" 
             size="icon"

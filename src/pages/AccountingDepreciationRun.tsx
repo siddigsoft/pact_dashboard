@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Asset {
   id: string; asset_name: string; asset_code: string | null; category: string | null;
@@ -60,8 +61,9 @@ function calcDepr(a: Asset): AssetWithDepr {
 }
 
 export default function AccountingDepreciationRun() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { checkPermission, hasAnyRole, loading: authLoading } = useAuthorization();
+  const allowed = checkPermission('fixed_assets', 'read');
+  const canExport = checkPermission('fixed_assets', 'export');
   const canRun = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
   const { toast } = useToast();
 
@@ -80,6 +82,7 @@ export default function AccountingDepreciationRun() {
   const [unifiedLoading, setUnifiedLoading] = useState(false);
 
   const loadUnifiedRuns = useCallback(async () => {
+    if (!allowed) return;
     setUnifiedLoading(true);
     const { data } = await supabase
       .from('asset_depreciation_runs' as any)
@@ -88,9 +91,10 @@ export default function AccountingDepreciationRun() {
       .limit(50);
     setUnifiedRuns((data ?? []) as UnifiedDepRun[]);
     setUnifiedLoading(false);
-  }, []);
+  }, [allowed]);
 
   const load = useCallback(async () => {
+    if (!allowed) return;
     setLoading(true);
     const [assetRes, runRes] = await Promise.all([
       supabase.from('acct_fixed_assets').select('id, asset_name, asset_code, category, acquisition_cost, salvage_value, useful_life_months, acquisition_date, status').eq('status', 'active').limit(1000),
@@ -116,9 +120,9 @@ export default function AccountingDepreciationRun() {
       setGlLogMap(map);
     }
     setLoading(false);
-  }, []);
+  }, [allowed]);
 
-  useEffect(() => { void load(); void loadUnifiedRuns(); }, [load, loadUnifiedRuns]);
+  useEffect(() => { if (allowed) { void load(); void loadUnifiedRuns(); } }, [allowed, load, loadUnifiedRuns]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -146,6 +150,7 @@ export default function AccountingDepreciationRun() {
   };
 
   const exportAssets = () => {
+    if (!canExport) return;
     const rows = filtered.map(a => ({
       'Asset Code': a.asset_code ?? '',
       'Asset Name': a.asset_name,
@@ -176,7 +181,9 @@ export default function AccountingDepreciationRun() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportAssets} disabled={!filtered.length} data-testid="button-export-depreciation-run"><Download className="h-4 w-4 mr-1" />Export</Button>
+          <ReportExportGate resource="fixed_assets" action="export">
+            <Button variant="outline" size="sm" onClick={exportAssets} disabled={!filtered.length} data-testid="button-export-depreciation-run"><Download className="h-4 w-4 mr-1" />Export</Button>
+          </ReportExportGate>
           {canRun && !migrationNeeded && (
             <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={running || eligibleAssets.length === 0} data-testid="button-run-depreciation">
               {running ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-1" />}Run Depreciation

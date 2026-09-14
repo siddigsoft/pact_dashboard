@@ -82,7 +82,8 @@ interface RawRetainerTx {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function SalaryRetainerReport() {
-  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const { isSuperAdmin, hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('payroll', 'export');
   const navigate = useNavigate();
   const isAuthorized = isSuperAdmin() || hasAnyRole([
     'admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin',
@@ -225,6 +226,7 @@ export default function SalaryRetainerReport() {
 
   // ── Export ─────────────────────────────────────────────────────────────────
   function exportCSV() {
+    if (!canExport) return;
     const rows: string[][] = [
       ['Employee', 'Department', 'Role', 'Type', 'Base Salary', 'Gross Salary', 'Net Salary', 'Retainer', 'Currency', 'Total Fixed Cost'],
     ];
@@ -245,6 +247,7 @@ export default function SalaryRetainerReport() {
   }
 
   function exportExcel() {
+    if (!canExport) return;
     const data = filtered.map(e => ({
       'Employee': e.full_name ?? '',
       'Department': e.department_name ?? '',
@@ -276,6 +279,7 @@ export default function SalaryRetainerReport() {
   }
 
   function exportPDF() {
+    if (!canExport) return;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     doc.setFillColor(15, 32, 65);
     doc.rect(0, 0, 297, 25, 'F');
@@ -347,7 +351,7 @@ export default function SalaryRetainerReport() {
                 <Input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="h-8 w-[140px] text-xs bg-white dark:bg-slate-900" data-testid="input-date-end" />
               </div>
             )}
-            <DropdownMenu>
+              {canExport && <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900" data-testid="button-export">
                   <Download className="h-3.5 w-3.5" />Export
@@ -358,7 +362,7 @@ export default function SalaryRetainerReport() {
                 <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="h-3.5 w-3.5 mr-2" />Export Excel</DropdownMenuItem>
                 <DropdownMenuItem onClick={exportPDF}><FileText className="h-3.5 w-3.5 mr-2" />Export PDF</DropdownMenuItem>
               </DropdownMenuContent>
-            </DropdownMenu>
+              </DropdownMenu>}
           </div>
         </div>
 

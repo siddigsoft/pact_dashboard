@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import {
   Upload, FileSpreadsheet, PlusCircle, Trash2, Pencil, XCircle,
   Loader2, Download, CheckCircle2, Users, AlertTriangle, RefreshCw,
@@ -1465,10 +1466,12 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
               {/* ── UPLOAD FILE ── */}
               <TabsContent value="upload" className="mt-0 space-y-4">
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={downloadTemplate} className="flex items-center gap-1.5">
-                    <Download className="h-3.5 w-3.5" />
-                    Download Template
-                  </Button>
+                  <ReportExportGate resource="mmp">
+                    <Button size="sm" variant="outline" onClick={downloadTemplate} className="flex items-center gap-1.5">
+                      <Download className="h-3.5 w-3.5" />
+                      Download Template
+                    </Button>
+                  </ReportExportGate>
                   <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5">
                     <FileSpreadsheet className="h-3.5 w-3.5" />
                     Browse File

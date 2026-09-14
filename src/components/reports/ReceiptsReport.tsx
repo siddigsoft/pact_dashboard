@@ -31,6 +31,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import { subDays, format } from 'date-fns';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 export function ReceiptsReport() {
   const [data, setData] = useState<ReceiptsSummary | null>(null);
@@ -40,8 +41,15 @@ export function ReceiptsReport() {
     to: new Date(),
   });
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canViewCostSubmissions = checkPermission('cost_submissions', 'read');
+  const canExportCostSubmissions = checkPermission('cost_submissions', 'export');
 
   const fetchData = async () => {
+    if (!canViewCostSubmissions) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       let query = supabase
@@ -172,7 +180,7 @@ export function ReceiptsReport() {
 
   useEffect(() => {
     fetchData();
-  }, [dateRange]);
+  }, [dateRange, canViewCostSubmissions]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -184,6 +192,7 @@ export function ReceiptsReport() {
   };
 
   const handleExportExcel = () => {
+    if (!canExportCostSubmissions) return;
     if (!data) return;
     const exportData = data.recentReceipts.map(receipt => ({
       'Receipt ID': receipt.id,
@@ -202,6 +211,7 @@ export function ReceiptsReport() {
   };
 
   const handleExportCSV = () => {
+    if (!canExportCostSubmissions) return;
     if (!data) return;
     const csvData = [
       { Metric: 'Total Receipts', Value: data.totalReceipts },
@@ -251,6 +261,16 @@ export function ReceiptsReport() {
     );
   }
 
+  if (!canViewCostSubmissions) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          You do not have permission to view receipt reports.
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!data) {
     return (
       <Card>
@@ -278,14 +298,14 @@ export function ReceiptsReport() {
             dateRange={dateRange}
             onDateRangeChange={setDateRange}
           />
-          <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
+          {canExportCostSubmissions && <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
             <Download className="w-4 h-4 mr-1" />
             CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
+          </Button>}
+          {canExportCostSubmissions && <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
             <FileSpreadsheet className="w-4 h-4 mr-1" />
             Excel
-          </Button>
+          </Button>}
         </div>
       </div>
 

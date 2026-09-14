@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { PageLoader } from '@/components/ui/page-loader';
 import { useApAgingQuery } from '@/hooks/useAccountingQueries';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, Legend } from 'recharts';
 
 type Vendor = NonNullable<ReturnType<typeof useApAgingQuery>['data']>['vendors'][number];
@@ -53,9 +54,10 @@ function ageBucket(postingDate: string, paymentTerms: number): AgeBucket {
 }
 
 export default function AccountingAPAging() {
-  const { hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const allowed = checkPermission('procurement', 'read');
+  const canExport = checkPermission('procurement', 'export');
 
   const query = useApAgingQuery(allowed && authReady);
   const vendors = query.data?.vendors ?? [];
@@ -150,6 +152,7 @@ export default function AccountingAPAging() {
   ].filter((d) => d.value > 0);
 
   const exportCsv = () => {
+    if (!canExport) return;
     const header = [
       'Vendor Code',
       'Vendor Name',
@@ -193,6 +196,7 @@ export default function AccountingAPAging() {
   };
 
   const exportExcel = () => {
+    if (!canExport) return;
     const rows = agingRows.map((r) => ({
       'Vendor Code': r.vendor.vendor_code ?? '',
       'Vendor Name': r.vendor.name_en,
@@ -271,26 +275,28 @@ export default function AccountingAPAging() {
             <RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />
             Refresh
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={exportExcel}
-            disabled={!agingRows.length}
-            data-testid="button-export-ap-aging"
-          >
-            <Download className="h-4 w-4 mr-1" />
-            Excel
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={exportCsv}
-            disabled={!agingRows.length}
-            data-testid="button-export"
-          >
-            <Download className="h-4 w-4 mr-1" />
-            CSV
-          </Button>
+          <ReportExportGate resource="procurement" action="export">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportExcel}
+              disabled={!agingRows.length}
+              data-testid="button-export-ap-aging"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportCsv}
+              disabled={!agingRows.length}
+              data-testid="button-export"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              CSV
+            </Button>
+          </ReportExportGate>
         </div>
       </div>
 

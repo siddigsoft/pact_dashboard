@@ -24,6 +24,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid,
 } from 'recharts';
 import { exportToExcel } from '@/utils/report-export';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 type QuestionType = 'rating' | 'nps' | 'text' | 'yes_no';
 type TargetAudience = 'all' | 'hub' | 'department';
@@ -133,6 +135,8 @@ function isSurveyOpen(s: PulseSurvey): boolean {
 }
 
 export default function PulseSurveys() {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('pulse_surveys', 'export');
   const { currentUser } = useAppContext();
   const { hasAnyRole } = useAuthorization();
   const { toast } = useToast();
@@ -454,6 +458,7 @@ export default function PulseSurveys() {
   }
 
   function exportResults(s: PulseSurvey) {
+    if (!checkPermission('pulse_surveys', 'export')) return;
     const rs = responsesBySurvey[s.id] ?? [];
     const rows = rs.map((r, i) => {
       const row: Record<string, any> = { '#': i + 1, 'Submitted At': format(new Date(r.submitted_at), 'yyyy-MM-dd HH:mm'), 'Hub': r.hub_id ? (hubMap[r.hub_id] ?? r.hub_id) : '' };
@@ -516,7 +521,11 @@ export default function PulseSurveys() {
                       </p>
                     </div>
                     <div className="flex gap-1.5">
-                      <Button size="sm" variant="outline" onClick={() => exportResults(s)} data-testid={`button-export-${s.id}`}>Export</Button>
+                       {canExport && (
+                         <ReportExportGate resource="pulse_surveys">
+                           <Button size="sm" variant="outline" onClick={() => exportResults(s)} data-testid={`button-export-${s.id}`}>Export</Button>
+                         </ReportExportGate>
+                       )}
                       <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Edit2 className="h-3.5 w-3.5" /></Button>
                       <Button size="sm" variant="ghost" className="text-red-600" onClick={() => deleteSurvey(s)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>

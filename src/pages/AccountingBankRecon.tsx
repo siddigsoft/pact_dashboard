@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface BankAccount {
   id: string; account_name: string; bank_name: string; account_number: string | null;
@@ -321,12 +322,14 @@ export default function AccountingBankRecon() {
               </Button>
             </>
           )}
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!statementLines.length} data-testid="button-export-bank-recon">
-            <Download className="h-4 w-4 mr-1" /> Export Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!statementLines.length} data-testid="button-export-csv">
-            <Download className="h-4 w-4 mr-1" /> Export CSV
-          </Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={!statementLines.length} data-testid="button-export-bank-recon">
+              <Download className="h-4 w-4 mr-1" /> Export Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!statementLines.length} data-testid="button-export-csv">
+              <Download className="h-4 w-4 mr-1" /> Export CSV
+            </Button>
+          </ReportExportGate>
         </div>
       </div>
 

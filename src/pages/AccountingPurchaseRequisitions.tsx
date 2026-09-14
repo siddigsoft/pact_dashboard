@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Fund { id: string; code: string; name_en: string }
 interface Account { id: string; code: string; name_en: string }
@@ -241,12 +242,14 @@ export default function AccountingPurchaseRequisitions() {
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-pr">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv-pr">
-            <Download className="w-4 h-4 mr-1" /> CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-excel-pr">
-            <Download className="w-4 h-4 mr-1" /> Excel
-          </Button>
+          <ReportExportGate resource="procurement">
+            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv-pr">
+              <Download className="w-4 h-4 mr-1" /> CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-excel-pr">
+              <Download className="w-4 h-4 mr-1" /> Excel
+            </Button>
+          </ReportExportGate>
           <Button size="sm" onClick={openCreate} data-testid="button-create-pr">
             <Plus className="w-4 h-4 mr-1" /> New PR
           </Button>

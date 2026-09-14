@@ -37,6 +37,7 @@ import { activatePreFund } from '@/utils/preFundActivation';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface PeriodType  { id: string; name: string; day_count: number | null; is_builtin: boolean }
 interface Project     { id: string; name: string; status?: string | null; description?: string | null }
@@ -2350,9 +2351,11 @@ export default function PreFundingRegistry() {
           <Button variant="outline" size="sm" onClick={load} data-testid="button-refresh-registry">
             <RefreshCw className="h-4 w-4 mr-1.5" />Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportFunds} data-testid="button-export-fund-registry">
-            <Download className="h-4 w-4 mr-1.5" />Export
-          </Button>
+          <ReportExportGate resource="pre_funding">
+            <Button variant="outline" size="sm" onClick={exportFunds} data-testid="button-export-fund-registry">
+              <Download className="h-4 w-4 mr-1.5" />Export
+            </Button>
+          </ReportExportGate>
           {canAccess && (
             <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white" onClick={openNew} data-testid="button-new-fund-registry">
               <Plus className="h-4 w-4 mr-1.5" />New Fund
@@ -2538,10 +2541,12 @@ export default function PreFundingRegistry() {
                             <History className="h-3.5 w-3.5" />Funding History
                           </DropdownMenuItem>
                           {['active', 'low_balance', 'closed'].includes(f.status) && (
-                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-sky-700" onClick={() => handleDonorPDF(f)} disabled={generatingDonorPdf === f.id} data-testid={`menu-pdf-${f.id}`}>
-                              <FileText className="h-3.5 w-3.5" />
-                              {generatingDonorPdf === f.id ? 'Generating…' : 'Donor Statement PDF'}
-                            </DropdownMenuItem>
+                            <ReportExportGate resource="pre_funding">
+                              <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-sky-700" onClick={() => handleDonorPDF(f)} disabled={generatingDonorPdf === f.id} data-testid={`menu-pdf-${f.id}`}>
+                                <FileText className="h-3.5 w-3.5" />
+                                {generatingDonorPdf === f.id ? 'Generating…' : 'Donor Statement PDF'}
+                              </DropdownMenuItem>
+                            </ReportExportGate>
                           )}
                           {['active', 'low_balance'].includes(f.status) && (
                             <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-violet-700" onClick={() => openAllocDialog(f)} data-testid={`menu-users-${f.id}`}>
@@ -3256,14 +3261,16 @@ export default function PreFundingRegistry() {
 
           <DialogFooter className="flex-row justify-end gap-2">
             {!receiptPreviewError && receiptPreviewUrl && (
-              <a
-                href={receiptPreviewUrl}
-                download={receiptPreview.name}
-                className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-muted"
-              >
-                <Download className="h-4 w-4" />
-                Download
-              </a>
+              <ReportExportGate resource="pre_funding">
+                <a
+                  href={receiptPreviewUrl}
+                  download={receiptPreview.name}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-muted"
+                >
+                  <Download className="h-4 w-4" />
+                  Download
+                </a>
+              </ReportExportGate>
             )}
             <Button type="button" variant="outline" onClick={closeReceiptPreview}>
               Close

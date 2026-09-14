@@ -34,6 +34,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import { subDays } from 'date-fns';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 export function FinancialReports() {
   const [data, setData] = useState<FinancialSummary | null>(null);
@@ -44,8 +45,15 @@ export function FinancialReports() {
     to: new Date(),
   });
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canViewFinances = checkPermission('finances', 'read');
+  const canExportFinances = checkPermission('finances', 'export');
 
   const fetchData = async () => {
+    if (!canViewFinances) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const range = dateRange?.from && dateRange?.to 
@@ -67,9 +75,10 @@ export function FinancialReports() {
 
   useEffect(() => {
     fetchData();
-  }, [dateRange]);
+  }, [dateRange, canViewFinances]);
 
   const handleExportPDF = async () => {
+    if (!canExportFinances) return;
     if (!data) return;
     setExporting(true);
     try {
@@ -93,6 +102,7 @@ export function FinancialReports() {
   };
 
   const handleExportExcel = () => {
+    if (!canExportFinances) return;
     if (!data) return;
     const excelData = [
       { Metric: 'Total Budget', Value: data.totalBudget, Unit: 'SDG' },
@@ -112,6 +122,7 @@ export function FinancialReports() {
   };
 
   const handleExportCSV = () => {
+    if (!canExportFinances) return;
     if (!data) return;
     const csvData = [
       { Metric: 'Total Budget', Value: data.totalBudget },
@@ -158,6 +169,16 @@ export function FinancialReports() {
     );
   }
 
+  if (!canViewFinances) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          You do not have permission to view financial reports.
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!data) {
     return (
       <Card>
@@ -183,18 +204,18 @@ export function FinancialReports() {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
+          {canExportFinances && <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
             <FileText className="w-4 h-4 mr-2" />
             CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
+          </Button>}
+          {canExportFinances && <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Excel
-          </Button>
-          <Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-pdf">
+          </Button>}
+          {canExportFinances && <Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-pdf">
             <Download className="w-4 h-4 mr-2" />
             {exporting ? 'Exporting...' : 'PDF'}
-          </Button>
+          </Button>}
         </div>
       </div>
 

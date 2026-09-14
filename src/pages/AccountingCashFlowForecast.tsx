@@ -12,6 +12,7 @@ import { Loader2, TrendingUp, RefreshCw, Download, AlertTriangle, BarChart3 } fr
 import { format, addMonths, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import {
@@ -31,9 +32,10 @@ interface ForecastRow {
 interface HistoricalRow { month: string; inflows: number; outflows: number; net: number }
 
 export default function AccountingCashFlowForecast() {
-  const { hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const allowed = checkPermission('finances', 'read');
+  const canExport = checkPermission('finances', 'export');
 
   const [loading, setLoading] = useState(true);
   const [cashBalance, setCashBalance] = useState(0);
@@ -48,6 +50,7 @@ export default function AccountingCashFlowForecast() {
   const [missingTables, setMissingTables] = useState<string[]>([]);
 
   const load = useCallback(async () => {
+    if (!allowed || !authReady) return;
     setLoading(true); setError(null);
     try {
       const missing: string[] = [];
@@ -163,9 +166,9 @@ export default function AccountingCashFlowForecast() {
       setMissingTables(missing);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
-  }, []);
+  }, [allowed, authReady]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (allowed && authReady) void load(); }, [allowed, authReady, load]);
 
   const forecast: ForecastRow[] = useMemo(() => {
     const rows: ForecastRow[] = [];
@@ -194,12 +197,14 @@ export default function AccountingCashFlowForecast() {
   }, [cashBalance, monthlyInflow, monthlyOutflow, openEncumbrances, openPOs, preFundLiquidity, preFundCommitted]);
 
   const exportCsv = () => {
+    if (!canExport) return;
     const header = ['Month', 'Opening Balance', 'Inflows', 'Outflows', 'Net', 'Closing Balance'];
     const body = forecast.map(r => [r.label, r.openingBalance.toFixed(0), r.inflows.toFixed(0), r.outflows.toFixed(0), r.net.toFixed(0), r.closingBalance.toFixed(0)]);
     downloadCsv(`cash-flow-forecast-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
   };
 
   const exportExcel = () => {
+    if (!canExport) return;
     const rows = forecast.map(r => ({
       'Month': r.label,
       'Opening Balance': r.openingBalance,
@@ -233,12 +238,14 @@ export default function AccountingCashFlowForecast() {
           <Button variant="outline" size="sm" onClick={load} disabled={loading} data-testid="button-refresh">
             <RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!forecast.length} data-testid="button-export-cash-flow-forecast">
-            <Download className="h-4 w-4 mr-1" />Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!forecast.length} data-testid="button-export">
-            <Download className="h-4 w-4 mr-1" />CSV
-          </Button>
+          <ReportExportGate resource="finances" action="export">
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={!forecast.length} data-testid="button-export-cash-flow-forecast">
+              <Download className="h-4 w-4 mr-1" />Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!forecast.length} data-testid="button-export">
+              <Download className="h-4 w-4 mr-1" />CSV
+            </Button>
+          </ReportExportGate>
         </div>
       </div>
 

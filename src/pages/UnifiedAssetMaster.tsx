@@ -18,6 +18,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,8 +98,9 @@ function emptyDisposalForm() {
 }
 
 export default function UnifiedAssetMaster() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { hasAnyRole, isAuthenticated, checkPermission } = useAuthorization();
   const { currentUser } = useAppContext();
+  const canExport = checkPermission('fixed_assets', 'export');
   const canEdit    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'hr_admin', 'ict']);
   const canDispose = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
   const canRunDep  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
@@ -364,12 +366,19 @@ export default function UnifiedAssetMaster() {
         <TabsContent value="register" className="space-y-4 mt-4">
           {/* Header actions */}
           <div className="flex gap-2 justify-end">
-            <Button type="button" variant="outline" size="sm" onClick={() => downloadCsv('assets.csv', [
-              ['Code','Name','Type','Category','Serial','Hub','Status','Purchase Value','NBV','Currency','Custodian'],
-              ...assets.map(a => [a.asset_code, a.name, a.asset_type, a.category, a.serial_number??'', a.hub??'', a.status, a.purchase_value??'', nbv(a)??'', a.currency, a.custodian_name??'']),
-            ])}>
-              <Download className="h-4 w-4 mr-1" /> Export
-            </Button>
+            {canExport && (
+              <ReportExportGate resource="fixed_assets">
+                <Button type="button" variant="outline" size="sm" onClick={() => {
+                  if (!checkPermission('fixed_assets', 'export')) return;
+                  downloadCsv('assets.csv', [
+                    ['Code','Name','Type','Category','Serial','Hub','Status','Purchase Value','NBV','Currency','Custodian'],
+                    ...assets.map(a => [a.asset_code, a.name, a.asset_type, a.category, a.serial_number??'', a.hub??'', a.status, a.purchase_value??'', nbv(a)??'', a.currency, a.custodian_name??'']),
+                  ]);
+                }}>
+                  <Download className="h-4 w-4 mr-1" /> Export
+                </Button>
+              </ReportExportGate>
+            )}
             {canEdit && (
               <Button size="sm" onClick={() => { setForm(emptyForm()); setCreateOpen(true); }}>
                 <Plus className="h-4 w-4 mr-1" /> New Asset

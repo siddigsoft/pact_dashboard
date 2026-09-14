@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
 import { getDefaultAccountingPeriod } from '@/lib/accountingReporting';
 import { AccountingReportReadiness } from '@/components/accounting/AccountingReportReadiness';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
 interface FiscalYear { id: string; code: string }
@@ -259,15 +260,17 @@ export default function AccountingTrialBalance() {
           <Button variant="outline" size="sm" onClick={() => void runTb()} disabled={!periodId || loading} data-testid="button-refresh">
             <RefreshCw className={cn('w-4 h-4 mr-1', loading && 'animate-spin')} /> Recompute
           </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
-            <Download className="w-4 h-4 mr-1" /> CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-trial-balance">
-            <Download className="h-4 w-4 mr-1" /> Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void exportPdf()} disabled={!filtered.length || pdfBusy} data-testid="button-export-pdf">
-            {pdfBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <FileDown className="w-4 h-4 mr-1" />} PDF (EN/AR)
-          </Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
+              <Download className="w-4 h-4 mr-1" /> CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-trial-balance">
+              <Download className="h-4 w-4 mr-1" /> Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void exportPdf()} disabled={!filtered.length || pdfBusy} data-testid="button-export-pdf">
+              {pdfBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <FileDown className="w-4 h-4 mr-1" />} PDF (EN/AR)
+            </Button>
+          </ReportExportGate>
         </div>
       </div>
 

@@ -21,6 +21,7 @@ import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface ExchangeRate {
   id: string; from_currency: string; to_currency: string;
@@ -193,8 +194,10 @@ export default function AccountingMultiCurrency() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-fx"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-fx-excel"><Download className="w-4 h-4 mr-1" /> Excel</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-fx-csv"><ArrowLeftRight className="w-4 h-4 mr-1" /> CSV</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-fx-excel"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-fx-csv"><ArrowLeftRight className="w-4 h-4 mr-1" /> CSV</Button>
+          </ReportExportGate>
           {canEdit && <Button size="sm" onClick={openCreate} data-testid="button-create-fx"><Plus className="w-4 h-4 mr-1" /> Add Rate</Button>}
         </div>
       </div>

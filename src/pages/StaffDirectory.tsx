@@ -26,6 +26,7 @@ import { sudanStates, getLocalitiesByState, hubs as sudanHubs } from "@/data/sud
 import { useGlobalPresence } from "@/context/presence/GlobalPresenceContext";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/user/UserContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import {
@@ -789,17 +790,19 @@ function ProfileDetail({
 
 /* ─── Export Dropdown ────────────────────────────────────── */
 function ExportMenu({
-  profiles, tab, label, dbHubs,
+  profiles, tab, label, dbHubs, canExport,
 }: {
   profiles: StaffProfile[];
   tab: string;
   label: string;
   dbHubs: { id: string; name: string }[];
+  canExport: boolean;
 }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
 
   const exp = useCallback(async (type: 'excel' | 'pdf' | 'csv') => {
+    if (!canExport) return;
     if (!profiles.length) { toast({ title: 'No data to export', variant: 'destructive' }); return; }
     setBusy(true);
     try {
@@ -812,7 +815,9 @@ function ExportMenu({
     } catch (err: any) {
       toast({ title: 'Export failed', description: err?.message, variant: 'destructive' });
     } finally { setBusy(false); }
-  }, [profiles, tab, label, toast]);
+  }, [profiles, tab, label, toast, canExport]);
+
+  if (!canExport) return null;
 
   return (
     <DropdownMenu>
@@ -868,6 +873,8 @@ function CapRow({ label, total, online, max }: { label: string; total: number; o
 export default function StaffDirectory() {
   const { toast } = useToast();
   const { currentUser } = useUser();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('users', 'export');
   const { isUserOnline, isConnected, onlineUserIds } = useGlobalPresence();
   const _roleNorm = (currentUser?.role ?? "").toLowerCase().replace(/[_\s]/g, "");
   const canAccessDepts = _roleNorm === "admin" || _roleNorm === "superadmin";
@@ -1461,7 +1468,7 @@ export default function StaffDirectory() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <ExportMenu profiles={filtered} tab={activeTab} label={exportLabel} dbHubs={dbHubs} />
+            <ExportMenu profiles={filtered} tab={activeTab} label={exportLabel} dbHubs={dbHubs} canExport={canExport} />
             <Button
               variant="outline"
               size="sm"

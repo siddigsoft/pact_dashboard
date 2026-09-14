@@ -34,6 +34,8 @@ import { format, parseISO, isValid, startOfMonth, subMonths } from 'date-fns';
 import { exportStandardExcel } from '@/utils/standardExcelExport';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface OpCostRow {
   id: string;
@@ -89,6 +91,8 @@ export function ConsolidatedFinancialTab({
   totalPaidAmount,
 }: ConsolidatedFinancialTabProps) {
   const navigate = useNavigate();
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('finances', 'export');
   const { toast } = useToast();
   const { requests: transportRequests, loading: transportLoading } = useDownPayment();
   const { projects } = useProjectContext();
@@ -222,6 +226,7 @@ export function ConsolidatedFinancialTab({
   ].filter(d => d.value > 0), [transportStats.paid, opStats.paidAmount]);
 
   const handleExportExcel = () => {
+    if (!checkPermission('finances', 'export')) return;
     exportStandardExcel({
       reportTitle: 'PACT Consolidated Financial Report',
       subtitleLine: `Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}`,
@@ -270,6 +275,7 @@ export function ConsolidatedFinancialTab({
   };
 
   const handleExportPDF = () => {
+    if (!checkPermission('finances', 'export')) return;
     const doc = new jsPDF('l', 'mm', 'a4');
     doc.setFontSize(18);
     doc.text('Consolidated Financial Report', 14, 20);
@@ -370,14 +376,18 @@ export function ConsolidatedFinancialTab({
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
-            <FileSpreadsheet className="h-4 w-4 mr-1.5" />
-            Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportPDF} data-testid="button-export-pdf">
-            <FileText className="h-4 w-4 mr-1.5" />
-            PDF
-          </Button>
+          {canExport && (
+            <ReportExportGate resource="finances">
+              <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
+                <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+                Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExportPDF} data-testid="button-export-pdf">
+                <FileText className="h-4 w-4 mr-1.5" />
+                PDF
+              </Button>
+            </ReportExportGate>
+          )}
         </div>
       </div>
 

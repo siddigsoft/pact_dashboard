@@ -28,6 +28,7 @@ import { exportToExcel } from '@/utils/report-export';
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
 import jsPDF from 'jspdf';
 import { PageLoader } from '@/components/ui/page-loader';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -205,7 +206,8 @@ function buildOfferPdf(c: Candidate, posting: JobPosting, deptName: string): jsP
 
 export default function Recruitment() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
   const navigate = useNavigate();
   const { isConnected: outlookConnected, createEvent: createOutlookEvent } = useOutlookCalendar();
@@ -780,6 +782,7 @@ export default function Recruitment() {
 
   // ── Export ─────────────────────────────────────────────────────────────────
   function handleExport() {
+    if (!checkPermission('hr', 'export')) return;
     const rows = candidates.map(c => ({
       'Job Posting': postings.find(p => p.id === c.job_posting_id)?.title ?? '',
       Candidate: c.full_name, Email: c.email ?? '', Phone: c.phone ?? '',
@@ -856,6 +859,7 @@ export default function Recruitment() {
     }
 
     function previewPdf() {
+      if (!checkPermission('hr', 'export')) return;
       const updatedCand = { ...c,
         salary_offer: parseFloat(offerSalary) || c.salary_offer,
         offer_currency: offerCurrency,
@@ -867,6 +871,7 @@ export default function Recruitment() {
     }
 
     function downloadPdf() {
+      if (!checkPermission('hr', 'export')) return;
       const updatedCand = { ...c,
         salary_offer: parseFloat(offerSalary) || c.salary_offer,
         offer_currency: offerCurrency,
@@ -1072,12 +1077,16 @@ export default function Recruitment() {
                 <Button size="sm" variant="outline" onClick={saveOfferDetails} disabled={savingOffer}>
                   {savingOffer && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Save Details
                 </Button>
-                <Button size="sm" variant="outline" onClick={previewPdf}>
-                  <Eye className="h-3.5 w-3.5 mr-1" />Preview PDF
-                </Button>
-                <Button size="sm" variant="outline" onClick={downloadPdf} data-testid={`btn-offer-pdf-${c.id}`}>
-                  <FileDown className="h-3.5 w-3.5 mr-1" />Download PDF
-                </Button>
+                {canExport && <ReportExportGate resource="hr">
+                  <Button size="sm" variant="outline" onClick={previewPdf}>
+                    <Eye className="h-3.5 w-3.5 mr-1" />Preview PDF
+                  </Button>
+                </ReportExportGate>}
+                {canExport && <ReportExportGate resource="hr">
+                  <Button size="sm" variant="outline" onClick={downloadPdf} data-testid={`btn-offer-pdf-${c.id}`}>
+                    <FileDown className="h-3.5 w-3.5 mr-1" />Download PDF
+                  </Button>
+                </ReportExportGate>}
                 {c.email && (
                   <Button size="sm" onClick={handleSendEmail} disabled={sendingEmail || saving}>
                     {(sendingEmail || saving) ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Mail className="h-3.5 w-3.5 mr-1" />}
@@ -1121,9 +1130,11 @@ export default function Recruitment() {
           </TabsList>
         </Tabs>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport} data-testid="button-export-candidates">
-            <FileDown className="h-4 w-4 mr-1" />Export
-          </Button>
+          {canExport && <ReportExportGate resource="hr">
+            <Button variant="outline" onClick={handleExport} data-testid="button-export-candidates">
+              <FileDown className="h-4 w-4 mr-1" />Export
+            </Button>
+          </ReportExportGate>}
           {pageTab === 'postings' && isAdmin && (
             <Button onClick={openNewJob} data-testid="button-new-posting">
               <Plus className="h-4 w-4 mr-1" />New Posting

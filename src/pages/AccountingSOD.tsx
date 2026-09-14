@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface JournalEntry {
   id: string; entry_no: string; posting_date: string;
@@ -180,7 +181,9 @@ export default function AccountingSOD() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-sod"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={violations.length === 0} data-testid="button-export-sod"><Download className="w-4 h-4 mr-1" /> Export</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={violations.length === 0} data-testid="button-export-sod"><Download className="w-4 h-4 mr-1" /> Export</Button>
+          </ReportExportGate>
         </div>
       </div>
 

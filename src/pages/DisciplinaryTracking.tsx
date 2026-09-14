@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { exportToExcel } from '@/utils/report-export';
 import { PageLoader } from '@/components/ui/page-loader';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Case {
   id: string; user_id: string; case_type: 'disciplinary' | 'grievance'; category: string | null;
@@ -46,9 +47,15 @@ const BLANK = {
 
 export default function DisciplinaryTracking() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
-  const isHr = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']);
+  const roleCanManage = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']);
+  const canRead = checkPermission('hr', 'read');
+  const canView = roleCanManage || canRead;
+  const canCreate = roleCanManage || checkPermission('hr', 'create');
+  const canUpdate = roleCanManage || checkPermission('hr', 'update');
+  const canDelete = roleCanManage || checkPermission('hr', 'delete');
 
   const [cases, setCases] = useState<Case[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -62,7 +69,9 @@ export default function DisciplinaryTracking() {
   const [missingTable, setMissingTable] = useState(false);
   const [forbidden, setForbidden] = useState(false);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    if (canView) fetchAll();
+  }, [canView]);
 
   async function fetchAll() {
     setLoading(true);
@@ -128,6 +137,7 @@ export default function DisciplinaryTracking() {
   }
 
   function handleExport() {
+    if (!checkPermission('hr', 'export')) return;
     const rows = cases.map(c => ({
       'Staff Member': nameOf(c.user_id),
       Type: c.case_type,
@@ -149,7 +159,7 @@ export default function DisciplinaryTracking() {
     else { toast({ title: 'Case deleted' }); fetchAll(); }
   }
 
-  if (!isHr) {
+  if (!canView) {
     return (
       <Card className="border-dashed"><CardContent className="py-16 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
         <Lock className="h-5 w-5" />Disciplinary & grievance records are restricted to HR and admin roles.
@@ -185,8 +195,10 @@ export default function DisciplinaryTracking() {
           </Select>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport} data-testid="button-export-cases"><FileDown className="h-4 w-4 mr-1" />Export</Button>
-          <Button onClick={openNew} data-testid="button-new-case"><Plus className="h-4 w-4 mr-1" />Log Case</Button>
+          {canExport && <ReportExportGate resource="hr">
+            <Button variant="outline" onClick={handleExport} data-testid="button-export-cases"><FileDown className="h-4 w-4 mr-1" />Export</Button>
+          </ReportExportGate>}
+          {canCreate && <Button onClick={openNew} data-testid="button-new-case"><Plus className="h-4 w-4 mr-1" />Log Case</Button>}
         </div>
       </div>
 
@@ -208,8 +220,8 @@ export default function DisciplinaryTracking() {
                 {c.resolution_notes && <p className="text-xs text-muted-foreground mt-2 border-t pt-2">Resolution: {c.resolution_notes}</p>}
               </div>
               <div className="flex gap-1 shrink-0">
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(c)} data-testid={`button-edit-case-${c.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7 text-red-600" onClick={() => remove(c)} data-testid={`button-delete-case-${c.id}`}><Trash2 className="h-3.5 w-3.5" /></Button>
+                {canUpdate && <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(c)} data-testid={`button-edit-case-${c.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>}
+                {canDelete && <Button size="icon" variant="ghost" className="h-7 w-7 text-red-600" onClick={() => remove(c)} data-testid={`button-delete-case-${c.id}`}><Trash2 className="h-3.5 w-3.5" /></Button>}
               </div>
             </CardContent>
           </Card>

@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, Download, RefreshCw, Clock, Search } from 'lucide-react';
 import { differenceInDays, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { formatNumber } from '@/lib/accountingFormat';
 
 interface APInvoice {
@@ -94,7 +95,9 @@ export default function AccountingAgedReceivable() {
           <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search vendor…" className="pl-7 w-48 h-8 text-sm" />
         </div>
         <Button size="sm" variant="outline" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
-        <Button size="sm" variant="outline" onClick={exportData}><Download className="h-4 w-4 mr-1" />Export</Button>
+        <ReportExportGate resource="accounting">
+          <Button size="sm" variant="outline" onClick={exportData}><Download className="h-4 w-4 mr-1" />Export</Button>
+        </ReportExportGate>
       </div>
 
       {/* Summary cards */}

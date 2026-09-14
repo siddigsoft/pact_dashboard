@@ -21,6 +21,7 @@ import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, Legend } from 'recharts';
 import { useDonorReportsQuery } from '@/hooks/useAccountingQueries';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 const RESTRICTION_CFG: Record<string, { label: string; color: string; short: string }> = {
   without_restriction: { label: 'Unrestricted',      color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30', short: 'UNR' },
@@ -160,8 +161,10 @@ export default function AccountingDonorReports() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-donor"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-donor"><Download className="w-4 h-4 mr-1" /> CSV</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-donor-reports"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <ReportExportGate resource="accounting">
+            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-donor"><Download className="w-4 h-4 mr-1" /> CSV</Button>
+            <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-donor-reports"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          </ReportExportGate>
         </div>
       </div>
 

@@ -32,6 +32,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { cn } from '@/lib/utils';
 import { format, parseISO, isBefore, differenceInDays, startOfWeek, isValid } from 'date-fns';
 import {
@@ -3696,6 +3698,8 @@ export function ProjectFieldTasksPanel({
   completedStageIds = new Set<string>(),
   teamComposition = [],
 }: Props) {
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('projects', 'export');
   const teamCandidates = useMemo(
     () => teamMembersToAssigneeOptions(teamComposition),
     [teamComposition],
@@ -3888,6 +3892,7 @@ export function ProjectFieldTasksPanel({
 
   // ── CSV/PDF Export ──
   const exportCSV = () => {
+    if (!checkPermission('projects', 'export')) return;
     const header = ['Title','Status','Priority','Assignee','Start Date','Due Date','State','Locality','Est Hours','Act Hours','Est Cost','Act Cost','Notes'];
     const rows = filtered.map(t => [
       t.title, STATUS_CFG[t.status].label, PRIORITY_CFG[t.priority].label,
@@ -3907,6 +3912,7 @@ export function ProjectFieldTasksPanel({
   };
 
   const exportPDF = () => {
+    if (!checkPermission('projects', 'export')) return;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     doc.setFontSize(14);
     doc.text(`Field Tasks — ${projectName}`, 14, 14);
@@ -3960,6 +3966,7 @@ export function ProjectFieldTasksPanel({
   };
 
   const exportExcel = async () => {
+    if (!checkPermission('projects', 'export')) return;
     const { exportStandardExcel } = await import('@/utils/standardExcelExport');
     const taskRows = filtered.map(t => [
       t.title,
@@ -4083,25 +4090,27 @@ export function ProjectFieldTasksPanel({
           )}
 
           {/* Export dropdown */}
-          {tasks.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 text-xs">
-                  <FileDown className="h-3.5 w-3.5 mr-1" /> Export
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={exportCSV}>
-                  Export as CSV
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportPDF}>
-                  Export as PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportExcel}>
-                  Export as Excel
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          {canExport && tasks.length > 0 && (
+            <ReportExportGate resource="projects">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 text-xs">
+                    <FileDown className="h-3.5 w-3.5 mr-1" /> Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={exportCSV}>
+                    Export as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportPDF}>
+                    Export as PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportExcel}>
+                    Export as Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ReportExportGate>
           )}
 
           {canEdit && (

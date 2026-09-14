@@ -19,6 +19,7 @@ import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { getDefaultAccountingPeriod } from '@/lib/accountingReporting';
 import { AccountingReportReadiness } from '@/components/accounting/AccountingReportReadiness';
 import { calculateBalanceSheet, statementNetBalance } from '@/lib/accountingStatements';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface TbRow {
   account_id: string; account_code: string; account_name_en: string; account_name_ar: string;
@@ -426,17 +427,19 @@ export default function AccountingFinancialStatements() {
                 <h2 className="text-lg font-semibold">Income Statement · قائمة الدخل</h2>
                 <p className="text-xs text-muted-foreground">{periodLabel(periodId)} · {selectedCurrency}</p>
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={exportIncomeStatementCsv} disabled={!tb.length} data-testid="button-export-is-csv">
-                  <Download className="h-3.5 w-3.5 mr-1" /> CSV
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportIncomeStatementExcel} disabled={!tb.length} data-testid="button-export-is-excel">
-                  <Download className="h-3.5 w-3.5 mr-1" /> Excel
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => exportPdf('income')} disabled={!tb.length || pdfBusy} data-testid="button-export-is-pdf">
-                  {pdfBusy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-1" />} PDF
-                </Button>
-              </div>
+              <ReportExportGate resource="accounting">
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={exportIncomeStatementCsv} disabled={!tb.length} data-testid="button-export-is-csv">
+                    <Download className="h-3.5 w-3.5 mr-1" /> CSV
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={exportIncomeStatementExcel} disabled={!tb.length} data-testid="button-export-is-excel">
+                    <Download className="h-3.5 w-3.5 mr-1" /> Excel
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => exportPdf('income')} disabled={!tb.length || pdfBusy} data-testid="button-export-is-pdf">
+                    {pdfBusy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-1" />} PDF
+                  </Button>
+                </div>
+              </ReportExportGate>
             </div>
 
             <StatementSection
@@ -477,6 +480,7 @@ export default function AccountingFinancialStatements() {
                 <h2 className="text-lg font-semibold">Balance Sheet · الميزانية العمومية</h2>
                 <p className="text-xs text-muted-foreground">{selectedPeriod ? `As of ${format(parseISO(selectedPeriod.end_date), 'MMMM d, yyyy')}` : ''} · {selectedCurrency}</p>
               </div>
+              <ReportExportGate resource="accounting">
               <div className="flex items-center gap-2">
                 {balanceSheetTb.length > 0 && (
                   <Badge variant={bsData.isBalanced ? 'default' : 'destructive'} className={bsData.isBalanced ? 'bg-emerald-600' : ''}>
@@ -493,6 +497,7 @@ export default function AccountingFinancialStatements() {
                   {pdfBusy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-1" />} PDF
                 </Button>
               </div>
+              </ReportExportGate>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

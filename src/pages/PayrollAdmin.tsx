@@ -41,6 +41,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { PageLoader } from '@/components/ui/page-loader';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
+
+function PayrollExportGate({ children }: { children: React.ReactNode }) {
+  return <ReportExportGate resource="payroll">{children}</ReportExportGate>;
+}
+
+function usePayrollExportPermission() {
+  const { checkPermission } = useAuthorization();
+  return checkPermission('payroll', 'export');
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface LineItem { name: string; amount: number; type: 'fixed' | 'percent'; }
@@ -1680,6 +1690,7 @@ function PayrollReportsTab({ runs, employees, currentUserId }: { runs: PayrollRu
 
 // ── Sub-report: Payroll Breakdown (original content) ─────────────────────────
 function PayrollBreakdownReport({ runs, employees }: { runs: PayrollRun[]; employees: EmployeeRow[] }) {
+  const canExport = usePayrollExportPermission();
   const [selectedRunId, setSelectedRunId] = useState<string>('projection');
 
   // Fetch run items for selected payroll run
@@ -1738,6 +1749,7 @@ function PayrollBreakdownReport({ runs, employees }: { runs: PayrollRun[]; emplo
   const maxDeptBar  = deptSummary[0]?.gross || 1;
 
   const exportExcel = () => {
+    if (!canExport) return;
     const label = isProjection ? 'projection' : (selectedRun?.period_label ?? 'report');
     exportMultiSheetExcel([
       {
@@ -1832,9 +1844,11 @@ function PayrollBreakdownReport({ runs, employees }: { runs: PayrollRun[]; emplo
             {selectedRun.status === 'locked' ? '🔒 Locked payroll run' : 'Draft payroll run'}
           </span>
         )}
-        <Button onClick={exportExcel} disabled={items.length === 0} size="sm" variant="outline" className="ml-auto h-9 gap-2 text-xs bg-white dark:bg-slate-900">
-          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
-        </Button>
+        <PayrollExportGate>
+          <Button onClick={exportExcel} disabled={items.length === 0} size="sm" variant="outline" className="ml-auto h-9 gap-2 text-xs bg-white dark:bg-slate-900">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
+          </Button>
+        </PayrollExportGate>
       </div>
 
       {loading && (
@@ -2060,6 +2074,7 @@ function PayrollBreakdownReport({ runs, employees }: { runs: PayrollRun[]; emplo
 
 // ── Sub-report: Contract Expiry ───────────────────────────────────────────────
 function ContractExpiryReport({ employees }: { employees: EmployeeRow[] }) {
+  const canExport = usePayrollExportPermission();
   const today = new Date();
 
   const withExpiry = employees
@@ -2079,6 +2094,7 @@ function ContractExpiryReport({ employees }: { employees: EmployeeRow[] }) {
   const openEnded = employees.filter(e => !e.contract_end_date);
 
   const exportExcel = () => {
+    if (!canExport) return;
     const rows = withExpiry.map(e => ({
       'Employee': e.full_name ?? '—', 'Department': e.department_name ?? '—',
       'Employment Type': e.employment_type ?? '—',
@@ -2135,9 +2151,11 @@ function ContractExpiryReport({ employees }: { employees: EmployeeRow[] }) {
             </div>
           ))}
         </div>
-        <Button onClick={exportExcel} size="sm" variant="outline" disabled={withExpiry.length === 0} className="h-9 gap-2 text-xs bg-white">
-          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
-        </Button>
+        <PayrollExportGate>
+          <Button onClick={exportExcel} size="sm" variant="outline" disabled={withExpiry.length === 0} className="h-9 gap-2 text-xs bg-white">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
+          </Button>
+        </PayrollExportGate>
       </div>
 
       {withExpiry.length === 0 && (
@@ -2181,6 +2199,7 @@ function ContractExpiryReport({ employees }: { employees: EmployeeRow[] }) {
 
 // ── Sub-report: Headcount & Workforce ─────────────────────────────────────────
 function HeadcountReport({ employees }: { employees: EmployeeRow[] }) {
+  const canExport = usePayrollExportPermission();
   const byDept = useMemo(() => {
     const map: Record<string, { dept: string; count: number; types: Record<string, number>; withSalary: number }> = {};
     for (const e of employees) {
@@ -2210,6 +2229,7 @@ function HeadcountReport({ employees }: { employees: EmployeeRow[] }) {
   };
 
   const exportExcel = () => {
+    if (!canExport) return;
     exportMultiSheetExcel([
       {
         name: 'By Department',
@@ -2284,9 +2304,11 @@ function HeadcountReport({ employees }: { employees: EmployeeRow[] }) {
               <Building2 className="h-4 w-4 text-violet-500" />
               <h3 className="text-sm font-semibold">By Department</h3>
             </div>
-            <Button onClick={exportExcel} size="sm" variant="outline" className="h-7 gap-1.5 text-xs">
-              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />Export
-            </Button>
+            <PayrollExportGate>
+              <Button onClick={exportExcel} size="sm" variant="outline" className="h-7 gap-1.5 text-xs">
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />Export
+              </Button>
+            </PayrollExportGate>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -2322,6 +2344,7 @@ function HeadcountReport({ employees }: { employees: EmployeeRow[] }) {
 
 // ── Sub-report: Year-to-Date ───────────────────────────────────────────────────
 function YTDReport({ runs, employees }: { runs: PayrollRun[]; employees: EmployeeRow[] }) {
+  const canExport = usePayrollExportPermission();
   const thisYear = new Date().getFullYear();
   const yearRuns = runs.filter(r => r.period_start.startsWith(String(thisYear)));
 
@@ -2372,6 +2395,7 @@ function YTDReport({ runs, employees }: { runs: PayrollRun[]; employees: Employe
   const maxMonthGross = Math.max(...monthlyTotals.map(m => m.gross), 1);
 
   const exportExcel = () => {
+    if (!canExport) return;
     exportMultiSheetExcel([
       {
         name: 'Summary',
@@ -2422,9 +2446,11 @@ function YTDReport({ runs, employees }: { runs: PayrollRun[]; employees: Employe
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h3 className="text-sm font-semibold text-muted-foreground">Year-to-Date {thisYear} · {yearRuns.length} payroll run{yearRuns.length !== 1 ? 's' : ''}</h3>
-        <Button onClick={exportExcel} size="sm" variant="outline" className="h-9 gap-2 text-xs bg-white">
-          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
-        </Button>
+        <PayrollExportGate>
+          <Button onClick={exportExcel} size="sm" variant="outline" className="h-9 gap-2 text-xs bg-white">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
+          </Button>
+        </PayrollExportGate>
       </div>
 
       {/* YTD KPIs */}
@@ -2524,6 +2550,7 @@ function YTDReport({ runs, employees }: { runs: PayrollRun[]; employees: Employe
 
 // ── Sub-report: Month Comparison ──────────────────────────────────────────────
 function MonthComparisonReport({ runs }: { runs: PayrollRun[] }) {
+  const canExport = usePayrollExportPermission();
   const [runAId, setRunAId] = useState<string>(runs[1]?.id ?? '');
   const [runBId, setRunBId] = useState<string>(runs[0]?.id ?? '');
 
@@ -2581,6 +2608,7 @@ function MonthComparisonReport({ runs }: { runs: PayrollRun[] }) {
   }, [itemsA, itemsB]);
 
   const exportExcel = () => {
+    if (!canExport) return;
     exportMultiSheetExcel([
       {
         name: 'Summary',
@@ -2638,9 +2666,11 @@ function MonthComparisonReport({ runs }: { runs: PayrollRun[] }) {
             <SelectContent>{runs.map(r => <SelectItem key={r.id} value={r.id}>{r.period_label}</SelectItem>)}</SelectContent>
           </Select>
         </div>
-        <Button onClick={exportExcel} size="sm" variant="outline" disabled={itemsA.length === 0 && itemsB.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">
-          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
-        </Button>
+        <PayrollExportGate>
+          <Button onClick={exportExcel} size="sm" variant="outline" disabled={itemsA.length === 0 && itemsB.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
+          </Button>
+        </PayrollExportGate>
       </div>
 
       {loading && (
@@ -2730,6 +2760,7 @@ function MonthComparisonReport({ runs }: { runs: PayrollRun[] }) {
 
 // ── Sub-report: Statutory Filing ──────────────────────────────────────────────
 function StatutoryReport({ runs }: { runs: PayrollRun[] }) {
+  const canExport = usePayrollExportPermission();
   const [selectedRunId, setSelectedRunId] = useState<string>(runs[0]?.id ?? '');
   const run = runs.find(r => r.id === selectedRunId);
 
@@ -2774,6 +2805,7 @@ function StatutoryReport({ runs }: { runs: PayrollRun[] }) {
   }, [rows]);
 
   const exportExcel = () => {
+    if (!canExport) return;
     exportMultiSheetExcel([
       {
         name: 'Statutory',
@@ -2811,9 +2843,11 @@ function StatutoryReport({ runs }: { runs: PayrollRun[] }) {
           <SelectTrigger className="h-9 w-[200px] text-sm bg-white dark:bg-slate-900"><SelectValue placeholder="Select period" /></SelectTrigger>
           <SelectContent>{runs.map(r => <SelectItem key={r.id} value={r.id}>{r.period_label} {r.status === 'locked' ? '🔒' : ''}</SelectItem>)}</SelectContent>
         </Select>
-        <Button onClick={exportExcel} size="sm" variant="outline" disabled={items.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">
-          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Filing Sheet
-        </Button>
+        <PayrollExportGate>
+          <Button onClick={exportExcel} size="sm" variant="outline" disabled={items.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Filing Sheet
+          </Button>
+        </PayrollExportGate>
       </div>
 
       {/* Summary KPIs */}
@@ -2888,6 +2922,7 @@ function StatutoryReport({ runs }: { runs: PayrollRun[] }) {
 interface DeptBudget { id: string; department_name: string | null; period_label: string; target_amount: number; currency: string; }
 
 function BudgetVsActualReport({ runs, employees, currentUserId }: { runs: PayrollRun[]; employees: EmployeeRow[]; currentUserId: string }) {
+  const canExport = usePayrollExportPermission();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [selectedRunId, setSelectedRunId] = useState<string>(runs.find(r => r.status === 'locked')?.id ?? runs[0]?.id ?? '');
@@ -2952,6 +2987,7 @@ function BudgetVsActualReport({ runs, employees, currentUserId }: { runs: Payrol
   };
 
   const exportExcel = () => {
+    if (!canExport) return;
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
       deptActuals.map(d => {
@@ -2978,9 +3014,11 @@ function BudgetVsActualReport({ runs, employees, currentUserId }: { runs: Payrol
           <SelectTrigger className="h-9 w-[200px] text-sm bg-white dark:bg-slate-900"><SelectValue /></SelectTrigger>
           <SelectContent>{runs.map(r => <SelectItem key={r.id} value={r.id}>{r.period_label}</SelectItem>)}</SelectContent>
         </Select>
-        <Button onClick={exportExcel} size="sm" variant="outline" disabled={deptActuals.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">
-          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export
-        </Button>
+        <PayrollExportGate>
+          <Button onClick={exportExcel} size="sm" variant="outline" disabled={deptActuals.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export
+          </Button>
+        </PayrollExportGate>
       </div>
 
       {/* Overall KPIs */}
@@ -3092,6 +3130,7 @@ interface PayrollAdvance {
 }
 
 function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; currentUserId: string }) {
+  const canExport = usePayrollExportPermission();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -3149,6 +3188,7 @@ function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; c
   };
 
   const exportExcel = () => {
+    if (!canExport) return;
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
       advances.map(a => ({
@@ -3177,9 +3217,11 @@ function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; c
           ))}
         </div>
         <div className="flex gap-2 shrink-0">
-          <Button onClick={exportExcel} size="sm" variant="outline" className="h-9 gap-2 text-xs bg-white" disabled={advances.length === 0}>
-            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export
-          </Button>
+          <PayrollExportGate>
+            <Button onClick={exportExcel} size="sm" variant="outline" className="h-9 gap-2 text-xs bg-white" disabled={advances.length === 0}>
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export
+            </Button>
+          </PayrollExportGate>
           <Button onClick={() => setShowForm(v => !v)} size="sm" className="h-9 gap-2 bg-[#0F2041] hover:bg-[#1D3461] text-white text-xs">
             <Plus className="h-4 w-4" />{showForm ? 'Cancel' : 'Record Advance'}
           </Button>
@@ -4306,6 +4348,7 @@ function PayslipsTab({ runs, loading, employees }: {
   runs: PayrollRun[]; loading: boolean; employees: EmployeeRow[];
 }) {
   const { toast } = useToast();
+  const canExport = usePayrollExportPermission();
   const [selectedRun, setSelectedRun]   = useState<PayrollRun | null>(null);
   const [runItems, setRunItems]          = useState<RunItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -4328,6 +4371,7 @@ function PayslipsTab({ runs, loading, employees }: {
   };
 
   const downloadPDF = async (item: RunItem) => {
+    if (!canExport) return;
     if (!selectedRun) return;
     const emp: EmployeeRow = empMap[item.user_id] ?? { id: item.user_id, full_name: item.user_name, role: null, department_name: item.department_name, department_id: null, email: null, employment_type: null, contract_start_date: null, contract_end_date: null, contract_type: null, is_employee: null, salary_config: null, retainer: null };
     // Fetch YTD data: all locked/approved payroll items for this employee in the same calendar year
@@ -4363,6 +4407,7 @@ function PayslipsTab({ runs, loading, employees }: {
   };
 
   const downloadAll = () => {
+    if (!canExport) return;
     runItems.forEach(item => downloadPDF(item));
     toast({ title: `Generating ${runItems.length} payslips…` });
   };
@@ -4424,10 +4469,12 @@ function PayslipsTab({ runs, loading, employees }: {
                   {selectedRun.status === 'locked' && <span className="ml-2 text-emerald-600 font-semibold">· Locked</span>}
                 </p>
               </div>
-              {runItems.length > 0 && (
-                <Button size="sm" onClick={downloadAll} className="bg-[#0F2041] hover:bg-[#1D3461] text-white h-8 gap-2 text-xs">
-                  <Download className="h-3.5 w-3.5" />All PDFs ({runItems.length})
-                </Button>
+              {runItems.length > 0 && canExport && (
+                <PayrollExportGate>
+                  <Button size="sm" onClick={downloadAll} className="bg-[#0F2041] hover:bg-[#1D3461] text-white h-8 gap-2 text-xs">
+                    <Download className="h-3.5 w-3.5" />All PDFs ({runItems.length})
+                  </Button>
+                </PayrollExportGate>
               )}
             </div>
 
@@ -4482,10 +4529,12 @@ function PayslipsTab({ runs, loading, employees }: {
                             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Net Pay</p>
                             <p className="text-sm font-bold text-blue-600">{fmt(item.net_salary, item.currency)}</p>
                           </div>
-                          <Button size="sm" variant="outline" onClick={() => downloadPDF(item)}
-                            className="h-8 gap-1.5 text-xs bg-white dark:bg-slate-800 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Download className="h-3.5 w-3.5" />PDF
-                          </Button>
+                          {canExport && <PayrollExportGate>
+                            <Button size="sm" variant="outline" onClick={() => downloadPDF(item)}
+                              className="h-8 gap-1.5 text-xs bg-white dark:bg-slate-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Download className="h-3.5 w-3.5" />PDF
+                            </Button>
+                          </PayrollExportGate>}
                         </div>
                       </div>
                     ))}

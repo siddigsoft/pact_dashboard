@@ -56,6 +56,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useToast } from '@/hooks/use-toast';
@@ -150,7 +151,8 @@ const RetainerManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, users } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canExport = checkPermission('payroll', 'export');
   const { processMonthlyRetainers, reprocessFallbackRetainers } = useWallet();
 
   const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
@@ -158,12 +160,17 @@ const RetainerManagement = () => {
   const isFinancialAdmin = hasAnyRole(['finance_admin', 'Finance Admin']);
   const roleCanManage = isSuperAdmin || isAdmin || isFinancialAdmin;
   const overrideCanManage = usePageManageOverride('retainer-management', roleCanManage);
+  // The page's directory destination is payroll:read.  A read grant must
+  // expose the fetched payment history without granting any processing
+  // controls; manage remains role/page-override based.
+  const canRead = checkPermission('payroll', 'read');
+  const canView = roleCanManage || overrideCanManage || canRead;
   const canManage = roleCanManage || overrideCanManage;
 
   const [activeTab, setActiveTab] = useState('overview');
   const invalidateRetainer = useInvalidateRetainerQueries();
-  const retainerQuery = useRetainerBundleQuery(canManage);
-  const loading = canManage && retainerQuery.isLoading;
+  const retainerQuery = useRetainerBundleQuery(canView);
+  const loading = canView && retainerQuery.isLoading;
   const transactions = (retainerQuery.data?.transactions ?? []) as RetainerTransaction[];
   const eligibleUsers = (retainerQuery.data?.eligibleUsers ?? []) as EligibleUser[];
   const [searchQuery, setSearchQuery] = useState('');
@@ -194,9 +201,9 @@ const RetainerManagement = () => {
   };
 
   const fetchData = useCallback(async () => {
-    if (!canManage) return;
+    if (!canView) return;
     await invalidateRetainer();
-  }, [canManage, invalidateRetainer]);
+  }, [canView, invalidateRetainer]);
 
   const userNameMap = useMemo(() => {
     const map: Record<string, { name: string; email: string }> = {};
@@ -407,6 +414,7 @@ const RetainerManagement = () => {
   };
 
   const exportPaymentHistory = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const headers = ['Date', 'Period', 'User', 'Email', 'Amount', 'Currency', 'Fallback', 'Balance Before', 'Balance After', 'Description'];
     const rows = filteredTransactions.map(t => {
       const user = userNameMap[t.user_id];
@@ -437,6 +445,7 @@ const RetainerManagement = () => {
   };
 
   const exportPaymentHistoryExcel = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const rows = filteredTransactions.map(t => {
       const user = userNameMap[t.user_id];
       const isFallback = !!(t.metadata?.base_currency && !t.metadata?.fx_rate);
@@ -458,6 +467,7 @@ const RetainerManagement = () => {
   };
 
   const exportTrackingGrid = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const months = getLast12Months().reverse();
     const headers = ['User', 'Email', 'Level', 'Retainer Amount', ...months.map(m => {
       const [y, mo] = m.split('-');
@@ -483,6 +493,7 @@ const RetainerManagement = () => {
   };
 
   const exportTrackingGridExcel = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const months = getLast12Months().reverse();
     const rows = paymentGrid.map(entry => {
       const row: Record<string, any> = {
@@ -503,6 +514,7 @@ const RetainerManagement = () => {
   };
 
   const exportEligibleUsers = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const headers = ['Name', 'Email', 'Level', 'Role Scope', 'Retainer Amount', 'Currency', 'Frequency', 'Active'];
     const rows = filteredEligible.map(u => [
       u.full_name || '',
@@ -527,6 +539,7 @@ const RetainerManagement = () => {
   };
 
   const exportEligibleUsersExcel = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const rows = filteredEligible.map(u => ({
       'Name': u.full_name || '',
       'Email': u.email || '',
@@ -542,6 +555,7 @@ const RetainerManagement = () => {
   };
 
   const exportMonthlySummary = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const months = getLast12Months().reverse();
     const headers = ['Period', 'Users Paid', 'Total Amount', 'Currency'];
     const rows = months.map(m => {
@@ -567,6 +581,7 @@ const RetainerManagement = () => {
   };
 
   const exportMonthlySummaryExcel = () => {
+    if (!checkPermission('payroll', 'export')) return;
     const months = getLast12Months().reverse();
     const rows = months.map(m => {
       const monthTx = transactions.filter(t => t.metadata?.period === m);
@@ -657,7 +672,7 @@ const RetainerManagement = () => {
     );
   }, [eligibleUsers, fxWarnings]);
 
-  if (!canManage) {
+  if (!canView) {
     return (
       <div className="container mx-auto p-6">
         <Alert variant="destructive">
@@ -811,9 +826,11 @@ const RetainerManagement = () => {
                     <p className="text-xs text-muted-foreground">Click "Review & Process" to preview and run the monthly payment batch</p>
                   </div>
                 </div>
-                <Button size="sm" onClick={() => { setActiveTab('process'); setShowProcessDialog(false); }} data-testid="button-go-to-process">
-                  Review & Process
-                </Button>
+                {canManage && (
+                  <Button size="sm" onClick={() => { setActiveTab('process'); setShowProcessDialog(false); }} data-testid="button-go-to-process">
+                    Review & Process
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )}
@@ -824,19 +841,21 @@ const RetainerManagement = () => {
                 <BarChart3 className="h-4 w-4 mr-1" />Overview
               </TabsTrigger>
               {/* Review & Process moved up — it's the primary action tab */}
-              <TabsTrigger value="process" className="text-xs sm:text-sm relative" data-testid="tab-process">
-                <Banknote className="h-4 w-4 mr-1" />Review & Process
-                {kpis.unpaidThisMonth > 0 && (
-                  <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1">
-                    {kpis.unpaidThisMonth}
-                  </span>
-                )}
-                {persistentFallback.count > 0 && (
-                  <span className="ml-1 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1" title="Wrong-currency payments need correction">
-                    {persistentFallback.count}⚠
-                  </span>
-                )}
-              </TabsTrigger>
+              {canManage && (
+                <TabsTrigger value="process" className="text-xs sm:text-sm relative" data-testid="tab-process">
+                  <Banknote className="h-4 w-4 mr-1" />Review & Process
+                  {kpis.unpaidThisMonth > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1">
+                      {kpis.unpaidThisMonth}
+                    </span>
+                  )}
+                  {persistentFallback.count > 0 && (
+                    <span className="ml-1 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1" title="Wrong-currency payments need correction">
+                      {persistentFallback.count}⚠
+                    </span>
+                  )}
+                </TabsTrigger>
+              )}
               <TabsTrigger value="eligible" className="text-xs sm:text-sm" data-testid="tab-eligible">
                 <Users className="h-4 w-4 mr-1" />Eligible Users
               </TabsTrigger>
@@ -859,19 +878,21 @@ const RetainerManagement = () => {
                     <span>
                       <span className="font-medium">{persistentFallback.count} member{persistentFallback.count !== 1 ? 's' : ''} were paid in base currency</span> for {getCurrentPeriod()} — their configured payout currency had no exchange rate at processing time.
                     </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                      onClick={() => {
-                        setReprocessTargetUserIds(persistentFallback.userIds);
-                        setActiveTab('process');
-                        setShowReprocessDialog(true);
-                      }}
-                      data-testid="button-overview-reprocess"
-                    >
-                      <RefreshCw className="h-3 w-3 mr-1.5" />Go to Reprocess
-                    </Button>
+                    {canManage && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                        onClick={() => {
+                          setReprocessTargetUserIds(persistentFallback.userIds);
+                          setActiveTab('process');
+                          setShowReprocessDialog(true);
+                        }}
+                        data-testid="button-overview-reprocess"
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1.5" />Go to Reprocess
+                      </Button>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}
@@ -953,14 +974,16 @@ const RetainerManagement = () => {
                       <FileText className="h-4 w-4" />
                       Quick Stats
                     </CardTitle>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={exportMonthlySummary} data-testid="button-export-summary-csv">
-                        <Download className="h-4 w-4 mr-1" />CSV
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={exportMonthlySummaryExcel} data-testid="button-export-summary-excel">
-                        <Download className="h-4 w-4 mr-1" />Excel
-                      </Button>
-                    </div>
+                     {canExport && <ReportExportGate resource="payroll">
+                       <div className="flex gap-2">
+                         <Button variant="outline" size="sm" onClick={exportMonthlySummary} data-testid="button-export-summary-csv">
+                           <Download className="h-4 w-4 mr-1" />CSV
+                         </Button>
+                         <Button variant="outline" size="sm" onClick={exportMonthlySummaryExcel} data-testid="button-export-summary-excel">
+                           <Download className="h-4 w-4 mr-1" />Excel
+                         </Button>
+                       </div>
+                     </ReportExportGate>}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -1002,14 +1025,16 @@ const RetainerManagement = () => {
                       </CardTitle>
                       <CardDescription>Complete record of all retainer payments</CardDescription>
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={exportPaymentHistory} data-testid="button-export-history-csv">
-                        <Download className="h-4 w-4 mr-1" />CSV
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={exportPaymentHistoryExcel} data-testid="button-export-history-excel">
-                        <Download className="h-4 w-4 mr-1" />Excel
-                      </Button>
-                    </div>
+                     {canExport && <ReportExportGate resource="payroll">
+                       <div className="flex gap-2">
+                         <Button variant="outline" size="sm" onClick={exportPaymentHistory} data-testid="button-export-history-csv">
+                           <Download className="h-4 w-4 mr-1" />CSV
+                         </Button>
+                         <Button variant="outline" size="sm" onClick={exportPaymentHistoryExcel} data-testid="button-export-history-excel">
+                           <Download className="h-4 w-4 mr-1" />Excel
+                         </Button>
+                       </div>
+                     </ReportExportGate>}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -1139,14 +1164,16 @@ const RetainerManagement = () => {
                         </span>
                       </CardDescription>
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={exportTrackingGrid} data-testid="button-export-grid-csv">
-                        <Download className="h-4 w-4 mr-1" />CSV
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={exportTrackingGridExcel} data-testid="button-export-grid-excel">
-                        <Download className="h-4 w-4 mr-1" />Excel
-                      </Button>
-                    </div>
+                     {canExport && <ReportExportGate resource="payroll">
+                       <div className="flex gap-2">
+                         <Button variant="outline" size="sm" onClick={exportTrackingGrid} data-testid="button-export-grid-csv">
+                           <Download className="h-4 w-4 mr-1" />CSV
+                         </Button>
+                         <Button variant="outline" size="sm" onClick={exportTrackingGridExcel} data-testid="button-export-grid-excel">
+                           <Download className="h-4 w-4 mr-1" />Excel
+                         </Button>
+                       </div>
+                     </ReportExportGate>}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -1237,17 +1264,21 @@ const RetainerManagement = () => {
                       </CardTitle>
                       <CardDescription>All users with active retainer classifications</CardDescription>
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => navigate('/classifications')} data-testid="button-go-classifications">
-                        Manage Classifications
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={exportEligibleUsers} data-testid="button-export-eligible-csv">
-                        <Download className="h-4 w-4 mr-1" />CSV
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={exportEligibleUsersExcel} data-testid="button-export-eligible-excel">
-                        <Download className="h-4 w-4 mr-1" />Excel
-                      </Button>
-                    </div>
+                     <div className="flex gap-2">
+                       <Button variant="outline" size="sm" onClick={() => navigate('/classifications')} data-testid="button-go-classifications">
+                         Manage Classifications
+                       </Button>
+                       {canExport && <ReportExportGate resource="payroll">
+                         <>
+                           <Button variant="outline" size="sm" onClick={exportEligibleUsers} data-testid="button-export-eligible-csv">
+                             <Download className="h-4 w-4 mr-1" />CSV
+                           </Button>
+                           <Button variant="outline" size="sm" onClick={exportEligibleUsersExcel} data-testid="button-export-eligible-excel">
+                             <Download className="h-4 w-4 mr-1" />Excel
+                           </Button>
+                         </>
+                       </ReportExportGate>}
+                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -1381,9 +1412,11 @@ const RetainerManagement = () => {
                       </CardTitle>
                       <CardDescription>Full audit log of all retainer processing actions</CardDescription>
                     </div>
-                    <Button variant="outline" size="sm" onClick={exportPaymentHistory} data-testid="button-export-audit">
-                      <Download className="h-4 w-4 mr-1" />Export
-                    </Button>
+                     {canExport && <ReportExportGate resource="payroll">
+                       <Button variant="outline" size="sm" onClick={exportPaymentHistory} data-testid="button-export-audit">
+                         <Download className="h-4 w-4 mr-1" />Export
+                       </Button>
+                     </ReportExportGate>}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -1699,19 +1732,21 @@ const RetainerManagement = () => {
                               </p>
                             )}
                           </div>
-                          <Button
-                            onClick={() => setShowProcessDialog(true)}
-                            disabled={processing || pendingUsers.length === 0}
-                            data-testid="button-start-processing"
-                          >
-                            {processing ? (
-                              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processing...</>
-                            ) : pendingUsers.length === 0 ? (
-                              <><CheckCircle2 className="h-4 w-4 mr-2" />All Due Members Paid</>
-                            ) : (
-                              <><Banknote className="h-4 w-4 mr-2" />Process {pendingUsers.length} Retainer{pendingUsers.length !== 1 ? 's' : ''}</>
-                            )}
-                          </Button>
+                          {canManage && (
+                            <Button
+                              onClick={() => setShowProcessDialog(true)}
+                              disabled={processing || pendingUsers.length === 0}
+                              data-testid="button-start-processing"
+                            >
+                              {processing ? (
+                                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processing...</>
+                              ) : pendingUsers.length === 0 ? (
+                                <><CheckCircle2 className="h-4 w-4 mr-2" />All Due Members Paid</>
+                              ) : (
+                                <><Banknote className="h-4 w-4 mr-2" />Process {pendingUsers.length} Retainer{pendingUsers.length !== 1 ? 's' : ''}</>
+                              )}
+                            </Button>
+                          )}
                         </div>
                       </>
                     );

@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface PO { id: string; po_number: string; title: string; amount: number; currency: string }
 interface GRN { id: string; grn_number: string; title: string }
@@ -275,8 +276,10 @@ export default function AccountingAPInvoices() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-inv"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-ap-invoices"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-inv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
+          <ReportExportGate resource="procurement">
+            <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-ap-invoices"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-inv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
+          </ReportExportGate>
           {canApprove && <Button size="sm" onClick={openCreate} data-testid="button-create-inv"><Plus className="w-4 h-4 mr-1" /> New Invoice</Button>}
         </div>
       </div>
