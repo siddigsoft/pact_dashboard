@@ -70,7 +70,7 @@ function transformFromDB(data: any): DownPaymentRequest {
     requestedAt: data.requested_at,
     requesterRole: data.requester_role,
     hubId: data.hub_id,
-    hubName: cleanStr(data.hub_name) ?? data.hub_name,
+    hubName: cleanStr(mmpEntry?.hub_office || data.hub_name) ?? data.hub_name,
     totalTransportationBudget: parseFloat(data.total_transportation_budget),
     requestedAmount: parseFloat(data.requested_amount),
     approvedAmount: data.metadata?.approved_amount ? parseFloat(data.metadata.approved_amount) : undefined,
@@ -124,6 +124,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     mmp_site_entries!left (
       state,
       locality,
+      hub_office,
       cp_name,
       status,
       mmp_file_id
@@ -289,6 +290,22 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     }));
   }
 
+  async function fetchSiteHubEnrichment(ids: string[]) {
+    if (ids.length === 0) return [];
+    const CHUNK = 800;
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK));
+    const results = await Promise.all(
+      chunks.map(chunk => supabase
+        .from('mmp_site_entries')
+        .select('id, hub_office')
+        .in('id', chunk))
+    );
+    const failed = results.find(result => result.error);
+    if (failed?.error) throw failed.error;
+    return results.flatMap(result => result.data || []);
+  }
+
   // Batch-fetch the Enumerator Fees ledger status (paid/unpaid, amounts) per
   // site entry, same chunking/SECURITY DEFINER pattern as geo enrichment, so
   // the Transport Advance / Down Payment page can show whether the fee was
@@ -304,14 +321,31 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     return results.flatMap((r: any) => r.data || []);
   }
 
-  const [enrichResult, hubResult, profileResult, feeStatusResult] = await Promise.allSettled([
+  const [enrichResult, hubResult, siteHubResult, profileResult, feeStatusResult] = await Promise.allSettled([
     fetchEnrichmentBatched(entryIds),
     hubIds.length > 0 ? fetchHubEnrichment(hubIds) : Promise.resolve([]),
+    fetchSiteHubEnrichment(entryIds),
     missingNameIds.length > 0
       ? supabase.from('profiles').select('id, full_name, username, email').in('id', missingNameIds)
       : Promise.resolve({ data: [] }),
     fetchFeeStatusBatched(entryIds),
   ]);
+
+  const siteHubMap = new Map<string, string>();
+  if (siteHubResult.status === 'fulfilled') {
+    (siteHubResult.value as any[])
+      .filter((entry: any) => entry.id && cleanStr(entry.hub_office))
+      .forEach((entry: any) => {
+        siteHubMap.set(entry.id, cleanStr(entry.hub_office) as string);
+      });
+    transformed.forEach(request => {
+      if (request.mmpSiteEntryId && siteHubMap.has(request.mmpSiteEntryId)) {
+        request.hubName = siteHubMap.get(request.mmpSiteEntryId);
+      }
+    });
+  } else {
+    console.warn('[DownPayment] Site hub enrichment failed (non-critical):', siteHubResult.reason);
+  }
 
   if (enrichResult.status === 'fulfilled' && (enrichResult.value as any[]).length > 0) {
     const entryMap = new Map<string, { state: string; locality: string; mmp_name: string }>(
@@ -359,7 +393,10 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
       }
     });
     transformed.forEach(r => {
-      if (r.hubId && hubNameMap.has(r.hubId)) r.hubName = hubNameMap.get(r.hubId) as string;
+      const hasCanonicalSiteHub = Boolean(r.mmpSiteEntryId && siteHubMap.has(r.mmpSiteEntryId));
+      if (!hasCanonicalSiteHub && r.hubId && hubNameMap.has(r.hubId)) {
+        r.hubName = hubNameMap.get(r.hubId) as string;
+      }
       // Backfill stateName from the hub's primary state for records without one
       if (!r.stateName && r.hubId && hubStateMap.has(r.hubId)) {
         r.stateName = hubStateMap.get(r.hubId);

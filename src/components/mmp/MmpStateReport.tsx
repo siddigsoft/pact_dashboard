@@ -375,6 +375,14 @@ export default function MmpStateReport({
           'down_payment_requests',
           selectedAdvances.map((row: any) => row.id).filter(Boolean),
         );
+        const canonicalHubByEntry = new Map<string, string>(
+          rawEntries
+            .map((entry: any) => [
+              entry.id,
+              cleanName(entry.hub_office || entry.hub_name || entry.hubName || ''),
+            ] as const)
+            .filter((entry): entry is readonly [string, string] => Boolean(entry[0] && entry[1])),
+        );
         const linksByRequest = new Map<string, typeof paymentLinks>();
         paymentLinks.forEach(link => {
           const rows = linksByRequest.get(link.sourceId) ?? [];
@@ -391,6 +399,7 @@ export default function MmpStateReport({
           }, linksByRequest.get(row.id) ?? []);
           return {
             ...row,
+            hub_name: canonicalHubByEntry.get(row.mmp_site_entry_id) || row.hub_name,
             status: isDownPaymentSettledStatus(row.status) && balance.remaining > 0
               ? 'partially_paid'
               : row.status,

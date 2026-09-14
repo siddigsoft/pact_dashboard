@@ -6,7 +6,7 @@
 - [flutter-sync-rule](flutter-sync-rule.md) — Any web change affecting field staff must also update Flutter (mobile/) in the same session — permanent default.
 - [pre-fund-spend-attribution](pre-fund-spend-attribution.md) — Allocation Dashboard "spent=0" while Total Paid Out is correct: user_id may be NULL, or txn.created_by (disbursing officer) is the true allocation holder, not user_id (recipient).
 - [down-payment-batch-pay-basis](down-payment-batch-pay-basis.md) — batch-pay bulk actions must compute basis from remaining_amount for partially_paid rows, not full approved amount, or reused "approved"-only filters silently disable the action.
-- [down-payment-balance-authority](down-payment-balance-authority.md) — Cards, tabs, groups, and exports share one status/balance policy; immutable payment evidence wins and legacy fallback must be flagged.
+- [down-payment-balance-authority](down-payment-balance-authority.md) — Payment totals include waiting-confirmation and confirmed amounts; MMP site geography controls tracker filters.
 - [project-flow-deliverables-sync](project-flow-deliverables-sync.md) — Overview deliverables checklist and Stage checklist share one table now; project_stage_assignees/attachments tables may still be missing in dev DB.
 - [project-flow-stage-label-duplication](project-flow-stage-label-duplication.md) — Any view showing a project's stage label/progress must use getEffectiveStages/getProjectStageProgress, not raw getProjectFlow(...).stages, or renamed/skipped stages show stale data.
 - [notification-email-coverage](notification-email-coverage.md) — Raw DB-insert notification helpers with unmapped event_type bypass dispatch-notification entirely, so email is silently never sent.

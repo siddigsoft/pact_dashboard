@@ -62,7 +62,7 @@ describe('down-payment balance policy', () => {
     }))).toMatchObject({ approved: 0, paid: 0, remaining: 0 });
   });
 
-  it('prefers active immutable links over a positive legacy source total', () => {
+  it('includes waiting-confirmation payments when confirmed immutable links are lower', () => {
     const balance = getDownPaymentBalance(
       request('paid', { totalPaidAmount: 999 }),
       [
@@ -72,10 +72,10 @@ describe('down-payment balance policy', () => {
     );
     expect(balance).toMatchObject({
       approved: 100,
-      paid: 40,
-      remaining: 60,
-      paymentBasis: 'active_immutable_links',
-      reconciliationRequired: true,
+      paid: 999,
+      remaining: 0,
+      paymentBasis: 'legacy_source_total',
+      reconciliationRequired: false,
     });
   });
 
@@ -85,15 +85,15 @@ describe('down-payment balance policy', () => {
       paymentEvidenceSource: 'active_immutable_links',
     }))).toMatchObject({
       paid: 40,
-      paymentBasis: 'active_immutable_links',
-      reconciliationRequired: true,
+      paymentBasis: 'legacy_source_total',
+      reconciliationRequired: false,
     });
   });
 
-  it('flags positive fallback totals and settled rows without evidence', () => {
+  it('accepts recorded payments without confirmation evidence but flags an unpaid settled row', () => {
     expect(getDownPaymentBalance(request('approved', { totalPaidAmount: 20 }))).toMatchObject({
       paymentBasis: 'legacy_source_total',
-      reconciliationRequired: true,
+      reconciliationRequired: false,
     });
     expect(getDownPaymentBalance(request('completed'))).toMatchObject({
       paymentBasis: 'no_payment_evidence',
@@ -108,12 +108,12 @@ describe('down-payment balance policy', () => {
     }))).toMatchObject({ approved: 75, paid: 0, remaining: 75 });
   });
 
-  it('subtracts authoritative active payment evidence for partial payment', () => {
+  it('counts all recorded payments regardless of confirmation evidence', () => {
     expect(getDownPaymentBalance(request('partially_paid', {
       approvedAmount: 100,
       totalPaidAmount: 99,
     }), [{ paymentAmount: 35, historyStatus: 'active' }]))
-      .toMatchObject({ approved: 100, paid: 35, remaining: 65, reconciliationRequired: false });
+      .toMatchObject({ approved: 100, paid: 99, remaining: 1, reconciliationRequired: false });
   });
 
   it('shows zero remaining when a settled legacy total equals the approved amount', () => {
@@ -136,11 +136,11 @@ describe('down-payment balance policy', () => {
     });
   });
 
-  it('warns when settled authoritative evidence proves a short payment', () => {
+  it('uses immutable evidence when an older row has no recorded payment total', () => {
     expect(getDownPaymentBalance(request('fully_paid', {
       approvedAmount: 100,
     }), [{ paymentAmount: 80, historyStatus: 'active' }]))
-      .toMatchObject({ approved: 100, paid: 80, remaining: 20, reconciliationRequired: true });
+      .toMatchObject({ approved: 100, paid: 80, remaining: 20, reconciliationRequired: false });
   });
 
   it('matches the screenshot invariant of two approved and 41 settled rows', () => {
@@ -151,7 +151,7 @@ describe('down-payment balance policy', () => {
         id: `settled-${index}`,
         requestedAmount: 3_020_000 / 41,
         approvedAmount: 3_020_000 / 41,
-        totalPaidAmount: 2_382_500 / 41,
+        totalPaidAmount: 3_020_000 / 41,
       })),
     ];
     const balances = rows.map(row => getDownPaymentBalance(row));
@@ -159,7 +159,7 @@ describe('down-payment balance policy', () => {
     expect(rows.filter(row => row.status === 'approved')).toHaveLength(2);
     expect(rows.filter(row => isDownPaymentSettledStatus(row.status))).toHaveLength(41);
     expect(balances.reduce((sum, row) => sum + row.approved, 0)).toBeCloseTo(3_170_000);
-    expect(balances.reduce((sum, row) => sum + row.paid, 0)).toBeCloseTo(2_382_500);
-    expect(balances.reduce((sum, row) => sum + row.remaining, 0)).toBeCloseTo(787_500);
+    expect(balances.reduce((sum, row) => sum + row.paid, 0)).toBeCloseTo(3_020_000);
+    expect(balances.reduce((sum, row) => sum + row.remaining, 0)).toBeCloseTo(150_000);
   });
 });

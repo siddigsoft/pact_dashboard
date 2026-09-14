@@ -28,7 +28,7 @@ export interface DownPaymentPaymentEvidence {
 export interface DownPaymentBalance {
   /** Amount approved for the request, excluding rejected/cancelled/deleted rows. */
   approved: number;
-  /** Amount paid according to immutable evidence, or the legacy source total. */
+  /** Total amount recorded as paid, regardless of confirmation workflow state. */
   paid: number;
   /** Unpaid approved balance, including completed rows whose payment evidence is short. */
   remaining: number;
@@ -163,44 +163,41 @@ export function getDownPaymentBalance(
     : 0;
 
   const activeEvidence = paymentEvidence.filter(isActiveEvidence);
+  const sourcePaid = isFinancial ? finiteAmount(request.totalPaidAmount) : 0;
+  const evidencePaid = activeEvidence.reduce((sum, evidence) => sum + evidenceAmount(evidence), 0);
   // Pages that already resolved immutable links attach the basis to their
   // enriched row. Preserve that authority when a grouped/export view receives
   // the row without the separate evidence map.
   const declaredActiveEvidence = request.paymentEvidenceSource === 'active_immutable_links';
   const hasEvidence = activeEvidence.length > 0 || declaredActiveEvidence;
-  const paid = activeEvidence.length > 0
-    ? activeEvidence.reduce((sum, evidence) => sum + evidenceAmount(evidence), 0)
-    : isFinancial
-      ? finiteAmount(request.totalPaidAmount)
-      : 0;
+  // totalPaidAmount is the cumulative amount already recorded through both
+  // "Paid — Waiting Confirmation" and "Confirmed". Confirmation must not
+  // remove a payment from financial totals. Immutable links remain useful for
+  // fund attribution and reconciliation, and are a fallback for older rows
+  // whose source cache is empty.
+  const paid = sourcePaid > 0 ? sourcePaid : evidencePaid;
   const remaining = Math.max(0, approved - paid);
 
-  const legacyPositiveTotal = !hasEvidence && finiteAmount(request.totalPaidAmount) > 0;
-  const settledWithoutEvidence = isDownPaymentSettledStatus(status) && !hasEvidence;
-  const settledShortPayment = isDownPaymentSettledStatus(status)
-    && (activeEvidence.length > 0 || declaredActiveEvidence)
-    && paid < approved;
+  const settledWithoutAnyPayment = isDownPaymentSettledStatus(status)
+    && approved > 0
+    && paid === 0;
   const reconciliationRequired = Boolean(
-    request.reconciliationRequired || legacyPositiveTotal || settledWithoutEvidence || settledShortPayment,
+    request.reconciliationRequired || settledWithoutAnyPayment,
   );
 
   let reconciliationReason = request.reconciliationReason || undefined;
-  if (!reconciliationReason && legacyPositiveTotal) {
-    reconciliationReason = 'Positive legacy payment total has no active immutable payment evidence.';
-  } else if (!reconciliationReason && settledWithoutEvidence) {
-    reconciliationReason = 'Settled status has no active immutable payment evidence.';
-  } else if (!reconciliationReason && settledShortPayment) {
-    reconciliationReason = 'Settled status has active immutable evidence below the approved entitlement.';
+  if (!reconciliationReason && settledWithoutAnyPayment) {
+    reconciliationReason = 'Settled status has no recorded payment.';
   }
 
   return {
     approved,
     paid,
     remaining,
-    paymentBasis: hasEvidence
-      ? 'active_immutable_links'
-      : paid > 0
-        ? 'legacy_source_total'
+    paymentBasis: sourcePaid > 0
+      ? 'legacy_source_total'
+      : hasEvidence
+        ? 'active_immutable_links'
         : 'no_payment_evidence',
     reconciliationRequired,
     ...(reconciliationReason ? { reconciliationReason } : {}),

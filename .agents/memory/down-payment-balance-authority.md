@@ -9,14 +9,20 @@ Every Down-Payment card, tab, grouped view, regular export, and bulk export must
 
 **How to apply:** Approved financial lifecycle includes approved, partially paid, and all settled statuses. Rejected, cancelled, and deleted rows retain historical visibility but contribute zero approved, paid, and remaining financial amounts.
 
-Active immutable payment evidence is authoritative. A positive legacy source total may remain as compatibility evidence for direct or historical payments, but it must be visibly flagged for Finance reconciliation.
+Cumulative `total_paid_amount` is authoritative for the financial Paid total because it includes both “Paid — Waiting Confirmation” and “Confirmed” payments. Immutable links remain authoritative for fund attribution and are a fallback when the source total is empty.
 
-**Why:** Silently treating a stale source total as verified can misstate both paid and remaining amounts.
+**Why:** Confirmation is a workflow subdivision, not a financial exclusion. Counting only confirmed immutable links understated Paid and overstated Remaining.
 
-**How to apply:** Calculate remaining per request as `max(approved - paid, 0)` and then sum. Completed/site-finished or other settled labels do not erase a proven payment shortfall; keep it in Remaining and flag it for reconciliation.
+**How to apply:** Calculate remaining per request as `max(approved - total_paid_amount, 0)` and then sum. Use active immutable links only when the source total is empty.
 
 Site completion/coverage is a separate dimension from the Down-Payment request/payment status and must be reported separately.
 
 **Why:** An approved or fully-paid advance does not prove that the linked field site was completed or WFP-confirmed.
 
 **How to apply:** Detailed and grouped reports should show both statuses: the request lifecycle (pending, approved, partially paid, settled, etc.) and the linked site’s current system status/coverage classification.
+
+Tracker geography must prefer the linked MMP site’s state, locality, and hub over copied request fields.
+
+**Why:** Request-level hub values can become stale and caused Hub filters to return fewer rows than State + MMP filters for the same sites.
+
+**How to apply:** Use `mmp_site_entries` geography for Hub/State/Locality/MMP filters and report grouping; use request geography only when no linked site value exists.

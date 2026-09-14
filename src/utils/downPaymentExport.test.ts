@@ -36,7 +36,7 @@ describe('filterDownPayments', () => {
 });
 
 describe('getDownPaymentStats', () => {
-  it('uses immutable evidence when an evidence map is provided', () => {
+  it('includes recorded waiting-confirmation payments when evidence is provided', () => {
     const row = requestAt('2026-09-14T00:00:00');
     row.status = 'paid';
     row.approvedAmount = 100;
@@ -46,8 +46,8 @@ describe('getDownPaymentStats', () => {
     ]));
     expect(stats.amounts).toMatchObject({
       totalApproved: 100,
-      totalPaid: 25,
-      totalRemaining: 75,
+      totalPaid: 95,
+      totalRemaining: 5,
     });
   });
 });
