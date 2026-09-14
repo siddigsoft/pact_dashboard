@@ -983,24 +983,45 @@ export function DownPaymentApprovalPanel({
           data: completedSubTab === 'confirmed' ? paidConfirmedRequests : paidWaitingRequests,
           tabLabel: completedSubTab === 'confirmed' ? 'Confirmed' : 'Paid - Waiting Confirmation',
         };
+      case 'closed':
+        return { data: closedRequests, tabLabel: 'Closed' };
       case 'all':
       default:
         return { data: filteredRequests, tabLabel: 'All' };
     }
   };
 
-  const handleExport = (type: 'csv' | 'excel' | 'pdf') => {
+  const handleExport = async (type: 'csv' | 'excel' | 'pdf') => {
     const { data, tabLabel } = getActiveTabData();
+    if (data.length === 0) {
+      toast({ title: 'No Data', description: 'No requests match the current tab and filters.', variant: 'destructive' });
+      return;
+    }
+
     const suffix = `down-payments-${tabLabel.toLowerCase()}`;
-    if (type === 'csv') {
-      exportToCSV(
-        data.map(request => ({ ...request, totalPaidAmount: getDisplayedPaidAmount(request) })),
-        suffix,
-      );
-    } else if (type === 'excel') {
-      handleStatementExport('excel');
-    } else {
-      handleStatementExport('pdf');
+    const exportRows = data.map(request => ({
+      ...request,
+      totalPaidAmount: getDisplayedPaidAmount(request),
+    }));
+
+    try {
+      if (type === 'csv') {
+        exportToCSV(exportRows, suffix);
+      } else if (type === 'excel') {
+        exportToExcel(exportRows, suffix, tabLabel);
+      } else {
+        exportToPDF(exportRows, {
+          filters: effectiveFilters,
+          includeAuditLog: false,
+          includeSignature: false,
+          reportTitle: `Down-Payment Requests - ${tabLabel}`,
+        });
+      }
+      toast({ title: 'Export Downloaded', description: `${type.toUpperCase()} report exported successfully.` });
+    } catch (err) {
+      console.error('Down-payment export error:', err);
+      const message = err instanceof Error ? err.message : 'Unknown export error';
+      toast({ title: 'Export Failed', description: `Could not generate the report: ${message}`, variant: 'destructive' });
     }
   };
 
@@ -1083,12 +1104,13 @@ export function DownPaymentApprovalPanel({
         await generateFinancialStatementPdf(statementRows, config);
         toast({ title: 'Statement Downloaded / تم تحميل الكشف', description: `PDF statement exported successfully.` });
       } else {
-        generateFinancialStatementExcel(statementRows, config);
+        await generateFinancialStatementExcel(statementRows, config);
         toast({ title: 'Statement Downloaded / تم تحميل الكشف', description: `Excel statement exported successfully.` });
       }
     } catch (err) {
       console.error('Statement export error:', err);
-      toast({ title: 'Export Failed', description: 'Could not generate statement. Please try again.', variant: 'destructive' });
+      const message = err instanceof Error ? err.message : 'Unknown export error';
+      toast({ title: 'Export Failed', description: `Could not generate statement: ${message}`, variant: 'destructive' });
     }
   };
 
@@ -3634,15 +3656,15 @@ export function DownPaymentApprovalPanel({
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-40 p-1">
-              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => handleExport('csv')} data-testid="button-export-csv">
+              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => void handleExport('csv')} data-testid="button-export-csv">
                 <FileDown className="h-4 w-4 mr-2" />
                 CSV
               </Button>
-              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => handleExport('excel')} data-testid="button-export-excel">
+              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => void handleExport('excel')} data-testid="button-export-excel">
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 Excel
               </Button>
-              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => handleExport('pdf')} data-testid="button-export-pdf">
+              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => void handleExport('pdf')} data-testid="button-export-pdf">
                 <FileText className="h-4 w-4 mr-2" />
                 PDF
               </Button>
@@ -3652,7 +3674,7 @@ export function DownPaymentApprovalPanel({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleStatementExport('pdf')}
+            onClick={() => void handleStatementExport('pdf')}
             disabled={filteredRequests.length === 0}
             data-testid="button-statement-pdf"
           >
@@ -3662,7 +3684,7 @@ export function DownPaymentApprovalPanel({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleStatementExport('excel')}
+            onClick={() => void handleStatementExport('excel')}
             disabled={filteredRequests.length === 0}
             data-testid="button-statement-excel"
           >

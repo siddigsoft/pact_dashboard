@@ -39,8 +39,12 @@ export function filterDownPayments(
     if (filters.dateFrom && new Date(req.requestedAt) < new Date(filters.dateFrom)) {
       return false;
     }
-    if (filters.dateTo && new Date(req.requestedAt) > new Date(filters.dateTo)) {
-      return false;
+    if (filters.dateTo) {
+      const inclusiveEndDate = new Date(filters.dateTo);
+      inclusiveEndDate.setHours(23, 59, 59, 999);
+      if (new Date(req.requestedAt) > inclusiveEndDate) {
+        return false;
+      }
     }
     if (filters.amountMin && req.requestedAmount < filters.amountMin) {
       return false;

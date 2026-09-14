@@ -652,15 +652,14 @@ export async function generateAllSheetsStatementExcelBase64(
   return { base64: uint8ToBase64(bytes), filename: result.filename };
 }
 
-export function generateFinancialStatementExcel(
+export async function generateFinancialStatementExcel(
   rows: StatementRow[],
   config: StatementConfig
-): void {
+): Promise<void> {
   const result = buildStatementWorkbook(rows, config);
   if (!result) return;
-  result.wb.xlsx.writeBuffer().then(buffer => {
-    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), result.filename);
-  });
+  const buffer = await result.wb.xlsx.writeBuffer();
+  saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), result.filename);
 }
 
 export async function generateFinancialStatementExcelBase64(
