@@ -631,6 +631,24 @@ export function DownPaymentApprovalPanel({
     return filteredRequests.filter(req => isDownPaymentClosedStatus(req.status));
   }, [filteredRequests]);
 
+  const approvedOutstandingRequests = useMemo(
+    () => approvedRequests.filter(request => getDownPaymentBalance(
+      request,
+      preFundPaymentEvidence?.get(request.id) ?? [],
+    ).remaining > 0),
+    [approvedRequests, preFundPaymentEvidence],
+  );
+
+  const processingOutstandingRequests = useMemo(
+    () => processingRequests.filter(request =>
+      request.status === 'partially_paid' &&
+      getDownPaymentBalance(
+        request,
+        preFundPaymentEvidence?.get(request.id) ?? [],
+      ).remaining > 0),
+    [processingRequests, preFundPaymentEvidence],
+  );
+
   const paidWaitingRequests = useMemo(() => {
     return completedRequests.filter(req => !(req.metadata as any)?.receipt_confirmation?.confirmed);
   }, [completedRequests]);
@@ -3506,7 +3524,20 @@ export function DownPaymentApprovalPanel({
           )}
         </CardContent>
       </Card>
-      <Card data-testid="card-stats-remaining">
+      <Card
+        data-testid="card-stats-remaining"
+        role="button"
+        tabIndex={0}
+        className="cursor-pointer transition-colors hover:border-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+        aria-label="Show requests with remaining balances"
+        onClick={() => setActiveTab(approvedOutstandingRequests.length > 0 ? 'approved' : 'processing')}
+        onKeyDown={event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setActiveTab(approvedOutstandingRequests.length > 0 ? 'approved' : 'processing');
+          }
+        }}
+      >
         <CardContent className="p-3">
           <div className="text-xl font-bold text-orange-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-remaining-amount">{stats.amounts.totalRemaining.toLocaleString()}</div>
           <div className="text-xs text-muted-foreground mt-0.5">Remaining (SDG)</div>
@@ -3515,6 +3546,36 @@ export function DownPaymentApprovalPanel({
               {Math.round(stats.amounts.totalRemaining / stats.amounts.totalApproved * 100)}% of approved
             </div>
           )}
+          {(approvedOutstandingRequests.length > 0 || processingOutstandingRequests.length > 0) && (
+            <div className="mt-1 text-[11px] font-medium text-orange-700 dark:text-orange-400">
+              {approvedOutstandingRequests.length > 0 && (
+                <button
+                  type="button"
+                  className="underline underline-offset-2"
+                  onClick={event => {
+                    event.stopPropagation();
+                    setActiveTab('approved');
+                  }}
+                >
+                  {approvedOutstandingRequests.length} in Approved
+                </button>
+              )}
+              {approvedOutstandingRequests.length > 0 && processingOutstandingRequests.length > 0 && <span> · </span>}
+              {processingOutstandingRequests.length > 0 && (
+                <button
+                  type="button"
+                  className="underline underline-offset-2"
+                  onClick={event => {
+                    event.stopPropagation();
+                    setActiveTab('processing');
+                  }}
+                >
+                  {processingOutstandingRequests.length} in Processing
+                </button>
+              )}
+            </div>
+          )}
+          <div className="mt-1 text-[10px] text-muted-foreground">Click to view outstanding requests</div>
         </CardContent>
       </Card>
     </div>
