@@ -74,6 +74,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
+import { resolveDownPaymentExportSelection } from '@/utils/downPaymentExportSelection';
 import { allocateExactProportionally } from '@/utils/proportionalAllocation';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel, generateFinancialStatementExcelBase64, generateAllSheetsStatementExcelBase64 } from '@/utils/financialStatementExcel';
@@ -370,6 +371,7 @@ export function DownPaymentApprovalPanel({
   const [singlePayPreFundId, setSinglePayPreFundId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('pending');
   const [completedSubTab, setCompletedSubTab] = useState<'paid_waiting' | 'confirmed'>('paid_waiting');
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -600,6 +602,32 @@ export function DownPaymentApprovalPanel({
   const paidConfirmedRequests = useMemo(() => {
     return completedRequests.filter(req => !!(req.metadata as any)?.receipt_confirmation?.confirmed);
   }, [completedRequests]);
+
+  const activeExportSelection = useMemo(() => resolveDownPaymentExportSelection({
+    activeTab,
+    completedSubTab,
+    pending: pendingRequests,
+    approved: approvedRequests,
+    processing: processingRequests,
+    paidWaiting: paidWaitingRequests,
+    confirmed: paidConfirmedRequests,
+    closed: closedRequests,
+    all: filteredRequests,
+  }), [
+    activeTab,
+    completedSubTab,
+    pendingRequests,
+    approvedRequests,
+    processingRequests,
+    paidWaitingRequests,
+    paidConfirmedRequests,
+    closedRequests,
+    filteredRequests,
+  ]);
+  const activeExportSelectionRef = useRef(activeExportSelection);
+  useEffect(() => {
+    activeExportSelectionRef.current = activeExportSelection;
+  }, [activeExportSelection]);
 
   const calculateApprovedAmount = () => {
     if (!selectedRequest) return 0;
@@ -970,29 +998,8 @@ export function DownPaymentApprovalPanel({
     setFilters({});
   };
 
-  const getActiveTabData = (): { data: DownPaymentRequest[]; tabLabel: string } => {
-    switch (activeTab) {
-      case 'pending':
-        return { data: pendingRequests, tabLabel: 'Pending' };
-      case 'approved':
-        return { data: approvedRequests, tabLabel: 'Approved' };
-      case 'processing':
-        return { data: processingRequests, tabLabel: 'Processing' };
-      case 'completed':
-        return {
-          data: completedSubTab === 'confirmed' ? paidConfirmedRequests : paidWaitingRequests,
-          tabLabel: completedSubTab === 'confirmed' ? 'Confirmed' : 'Paid - Waiting Confirmation',
-        };
-      case 'closed':
-        return { data: closedRequests, tabLabel: 'Closed' };
-      case 'all':
-      default:
-        return { data: filteredRequests, tabLabel: 'All' };
-    }
-  };
-
   const handleExport = async (type: 'csv' | 'excel' | 'pdf') => {
-    const { data, tabLabel } = getActiveTabData();
+    const { data, tabLabel } = activeExportSelectionRef.current;
     if (data.length === 0) {
       toast({ title: 'No Data', description: 'No requests match the current tab and filters.', variant: 'destructive' });
       return;
@@ -1001,7 +1008,7 @@ export function DownPaymentApprovalPanel({
     const suffix = `down-payments-${tabLabel.toLowerCase()}`;
     const exportRows = data.map(request => ({
       ...request,
-      totalPaidAmount: getDisplayedPaidAmount(request),
+      totalPaidAmount: request.totalPaidAmount || 0,
     }));
 
     try {
@@ -1065,7 +1072,7 @@ export function DownPaymentApprovalPanel({
       statusAr: STATUS_AR_MAP[req.status] || '',
       requestedAmount: req.requestedAmount,
       approvedAmount: req.approvedAmount || req.requestedAmount,
-      paidAmount: getDisplayedPaidAmount(req),
+      paidAmount: req.totalPaidAmount || 0,
       t1Approver: req.supervisorApprovedByName || (t1User ? getName(t1User) : undefined),
       t1Date: req.supervisorApprovedAt || undefined,
       t1Status: req.supervisorStatus || undefined,
@@ -1078,7 +1085,7 @@ export function DownPaymentApprovalPanel({
   };
 
   const handleStatementExport = async (exportFormat: 'pdf' | 'excel') => {
-    const { data: dataToExport } = getActiveTabData();
+    const { data: dataToExport } = activeExportSelectionRef.current;
     if (dataToExport.length === 0) {
       toast({ title: 'No Data', description: 'No requests match the current filters.', variant: 'destructive' });
       return;
@@ -3647,7 +3654,7 @@ export function DownPaymentApprovalPanel({
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <Popover>
+          <Popover open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" data-testid="button-export">
                 <Download className="h-4 w-4 mr-1" />
@@ -3656,15 +3663,15 @@ export function DownPaymentApprovalPanel({
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-40 p-1">
-              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => void handleExport('csv')} data-testid="button-export-csv">
+              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleExport('csv'); }} data-testid="button-export-csv">
                 <FileDown className="h-4 w-4 mr-2" />
                 CSV
               </Button>
-              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => void handleExport('excel')} data-testid="button-export-excel">
+              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleExport('excel'); }} data-testid="button-export-excel">
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 Excel
               </Button>
-              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => void handleExport('pdf')} data-testid="button-export-pdf">
+              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleExport('pdf'); }} data-testid="button-export-pdf">
                 <FileText className="h-4 w-4 mr-2" />
                 PDF
               </Button>
@@ -3675,7 +3682,7 @@ export function DownPaymentApprovalPanel({
             variant="outline"
             size="sm"
             onClick={() => void handleStatementExport('pdf')}
-            disabled={filteredRequests.length === 0}
+            disabled={activeExportSelection.data.length === 0}
             data-testid="button-statement-pdf"
           >
             <Banknote className="h-4 w-4 mr-1" />
@@ -3685,7 +3692,7 @@ export function DownPaymentApprovalPanel({
             variant="outline"
             size="sm"
             onClick={() => void handleStatementExport('excel')}
-            disabled={filteredRequests.length === 0}
+            disabled={activeExportSelection.data.length === 0}
             data-testid="button-statement-excel"
           >
             <FileSpreadsheet className="h-4 w-4 mr-1" />
