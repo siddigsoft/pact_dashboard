@@ -50,10 +50,10 @@ function sectionFill(): ExcelJS.Fill {
   return { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
 }
 
-// Explicit column widths for transport statement (Financial Statement sheet, 13 cols — incl. Account #, State)
-const TRANSPORT_WIDTHS_SUMMARY = [5, 22, 13, 26, 18, 16, 14, 15, 15, 11, 26, 18, 12];
-// Explicit column widths for transport Full Details sheet (27 cols — incl. Account #, MMP, Locality, Activity, Budget, Approval Type, Payment Type, Justification)
-const TRANSPORT_WIDTHS_DETAIL = [5, 22, 13, 26, 18, 16, 14, 13, 22, 14, 16, 14, 16, 13, 14, 14, 11, 12, 26, 13, 13, 18, 13, 13, 20, 26, 18];
+// Explicit column widths for transport statement (14 cols — incl. Account #, State, Remaining)
+const TRANSPORT_WIDTHS_SUMMARY = [5, 22, 13, 26, 18, 16, 14, 15, 15, 15, 11, 26, 18, 12];
+// Explicit column widths for transport Full Details sheet (28 cols — incl. Remaining)
+const TRANSPORT_WIDTHS_DETAIL = [5, 22, 13, 26, 18, 16, 14, 13, 22, 14, 16, 14, 16, 13, 14, 14, 14, 11, 12, 26, 13, 13, 18, 13, 13, 20, 26, 18];
 // Explicit column widths for operational cost (Financial Statement sheet, 11 cols — inc. Project)
 const OPCOST_WIDTHS_SUMMARY = [5, 22, 13, 26, 22, 16, 15, 15, 26, 18, 12];
 // Explicit column widths for operational cost Full Details (18 cols — inc. Project)
@@ -103,10 +103,11 @@ function buildStatementWorkbook(
   const totalRequested = rows.reduce((s, r) => s + r.requestedAmount, 0);
   const totalApproved = rows.reduce((s, r) => s + r.approvedAmount, 0);
   const totalPaid = rows.reduce((s, r) => s + r.paidAmount, 0);
+  const totalRemaining = rows.reduce((s, r) => s + r.remainingAmount, 0);
 
   const statusLabel = fmtStatus(config.statusFilter);
   const typeLabel = isTransport ? 'Transport-Advance' : 'Operational-Cost';
-  const totalCols = isTransport ? 13 : 11; // transport: 13 cols (incl. Account #, State), operational: 11 cols (with Project)
+  const totalCols = isTransport ? 14 : 11; // transport: 14 cols (incl. Account #, State, Remaining), operational: 11 cols (with Project)
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
@@ -166,6 +167,7 @@ function buildStatementWorkbook(
     [`Total Requested (${cur})`, fmtCurrency(totalRequested, cur)],
     [`Total Approved (${cur})`, fmtCurrency(totalApproved, cur)],
     [`Total Paid (${cur})`, fmtCurrency(totalPaid, cur)],
+    ...(isTransport ? [[`Remaining (${cur})`, fmtCurrency(totalRemaining, cur)] as [string, string]] : []),
   ];
 
   // Label spans cols 1-4 (wide enough for long text); value spans cols 5-6 (right-aligned)
@@ -194,15 +196,16 @@ function buildStatementWorkbook(
 
   // STATE SUMMARY section (transport only, when state data is available)
   if (isTransport) {
-    const stateMap = new Map<string, { count: number; requested: number; approved: number; paid: number }>();
+    const stateMap = new Map<string, { count: number; requested: number; approved: number; paid: number; remaining: number }>();
     rows.forEach(r => {
       const k = r.state && r.state.trim() ? r.state.trim() : 'Unknown';
-      if (!stateMap.has(k)) stateMap.set(k, { count: 0, requested: 0, approved: 0, paid: 0 });
+      if (!stateMap.has(k)) stateMap.set(k, { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 });
       const s = stateMap.get(k)!;
       s.count++;
       s.requested += r.requestedAmount;
       s.approved += r.approvedAmount;
       s.paid += r.paidAmount;
+      s.remaining += r.remainingAmount;
     });
     const stateEntries = Array.from(stateMap.entries()).sort(([a], [b]) => a.localeCompare(b));
 
@@ -217,7 +220,7 @@ function buildStatementWorkbook(
     ws.mergeCells(stateSectionRow.number, 1, stateSectionRow.number, totalCols);
 
     // Shift one column right so State name lands in col B (width 22) instead of col A (width 5/#)
-    const stateHdrData = ['', 'State', 'Requests', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`];
+    const stateHdrData = ['', 'State', 'Requests', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, `Remaining (${cur})`];
     const stateHdr = ws.addRow([...stateHdrData, ...Array(totalCols - stateHdrData.length).fill('')]);
     stateHdr.eachCell((cell, ci) => {
       cell.fill = subHeaderFill();
@@ -229,8 +232,8 @@ function buildStatementWorkbook(
 
     stateEntries.forEach(([stateName, s], i) => {
       const rowData: (string | number)[] = [
-        '', stateName, s.count, fmtCurrency(s.requested, cur), fmtCurrency(s.approved, cur), fmtCurrency(s.paid, cur),
-        ...Array(totalCols - 6).fill(''),
+        '', stateName, s.count, fmtCurrency(s.requested, cur), fmtCurrency(s.approved, cur), fmtCurrency(s.paid, cur), fmtCurrency(s.remaining, cur),
+        ...Array(totalCols - 7).fill(''),
       ];
       const row = ws.addRow(rowData);
       row.eachCell((cell, ci) => {
@@ -246,9 +249,10 @@ function buildStatementWorkbook(
     const sGrandReq  = Array.from(stateMap.values()).reduce((s, v) => s + v.requested, 0);
     const sGrandApp  = Array.from(stateMap.values()).reduce((s, v) => s + v.approved, 0);
     const sGrandPaid = Array.from(stateMap.values()).reduce((s, v) => s + v.paid, 0);
+    const sGrandRemaining = Array.from(stateMap.values()).reduce((s, v) => s + v.remaining, 0);
     const stateGrandData: (string | number)[] = [
-      '', 'GRAND TOTAL', rows.length, fmtCurrency(sGrandReq, cur), fmtCurrency(sGrandApp, cur), fmtCurrency(sGrandPaid, cur),
-      ...Array(totalCols - 6).fill(''),
+      '', 'GRAND TOTAL', rows.length, fmtCurrency(sGrandReq, cur), fmtCurrency(sGrandApp, cur), fmtCurrency(sGrandPaid, cur), fmtCurrency(sGrandRemaining, cur),
+       ...Array(totalCols - 7).fill(''),
     ];
     const stateGrandRow = ws.addRow(stateGrandData);
     stateGrandRow.eachCell((cell, ci) => {
@@ -274,7 +278,7 @@ function buildStatementWorkbook(
   ws.mergeCells(detailSectionRow.number, 1, detailSectionRow.number, totalCols);
 
   const tableHead = isTransport
-    ? ['#', 'Ref ID', 'Date', 'Requester', 'Account #', 'Site', 'State', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
+    ? ['#', 'Ref ID', 'Date', 'Requester', 'Account #', 'Site', 'State', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, `Remaining (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
     : ['#', 'Ref ID', 'Date', 'Requester', 'Project', 'Category', `Amount (${cur})`, `Approved (${cur})`, 'T1 Approver', 'T2 Approver', 'Status'];
 
   const hdrRow = ws.addRow(tableHead);
@@ -289,7 +293,7 @@ function buildStatementWorkbook(
   rows.forEach((r, idx) => {
     const rowData: (string | number)[] = [idx + 1, r.refId, fmtDate(r.date), r.requester || ''];
     if (isTransport) {
-      rowData.push(r.accountNumber || '', r.site || r.description || '', r.state || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur));
+       rowData.push(r.accountNumber || '', r.site || r.description || '', r.state || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur), fmtCurrency(r.remainingAmount, cur));
     } else {
       rowData.push(r.project || '', r.category || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur));
     }
@@ -313,7 +317,7 @@ function buildStatementWorkbook(
   });
 
   const totalsData: (string | number)[] = isTransport
-    ? ['', '', '', '', '', 'TOTALS', '', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
+     ? ['', '', '', '', '', 'TOTALS', '', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), fmtCurrency(totalRemaining, cur), '', '', '']
     : ['', '', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
 
   const totRow = ws.addRow(totalsData);
@@ -377,7 +381,7 @@ function buildStatementWorkbook(
     ws2.addRow([]).height = 6;
 
     const detailHeaders = isTransport
-      ? ['#', 'Reference ID', 'Date', 'Requester', 'Account #', 'Site', 'Hub', 'State', 'MMP', 'Locality', 'Activity Type', `Budget (${cur})`, 'Approval Type', 'Payment Type', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Justification', 'Notes']
+       ? ['#', 'Reference ID', 'Date', 'Requester', 'Account #', 'Site', 'Hub', 'State', 'MMP', 'Locality', 'Activity Type', `Budget (${cur})`, 'Approval Type', 'Payment Type', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, `Remaining (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Justification', 'Notes']
       : ['#', 'Reference ID', 'Date', 'Requester', 'Project', 'Category', 'Description', `Amount (${cur})`, `Approved (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Notes'];
 
     const detHdrRow = ws2.addRow(detailHeaders);
@@ -406,7 +410,8 @@ function buildStatementWorkbook(
           r.paymentType || '',
           r.requestedAmount,
           r.approvedAmount,
-          r.paidAmount,
+           r.paidAmount,
+           r.remainingAmount,
         );
       } else {
         rowData.push(r.project || '', r.category || '', r.description || '', r.requestedAmount, r.approvedAmount);
@@ -452,7 +457,7 @@ function addGroupedSheet(
 
   const cur = config.currency || 'SDG';
   const isTransport = config.statementType === 'transport_advance';
-  const totalCols = isTransport ? 12 : 10;
+  const totalCols = isTransport ? 13 : 10;
   const refNum = `STMT-${format(new Date(), 'yyyyMMdd-HHmm')}`;
 
   const groupLabel =
@@ -480,6 +485,7 @@ function addGroupedSheet(
   const totalRequested = rows.reduce((s, r) => s + r.requestedAmount, 0);
   const totalApproved  = rows.reduce((s, r) => s + r.approvedAmount, 0);
   const totalPaid      = rows.reduce((s, r) => s + r.paidAmount, 0);
+  const totalRemaining = rows.reduce((s, r) => s + r.remainingAmount, 0);
 
   const ws = wb.addWorksheet(groupLabel);
 
@@ -515,6 +521,7 @@ function addGroupedSheet(
     [`Total Requested (${cur})`, fmtCurrency(totalRequested, cur)],
     [`Total Approved (${cur})`,  fmtCurrency(totalApproved, cur)],
     [`Total Paid (${cur})`,      fmtCurrency(totalPaid, cur)],
+    ...(isTransport ? [[`Remaining (${cur})`, fmtCurrency(totalRemaining, cur)] as [string, string]] : []),
   ];
   summaryPairs.forEach(([label, value], i) => {
     const rowData: (string | number)[] = [label, '', '', ''];
@@ -536,7 +543,7 @@ function addGroupedSheet(
   ws.addRow([]).height = 8;
 
   const tableHead = isTransport
-    ? ['#', 'Ref ID', 'Date', 'Requester', 'Site', 'State', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
+    ? ['#', 'Ref ID', 'Date', 'Requester', 'Site', 'State', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, `Remaining (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
     : ['#', 'Ref ID', 'Date', 'Requester', 'Category', `Amount (${cur})`, `Approved (${cur})`, 'T1 Approver', 'T2 Approver', 'Status'];
 
   // ── Groups ───────────────────────────────────────────────────────────────
@@ -544,6 +551,7 @@ function addGroupedSheet(
     const gReq  = groupRows.reduce((s, r) => s + r.requestedAmount, 0);
     const gApp  = groupRows.reduce((s, r) => s + r.approvedAmount, 0);
     const gPaid = groupRows.reduce((s, r) => s + r.paidAmount, 0);
+    const gRemaining = groupRows.reduce((s, r) => s + r.remainingAmount, 0);
 
     const groupHeaderRow = ws.addRow([`${groupLabel.replace('By ', '')}: ${groupName}   (${groupRows.length} request${groupRows.length !== 1 ? 's' : ''})`]);
     for (let c = 1; c <= totalCols; c++) {
@@ -565,7 +573,7 @@ function addGroupedSheet(
     groupRows.forEach((r, idx) => {
       const rowData: (string | number)[] = [idx + 1, r.refId, fmtDate(r.date), r.requester || ''];
       if (isTransport) {
-        rowData.push(r.site || r.description || '', r.state || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur));
+        rowData.push(r.site || r.description || '', r.state || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur), fmtCurrency(r.remainingAmount, cur));
       } else {
         rowData.push(r.category || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur));
       }
@@ -585,7 +593,7 @@ function addGroupedSheet(
     });
 
     const subtotalData: (string | number)[] = isTransport
-      ? ['', '', '', '', `Subtotal — ${groupName}`, '', fmtCurrency(gReq, cur), fmtCurrency(gApp, cur), fmtCurrency(gPaid, cur), '', '', '']
+      ? ['', '', '', '', `Subtotal — ${groupName}`, '', fmtCurrency(gReq, cur), fmtCurrency(gApp, cur), fmtCurrency(gPaid, cur), fmtCurrency(gRemaining, cur), '', '', '']
       : ['', '', '', '', `Subtotal — ${groupName}`, fmtCurrency(gReq, cur), fmtCurrency(gApp, cur), '', '', ''];
     const subTotRow = ws.addRow(subtotalData);
     subTotRow.eachCell((cell, ci) => {
@@ -600,7 +608,7 @@ function addGroupedSheet(
 
   // ── Grand total ──────────────────────────────────────────────────────────
   const grandData: (string | number)[] = isTransport
-    ? ['', '', '', '', 'GRAND TOTAL', '', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
+    ? ['', '', '', '', 'GRAND TOTAL', '', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), fmtCurrency(totalRemaining, cur), '', '', '']
     : ['', '', '', '', 'GRAND TOTAL', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
   const grandRow = ws.addRow(grandData);
   grandRow.eachCell((cell, ci) => {

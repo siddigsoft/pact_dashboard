@@ -24,6 +24,8 @@ export interface StatementRow {
   requestedAmount: number;
   approvedAmount: number;
   paidAmount: number;
+  /** Canonical approved-minus-authoritative-paid balance for transport advances. */
+  remainingAmount: number;
   t1Approver?: string;
   t1Date?: string;
   t1Status?: string;
@@ -222,9 +224,11 @@ export async function generateFinancialStatementPdf(
   const totalRequested = rows.reduce((s, r) => s + r.requestedAmount, 0);
   const totalApproved = rows.reduce((s, r) => s + r.approvedAmount, 0);
   const totalPaid = rows.reduce((s, r) => s + r.paidAmount, 0);
+  const totalRemaining = rows.reduce((s, r) => s + r.remainingAmount, 0);
+  const isTransport = config.statementType === 'transport_advance';
 
   const cardGap = 3;
-  const cardCount = 4;
+  const cardCount = isTransport ? 5 : 4;
   const cardW = (cw - cardGap * (cardCount - 1)) / cardCount;
   const cardH = 22;
 
@@ -249,6 +253,9 @@ export async function generateFinancialStatementPdf(
   drawSummaryCard(ml + cardW + cardGap, 'TOTAL REQUESTED', 'إجمالي المطلوب', fmtCurrency(totalRequested, cur), C.dark, C.bgLight);
   drawSummaryCard(ml + (cardW + cardGap) * 2, 'TOTAL APPROVED', 'إجمالي المعتمد', fmtCurrency(totalApproved, cur), C.blue, C.blueLight);
   drawSummaryCard(ml + (cardW + cardGap) * 3, 'TOTAL PAID', 'إجمالي المدفوع', fmtCurrency(totalPaid, cur), C.green, C.greenLight);
+  if (isTransport) {
+    drawSummaryCard(ml + (cardW + cardGap) * 4, 'REMAINING', 'المتبقي', fmtCurrency(totalRemaining, cur), C.amber, C.amberLight);
+  }
 
   y += cardH + 6;
 
@@ -264,10 +271,8 @@ export async function generateFinancialStatementPdf(
   }
   y += 11;
 
-  const isTransport = config.statementType === 'transport_advance';
-
   const tableHead = isTransport
-    ? [['#', 'Ref ID', 'Date', 'Requester', 'Account #', 'Site', 'Requested', 'Approved', 'Paid', 'T1', 'T2', 'Status']]
+    ? [['#', 'Ref ID', 'Date', 'Requester', 'Account #', 'Site', 'Requested', 'Approved', 'Paid', 'Remaining', 'T1', 'T2', 'Status']]
     : [['#', 'Ref ID', 'Date', 'Requester', 'Project', 'Category', 'Amount', 'Approved', 'T1', 'T2', 'Status']];
 
   const tableBody = rows.map((r, idx) => {
@@ -284,6 +289,7 @@ export async function generateFinancialStatementPdf(
         fmtCurrency(r.requestedAmount, cur),
         fmtCurrency(r.approvedAmount, cur),
         fmtCurrency(r.paidAmount, cur),
+        fmtCurrency(r.remainingAmount, cur),
       );
     } else {
       row.push(
@@ -302,7 +308,7 @@ export async function generateFinancialStatementPdf(
   });
 
   const totalsRow = isTransport
-    ? ['', '', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
+    ? ['', '', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), fmtCurrency(totalRemaining, cur), '', '', '']
     : ['', '', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
 
   tableBody.push(totalsRow);
@@ -330,9 +336,10 @@ export async function generateFinancialStatementPdf(
           6: { halign: 'right', cellWidth: 16 },
           7: { halign: 'right', cellWidth: 16 },
           8: { halign: 'right', cellWidth: 16 },
-          9: { cellWidth: 14 },
-          10: { cellWidth: 14 },
-          11: { cellWidth: 14 },
+           9: { halign: 'right', cellWidth: 16 },
+           10: { cellWidth: 14 },
+           11: { cellWidth: 14 },
+           12: { cellWidth: 14 },
         }
       : {
           0: { cellWidth: 7, halign: 'center' },

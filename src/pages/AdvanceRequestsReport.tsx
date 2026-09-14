@@ -66,7 +66,12 @@ import { notificationDigestService } from '@/services/notification-digest.servic
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
-import { cancelPaidDownPaymentRequest } from '@/utils/preFundLinkage';
+import {
+  cancelPaidDownPaymentRequest,
+  fetchPreFundSourcePaymentLinks,
+  type PreFundSourcePaymentLink,
+} from '@/utils/preFundLinkage';
+import { getDownPaymentBalance } from '@/utils/downPaymentBalance';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -87,6 +92,7 @@ function AdvanceRequestsReportContent() {
   const [hubFilter, setHubFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [paidFilter, setPaidFilter] = useState<string>('all');
+  const [paymentEvidenceByRequest, setPaymentEvidenceByRequest] = useState<Map<string, PreFundSourcePaymentLink[]>>(new Map());
   const [reconciledFilter, setReconciledFilter] = useState<string>('all');
   const [mmpFilter, setMmpFilter] = useState<string>('all');
   const location = useLocation();
@@ -123,6 +129,47 @@ function AdvanceRequestsReportContent() {
   const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || userRole === 'ict' || isSuperAdmin;
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
   const isFOM = userRole === 'fom' || userRole === 'field operation manager';
+
+  useEffect(() => {
+    let cancelled = false;
+    const requestIds = requests.map(request => request.id);
+
+    if (requestIds.length === 0) {
+      setPaymentEvidenceByRequest(new Map());
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void fetchPreFundSourcePaymentLinks('down_payment_requests', requestIds)
+      .then(links => {
+        if (cancelled) return;
+        const next = new Map<string, PreFundSourcePaymentLink[]>();
+        links.forEach(link => {
+          const existing = next.get(link.sourceId) ?? [];
+          existing.push(link);
+          next.set(link.sourceId, existing);
+        });
+        setPaymentEvidenceByRequest(next);
+      })
+      .catch(error => {
+        if (cancelled) return;
+        console.error('[Advance Requests Report] Could not load immutable payment evidence:', error);
+        setPaymentEvidenceByRequest(new Map());
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requests]);
+
+  const getRequestBalance = useCallback(
+    (request: DownPaymentRequest) => getDownPaymentBalance(
+      request,
+      paymentEvidenceByRequest.get(request.id) ?? [],
+    ),
+    [paymentEvidenceByRequest],
+  );
 
   const userMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -180,6 +227,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const handleDownloadCertificate = async (req: DownPaymentRequest) => {
+    const balance = getRequestBalance(req);
     const requester = users.find(u => u.id === req.requestedBy);
     const supervisorApprover = req.supervisorApprovedBy ? users.find(u => u.id === req.supervisorApprovedBy) : null;
     const adminApprover = req.adminProcessedBy ? users.find(u => u.id === req.adminProcessedBy) : null;
@@ -242,9 +290,9 @@ function AdvanceRequestsReportContent() {
         hubName: req.hubName,
         activityType: req.activityType,
         requestedAmount: req.requestedAmount,
-        approvedAmount: req.approvedAmount || req.adminApprovedAmount || req.supervisorApprovedAmount,
-        totalPaidAmount: req.totalPaidAmount || 0,
-        remainingAmount: req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0)),
+        approvedAmount: balance.approved,
+        totalPaidAmount: balance.paid,
+        remainingAmount: balance.remaining,
         justification: req.justification,
         requestedAt: req.requestedAt,
         status: req.status,
@@ -329,6 +377,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const buildCertData = (req: DownPaymentRequest, signatureImageData: string | null) => {
+    const balance = getRequestBalance(req);
     const requester = users.find(u => u.id === req.requestedBy);
     const supervisorApprover = req.supervisorApprovedBy ? users.find(u => u.id === req.supervisorApprovedBy) : null;
     const adminApprover = req.adminProcessedBy ? users.find(u => u.id === req.adminProcessedBy) : null;
@@ -338,9 +387,9 @@ function AdvanceRequestsReportContent() {
         id: req.id, siteName: req.siteName, stateName: req.stateName, localityName: req.localityName,
         projectName: req.projectName, hubName: req.hubName, activityType: req.activityType,
         requestedAmount: req.requestedAmount,
-        approvedAmount: req.approvedAmount || req.adminApprovedAmount || req.supervisorApprovedAmount,
-        totalPaidAmount: req.totalPaidAmount || 0,
-        remainingAmount: req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0)),
+        approvedAmount: balance.approved,
+        totalPaidAmount: balance.paid,
+        remainingAmount: balance.remaining,
         justification: req.justification, requestedAt: req.requestedAt, status: req.status,
         paymentType: req.paymentType, approvalType: req.approvalType, approvalPercentage: req.approvalPercentage,
       },
@@ -1927,6 +1976,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const mapRequestToStatementRow = (req: DownPaymentRequest): StatementRow => {
+    const balance = getRequestBalance(req);
     const reqUser = users?.find(u => u.id === req.requestedBy);
     return {
       refId: `PACT-TA-${req.id.substring(0, 8).toUpperCase()}`,
@@ -1940,8 +1990,9 @@ function AdvanceRequestsReportContent() {
       status: req.status,
       statusAr: STATUS_AR_MAP[req.status] || '',
       requestedAmount: req.requestedAmount,
-      approvedAmount: req.approvedAmount || req.requestedAmount,
-      paidAmount: req.totalPaidAmount || 0,
+      approvedAmount: balance.approved,
+      paidAmount: balance.paid,
+      remainingAmount: balance.remaining,
       t1Approver: req.supervisorApprovedByName || (req.supervisorApprovedBy ? getProfileName(req.supervisorApprovedBy) : undefined),
       t1Date: req.supervisorApprovedAt || undefined,
       t1Status: req.supervisorStatus || undefined,
@@ -1976,7 +2027,7 @@ function AdvanceRequestsReportContent() {
         await generateFinancialStatementPdf(statementRows, config);
         toast({ title: 'Statement Downloaded / تم تحميل الكشف', description: `PDF statement for ${statusLabel} exported successfully.` });
       } else {
-        generateFinancialStatementExcel(statementRows, config);
+        await generateFinancialStatementExcel(statementRows, config);
         toast({ title: 'Statement Downloaded / تم تحميل الكشف', description: `Excel statement for ${statusLabel} exported successfully.` });
       }
     } catch (err) {
@@ -2612,7 +2663,7 @@ function AdvanceRequestsReportContent() {
                     </TableHeader>
                     <TableBody>
                       {paginatedRequests.map(req => {
-                        const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                        const remaining = getRequestBalance(req).remaining;
                         const needsReconciliation = ['approved', 'partially_paid', 'fully_paid'].includes(req.status) && remaining > 0;
                         const isExpanded = expandedRequestRow === req.id;
                         const shortId = req.id.substring(0, 8).toUpperCase();
@@ -2943,7 +2994,7 @@ function AdvanceRequestsReportContent() {
                                       </TableHeader>
                                       <TableBody>
                                         {member.items.map(req => {
-                                          const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                                          const remaining = getRequestBalance(req).remaining;
                                           return (
                                             <TableRow key={req.id} data-testid={`row-member-detail-${req.id}`}>
                                               <TableCell className="text-xs whitespace-nowrap">{format(parseISO(req.createdAt), 'MMM dd, yyyy')}</TableCell>
@@ -2966,7 +3017,7 @@ function AdvanceRequestsReportContent() {
                                           <TableCell className="text-xs text-right font-mono">{member.totalRequested.toLocaleString()}</TableCell>
                                           <TableCell />
                                           <TableCell className="text-xs text-right font-mono">{member.items.reduce((s, r) => s + (r.totalPaidAmount || 0), 0).toLocaleString()}</TableCell>
-                                          <TableCell className="text-xs text-right font-mono">{member.items.reduce((s, r) => s + (r.remainingAmount || (r.requestedAmount - (r.totalPaidAmount || 0))), 0).toLocaleString()}</TableCell>
+                                          <TableCell className="text-xs text-right font-mono">{member.items.reduce((s, r) => s + getRequestBalance(r).remaining, 0).toLocaleString()}</TableCell>
                                           <TableCell />
                                         </TableRow>
                                       </TableBody>
@@ -3015,7 +3066,7 @@ function AdvanceRequestsReportContent() {
                   </TableHeader>
                   <TableBody>
                     {paginatedRequests.map(req => {
-                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      const remaining = getRequestBalance(req).remaining;
                       return (
                         <TableRow key={req.id}>
                           <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
@@ -3155,7 +3206,7 @@ function AdvanceRequestsReportContent() {
                   </TableHeader>
                   <TableBody>
                     {paginatedRequests.map(req => {
-                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      const remaining = getRequestBalance(req).remaining;
                       return (
                         <TableRow key={req.id}>
                           <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
@@ -3364,7 +3415,7 @@ function AdvanceRequestsReportContent() {
                   </TableHeader>
                   <TableBody>
                     {paginatedRequests.map(req => {
-                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      const remaining = getRequestBalance(req).remaining;
                       return (
                         <TableRow key={req.id}>
                           <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
@@ -3492,7 +3543,7 @@ function AdvanceRequestsReportContent() {
                   </TableHeader>
                   <TableBody>
                     {paginatedRequests.map(req => {
-                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      const remaining = getRequestBalance(req).remaining;
                       return (
                         <TableRow key={req.id}>
                           <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
@@ -3622,7 +3673,7 @@ function AdvanceRequestsReportContent() {
                   </TableHeader>
                   <TableBody>
                     {paginatedRequests.map(req => {
-                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      const remaining = getRequestBalance(req).remaining;
                       return (
                         <TableRow key={req.id}>
                           <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
@@ -3752,7 +3803,7 @@ function AdvanceRequestsReportContent() {
                   </TableHeader>
                   <TableBody>
                     {paginatedRequests.map(req => {
-                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      const remaining = getRequestBalance(req).remaining;
                       return (
                         <TableRow key={req.id}>
                           <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
@@ -3892,7 +3943,7 @@ function AdvanceRequestsReportContent() {
                   </TableHeader>
                   <TableBody>
                     {paginatedRequests.map(req => {
-                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      const remaining = getRequestBalance(req).remaining;
                       return (
                         <TableRow key={req.id}>
                           <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>

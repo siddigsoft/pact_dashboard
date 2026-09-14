@@ -1077,7 +1077,7 @@ export function DownPaymentApprovalPanel({
       if (type === 'csv') {
         exportToCSV(exportRows, suffix, preFundPaymentEvidence as DownPaymentEvidenceMap | undefined);
       } else if (type === 'excel') {
-        exportToExcel(exportRows, suffix, tabLabel, preFundPaymentEvidence as DownPaymentEvidenceMap | undefined);
+        await exportToExcel(exportRows, suffix, tabLabel, preFundPaymentEvidence as DownPaymentEvidenceMap | undefined);
       } else {
         exportToPDF(exportRows, {
           filters: effectiveFilters,
@@ -1141,6 +1141,7 @@ export function DownPaymentApprovalPanel({
       requestedAmount: req.requestedAmount,
       approvedAmount: balance.approved,
       paidAmount: balance.paid,
+      remainingAmount: balance.remaining,
       t1Approver: req.supervisorApprovedByName || (t1User ? getName(t1User) : undefined),
       t1Date: req.supervisorApprovedAt || undefined,
       t1Status: req.supervisorStatus || undefined,
@@ -1296,11 +1297,11 @@ export function DownPaymentApprovalPanel({
     });
   };
 
-  const handleDownloadBulkExcel = (reqs: DownPaymentRequest[], groupLabel?: string) => {
+  const handleDownloadBulkExcel = async (reqs: DownPaymentRequest[], groupLabel?: string) => {
     try {
       const timestamp = new Date().toISOString().slice(0, 10);
       const safeName = (groupLabel || 'All').replace(/[^a-zA-Z0-9]/g, '_');
-      exportToExcel(reqs, `PACT_Bulk_${safeName}_${timestamp}`, groupLabel || 'All', preFundPaymentEvidence);
+      await exportToExcel(reqs, `PACT_Bulk_${safeName}_${timestamp}`, groupLabel || 'All', preFundPaymentEvidence);
       toast({
         title: 'Bulk Excel Downloaded / تم تحميل ملف Excel الجماعي',
         description: `${reqs.length} request(s) exported to Excel. / تم تصدير ${reqs.length} طلب(ات) في ملف Excel.`,

@@ -75,7 +75,7 @@ describe('down-payment balance policy', () => {
       paid: 40,
       remaining: 60,
       paymentBasis: 'active_immutable_links',
-      reconciliationRequired: false,
+      reconciliationRequired: true,
     });
   });
 
@@ -86,7 +86,7 @@ describe('down-payment balance policy', () => {
     }))).toMatchObject({
       paid: 40,
       paymentBasis: 'active_immutable_links',
-      reconciliationRequired: false,
+      reconciliationRequired: true,
     });
   });
 
@@ -99,6 +99,48 @@ describe('down-payment balance policy', () => {
       paymentBasis: 'no_payment_evidence',
       reconciliationRequired: true,
     });
+  });
+
+  it('keeps an approved unpaid entitlement fully outstanding', () => {
+    expect(getDownPaymentBalance(request('approved', {
+      approvedAmount: 75,
+      totalPaidAmount: 0,
+    }))).toMatchObject({ approved: 75, paid: 0, remaining: 75 });
+  });
+
+  it('subtracts authoritative active payment evidence for partial payment', () => {
+    expect(getDownPaymentBalance(request('partially_paid', {
+      approvedAmount: 100,
+      totalPaidAmount: 99,
+    }), [{ paymentAmount: 35, historyStatus: 'active' }]))
+      .toMatchObject({ approved: 100, paid: 35, remaining: 65, reconciliationRequired: false });
+  });
+
+  it('shows zero remaining when a settled legacy total equals the approved amount', () => {
+    expect(getDownPaymentBalance(request('fully_paid', {
+      approvedAmount: 100,
+      totalPaidAmount: 100,
+    }))).toMatchObject({ approved: 100, paid: 100, remaining: 0, paymentBasis: 'legacy_source_total' });
+  });
+
+  it('does not let a settled status hide an unpaid recorded balance', () => {
+    expect(getDownPaymentBalance(request('fully_paid', {
+      approvedAmount: 100,
+      totalPaidAmount: 0,
+    }))).toMatchObject({
+      approved: 100,
+      paid: 0,
+      remaining: 100,
+      paymentBasis: 'no_payment_evidence',
+      reconciliationRequired: true,
+    });
+  });
+
+  it('warns when settled authoritative evidence proves a short payment', () => {
+    expect(getDownPaymentBalance(request('fully_paid', {
+      approvedAmount: 100,
+    }), [{ paymentAmount: 80, historyStatus: 'active' }]))
+      .toMatchObject({ approved: 100, paid: 80, remaining: 20, reconciliationRequired: true });
   });
 
   it('matches the screenshot invariant of two approved and 41 settled rows', () => {

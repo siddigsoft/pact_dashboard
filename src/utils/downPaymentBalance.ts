@@ -148,9 +148,9 @@ function evidenceAmount(evidence: DownPaymentPaymentEvidence): number {
  * Derive the one canonical financial view of a request.
  *
  * Active immutable payment events are authoritative.  Legacy source totals
- * are retained as a compatibility fallback, but settled rows without an
- * active event are explicitly marked for reconciliation instead of silently
- * presenting an apparently trustworthy balance.
+ * are retained as a compatibility fallback. Settled rows without an active
+ * event are explicitly marked for reconciliation rather than presented as
+ * fully evidenced payments.
  */
 export function getDownPaymentBalance(
   request: DownPaymentBalanceInput,
@@ -177,8 +177,11 @@ export function getDownPaymentBalance(
 
   const legacyPositiveTotal = !hasEvidence && finiteAmount(request.totalPaidAmount) > 0;
   const settledWithoutEvidence = isDownPaymentSettledStatus(status) && !hasEvidence;
+  const settledShortPayment = isDownPaymentSettledStatus(status)
+    && (activeEvidence.length > 0 || declaredActiveEvidence)
+    && paid < approved;
   const reconciliationRequired = Boolean(
-    request.reconciliationRequired || legacyPositiveTotal || settledWithoutEvidence,
+    request.reconciliationRequired || legacyPositiveTotal || settledWithoutEvidence || settledShortPayment,
   );
 
   let reconciliationReason = request.reconciliationReason || undefined;
@@ -186,6 +189,8 @@ export function getDownPaymentBalance(
     reconciliationReason = 'Positive legacy payment total has no active immutable payment evidence.';
   } else if (!reconciliationReason && settledWithoutEvidence) {
     reconciliationReason = 'Settled status has no active immutable payment evidence.';
+  } else if (!reconciliationReason && settledShortPayment) {
+    reconciliationReason = 'Settled status has active immutable evidence below the approved entitlement.';
   }
 
   return {

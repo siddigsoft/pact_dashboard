@@ -1,8 +1,8 @@
 import { DownPaymentRequest, DownPaymentReportConfig, DownPaymentFilter } from '@/types/down-payment';
-import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
+import { exportStandardExcel } from '@/utils/standardExcelExport';
 import {
   classifyDownPaymentStatus,
   getDownPaymentBalance,
@@ -198,27 +198,17 @@ export function exportToCSV(
   link.click();
 }
 
-export function exportToExcel(
+export async function exportToExcel(
   requests: DownPaymentRequest[],
   filename: string = 'down-payments',
   tabLabel: string = 'All',
   evidenceByRequest?: DownPaymentEvidenceMap,
-): void {
-  const wb = XLSX.utils.book_new();
-
+): Promise<void> {
   const totalRequested = requests.reduce((s, r) => s + r.requestedAmount, 0);
   const excelBalances = requests.map(req => balanceFor(req, evidenceByRequest));
   const totalApproved = excelBalances.reduce((s, balance) => s + balance.approved, 0);
   const totalPaid = excelBalances.reduce((s, balance) => s + balance.paid, 0);
   const totalRemaining = excelBalances.reduce((s, balance) => s + balance.remaining, 0);
-
-  const titleRows: (string | number)[][] = [
-    ['PACT Command Center - Down-Payment Requests Report'],
-    [`Tab: ${tabLabel} | Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Requests: ${requests.length}`],
-    [`Total Requested: ${formatCurrency(totalRequested)} | Total Approved: ${formatCurrency(totalApproved)} | Total Paid: ${formatCurrency(totalPaid)} | Remaining: ${formatCurrency(totalRemaining)}`],
-    [],
-  ];
-
   const headers = [
     '#', 'Request ID', 'MMP', 'Requester Name', 'Site Name', 'State', 'Locality', 'Hub',
     'Activity Type', 'CP Name', 'Requested At', 'Transportation Budget (SDG)',
@@ -266,7 +256,6 @@ export function exportToExcel(
       req.justification || '',
     ];
   });
-
   const totalBudget = requests.reduce((s, r) => s + r.totalTransportationBudget, 0);
   const emptyRow: string[] = Array(headers.length).fill('');
   const totalsRow = [...emptyRow];
@@ -276,28 +265,6 @@ export function exportToExcel(
   totalsRow[15] = totalApproved as any;
   totalsRow[16] = totalPaid as any;
   totalsRow[17] = totalRemaining as any;
-
-  const allRows = [...titleRows, headers, ...dataRows, emptyRow, totalsRow];
-  const ws = XLSX.utils.aoa_to_sheet(allRows);
-
-  const numCols = headers.length;
-
-  ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: numCols - 1 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: numCols - 1 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: numCols - 1 } },
-  ];
-
-  const colWidthMap: Record<number, number> = {
-    0: 5, 1: 14, 2: 24, 3: 22, 4: 28, 5: 16, 6: 16, 7: 16,
-    8: 16, 9: 16, 10: 18, 11: 20, 12: 20, 13: 18, 14: 10, 15: 20,
-    16: 16, 17: 16, 18: 20, 19: 15, 20: 18, 21: 22, 22: 18,
-    23: 22, 24: 18, 25: 22, 26: 18, 27: 22, 28: 28,
-  };
-  ws['!cols'] = Array.from({ length: numCols }, (_, i) => ({ wch: colWidthMap[i] || 16 }));
-
-  XLSX.utils.book_append_sheet(wb, ws, 'Down Payments');
-
   const summaryRows = (status: string) => requests.filter(r => r.status === status);
   const summaryAmount = (status: string, rows: DownPaymentRequest[]) => rows.reduce((sum, row) => {
     const balance = balanceFor(row, evidenceByRequest);
@@ -306,8 +273,6 @@ export function exportToExcel(
     return sum + balance.paid;
   }, 0);
   const summaryData = [
-    ['Summary Statistics'],
-    [],
     ['Category', 'Count', 'Amount (SDG)'],
     ['Total Requests (includes history)', requests.length, totalRequested],
     ...(['pending_supervisor', 'pending_admin', 'approved', 'partially_paid', 'fully_paid', 'paid', 'reconciled', 'completed', 'closed', 'rejected', 'cancelled', 'deleted'] as const).map(status => [
@@ -316,42 +281,53 @@ export function exportToExcel(
       summaryAmount(status, summaryRows(status)),
     ]),
     ['Note', 'Requested totals include rejected/cancelled history', ''],
-    [],
     ['', 'Total Approved', totalApproved],
     ['', 'Total Paid', totalPaid],
     ['', 'Remaining', totalRemaining],
   ];
-
-  const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-  summaryWs['!cols'] = [{ wch: 20 }, { wch: 18 }, { wch: 22 }];
-  summaryWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }];
-  XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
-
-  const hubGroups = new Map<string, { count: number; requested: number; approved: number; paid: number }>();
+  const hubGroups = new Map<string, { count: number; requested: number; approved: number; paid: number; remaining: number }>();
   requests.forEach(r => {
     const hub = r.hubName || 'Unknown';
-    const existing = hubGroups.get(hub) || { count: 0, requested: 0, approved: 0, paid: 0 };
+    const existing = hubGroups.get(hub) || { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
     const balance = balanceFor(r, evidenceByRequest);
     existing.count++;
     existing.requested += r.requestedAmount;
     existing.approved += balance.approved;
     existing.paid += balance.paid;
+    existing.remaining += balance.remaining;
     hubGroups.set(hub, existing);
   });
   const hubData: (string | number)[][] = [
-    ['Breakdown by Hub'],
-    [],
-    ['Hub', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)'],
+    ['Hub', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)'],
   ];
   hubGroups.forEach((v, k) => {
-    hubData.push([k, v.count, v.requested, v.approved, v.paid]);
+    hubData.push([k, v.count, v.requested, v.approved, v.paid, v.remaining]);
   });
-  const hubWs = XLSX.utils.aoa_to_sheet(hubData);
-  hubWs['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
-  hubWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
-  XLSX.utils.book_append_sheet(wb, hubWs, 'By Hub');
-
-  XLSX.writeFile(wb, `${filename}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  await exportStandardExcel({
+    reportTitle: 'PACT Command Center - Down-Payment Requests Report',
+    subtitleLine: `Tab: ${tabLabel} | Total Requests: ${requests.length}`,
+    metaLine: `Total Requested: ${formatCurrency(totalRequested)} | Total Approved: ${formatCurrency(totalApproved)} | Total Paid: ${formatCurrency(totalPaid)} | Remaining: ${formatCurrency(totalRemaining)}`,
+    filenamePrefix: filename,
+    mainSheet: {
+      sheetName: 'Down Payments',
+      headers,
+      rows: dataRows,
+      totalsRow,
+      colWidths: headers.map((_, index) => index === 0 ? 5 : index === 3 ? 22 : 16),
+    },
+    summarySheet: {
+      title: 'Summary Statistics',
+      rows: summaryData,
+      colWidths: [28, 18, 24],
+    },
+    breakdownSheets: [{
+      title: 'Breakdown by Hub',
+      sheetName: 'By Hub',
+      headers: hubData[0].map(String),
+      rows: hubData.slice(1),
+      colWidths: [22, 12, 20, 20, 20, 20],
+    }],
+  });
 }
 
 export function exportToPDF(

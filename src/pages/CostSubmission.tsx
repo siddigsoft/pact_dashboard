@@ -3932,6 +3932,7 @@ const CostSubmission = () => {
           requestedAmount: oc.amount_cents / 100,
           approvedAmount: ds === 'approved' || ds === 'paid' || ds === 'reconciled' ? oc.amount_cents / 100 : 0,
           paidAmount: ds === 'paid' || ds === 'reconciled' ? oc.amount_cents / 100 : 0,
+          remainingAmount: 0,
           t1Approver: t1User ? (t1User.fullName || t1User.email) : undefined,
           t1Date: oc.tier1_approved_at ? format(new Date(oc.tier1_approved_at), 'yyyy-MM-dd') : undefined,
           t1Status: oc.tier1_status || undefined,
