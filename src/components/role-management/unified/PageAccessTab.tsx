@@ -109,6 +109,23 @@ function roleLabel(rawRole: string | null) {
   const code = getRoleCode(rawRole);
   return ROLE_LABELS[code ?? ''] ?? (rawRole ?? 'Unknown');
 }
+
+function pageDisplayLabel(page: (typeof PAGE_DEFS)[number], rawRole?: string | null) {
+  if (page.slug === 'communication-hub') return 'Communication';
+  if (page.slug === 'portfolio') return 'Portfolio';
+  if (page.slug === 'mmp') {
+    const role = getRoleCode(rawRole ?? null);
+    if (role === 'dataCollector' || role === 'coordinator' || role === 'supervisor') {
+      return 'My Sites Management';
+    }
+  }
+  return page.label;
+}
+
+function pageDisplayPath(page: (typeof PAGE_DEFS)[number]) {
+  if (page.slug === 'portfolio') return '/programme-hub?tab=portfolio';
+  return page.path;
+}
 function packPermissions(p: Perms) { return JSON.stringify(p); }
 
 type StatusFilter = 'all' | 'granted' | 'blocked' | 'role-yes' | 'role-no';
@@ -377,8 +394,8 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
 
   const filteredByPagePages = useMemo(() => {
     const q = pageSearch.toLowerCase();
-    return PAGE_DEFS.filter(p => !q || p.label.toLowerCase().includes(q) || p.group.toLowerCase().includes(q));
-  }, [pageSearch]);
+    return PAGE_DEFS.filter(p => !q || pageDisplayLabel(p, userRole).toLowerCase().includes(q) || p.group.toLowerCase().includes(q));
+  }, [pageSearch, userRole]);
   const byPageGroupedPages = useMemo(() =>
     PAGE_GROUPS.map(g => ({ group: g, pages: filteredByPagePages.filter(p => p.group === g) })).filter(g => g.pages.length),
     [filteredByPagePages],
@@ -407,7 +424,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
       }
       const permStr = isBlocked ? 'Blocked' :
         [perms.r && 'Read', perms.w && 'Write', perms.c && 'Create', perms.d && 'Delete'].filter(Boolean).join(' + ');
-      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: `${profile.full_name ?? 'User'} → ${selectedPage.label} (${permStr})` });
+      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: `${profile.full_name ?? 'User'} → ${pageDisplayLabel(selectedPage, profile.role)} (${permStr})` });
       refetchOverrides();
       qc.invalidateQueries({ queryKey: ['bp-page-overrides'] });
     } catch (e: any) {
@@ -436,7 +453,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
       );
       refetchRoleConfigs();
       qc.invalidateQueries({ queryKey: ['bp-role-configs'] });
-      toast({ title: 'Default access updated', description: `Roles saved for ${selectedPage.label}.` });
+      toast({ title: 'Default access updated', description: `Roles saved for ${pageDisplayLabel(selectedPage, userRole)}.` });
     } catch (e: any) {
       toast({ title: 'Error saving roles', description: e.message, variant: 'destructive' });
     } finally { setSavingRoles(false); }
@@ -458,13 +475,13 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
   const filteredByUserPages = useMemo(() => {
     const q = search.toLowerCase();
     return PAGE_DEFS.filter(p => {
-      if (q && !p.label.toLowerCase().includes(q) && !p.group.toLowerCase().includes(q)) return false;
+      if (q && !pageDisplayLabel(p, userRole).toLowerCase().includes(q) && !p.group.toLowerCase().includes(q)) return false;
       if (statusFilter !== 'all') {
         if (effectivePage(p.slug) !== statusFilter) return false;
       }
       return true;
     });
-  }, [search, statusFilter, effectivePage]);
+  }, [search, statusFilter, effectivePage, userRole]);
   const groupedByUserPages = useMemo(() =>
     PAGE_GROUPS.map(g => ({ group: g, pages: filteredByUserPages.filter(p => p.group === g) })).filter(g => g.pages.length),
     [filteredByUserPages],
@@ -603,7 +620,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
                               isSelected ? 'bg-[#1D3461] text-white' : 'hover:bg-muted/50 text-foreground'
                             )}>
                             <Icon className={cn('h-3 w-3 shrink-0', isSelected ? 'text-white/80' : 'text-muted-foreground')} />
-                            <span className="flex-1 text-[11px] font-medium truncate">{page.label}</span>
+                            <span className="flex-1 text-[11px] font-medium truncate">{pageDisplayLabel(page, userRole)}</span>
                             <div className="flex items-center gap-0.5 shrink-0">
                               {isCustomRole && (
                                 <span className={cn('text-[7px] font-bold px-1 py-0.5 rounded-full',
@@ -630,7 +647,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
                 <div className="flex items-start gap-2 mb-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <h3 className="text-sm font-bold">{selectedPage.label}</h3>
+                      <h3 className="text-sm font-bold">{pageDisplayLabel(selectedPage, userRole)}</h3>
                       {selectedPage.note && (
                         <Tooltip>
                           <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
@@ -641,7 +658,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
                         <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">custom roles</span>
                       )}
                     </div>
-                    <p className="text-[10px] text-muted-foreground font-mono">{selectedPage.path}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono">{pageDisplayPath(selectedPage)}</p>
                   </div>
                 </div>
 
@@ -674,7 +691,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
                         <Shield className="h-3.5 w-3.5 text-[#1D3461]" /> Edit default access roles
                       </div>
                       <p className="text-[10px] text-muted-foreground mb-2.5">
-                        Toggle which roles have default access to <span className="font-medium">{selectedPage.label}</span>.
+                        Toggle which roles have default access to <span className="font-medium">{pageDisplayLabel(selectedPage, userRole)}</span>.
                         Changes are saved immediately.
                       </p>
                       <div className="flex flex-wrap gap-1 mb-2.5">
@@ -704,7 +721,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
                             supabase.from('page_role_configs').delete().eq('page_slug', selectedPage.slug).then(() => {
                               refetchRoleConfigs();
                               qc.invalidateQueries({ queryKey: ['bp-role-configs'] });
-                              toast({ title: 'Reset to defaults', description: `${selectedPage.label} reverted to built-in roles.` });
+                              toast({ title: 'Reset to defaults', description: `${pageDisplayLabel(selectedPage, userRole)} reverted to built-in roles.` });
                             });
                           }}
                           className="w-full text-[9px] text-muted-foreground hover:text-destructive text-center py-0.5 transition-colors">
@@ -768,7 +785,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
                         status={status}
                         override={ov}
                         saving={saving}
-                        pageLabel={selectedPage.label}
+                        pageLabel={pageDisplayLabel(selectedPage, profile.role)}
                         hasRoleAccess={hasRole}
                         onGrant={() => applyByPageOverride(profile, false, DEFAULT_PERMS, ov?.id)}
                         onBlock={() => applyByPageOverride(profile, true, DEFAULT_PERMS, ov?.id)}
@@ -908,7 +925,7 @@ function ByUserBody({
                         <div className={cn('h-2 w-2 rounded-full shrink-0', cfg.dot)} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <p className="text-xs font-medium truncate">{page.label}</p>
+                            <p className="text-xs font-medium truncate">{pageDisplayLabel(page, userRole)}</p>
                             {colRuleCount > 0 && (
                               <Badge className="text-[9px] h-3.5 px-1 bg-blue-100 text-blue-700 border-0 shrink-0">
                                 <Columns className="h-2 w-2 mr-0.5" />{colRuleCount}
@@ -934,7 +951,7 @@ function ByUserBody({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent className="text-xs max-w-[200px]">
-                            <p className="font-mono">{page.path}</p>
+                            <p className="font-mono">{pageDisplayPath(page)}</p>
                             {page.note && <p className="opacity-70">{page.note}</p>}
                           </TooltipContent>
                         </Tooltip>

@@ -61,3 +61,10 @@ Page access controls entry to the report area; a report action controls opening/
 **Why:** separate modal and nested controls made it unclear where to manage a page, tab, button, report, or column. The inline system keeps one consistent role-default plus per-user-override model.
 
 **How to apply:** add new access controls to the correct existing dimension and registry. Do not create parallel permission tables or hide button/report controls inside unrelated tabs.
+
+## User-facing page names
+Access Control must display the same page names and destinations users see in the sidebar. Stored page slugs remain stable even when a sidebar label or destination is an alias.
+
+**Why:** administrators assign access based on visible navigation names; internal registry names and legacy paths made it unclear which page a rule controlled.
+
+**How to apply:** treat sidebar labels and destinations as the display authority, but never rename an existing permission slug or database override solely to change its presentation.

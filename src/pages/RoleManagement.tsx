@@ -212,9 +212,12 @@ const RoleManagement = () => {
   const customRoles = roles.filter(role => !role.is_system_role);
 
   return (
-    <div className="container mx-auto space-y-6 p-3 sm:p-4 lg:p-6">
+    <div className={activeRoleTab === 'access-manager'
+      ? 'mx-auto flex h-[calc(100dvh-11rem)] min-h-[620px] w-full max-w-none flex-col gap-3 p-2 sm:p-3'
+      : 'container mx-auto space-y-6 p-3 sm:p-4 lg:p-6'
+    }>
       {/* Header */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+      <div className="flex shrink-0 flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Shield className="h-8 w-8 text-blue-600" />
@@ -251,7 +254,7 @@ const RoleManagement = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {activeRoleTab !== 'access-manager' && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0" data-testid="card-total-roles">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white/90">Total Roles <span className="block text-[11px] font-normal text-white/70" dir="rtl">إجمالي الأدوار</span></CardTitle>
@@ -290,11 +293,11 @@ const RoleManagement = () => {
           </CardContent>
           <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
-      </div>
+      </div>}
 
       {/* Tabbed content */}
-      <Tabs value={activeRoleTab} onValueChange={setActiveRoleTab}>
-        <TabsList className="mb-4 h-auto gap-1">
+      <Tabs value={activeRoleTab} onValueChange={setActiveRoleTab} className="flex min-h-0 flex-1 flex-col">
+        <TabsList className="mb-2 h-auto shrink-0 gap-1">
           {/* Tab 1: Roles */}
           <TabsTrigger value="roles" className="gap-2" data-testid="tab-roles">
             <Shield className="h-4 w-4" />
@@ -309,7 +312,7 @@ const RoleManagement = () => {
         </TabsList>
 
         {/* ── Tab 1: Roles ── */}
-        <TabsContent value="roles" className="space-y-6">
+        <TabsContent value="roles" className="min-h-0 space-y-6">
           <div className="space-y-4">
             <div>
               <h2 className="text-xl font-semibold">System Roles <span className="text-base font-normal text-muted-foreground" dir="rtl">/ الأدوار النظامية</span></h2>
@@ -370,8 +373,8 @@ const RoleManagement = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="access-manager" className="mt-0">
-          <UnifiedAccessManager containerClassName="flex h-[calc(100dvh-13rem)] min-h-[520px] flex-col overflow-hidden rounded-xl border bg-background shadow-sm md:flex-row" />
+        <TabsContent value="access-manager" className="mt-0 min-h-0 flex-1">
+          <UnifiedAccessManager containerClassName="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background shadow-sm md:flex-row" />
         </TabsContent>
 
       </Tabs>
