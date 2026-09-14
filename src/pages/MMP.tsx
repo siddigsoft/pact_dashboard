@@ -2489,7 +2489,6 @@ const MMP = () => {
   const canApprove = (isFOM || isAdmin || isSuperAdmin || isICT) && checkPermission('mmp', 'approve');
   const canAssign  = (isFOM || isAdmin || isICT) && checkPermission('mmp', 'assign');
   const canDelete  = canDeleteMmpItems(mmpPageFlags) && checkPermission('mmp', 'delete');
-  const canExport  = checkPermission('mmp', 'export');
 
   useEffect(() => {
     if (!isAdmin && !isSupervisor && !isDataTeam) return;

@@ -82,7 +82,7 @@ const MMPFullReport = () => {
   const { mmpId } = useParams<{ mmpId: string }>();
   const navigate = useNavigate();
   const { checkPermission } = useAuthorization();
-  const canUseMmpReports = checkPermission('mmp', 'export');
+  const canUseFullReport = checkPermission('mmp', 'full_report');
 
   const [mmp, setMmp] = useState<any>(null);
   const [entries, setEntries] = useState<SiteEntry[]>([]);
@@ -93,9 +93,9 @@ const MMPFullReport = () => {
   // ── Fetch ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mmpId) return;
-    if (!canUseMmpReports) {
+    if (!canUseFullReport) {
       setLoading(false);
-      setError('You do not have permission to view or export MMP reports.');
+      setError('You do not have permission to view or export the Full MMP Report.');
       return;
     }
     (async () => {
@@ -104,7 +104,7 @@ const MMPFullReport = () => {
       try {
         const { data, error: reportError } = await supabase.rpc(
           'get_mmp_report_payload' as any,
-          { p_mmp_id: mmpId } as any
+          { p_mmp_id: mmpId, p_report_kind: 'full_report' } as any
         );
         if (reportError) throw reportError;
         const payload = (data || {}) as any;
@@ -117,7 +117,7 @@ const MMPFullReport = () => {
         setLoading(false);
       }
     })();
-  }, [mmpId, canUseMmpReports]);
+  }, [mmpId, canUseFullReport]);
 
   // ── Derived stats ────────────────────────────────────────────────────────
   const { overall, byState, byCoordinator } = useMemo(() => {
@@ -189,7 +189,7 @@ const MMPFullReport = () => {
 
   // ── PDF Export ───────────────────────────────────────────────────────────
   const exportPDF = () => {
-    if (!overall || !mmp) return;
+    if (!canUseFullReport || !overall || !mmp) return;
     const doc = new jsPDF({ orientation: 'landscape' });
     const title = mmp.name || mmp.mmp_id || 'MMP Report';
     const now = format(new Date(), 'dd MMM yyyy HH:mm');
@@ -247,7 +247,7 @@ const MMPFullReport = () => {
 
   // ── Excel Export ─────────────────────────────────────────────────────────
   const exportExcel = () => {
-    if (!overall || !mmp) return;
+    if (!canUseFullReport || !overall || !mmp) return;
     const wb = XLSX.utils.book_new();
 
     // Summary sheet
@@ -351,11 +351,11 @@ const MMPFullReport = () => {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!overall} data-testid="button-export-excel">
+           <Button variant="outline" size="sm" onClick={exportExcel} disabled={!overall || !canUseFullReport} data-testid="button-export-excel">
             <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
             Excel
           </Button>
-          <Button variant="default" size="sm" onClick={exportPDF} disabled={!overall} data-testid="button-export-pdf">
+           <Button variant="default" size="sm" onClick={exportPDF} disabled={!overall || !canUseFullReport} data-testid="button-export-pdf">
             <Download className="h-3.5 w-3.5 mr-1.5" />
             PDF
           </Button>

@@ -43,9 +43,9 @@ AdminHub and SuperAdminHub both:
 FinanceHub and HRHub require the same live-filtering pattern whenever their tab controls are exposed.
 
 ## Reports
-Page access controls entry to the report area; a report action controls opening/exporting the report itself. MMP Full, State, and Hub reports use `mmp:export` in addition to the `mmp-full-report` page gate.
+Page access controls entry to the report area; a report action controls opening/exporting the report itself. MMP Full, State, and Hub reports have separate permissions and server-authorized report scopes; never combine them behind `mmp:export`.
 
-**Why:** page access and report-button access are separate decisions. A user may enter MMP Management without being allowed to open or export sensitive reports.
+**Why:** page access and report-button access are separate decisions, and each MMP report exposes a different data scope. A user may enter MMP Management or use one report without receiving the other two.
 
 Visible launch, export, download, and generate controls belong under Buttons & Actions. Reports contains access to report pages, dashboards, and report content rather than their clickable controls.
 

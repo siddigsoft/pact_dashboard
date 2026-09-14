@@ -108,11 +108,14 @@ interface SiteEntry {
   visit_completed_by: string | null;
 }
 
+export type MmpReportKind = 'full_report' | 'state_report' | 'hub_report';
+
 interface Props {
   open: boolean;
   onClose: () => void;
   mmpId: string;
   mmpName: string;
+  reportKind: MmpReportKind;
 }
 
 interface ActivityExportRow {
@@ -134,9 +137,14 @@ const clsCard: Record<EntryClass | 'total', { border: string; icon: string; num:
   pending:     { border: 'border-l-gray-400',   icon: 'text-gray-400',    num: 'text-gray-600' },
 };
 
-const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
+const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName, reportKind }: Props) => {
   const { checkPermission } = useAuthorization();
-  const canUseMmpReports = checkPermission('mmp', 'export');
+  const canUseMmpReports = checkPermission('mmp', reportKind);
+  const reportTitle = reportKind === 'state_report'
+    ? 'State MMP Status Report'
+    : reportKind === 'hub_report'
+      ? 'Hub MMP Status Report'
+      : 'Full MMP Status Report';
   const [mmp, setMmp] = useState<any>(null);
   const [entries, setEntries] = useState<SiteEntry[]>([]);
   const [profileMap, setProfileMap] = useState<Record<string, string>>({});
@@ -159,7 +167,13 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
     if (!canUseMmpReports) {
       setLoading(false);
       setFinanceLoading(false);
-      setAccessError('You do not have permission to view or export MMP reports.');
+      setMmp(null);
+      setEntries([]);
+      setDownPayments([]);
+      setCostSubmissions([]);
+      setActivityLogs([]);
+      setReportScope({});
+      setAccessError(`You do not have permission to view or export the ${reportKind.replace('_', ' ')}.`);
       return;
     }
     setLoading(true);
@@ -177,7 +191,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
       try {
         const { data, error } = await supabase.rpc(
           'get_mmp_report_payload' as any,
-          { p_mmp_id: mmpId } as any
+          { p_mmp_id: mmpId, p_report_kind: reportKind } as any
         );
         if (error) throw error;
 
@@ -197,7 +211,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         setFinanceLoading(false);
       }
     })();
-  }, [open, mmpId, canUseMmpReports]);
+  }, [open, mmpId, canUseMmpReports, reportKind]);
 
   // ── Derived stats ─────────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -480,14 +494,14 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
 
   // ── PDF Export ────────────────────────────────────────────────────────────
   const exportPDF = () => {
-    if (!stats || !mmp) return;
+    if (!canUseMmpReports || !stats || !mmp) return;
     const doc = new jsPDF({ orientation: 'landscape' });
     const now = format(new Date(), 'dd MMM yyyy HH:mm');
     const mmpTitle = mmp.name || mmp.mmp_id || mmpName;
 
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text('Full MMP Status Report', 14, 16);
+    doc.text(reportTitle, 14, 16);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
     doc.text(`${mmpTitle}  |  Project: ${(mmp.project as any)?.name || '—'}  |  Generated: ${now}`, 14, 24);
@@ -582,12 +596,12 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
       alternateRowStyles: { fillColor: [240, 255, 244] },
     });
 
-    doc.save(`MMP-Full-Report-${mmp.mmp_id || mmpId}-${format(new Date(), 'yyyyMMdd')}.pdf`);
+    doc.save(`MMP-${reportKind}-${mmp.mmp_id || mmpId}-${format(new Date(), 'yyyyMMdd')}.pdf`);
   };
 
   // ── Excel Export (ExcelJS — fully formatted) ──────────────────────────────
   const exportExcel = async () => {
-    if (!stats || !mmp) return;
+    if (!canUseMmpReports || !stats || !mmp) return;
     setExcelLoading(true);
     try {
       const ExcelJS = (await import('exceljs')).default;
@@ -699,7 +713,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
       // ════════════════════════════════════════════════════════════════
       const wsSumm = wb.addWorksheet('Summary');
       wsSumm.columns = [{ key: 'a', width: 34 }, { key: 'b', width: 22 }];
-      addTitleBlock(wsSumm, 'PACT Command Center — Full MMP Status Report', subtitle, 2);
+      addTitleBlock(wsSumm, `PACT Command Center — ${reportTitle}`, subtitle, 2);
 
       const summSections: [string, string | number][] = [
         ['MMP Name',         mmpTitle],
@@ -1104,7 +1118,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
       const blob   = new Blob([buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const a      = document.createElement('a');
       a.href       = URL.createObjectURL(blob);
-      a.download   = `MMP-Full-Report-${mmp.mmp_id || mmpId}-${format(new Date(), 'yyyyMMdd')}.xlsx`;
+      a.download   = `MMP-${reportKind}-${mmp.mmp_id || mmpId}-${format(new Date(), 'yyyyMMdd')}.xlsx`;
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (err) {
@@ -1169,7 +1183,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                 <div className="h-7 w-7 rounded-lg bg-white/15 flex items-center justify-center flex-shrink-0">
                   <BarChart3 className="h-4 w-4 text-white" />
                 </div>
-                Full MMP Status Report
+                {reportTitle}
               </DialogTitle>
               <p className="text-xs text-teal-200 mt-1 truncate pl-9">
                 {mmpName}{mmp?.mmp_id ? ` · ${mmp.mmp_id}` : ''}{(mmp?.project as any)?.name ? ` · ${(mmp.project as any).name}` : ''}
@@ -1185,7 +1199,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                 variant="outline"
                 size="sm"
                 onClick={exportExcel}
-                disabled={!stats || excelLoading}
+                disabled={!stats || !canUseMmpReports || excelLoading}
                 className="border-white/30 text-white bg-white/10 hover:bg-white/20 hover:border-white/50 h-8 text-xs"
               >
                 {excelLoading
@@ -1196,7 +1210,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
               <Button
                 size="sm"
                 onClick={exportPDF}
-                disabled={!stats}
+                disabled={!stats || !canUseMmpReports}
                 className="bg-white/15 hover:bg-white/25 text-white border border-white/30 h-8 text-xs"
               >
                 <Download className="h-3.5 w-3.5 mr-1.5" />

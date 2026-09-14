@@ -138,7 +138,13 @@ export type ActionType =
   | 'restore'
   | 'override'
   | 'submit'
-  | 'export';
+  | 'export'
+  // MMP reports are independently grantable. These are intentionally
+  // separate from the generic export action so one report can be revoked
+  // without changing access to the others.
+  | 'full_report'
+  | 'state_report'
+  | 'hub_report';
 
 export const RESOURCES: ResourceType[] = [
   'users', 'roles', 'permissions', 'settings', 'system', 'super_admins', 'audit_logs',
@@ -155,6 +161,7 @@ export const RESOURCES: ResourceType[] = [
 export const ACTIONS: ActionType[] = [
   'create', 'read', 'update', 'delete', 'approve',
   'assign', 'archive', 'restore', 'override', 'submit', 'export',
+  'full_report', 'state_report', 'hub_report',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,6 +189,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   create: 'Create', read: 'Read', update: 'Update', delete: 'Delete',
   approve: 'Approve', assign: 'Assign', archive: 'Archive', restore: 'Restore',
   override: 'Override', submit: 'Submit', export: 'Export',
+  full_report: 'Full MMP Report', state_report: 'State MMP Report', hub_report: 'Hub MMP Report',
 };
 
 const allActionsFor = (resource: ResourceType): { resource: ResourceType; action: ActionType }[] =>
@@ -638,3 +646,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'signatures', action: 'read' },
   ],
 };
+
+// Keep the historical default MMP report access for roles that had the
+// generic MMP export permission, while storing each report as its own
+// permission so administrators can revoke them independently.
+for (const permissions of Object.values(DEFAULT_ROLE_PERMISSIONS)) {
+  if (!permissions.some(p => p.resource === 'mmp' && p.action === 'export')) continue;
+  for (const action of ['full_report', 'state_report', 'hub_report'] as const) {
+    if (!permissions.some(p => p.resource === 'mmp' && p.action === action)) {
+      permissions.push({ resource: 'mmp', action });
+    }
+  }
+}

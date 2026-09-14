@@ -13,7 +13,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { MODULE_REGISTRY } from '@/types/moduleRegistry';
+import { MODULE_REGISTRY, ModuleAction, ModuleDefinition, ModulePage } from '@/types/moduleRegistry';
 import { ResourceType, ActionType } from '@/types/roles';
 import { COLUMN_REGISTRY } from '@/lib/column-registry';
 import { useSelectedUserAccess } from '@/context/role-management/SelectedUserAccessContext';
@@ -316,32 +316,71 @@ export function PermissionsTab({
 
   const filteredModules = useMemo(() => {
     const q = moduleSearch.toLowerCase();
-    return MODULE_REGISTRY.map(mod => ({
-      ...mod,
-      pages: mod.pages.map(pg => ({
-        ...pg,
-        actions: pg.actions.filter(a => {
-          // Reports contains access to report pages/content. Clickable operations
-          // such as export, download, generate, and MMP report launchers belong
-          // to Buttons & Actions.
-          const isReportAccess = a.action === 'read'
-            && /report|analytics/i.test(`${a.label} ${a.description || ''} ${pg.page}`);
-          const matchesType = actionFilter === 'all'
-            || (actionFilter === 'reports' ? isReportAccess : !isReportAccess);
-          const matchesSearch = !q ||
-            a.label.toLowerCase().includes(q) ||
-            a.resource.toLowerCase().includes(q) ||
-            a.description?.toLowerCase().includes(q);
-          return matchesType && matchesSearch;
-        }),
-      })).filter(pg => pg.actions.length > 0),
-    })).filter(mod => mod.pages.length > 0);
+    type RegisteredAction = {
+      action: ModuleAction;
+      module: ModuleDefinition;
+      page: ModulePage;
+      isReportAccess: boolean;
+      searchText: string;
+    };
+    const actionsByKey = new Map<string, RegisteredAction>();
+
+    // A permission key is the action identity. The registry can mention that
+    // same permission on multiple pages, but the access manager must render
+    // one control for it (and retain all registry text for searching).
+    MODULE_REGISTRY.forEach(mod => mod.pages.forEach(pg => pg.actions.forEach(a => {
+      // Reports contains access to report pages/content. Clickable operations
+      // such as export, download, generate, and report launchers belong to
+      // Buttons & Actions. The resource check is important for report pages
+      // whose visible label is "Documents", "Archive", etc.
+      const isReportAccess = a.action === 'read' && (
+        a.resource === 'reports'
+        || /report|analytics/i.test(`${a.label} ${a.description || ''} ${pg.page}`)
+      );
+      const searchText = [
+        a.label, a.resource, a.description, pg.page, mod.module,
+      ].filter(Boolean).join(' ').toLowerCase();
+      const existing = actionsByKey.get(a.key);
+      if (existing) {
+        existing.isReportAccess ||= isReportAccess;
+        existing.searchText += ` ${searchText}`;
+      } else {
+        actionsByKey.set(a.key, {
+          action: a,
+          module: mod,
+          page: pg,
+          isReportAccess,
+          searchText,
+        });
+      }
+    })));
+
+    // Keep the first registry location as the display location while every
+    // duplicate registration remains searchable through searchText above.
+    return Array.from(actionsByKey.values())
+      .filter(({ isReportAccess, searchText }) => {
+        const matchesType = actionFilter === 'all'
+          || (actionFilter === 'reports' ? isReportAccess : !isReportAccess);
+        return matchesType && (!q || searchText.includes(q));
+      })
+      .reduce<ModuleDefinition[]>((modules, registered) => {
+        let mod = modules.find(candidate => candidate.module === registered.module.module);
+        if (!mod) {
+          mod = { ...registered.module, pages: [] };
+          modules.push(mod);
+        }
+        let page = mod.pages.find(candidate => candidate.page === registered.page.page);
+        if (!page) {
+          page = { ...registered.page, actions: [] };
+          mod.pages.push(page);
+        }
+        page.actions.push(registered.action);
+        return modules;
+      }, []);
   }, [moduleSearch, actionFilter]);
   const visibleSection = section === 'all' ? activeSection : section;
 
   const pageDef = COLUMN_REGISTRY.find(p => p.pageSlug === selectedPage);
-  const mmpReportEffect = effectiveAction('mmp', 'export');
-  const mmpReportSaving = savingKey === 'perm:mmp:export';
   const userColMap = useMemo(() =>
     Object.fromEntries(columnConfigs.filter(c => c.user_id === userId).map(c => [`${c.page_slug}:${c.column_key}`, c])),
     [columnConfigs, userId],
@@ -407,64 +446,6 @@ export function PermissionsTab({
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
-              {!moduleSearch && actionFilter === 'buttons' && (
-                <div className={cn(
-                  'mb-3 rounded-xl border-2 p-3',
-                  mmpReportEffect === 'granted' ? 'border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/20' :
-                  mmpReportEffect === 'blocked' ? 'border-red-300 bg-red-50/60 dark:bg-red-950/20' :
-                  mmpReportEffect === 'role-yes' ? 'border-blue-300 bg-blue-50/60 dark:bg-blue-950/20' :
-                  'border-slate-200 bg-slate-50 dark:bg-slate-950/20'
-                )}>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <StatusIcon eff={mmpReportEffect} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold">MMP Report Buttons</p>
-                      <p className="text-xs text-muted-foreground">
-                        Controls all three report entry points in MMP Management.
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {['Full Report', 'State Report', 'Hub Report'].map(label => (
-                          <Badge key={label} variant="outline" className="bg-background text-[10px]">
-                            {label}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <Badge className={cn(
-                        'border-0 text-[9px]',
-                        mmpReportEffect === 'granted' ? 'bg-emerald-100 text-emerald-700' :
-                        mmpReportEffect === 'blocked' ? 'bg-red-100 text-red-700' :
-                        mmpReportEffect === 'role-yes' ? 'bg-blue-100 text-blue-700' :
-                        'bg-slate-100 text-slate-600'
-                      )}>
-                        {mmpReportEffect === 'granted' ? 'Granted' :
-                         mmpReportEffect === 'blocked' ? 'Blocked' :
-                         mmpReportEffect === 'role-yes' ? 'Role Default' : 'No Access'}
-                      </Badge>
-                      <button
-                        type="button"
-                        disabled={mmpReportSaving}
-                        onClick={() => toggleAction('mmp', 'export')}
-                        aria-label="Change access to Full, State, and Hub MMP report buttons"
-                        className={cn(
-                          'min-w-[92px] rounded border px-3 py-1 text-xs font-semibold transition-colors disabled:opacity-40',
-                          mmpReportEffect === 'granted' ? 'border-amber-200 text-amber-700 hover:bg-amber-50' :
-                          mmpReportEffect === 'blocked' ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' :
-                          mmpReportEffect === 'role-yes' ? 'border-red-200 text-red-700 hover:bg-red-50' :
-                          'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                        )}
-                      >
-                        {mmpReportSaving ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin" /> :
-                         mmpReportEffect === 'granted' ? 'Remove Grant' :
-                         mmpReportEffect === 'blocked' ? 'Restore Access' :
-                         mmpReportEffect === 'role-yes' ? 'Block' : 'Grant Access'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Pinned: Cost Submission fine-grained button access */}
               {!moduleSearch && actionFilter !== 'reports' && (
                 <CsButtonAccessSection

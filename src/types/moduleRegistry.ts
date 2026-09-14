@@ -308,7 +308,9 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'mmp:assign', label: 'Assign Coordinators', description: 'Assign enumerators to sites', resource: 'mmp', action: 'assign' },
           { key: 'mmp:archive', label: 'Archive / Close Cycle', description: 'Archive MMP or close monitoring cycle', resource: 'mmp', action: 'archive' },
           { key: 'mmp:delete', label: 'Delete MMP', description: 'Remove an MMP file', resource: 'mmp', action: 'delete', isDestructive: true },
-          { key: 'mmp:export', label: 'MMP Full / State / Hub Report Buttons', description: 'Show or hide the Full Report, State Report, and Hub Report buttons, including Excel/PDF downloads', resource: 'mmp', action: 'export' },
+          { key: 'mmp:full_report', label: 'Full MMP Report', description: 'View and download the complete MMP status report as PDF or Excel', resource: 'mmp', action: 'full_report' },
+          { key: 'mmp:state_report', label: 'State MMP Report', description: 'View and download the state-scoped MMP status report as PDF or Excel', resource: 'mmp', action: 'state_report' },
+          { key: 'mmp:hub_report', label: 'Hub MMP Report', description: 'View and download the assigned-hub MMP status report as PDF or Excel', resource: 'mmp', action: 'hub_report' },
         ],
       },
       {
@@ -1165,7 +1167,9 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         actions: [
           { key: 'mmp:read',   label: 'View Monitoring Plan',   description: 'Browse the monitoring plan', resource: 'mmp', action: 'read' },
           { key: 'mmp:update', label: 'Update Monitoring Plan', description: 'Modify monitoring plan entries', resource: 'mmp', action: 'update' },
-          { key: 'mmp:export', label: 'MMP Full / State / Hub Report Buttons', description: 'Show or hide the Full Report, State Report, and Hub Report buttons, including Excel/PDF downloads', resource: 'mmp', action: 'export' },
+          { key: 'mmp:full_report', label: 'Full MMP Report', description: 'View and download the complete MMP status report as PDF or Excel', resource: 'mmp', action: 'full_report' },
+          { key: 'mmp:state_report', label: 'State MMP Report', description: 'View and download the state-scoped MMP status report as PDF or Excel', resource: 'mmp', action: 'state_report' },
+          { key: 'mmp:hub_report', label: 'Hub MMP Report', description: 'View and download the assigned-hub MMP status report as PDF or Excel', resource: 'mmp', action: 'hub_report' },
         ],
       },
       {

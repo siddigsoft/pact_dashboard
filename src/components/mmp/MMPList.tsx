@@ -50,6 +50,7 @@ import { RecallDialog } from './RecallDialog';
 import MmpFullReportDialog from './MmpFullReportDialog';
 import MMPProgressDialog from './MMPProgressDialog';
 import { Label } from '@/components/ui/label';
+import type { MmpReportKind } from './MmpFullReportDialog';
 
 interface MMPListProps {
   mmpFiles: MMPFile[];
@@ -80,7 +81,11 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const [isSavingRename, setIsSavingRename] = useState(false);
   const [hubReportAllowed, setHubReportAllowed] = useState(false);
   const [fullReportOpen, setFullReportOpen] = useState(false);
-  const [selectedMmpForReport, setSelectedMmpForReport] = useState<{ id: string; name: string } | null>(null);
+  const [selectedMmpForReport, setSelectedMmpForReport] = useState<{
+    id: string;
+    name: string;
+    kind: MmpReportKind;
+  } | null>(null);
   // Staged delete dialog: stage 0=closed, 1=choose action, 2=hard-delete confirm, 3=unlink confirm
   const [deleteStage, setDeleteStage] = useState<0 | 1 | 2 | 3>(0);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
@@ -127,11 +132,15 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const canForwardMMP = !isSupervisor && !isCountryDirector && (checkPermission('mmp', 'update') || isAdmin || isICT);
   // Management sees the full report; supervisors receive the same report UI
   // with data constrained by the secure report RPC to their assigned hubs.
-  const canUseMmpReports = checkPermission('mmp', 'export');
-  const canViewFullReport = !isSupervisor && canUseMmpReports && canSeePage('mmp-full-report', effectiveCurrentUser?.role);
-  const canViewHubReport = isSupervisor && canUseMmpReports && hubReportAllowed;
+  const canViewFullReport = !isSupervisor && checkPermission('mmp', 'full_report') && canSeePage('mmp-full-report', effectiveCurrentUser?.role);
+  const canViewHubReport = isSupervisor && checkPermission('mmp', 'hub_report') && hubReportAllowed;
   // State Report is visible to FOM — same dialog, scoped label, red styling
-  const canViewStateReport = isFOM && canUseMmpReports && !canViewFullReport;
+  const canViewStateReport = isFOM && checkPermission('mmp', 'state_report');
+
+  const openMmpReport = (mmp: MMPFile, kind: MmpReportKind) => {
+    setSelectedMmpForReport({ id: mmp.id, name: mmp.name, kind });
+    setFullReportOpen(true);
+  };
 
   useEffect(() => {
     let active = true;
@@ -570,7 +579,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                   {canViewFullReport && (
                     <button
                       className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-md border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex-shrink-0"
-                      onClick={e => { e.stopPropagation(); setSelectedMmpForReport({ id: mmp.id, name: mmp.name }); setFullReportOpen(true); }}
+                      onClick={e => { e.stopPropagation(); openMmpReport(mmp, 'full_report'); }}
                       data-testid={`button-full-report-mmp-${mmp.id}`}
                       title="Full Status Report"
                     >
@@ -582,7 +591,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                   {canViewStateReport && (
                     <button
                       className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-md border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors flex-shrink-0"
-                      onClick={e => { e.stopPropagation(); setSelectedMmpForReport({ id: mmp.id, name: mmp.name }); setFullReportOpen(true); }}
+                      onClick={e => { e.stopPropagation(); openMmpReport(mmp, 'state_report'); }}
                       data-testid={`button-state-report-mmp-${mmp.id}`}
                       title="State Report"
                     >
@@ -594,7 +603,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                   {canViewHubReport && (
                     <button
                       className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-md border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors flex-shrink-0"
-                      onClick={e => { e.stopPropagation(); setSelectedMmpForReport({ id: mmp.id, name: mmp.name }); setFullReportOpen(true); }}
+                      onClick={e => { e.stopPropagation(); openMmpReport(mmp, 'hub_report'); }}
                       data-testid={`button-hub-report-mmp-${mmp.id}`}
                       title="Assigned Hub Report"
                     >
@@ -620,7 +629,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                       </DropdownMenuItem>
                       {canViewFullReport && (
                         <DropdownMenuItem
-                          onClick={() => { setSelectedMmpForReport({ id: mmp.id, name: mmp.name }); setFullReportOpen(true); }}
+                          onClick={() => openMmpReport(mmp, 'full_report')}
                           data-testid={`button-full-report-dropdown-${mmp.id}`}
                         >
                           <BarChart3 className="h-4 w-4 mr-2 text-indigo-600" />
@@ -629,7 +638,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                       )}
                       {canViewStateReport && (
                         <DropdownMenuItem
-                          onClick={() => { setSelectedMmpForReport({ id: mmp.id, name: mmp.name }); setFullReportOpen(true); }}
+                          onClick={() => openMmpReport(mmp, 'state_report')}
                           data-testid={`button-state-report-dropdown-${mmp.id}`}
                         >
                           <BarChart3 className="h-4 w-4 mr-2 text-red-600" />
@@ -638,7 +647,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                       )}
                       {canViewHubReport && (
                         <DropdownMenuItem
-                          onClick={() => { setSelectedMmpForReport({ id: mmp.id, name: mmp.name }); setFullReportOpen(true); }}
+                          onClick={() => openMmpReport(mmp, 'hub_report')}
                           data-testid={`button-hub-report-dropdown-${mmp.id}`}
                         >
                           <BarChart3 className="h-4 w-4 mr-2 text-teal-600" />
@@ -1124,6 +1133,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
           onClose={() => { setFullReportOpen(false); setSelectedMmpForReport(null); }}
           mmpId={selectedMmpForReport.id}
           mmpName={selectedMmpForReport.name}
+          reportKind={selectedMmpForReport.kind}
         />
       )}
     </>
