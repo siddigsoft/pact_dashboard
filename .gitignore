@@ -34,3 +34,5 @@ attached_assets/
 *.sln
 *.sw?
 .ocr-quota-cache.json
+
+.worktrees/
