@@ -97,6 +97,10 @@ export interface DownPaymentRequest {
   requestedByName?: string;
   requestedAt: string;
   requesterRole: 'dataCollector' | 'coordinator';
+  dataCollectorId?: string;
+  dataCollectorName?: string;
+  coordinatorId?: string;
+  coordinatorName?: string;
   hubId?: string;
   hubName?: string;
   

@@ -117,7 +117,11 @@ export function filterDownPayments(
 }
 
 function getStatusLabel(status: string): string {
-  return getDownPaymentStatusLabel(status);
+  const label = getDownPaymentStatusLabel(status);
+  if (label !== 'Unknown' || !status) return label;
+  return status
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
 function formatCurrency(amount: number): string {
@@ -270,7 +274,7 @@ export async function exportToExcel(
   const totalPaid = excelBalances.reduce((s, balance) => s + balance.paid, 0);
   const totalRemaining = excelBalances.reduce((s, balance) => s + balance.remaining, 0);
   const headers = [
-    '#', 'Request ID', 'MMP', 'Requester Name', 'Site Name', 'State', 'Locality', 'Hub',
+    '#', 'Request ID', 'MMP', 'Requester Name', 'Requester Role', 'Data Collector', 'Coordinator', 'Site Name', 'State', 'Locality', 'Hub',
     'Activity Type', 'CP Name', 'Requested At', 'Transportation Budget (SDG)',
     'Requested Amount (SDG)', 'Approval Type', 'Approval %', 'Approved Amount (SDG)',
     'Paid Amount (SDG)', 'Remaining (SDG)', 'Remaining Includes', 'Status',
@@ -288,6 +292,9 @@ export async function exportToExcel(
       req.id,
       req.mmpName || 'N/A',
       req.requestedByName || 'Unknown',
+      req.requesterRole === 'coordinator' ? 'Coordinator' : 'Data Collector',
+      req.dataCollectorName || (req.requesterRole === 'dataCollector' ? req.requestedByName : undefined) || 'Unassigned',
+      req.coordinatorName || (req.requesterRole === 'coordinator' ? req.requestedByName : undefined) || 'Unassigned',
       req.siteName,
       req.stateName || 'N/A',
       req.localityName || 'N/A',
@@ -323,12 +330,12 @@ export async function exportToExcel(
   const totalBudget = requests.reduce((s, r) => s + r.totalTransportationBudget, 0);
   const emptyRow: string[] = Array(headers.length).fill('');
   const totalsRow = [...emptyRow];
-  totalsRow[9] = 'TOTALS:';
-  totalsRow[11] = totalBudget as any;
-  totalsRow[12] = totalRequested as any;
-  totalsRow[15] = totalApproved as any;
-  totalsRow[16] = totalPaid as any;
-  totalsRow[17] = totalRemaining as any;
+  totalsRow[12] = 'TOTALS:';
+  totalsRow[14] = totalBudget as any;
+  totalsRow[15] = totalRequested as any;
+  totalsRow[18] = totalApproved as any;
+  totalsRow[19] = totalPaid as any;
+  totalsRow[20] = totalRemaining as any;
   const summaryRows = (status: string) => requests.filter(r => r.status === status);
   const summaryAmount = (status: string, rows: DownPaymentRequest[]) => rows.reduce((sum, row) => {
     const balance = balanceFor(row, evidenceByRequest);
@@ -395,6 +402,10 @@ export async function exportToExcel(
     'fully_paid', 'paid', 'reconciled', 'completed', 'closed',
     'rejected', 'cancelled', 'deleted',
   ];
+  const observedAdditionalStatuses = [...new Set(requests.map(request => request.status))]
+    .filter(status => !statusOrder.includes(status))
+    .sort((a, b) => a.localeCompare(b));
+  const exportStatusOrder = [...statusOrder, ...observedAdditionalStatuses];
   const states = [...new Set(requests.map(request => request.stateName || 'Unknown'))]
     .sort((a, b) => a.localeCompare(b));
   const stateStatusGroups = new Map<string, BreakdownTotals>();
@@ -407,9 +418,10 @@ export async function exportToExcel(
   });
   const stateStatusRows: (string | number)[][] = [];
   states.forEach(state => {
-    statusOrder.forEach(status => {
-      const totals = stateStatusGroups.get(`${state}\u0000${status}`)
-        ?? { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
+    const stateTotals: BreakdownTotals = { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
+    exportStatusOrder.forEach(status => {
+      const totals = stateStatusGroups.get(`${state}\u0000${status}`);
+      if (!totals || totals.count === 0) return;
       stateStatusRows.push([
         state,
         getStatusLabel(status),
@@ -419,7 +431,21 @@ export async function exportToExcel(
         totals.paid,
         totals.remaining,
       ]);
+      stateTotals.count += totals.count;
+      stateTotals.requested += totals.requested;
+      stateTotals.approved += totals.approved;
+      stateTotals.paid += totals.paid;
+      stateTotals.remaining += totals.remaining;
     });
+    stateStatusRows.push([
+      state,
+      'STATE SUBTOTAL',
+      stateTotals.count,
+      stateTotals.requested,
+      stateTotals.approved,
+      stateTotals.paid,
+      stateTotals.remaining,
+    ]);
   });
 
   const siteStatusGroups = new Map<string, BreakdownTotals>();
@@ -439,6 +465,47 @@ export async function exportToExcel(
       ] as (string | number)[];
     })
     .sort((a, b) => String(a[0]).localeCompare(String(b[0])) || String(a[1]).localeCompare(String(b[1])));
+
+  const buildPersonRows = (
+    role: 'dataCollector' | 'coordinator',
+  ): (string | number)[][] => {
+    const grouped = new Map<string, BreakdownTotals>();
+    requests.forEach(request => {
+      const state = request.stateName || 'Unknown';
+      const person = role === 'dataCollector'
+        ? request.dataCollectorName || (request.requesterRole === 'dataCollector' ? request.requestedByName : undefined) || 'Unassigned'
+        : request.coordinatorName || (request.requesterRole === 'coordinator' ? request.requestedByName : undefined) || 'Unassigned';
+      addBreakdownRow(grouped, `${state}\u0000${person}`, request);
+    });
+    const rows: (string | number)[][] = [];
+    states.forEach(state => {
+      const stateTotals: BreakdownTotals = { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
+      [...grouped.entries()]
+        .filter(([key]) => key.startsWith(`${state}\u0000`))
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([key, totals]) => {
+          const person = key.split('\u0000')[1];
+          rows.push([state, person, totals.count, totals.requested, totals.approved, totals.paid, totals.remaining]);
+          stateTotals.count += totals.count;
+          stateTotals.requested += totals.requested;
+          stateTotals.approved += totals.approved;
+          stateTotals.paid += totals.paid;
+          stateTotals.remaining += totals.remaining;
+        });
+      rows.push([
+        state,
+        'STATE SUBTOTAL',
+        stateTotals.count,
+        stateTotals.requested,
+        stateTotals.approved,
+        stateTotals.paid,
+        stateTotals.remaining,
+      ]);
+    });
+    return rows;
+  };
+  const dataCollectorRows = buildPersonRows('dataCollector');
+  const coordinatorRows = buildPersonRows('coordinator');
   await exportStandardExcel({
     reportTitle: 'PACT Command Center - Down-Payment Requests Report',
     subtitleLine: `Tab: ${tabLabel} | Total Requests: ${requests.length}`,
@@ -463,6 +530,20 @@ export async function exportToExcel(
         headers: hubData[0].map(String),
         rows: hubData.slice(1),
         colWidths: [22, 12, 20, 20, 20, 20],
+      },
+      {
+        title: 'Down-Payment Totals by Data Collector and State',
+        sheetName: 'By Data Collector',
+        headers: ['State', 'Data Collector', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)'],
+        rows: dataCollectorRows,
+        colWidths: [22, 28, 12, 20, 20, 20, 20],
+      },
+      {
+        title: 'Down-Payment Totals by Coordinator and State',
+        sheetName: 'By Coordinator',
+        headers: ['State', 'Coordinator', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)'],
+        rows: coordinatorRows,
+        colWidths: [22, 28, 12, 20, 20, 20, 20],
       },
       {
         title: 'Breakdown by State and Request Status',

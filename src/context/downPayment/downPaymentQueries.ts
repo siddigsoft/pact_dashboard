@@ -290,7 +290,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     }));
   }
 
-  async function fetchSiteHubEnrichment(ids: string[]) {
+  async function fetchSiteDetailsEnrichment(ids: string[]) {
     if (ids.length === 0) return [];
     const CHUNK = 800;
     const chunks: string[][] = [];
@@ -298,7 +298,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     const results = await Promise.all(
       chunks.map(chunk => supabase
         .from('mmp_site_entries')
-        .select('id, hub_office')
+        .select('id, hub_office, status, forwarded_to_user_id, accepted_by, monitoring_by, additional_data')
         .in('id', chunk))
     );
     const failed = results.find(result => result.error);
@@ -324,7 +324,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   const [enrichResult, hubResult, siteHubResult, profileResult, feeStatusResult] = await Promise.allSettled([
     fetchEnrichmentBatched(entryIds),
     hubIds.length > 0 ? fetchHubEnrichment(hubIds) : Promise.resolve([]),
-    fetchSiteHubEnrichment(entryIds),
+    fetchSiteDetailsEnrichment(entryIds),
     missingNameIds.length > 0
       ? supabase.from('profiles').select('id, full_name, username, email').in('id', missingNameIds)
       : Promise.resolve({ data: [] }),
@@ -332,16 +332,50 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   ]);
 
   const siteHubMap = new Map<string, string>();
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (siteHubResult.status === 'fulfilled') {
     (siteHubResult.value as any[])
-      .filter((entry: any) => entry.id && cleanStr(entry.hub_office))
       .forEach((entry: any) => {
-        siteHubMap.set(entry.id, cleanStr(entry.hub_office) as string);
+        const hubName = cleanStr(entry.hub_office);
+        if (entry.id && hubName) siteHubMap.set(entry.id, hubName);
       });
+    const siteDetailMap = new Map<string, any>(
+      (siteHubResult.value as any[]).map((entry: any) => [entry.id, entry]),
+    );
     transformed.forEach(request => {
-      if (request.mmpSiteEntryId && siteHubMap.has(request.mmpSiteEntryId)) {
-        request.hubName = siteHubMap.get(request.mmpSiteEntryId);
+      if (!request.mmpSiteEntryId) return;
+      const entry = siteDetailMap.get(request.mmpSiteEntryId);
+      if (!entry) return;
+      if (siteHubMap.has(request.mmpSiteEntryId)) request.hubName = siteHubMap.get(request.mmpSiteEntryId);
+      if (cleanStr(entry.status)) request.siteCompletionStatus = cleanStr(entry.status);
+
+      const additionalData = entry.additional_data && typeof entry.additional_data === 'object'
+        ? entry.additional_data
+        : {};
+      const coordinatorValue = cleanStr(additionalData.assigned_to || entry.forwarded_to_user_id);
+      const collectorValue = cleanStr(
+        entry.accepted_by
+        || entry.monitoring_by
+        || additionalData.claimed_by
+        || additionalData.accepted_by,
+      );
+      if (coordinatorValue) {
+        if (UUID_RE.test(coordinatorValue)) request.coordinatorId = coordinatorValue;
+        else request.coordinatorName = coordinatorValue;
       }
+      if (collectorValue) {
+        if (UUID_RE.test(collectorValue)) request.dataCollectorId = collectorValue;
+        else request.dataCollectorName = collectorValue;
+      }
+      request.coordinatorName = request.coordinatorName
+        || cleanStr(additionalData.assigned_to_name || additionalData.coordinator_name);
+      request.dataCollectorName = request.dataCollectorName
+        || cleanStr(
+          additionalData.collector_name
+          || additionalData.accepted_by_name
+          || additionalData.enumerator_name
+          || additionalData.data_collector_name,
+        );
     });
   } else {
     console.warn('[DownPayment] Site hub enrichment failed (non-critical):', siteHubResult.reason);
@@ -379,6 +413,47 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   } else if (profileResult.status === 'rejected') {
     console.warn('[DownPayment] Profile name enrichment failed (non-critical):', profileResult.reason);
   }
+
+  const assignmentProfileIds = [
+    ...new Set(
+      transformed
+        .flatMap(request => [request.dataCollectorId, request.coordinatorId])
+        .filter((id): id is string => Boolean(id && UUID_RE.test(id))),
+    ),
+  ];
+  if (assignmentProfileIds.length > 0) {
+    const { data: assignmentProfiles, error: assignmentProfileError } = await supabase
+      .from('profiles')
+      .select('id, full_name, username, email')
+      .in('id', assignmentProfileIds);
+    if (assignmentProfileError) {
+      console.warn('[DownPayment] Assignment profile enrichment failed (non-critical):', assignmentProfileError);
+    } else {
+      const assignmentNameMap = new Map<string, string>(
+        (assignmentProfiles || []).map((profile: any) => [
+          profile.id,
+          profile.full_name || profile.username || profile.email || '',
+        ]),
+      );
+      transformed.forEach(request => {
+        if (!request.dataCollectorName && request.dataCollectorId) {
+          request.dataCollectorName = assignmentNameMap.get(request.dataCollectorId);
+        }
+        if (!request.coordinatorName && request.coordinatorId) {
+          request.coordinatorName = assignmentNameMap.get(request.coordinatorId);
+        }
+      });
+    }
+  }
+
+  transformed.forEach(request => {
+    if (!request.dataCollectorName && request.requesterRole === 'dataCollector') {
+      request.dataCollectorName = request.requestedByName;
+    }
+    if (!request.coordinatorName && request.requesterRole === 'coordinator') {
+      request.coordinatorName = request.requestedByName;
+    }
+  });
 
   if (hubResult.status === 'fulfilled' && (hubResult.value as any[])?.length > 0) {
     // Build hub → name map AND hub → first-state-name map for records

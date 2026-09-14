@@ -265,11 +265,12 @@ function buildBreakdownSheet(
 
   rows.forEach((rowData, idx) => {
     const row = ws.addRow(rowData.map(v => v ?? ''));
+    const isSubtotal = rowData.some(value => String(value ?? '').toUpperCase().includes('SUBTOTAL'));
     row.height = 16;
     row.eachCell({ includeEmpty: true }, (cell, colNum) => {
       if (colNum > numCols) return;
-      setFill(cell, idx % 2 === 1 ? COLOR.rowAlt : COLOR.rowWhite);
-      setFont(cell, '1e293b', false, 10);
+      setFill(cell, isSubtotal ? COLOR.totalBg : idx % 2 === 1 ? COLOR.rowAlt : COLOR.rowWhite);
+      setFont(cell, isSubtotal ? COLOR.totalFg : '1e293b', isSubtotal, 10);
       applyBorder(cell);
       cell.alignment = { vertical: 'middle', horizontal: 'left' };
     });
