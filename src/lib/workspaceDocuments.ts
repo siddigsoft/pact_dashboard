@@ -38,6 +38,13 @@ export interface DocumentMetadata {
   source_url?: string | null;
   storage_bucket?: string | null;
 }
+export function normalizeSiteLabel(label: string | null | undefined): string | null {
+  const trimmed = label?.trim() ?? '';
+  if (!trimmed) return null;
+  if (/^unknown site$/i.test(trimmed)) return null;
+  return trimmed;
+}
+
 export function isAdminOnlyDocument(file: DocumentMetadata): boolean {
   return file.audience === 'admin_only'
     || ['site_permit', 'payment_receipt', 'site_image', 'mmp'].includes(file.document_category ?? '');
@@ -45,11 +52,14 @@ export function isAdminOnlyDocument(file: DocumentMetadata): boolean {
 export function matchesDocumentFilters(file: DocumentMetadata, filters: {
   category: string; project: string; site: string; period: string; adminOnly: boolean;
 }): boolean {
+  const siteLabel = normalizeSiteLabel(file.site_label);
   return (filters.category === 'all' || (file.document_category ?? 'other') === filters.category)
     && (!filters.project || (file.project_label ?? '').toLowerCase() === filters.project.toLowerCase()
       || (file.project_label ?? '').toLowerCase().includes(filters.project.toLowerCase()))
-    && (!filters.site || (file.site_label ?? '').toLowerCase() === filters.site.toLowerCase()
-      || (file.site_label ?? '').toLowerCase().includes(filters.site.toLowerCase()))
+    && (!filters.site || (!!siteLabel && (
+      siteLabel.toLowerCase() === filters.site.toLowerCase()
+      || siteLabel.toLowerCase().includes(filters.site.toLowerCase())
+    )))
     && (!filters.period || file.reporting_period === filters.period)
     && (!filters.adminOnly || isAdminOnlyDocument(file));
 }
@@ -71,7 +81,10 @@ export function groupSiteImages<T extends DocumentMetadata & { updated_at?: stri
 ): SiteImageGroup<T>[] {
   const map = new Map<string, SiteImageGroup<T>>();
   for (const file of files) {
-    const siteName = file.site_label?.trim() || file.project_label?.trim() || 'Unknown site';
+    const siteName =
+      normalizeSiteLabel(file.site_label) ||
+      file.project_label?.trim() ||
+      'Unknown site';
     const key = `${file.project_label ?? ''}__${siteName}`;
     let group = map.get(key);
     if (!group) {

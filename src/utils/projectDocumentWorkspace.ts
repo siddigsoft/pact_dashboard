@@ -72,6 +72,7 @@ async function upsertWorkspaceFile(params: {
   mimeType: string | null;
   createdBy: string;
   description: string | null;
+  projectName: string;
 }): Promise<void> {
   const { data: existing } = await supabase
     .from('workspace_files')
@@ -91,6 +92,10 @@ async function upsertWorkspaceFile(params: {
         last_modified_by: params.createdBy,
         updated_at: new Date().toISOString(),
         description: params.description,
+        document_category: 'project_document',
+        project_label: params.projectName,
+        audience: 'workspace',
+        tags: ['project', 'project-document'],
       })
       .eq('id', existing.id);
     return;
@@ -117,6 +122,9 @@ async function upsertWorkspaceFile(params: {
     allow_download: true,
     archived: false,
     security_level: 'internal',
+    document_category: 'project_document',
+    project_label: params.projectName,
+    audience: 'workspace',
   });
 
   if (error) throw error;
@@ -190,6 +198,7 @@ export async function mirrorProjectDocumentToWorkspace(input: {
       mimeType: input.file.type || null,
       createdBy: input.uploaderId,
       description: `Project document — ${projectName}`,
+      projectName,
     });
   } catch (err) {
     try { await r2Delete(storagePath); } catch { /* best effort */ }
