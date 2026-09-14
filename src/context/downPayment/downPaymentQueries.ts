@@ -455,6 +455,26 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     }
   });
 
+  const coordinatorsByMmpState = new Map<string, Set<string>>();
+  transformed.forEach(request => {
+    const coordinator = cleanStr(request.coordinatorName);
+    const mmpName = cleanStr(request.mmpName);
+    const stateName = cleanStr(request.stateName);
+    if (!coordinator || !mmpName || !stateName) return;
+    const key = `${mmpName.toLowerCase()}\u0000${stateName.toLowerCase()}`;
+    const names = coordinatorsByMmpState.get(key) || new Set<string>();
+    names.add(coordinator);
+    coordinatorsByMmpState.set(key, names);
+  });
+  transformed.forEach(request => {
+    if (request.coordinatorName) return;
+    const mmpName = cleanStr(request.mmpName);
+    const stateName = cleanStr(request.stateName);
+    if (!mmpName || !stateName) return;
+    const names = coordinatorsByMmpState.get(`${mmpName.toLowerCase()}\u0000${stateName.toLowerCase()}`);
+    if (names?.size === 1) request.coordinatorName = [...names][0];
+  });
+
   if (hubResult.status === 'fulfilled' && (hubResult.value as any[])?.length > 0) {
     // Build hub → name map AND hub → first-state-name map for records
     // that have no mmpSiteEntryId (and therefore no enrichment state).

@@ -374,6 +374,7 @@ export async function exportToExcel(
   hubGroups.forEach((v, k) => {
     hubData.push([k, v.count, v.requested, v.approved, v.paid, v.remaining]);
   });
+  hubData.push(['GRAND TOTAL', requests.length, totalRequested, totalApproved, totalPaid, totalRemaining]);
 
   type BreakdownTotals = {
     count: number;
@@ -447,6 +448,15 @@ export async function exportToExcel(
       stateTotals.remaining,
     ]);
   });
+  stateStatusRows.push([
+    'GRAND TOTAL',
+    '',
+    requests.length,
+    totalRequested,
+    totalApproved,
+    totalPaid,
+    totalRemaining,
+  ]);
 
   const siteStatusGroups = new Map<string, BreakdownTotals>();
   requests.forEach(request => {
@@ -465,6 +475,10 @@ export async function exportToExcel(
       ] as (string | number)[];
     })
     .sort((a, b) => String(a[0]).localeCompare(String(b[0])) || String(a[1]).localeCompare(String(b[1])));
+  siteStatusRows.push([
+    'GRAND TOTAL', '', '', requests.length, totalRequested,
+    totalApproved, totalPaid, totalRemaining,
+  ]);
 
   const buildPersonRows = (
     role: 'dataCollector' | 'coordinator',
@@ -473,8 +487,8 @@ export async function exportToExcel(
     requests.forEach(request => {
       const state = request.stateName || 'Unknown';
       const person = role === 'dataCollector'
-        ? request.dataCollectorName || (request.requesterRole === 'dataCollector' ? request.requestedByName : undefined) || 'Unassigned'
-        : request.coordinatorName || (request.requesterRole === 'coordinator' ? request.requestedByName : undefined) || 'Unassigned';
+        ? request.dataCollectorName || request.requestedByName || 'Name not recorded'
+        : request.coordinatorName || (request.requesterRole === 'coordinator' ? request.requestedByName : undefined) || 'Coordinator not recorded';
       addBreakdownRow(grouped, `${state}\u0000${person}`, request);
     });
     const rows: (string | number)[][] = [];
@@ -502,6 +516,15 @@ export async function exportToExcel(
         stateTotals.remaining,
       ]);
     });
+    rows.push([
+      'GRAND TOTAL',
+      '',
+      requests.length,
+      totalRequested,
+      totalApproved,
+      totalPaid,
+      totalRemaining,
+    ]);
     return rows;
   };
   const dataCollectorRows = buildPersonRows('dataCollector');
@@ -532,9 +555,9 @@ export async function exportToExcel(
         colWidths: [22, 12, 20, 20, 20, 20],
       },
       {
-        title: 'Down-Payment Totals by Data Collector and State',
+        title: 'Down-Payment Totals by Requester / Data Collector and State',
         sheetName: 'By Data Collector',
-        headers: ['State', 'Data Collector', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)'],
+        headers: ['State', 'Requester / Data Collector', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)'],
         rows: dataCollectorRows,
         colWidths: [22, 28, 12, 20, 20, 20, 20],
       },

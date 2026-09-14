@@ -120,15 +120,22 @@ describe('exportToExcel', () => {
     const stateSheet = report.breakdownSheets.find((sheet: { sheetName: string }) => sheet.sheetName === 'By State & Status');
     expect(stateSheet.rows).toContainEqual(['Kassala', 'Approved', 1, 100, 100, 0, 100]);
     expect(stateSheet.rows).toContainEqual(['Kassala', 'STATE SUBTOTAL', 1, 100, 100, 0, 100]);
+    expect(stateSheet.rows).toContainEqual(['GRAND TOTAL', '', 1, 100, 100, 0, 100]);
 
     const siteSheet = report.breakdownSheets.find((sheet: { sheetName: string }) => sheet.sheetName === 'By Site Status');
     expect(siteSheet.rows).toContainEqual(['Kassala', 'Covered / Completed', 'Completed', 1, 100, 100, 0, 100]);
+    expect(siteSheet.rows).toContainEqual(['GRAND TOTAL', '', '', 1, 100, 100, 0, 100]);
 
     const collectorSheet = report.breakdownSheets.find((sheet: { sheetName: string }) => sheet.sheetName === 'By Data Collector');
     expect(collectorSheet.rows).toContainEqual(['Kassala', 'Amal Collector', 1, 100, 100, 0, 100]);
     expect(collectorSheet.rows).toContainEqual(['Kassala', 'STATE SUBTOTAL', 1, 100, 100, 0, 100]);
+    expect(collectorSheet.rows).toContainEqual(['GRAND TOTAL', '', 1, 100, 100, 0, 100]);
 
     const coordinatorSheet = report.breakdownSheets.find((sheet: { sheetName: string }) => sheet.sheetName === 'By Coordinator');
     expect(coordinatorSheet.rows).toContainEqual(['Kassala', 'Hassan Coordinator', 1, 100, 100, 0, 100]);
+    expect(coordinatorSheet.rows).toContainEqual(['GRAND TOTAL', '', 1, 100, 100, 0, 100]);
+
+    const hubSheet = report.breakdownSheets.find((sheet: { sheetName: string }) => sheet.sheetName === 'By Hub');
+    expect(hubSheet.rows).toContainEqual(['GRAND TOTAL', 1, 100, 100, 0, 100]);
   });
 });

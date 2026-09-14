@@ -189,6 +189,7 @@ function buildMainSheet(
     }
   });
 
+  applyFinancialNumberFormats(ws, headerRow.number, spec.headers);
   return ws;
 }
 
@@ -229,6 +230,10 @@ function buildSummarySheet(
   for (let i = 1; i <= numCols; i++) {
     ws.getColumn(i).width = colWidths?.[i - 1] || 22;
   }
+  if (rows.length > 0) {
+    applyFinancialNumberFormats(ws, 3, rows[0].map(value => String(value ?? '')));
+  }
+  return ws;
 }
 
 // ─── Breakdown sheet builder ──────────────────────────────────────────────────
@@ -265,12 +270,15 @@ function buildBreakdownSheet(
 
   rows.forEach((rowData, idx) => {
     const row = ws.addRow(rowData.map(v => v ?? ''));
-    const isSubtotal = rowData.some(value => String(value ?? '').toUpperCase().includes('SUBTOTAL'));
+    const isSubtotal = rowData.some(value => {
+      const label = String(value ?? '').toUpperCase();
+      return label.includes('SUBTOTAL') || label.includes('GRAND TOTAL');
+    });
     row.height = 16;
     row.eachCell({ includeEmpty: true }, (cell, colNum) => {
       if (colNum > numCols) return;
-      setFill(cell, isSubtotal ? COLOR.totalBg : idx % 2 === 1 ? COLOR.rowAlt : COLOR.rowWhite);
-      setFont(cell, isSubtotal ? COLOR.totalFg : '1e293b', isSubtotal, 10);
+      setFill(cell, isSubtotal ? COLOR.totalsBg : idx % 2 === 1 ? COLOR.rowAlt : COLOR.rowWhite);
+      setFont(cell, isSubtotal ? COLOR.totalsFg : '1e293b', isSubtotal, 10);
       applyBorder(cell);
       cell.alignment = { vertical: 'middle', horizontal: 'left' };
     });
@@ -279,6 +287,8 @@ function buildBreakdownSheet(
   headers.forEach((h, i) => {
     ws.getColumn(i + 1).width = colWidths?.[i] || Math.max(h.length + 4, 14);
   });
+  applyFinancialNumberFormats(ws, headerRow.number, headers);
+  return ws;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -311,10 +321,10 @@ export async function exportFormattedExcel(opts: FmtReportOptions): Promise<void
 }
 
 const AMOUNT_HEADER_PATTERN =
-  /amount|funded|disbursed|committed|balance|allocated|spent|remaining|paid|available|unallocated|transaction total/i;
+  /\(sdg\)|amount|budget|fee|cost|requested|approved|funded|disbursed|committed|balance|allocated|spent|remaining|paid|available|unallocated|transaction total/i;
 const PERCENT_HEADER_PATTERN = /%|utilization/i;
 const INTEGER_HEADER_PATTERN =
-  /count|step #|record #|^no\.?$|funds in view|active funds|total funds|total transactions|allocated staff|reconciled|unreconciled|records|total users|active users|pending users|users without|view rows|rows/i;
+  /count|requests?|sites?|coordinators?|collectors?|members?|step #|record #|^no\.?$|funds in view|active funds|total funds|total transactions|allocated staff|reconciled|unreconciled|records|total users|active users|pending users|users without|view rows|rows/i;
 const MONEY_FORMAT = '#,##0.00;[Red]-#,##0.00';
 const INTEGER_FORMAT = '#,##0';
 const PERCENT_FORMAT = '0.0"%"';

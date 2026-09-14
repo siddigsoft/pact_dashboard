@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getDownPaymentBalance, isDownPaymentSettledStatus } from '@/utils/downPaymentBalance';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 //
@@ -101,6 +102,8 @@ interface SiteEntry {
   enumerator_fee: number | null;
   transport_fee: number | null;
   cost: number | null;
+  fee_paid_status?: string | null;
+  fee_paid_amount?: number | null;
   visit_completed_by: string | null;
 }
 
@@ -255,6 +258,113 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
     };
   }, [entries, profileMap]);
 
+  const canonicalDownPayments = useMemo(() => {
+    const entryMap = new Map(entries.map(entry => [entry.id, entry]));
+    return downPayments.map(dp => {
+      const balance = getDownPaymentBalance({
+        status: dp.status,
+        requestedAmount: Number(dp.requested_amount || 0),
+        approvedAmount: dp.approved_amount == null ? undefined : Number(dp.approved_amount),
+        totalPaidAmount: Number(dp.total_paid_amount || 0),
+        reconciliationRequired: Boolean(dp.reconciliation_required),
+        reconciliationReason: dp.reconciliation_reason,
+      });
+      const entry = entryMap.get(dp.mmp_site_entry_id);
+      return {
+        ...dp,
+        stateName: entry?.state || dp.state_name || entry?.hub_office || dp.hub_name || 'Unknown State',
+        hubName: entry?.hub_office || dp.hub_name || '—',
+        requested: Number(dp.requested_amount || 0),
+        approved: balance.approved,
+        paid: balance.paid,
+        remaining: balance.remaining,
+        canonicalStatus: isDownPaymentSettledStatus(dp.status) && balance.remaining > 0
+          ? 'partially_paid'
+          : dp.status,
+      };
+    });
+  }, [downPayments, entries]);
+
+  const downPaymentFinancials = useMemo(() => {
+    const byStateMap = new Map<string, {
+      state: string;
+      requests: number;
+      requested: number;
+      approved: number;
+      paid: number;
+      remaining: number;
+      statuses: Record<string, number>;
+    }>();
+    canonicalDownPayments.forEach(dp => {
+      const current = byStateMap.get(dp.stateName) || {
+        state: dp.stateName,
+        requests: 0,
+        requested: 0,
+        approved: 0,
+        paid: 0,
+        remaining: 0,
+        statuses: {},
+      };
+      current.requests += 1;
+      current.requested += dp.requested;
+      current.approved += dp.approved;
+      current.paid += dp.paid;
+      current.remaining += dp.remaining;
+      current.statuses[dp.canonicalStatus] = (current.statuses[dp.canonicalStatus] || 0) + 1;
+      byStateMap.set(dp.stateName, current);
+    });
+    const byState = [...byStateMap.values()].sort((a, b) => b.requested - a.requested || a.state.localeCompare(b.state));
+    const totals = byState.reduce((sum, row) => ({
+      requests: sum.requests + row.requests,
+      requested: sum.requested + row.requested,
+      approved: sum.approved + row.approved,
+      paid: sum.paid + row.paid,
+      remaining: sum.remaining + row.remaining,
+    }), { requests: 0, requested: 0, approved: 0, paid: 0, remaining: 0 });
+    return { byState, totals };
+  }, [canonicalDownPayments]);
+
+  const fieldPaymentFinancials = useMemo(() => {
+    const byStateMap = new Map<string, {
+      state: string;
+      sites: number;
+      wfpConfirmed: number;
+      payable: number;
+      paid: number;
+      remaining: number;
+    }>();
+    entries.forEach(entry => {
+      const state = entry.state || entry.hub_office || 'Unknown State';
+      const current = byStateMap.get(state) || {
+        state,
+        sites: 0,
+        wfpConfirmed: 0,
+        payable: 0,
+        paid: 0,
+        remaining: 0,
+      };
+      const confirmed = (entry.status || '').toLowerCase() === 'wfp_confirmed';
+      const entitlement = Number(entry.enumerator_fee || 0) + Number(entry.transport_fee || 0);
+      const paid = Number(entry.fee_paid_amount || 0);
+      const payable = confirmed ? entitlement : 0;
+      current.sites += 1;
+      if (confirmed) current.wfpConfirmed += 1;
+      current.payable += payable;
+      current.paid += paid;
+      current.remaining += Math.max(payable - paid, 0);
+      byStateMap.set(state, current);
+    });
+    const byState = [...byStateMap.values()].sort((a, b) => b.payable - a.payable || a.state.localeCompare(b.state));
+    const totals = byState.reduce((sum, row) => ({
+      sites: sum.sites + row.sites,
+      wfpConfirmed: sum.wfpConfirmed + row.wfpConfirmed,
+      payable: sum.payable + row.payable,
+      paid: sum.paid + row.paid,
+      remaining: sum.remaining + row.remaining,
+    }), { sites: 0, wfpConfirmed: 0, payable: 0, paid: 0, remaining: 0 });
+    return { byState, totals };
+  }, [entries]);
+
   // ── Filtered sites ────────────────────────────────────────────────────────
   const filteredSites = useMemo(() => {
     let list = entries;
@@ -387,7 +497,69 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
       alternateRowStyles: { fillColor: [240, 244, 255] },
     });
 
-    const y1 = (doc as any).lastAutoTable?.finalY + 8 || 120;
+    const fieldPaymentY = (doc as any).lastAutoTable?.finalY + 8 || 120;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Field Payment Tracker by State', 14, fieldPaymentY);
+    autoTable(doc, {
+      startY: fieldPaymentY + 4,
+      head: [['State', 'Sites', 'WFP Confirmed', 'Payable', 'Paid', 'Remaining']],
+      body: [
+        ...fieldPaymentFinancials.byState.map(state => [
+          state.state,
+          state.sites,
+          state.wfpConfirmed,
+          state.payable.toLocaleString(),
+          state.paid.toLocaleString(),
+          state.remaining.toLocaleString(),
+        ]),
+        [
+          'TOTAL',
+          fieldPaymentFinancials.totals.sites,
+          fieldPaymentFinancials.totals.wfpConfirmed,
+          fieldPaymentFinancials.totals.payable.toLocaleString(),
+          fieldPaymentFinancials.totals.paid.toLocaleString(),
+          fieldPaymentFinancials.totals.remaining.toLocaleString(),
+        ],
+      ],
+      styles: { fontSize: 7 },
+      headStyles: { fillColor: [13, 148, 136] },
+      alternateRowStyles: { fillColor: [240, 253, 250] },
+    });
+
+    const financialY = (doc as any).lastAutoTable?.finalY + 8 || fieldPaymentY + 50;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Down-Payment Tracker by State', 14, financialY);
+    autoTable(doc, {
+      startY: financialY + 4,
+      head: [['State', 'Requests', 'Requested', 'Approved', 'Paid', 'Remaining', 'Payment Statuses']],
+      body: [
+        ...downPaymentFinancials.byState.map(state => [
+          state.state,
+          state.requests,
+          state.requested.toLocaleString(),
+          state.approved.toLocaleString(),
+          state.paid.toLocaleString(),
+          state.remaining.toLocaleString(),
+          Object.entries(state.statuses).map(([status, count]) => `${fmtStatus(status)}: ${count}`).join(' | '),
+        ]),
+        [
+          'TOTAL',
+          downPaymentFinancials.totals.requests,
+          downPaymentFinancials.totals.requested.toLocaleString(),
+          downPaymentFinancials.totals.approved.toLocaleString(),
+          downPaymentFinancials.totals.paid.toLocaleString(),
+          downPaymentFinancials.totals.remaining.toLocaleString(),
+          '',
+        ],
+      ],
+      styles: { fontSize: 7 },
+      headStyles: { fillColor: [5, 150, 105] },
+      alternateRowStyles: { fillColor: [240, 253, 250] },
+    });
+
+    const y1 = (doc as any).lastAutoTable?.finalY + 8 || financialY + 50;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Coordinator Performance', 14, y1);
@@ -537,11 +709,18 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         ['Coordinators',     stats.coordCount],
         ['Total Fees (SDG)', stats.totalFees],
         ['', ''],
+        ['── FIELD PAYMENTS ──', ''],
+        ['WFP Confirmed Sites', fieldPaymentFinancials.totals.wfpConfirmed],
+        ['Payable Fees (SDG)', fieldPaymentFinancials.totals.payable],
+        ['Paid Fees (SDG)', fieldPaymentFinancials.totals.paid],
+        ['Remaining Payable (SDG)', fieldPaymentFinancials.totals.remaining],
+        ['', ''],
         ['── DOWN PAYMENTS ──', ''],
-        ['Requests',         downPayments.length],
-        ['Total Requested (SDG)', downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0)],
-        ['Total Paid (SDG)', downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0)],
-        ['Remaining (SDG)',  downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0)],
+        ['Requests',         downPaymentFinancials.totals.requests],
+        ['Total Requested (SDG)', downPaymentFinancials.totals.requested],
+        ['Total Approved (SDG)', downPaymentFinancials.totals.approved],
+        ['Total Paid (SDG)', downPaymentFinancials.totals.paid],
+        ['Remaining (SDG)',  downPaymentFinancials.totals.remaining],
         ['', ''],
         ['── COST SUBMISSIONS ──', ''],
         ['Submissions',      costSubmissions.length],
@@ -594,24 +773,113 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         { key: 'done',  width: 10 }, { key: 'ip',    width: 13 },
         { key: 'att',   width: 11 }, { key: 'pend',  width: 9 },
         { key: 'pct',   width: 12 }, { key: 'coords',width: 12 },
-        { key: 'fees',  width: 16 },
+        { key: 'fees',  width: 16 }, { key: 'dpr', width: 12 },
+        { key: 'dpreq', width: 17 }, { key: 'dpapp', width: 17 },
+        { key: 'dppaid', width: 17 }, { key: 'dprem', width: 17 },
+        { key: 'fpayable', width: 18 }, { key: 'fpaid', width: 18 },
+        { key: 'fremaining', width: 18 },
       ];
-      addTitleBlock(wsState, 'By State — Coverage Breakdown', subtitle, 9);
-      addHeaderRow(wsState, ['State', 'Total', 'Covered', 'In Progress', 'Attention', 'Pending', 'Coverage %', 'Coordinators', 'Fees (SDG)']);
+      addTitleBlock(wsState, 'By State — Coverage and Financial Tracking', subtitle, 17);
+      addHeaderRow(wsState, [
+        'State', 'Total', 'Covered', 'In Progress', 'Attention', 'Pending', 'Coverage %',
+        'Coordinators', 'Fees (SDG)', 'DP Requests', 'DP Requested (SDG)',
+        'DP Approved (SDG)', 'DP Paid (SDG)', 'DP Remaining (SDG)',
+        'Field Payable (SDG)', 'Field Paid (SDG)', 'Field Remaining (SDG)',
+      ]);
 
       stats.byState.forEach((s, i) => {
-        const row = addDataRow(wsState, [s.name, s.total, s.done, s.inProgress, s.attention, s.pending, `${s.coveragePct}%`, s.coordIds.size, s.fees || 0], i % 2 === 0);
+        const financial = downPaymentFinancials.byState.find(item => item.state === s.name);
+        const fieldFinancial = fieldPaymentFinancials.byState.find(item => item.state === s.name);
+        const row = addDataRow(wsState, [
+          s.name, s.total, s.done, s.inProgress, s.attention, s.pending, `${s.coveragePct}%`,
+          s.coordIds.size, s.fees || 0, financial?.requests || 0, financial?.requested || 0,
+          financial?.approved || 0, financial?.paid || 0, financial?.remaining || 0,
+          fieldFinancial?.payable || 0, fieldFinancial?.paid || 0, fieldFinancial?.remaining || 0,
+        ], i % 2 === 0);
         row.getCell(1).font = { bold: true, size: 10 };
         row.getCell(3).font = { size: 10, color: { argb: GREEN } };
         row.getCell(4).font = { size: 10, color: { argb: AMBER } };
         row.getCell(5).font = { size: 10, color: { argb: RED } };
         row.getCell(6).font = { size: 10, color: { argb: SLATE } };
         row.getCell(9).numFmt = AMOUNT_FORMAT;
+        [11, 12, 13, 14, 15, 16, 17].forEach(col => { row.getCell(col).numFmt = AMOUNT_FORMAT; });
         coverageCell(row, 7, s.coveragePct);
       });
-      const stTot = addTotalsRow(wsState, ['TOTAL', stats.total, stats.done, stats.inProgress, stats.attention, stats.pending, `${stats.coveragePct}%`, stats.coordCount, stats.totalFees]);
+      const stTot = addTotalsRow(wsState, [
+        'TOTAL', stats.total, stats.done, stats.inProgress, stats.attention, stats.pending,
+        `${stats.coveragePct}%`, stats.coordCount, stats.totalFees,
+        downPaymentFinancials.totals.requests, downPaymentFinancials.totals.requested,
+        downPaymentFinancials.totals.approved, downPaymentFinancials.totals.paid,
+        downPaymentFinancials.totals.remaining,
+        fieldPaymentFinancials.totals.payable, fieldPaymentFinancials.totals.paid,
+        fieldPaymentFinancials.totals.remaining,
+      ]);
       stTot.getCell(9).numFmt = AMOUNT_FORMAT;
+      [11, 12, 13, 14, 15, 16, 17].forEach(col => { stTot.getCell(col).numFmt = AMOUNT_FORMAT; });
       coverageCell(stTot, 7, stats.coveragePct);
+
+      const wsFinState = wb.addWorksheet('Financial by State');
+      wsFinState.columns = [
+        { key: 'state', width: 24 }, { key: 'requests', width: 12 },
+        { key: 'requested', width: 18 }, { key: 'approved', width: 18 },
+        { key: 'paid', width: 18 }, { key: 'remaining', width: 18 },
+        { key: 'statuses', width: 48 },
+      ];
+      addTitleBlock(wsFinState, 'Down-Payment Tracker by State', subtitle, 7);
+      addHeaderRow(wsFinState, [
+        'State', 'Requests', 'Requested (SDG)', 'Approved (SDG)',
+        'Paid (SDG)', 'Remaining (SDG)', 'Payment Statuses',
+      ]);
+      downPaymentFinancials.byState.forEach((state, i) => {
+        const row = addDataRow(wsFinState, [
+          state.state,
+          state.requests,
+          state.requested,
+          state.approved,
+          state.paid,
+          state.remaining,
+          Object.entries(state.statuses)
+            .sort((a, b) => b[1] - a[1])
+            .map(([status, count]) => `${fmtStatus(status)}: ${count}`)
+            .join(' | '),
+        ], i % 2 === 0);
+        [3, 4, 5, 6].forEach(col => { row.getCell(col).numFmt = AMOUNT_FORMAT; });
+      });
+      const finStateTotal = addTotalsRow(wsFinState, [
+        'TOTAL',
+        downPaymentFinancials.totals.requests,
+        downPaymentFinancials.totals.requested,
+        downPaymentFinancials.totals.approved,
+        downPaymentFinancials.totals.paid,
+        downPaymentFinancials.totals.remaining,
+        '',
+      ]);
+      [3, 4, 5, 6].forEach(col => { finStateTotal.getCell(col).numFmt = AMOUNT_FORMAT; });
+
+      const wsFieldState = wb.addWorksheet('Field Payments by State');
+      wsFieldState.columns = [
+        { key: 'state', width: 24 }, { key: 'sites', width: 12 },
+        { key: 'confirmed', width: 16 }, { key: 'payable', width: 18 },
+        { key: 'paid', width: 18 }, { key: 'remaining', width: 18 },
+      ];
+      addTitleBlock(wsFieldState, 'Field Payment Tracker by State', subtitle, 6);
+      addHeaderRow(wsFieldState, [
+        'State', 'Sites', 'WFP Confirmed', 'Payable Fees (SDG)',
+        'Paid Fees (SDG)', 'Remaining Payable (SDG)',
+      ]);
+      fieldPaymentFinancials.byState.forEach((state, i) => {
+        const row = addDataRow(wsFieldState, [
+          state.state, state.sites, state.wfpConfirmed,
+          state.payable, state.paid, state.remaining,
+        ], i % 2 === 0);
+        [4, 5, 6].forEach(col => { row.getCell(col).numFmt = AMOUNT_FORMAT; });
+      });
+      const fieldStateTotal = addTotalsRow(wsFieldState, [
+        'TOTAL', fieldPaymentFinancials.totals.sites, fieldPaymentFinancials.totals.wfpConfirmed,
+        fieldPaymentFinancials.totals.payable, fieldPaymentFinancials.totals.paid,
+        fieldPaymentFinancials.totals.remaining,
+      ]);
+      [4, 5, 6].forEach(col => { fieldStateTotal.getCell(col).numFmt = AMOUNT_FORMAT; });
 
       // ════════════════════════════════════════════════════════════════
       // Sheet 3 — By Coordinator
@@ -682,57 +950,55 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
       // ════════════════════════════════════════════════════════════════
       // Sheet 5 — Down Payments (if any)
       // ════════════════════════════════════════════════════════════════
-      if (downPayments.length > 0) {
+      if (canonicalDownPayments.length > 0) {
         const wsDP = wb.addWorksheet('Down Payments');
         wsDP.columns = [
-          { key: 'site',  width: 28 }, { key: 'hub',   width: 20 },
+          { key: 'site',  width: 28 }, { key: 'state', width: 20 }, { key: 'hub', width: 20 },
           { key: 'type',  width: 16 }, { key: 'stat',  width: 18 },
           { key: 'sup',   width: 14 }, { key: 'adm',   width: 14 },
-          { key: 'req',   width: 16 }, { key: 'paid',  width: 14 },
+          { key: 'req',   width: 16 }, { key: 'approved', width: 16 }, { key: 'paid', width: 14 },
           { key: 'rem',   width: 16 }, { key: 'date',  width: 14 },
           { key: 'fpaid', width: 14 },
         ];
-        addTitleBlock(wsDP, 'Down Payment Requests', subtitle, 11);
-        addHeaderRow(wsDP, ['Site Name', 'Hub', 'Type', 'Status', 'Supervisor', 'Admin', 'Requested (SDG)', 'Paid (SDG)', 'Remaining (SDG)', 'Date', 'Fully Paid']);
+        addTitleBlock(wsDP, 'Down Payment Requests', subtitle, 13);
+        addHeaderRow(wsDP, [
+          'Site Name', 'State', 'Hub', 'Type', 'Status', 'Supervisor', 'Admin',
+          'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)', 'Date', 'Fully Paid At',
+        ]);
 
         const DP_STATUS_COLOR: Record<string, string> = {
           fully_paid: GREEN, approved: '4338CA', partially_paid: AMBER,
           pending_admin: '7C3AED', pending_supervisor: 'EA580C', rejected: RED,
         };
-        const totReq = downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0);
-        const totPaid = downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0);
-        const totRem = downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0);
+        const { requested: totReq, approved: totApproved, paid: totPaid, remaining: totRem } = downPaymentFinancials.totals;
 
-        downPayments.forEach((dp, i) => {
+        canonicalDownPayments.forEach((dp, i) => {
           const row = addDataRow(wsDP, [
-            dp.site_name || '—', dp.hub_name || '—',
+            dp.site_name || '—', dp.stateName, dp.hubName,
             (dp.payment_type || '').replace(/_/g, ' ') || '—',
-            (dp.status || '').replace(/_/g, ' '),
+            fmtStatus(dp.canonicalStatus),
             dp.supervisor_status || '—', dp.admin_status || '—',
-            Number(dp.requested_amount || 0), Number(dp.total_paid_amount || 0), Number(dp.remaining_amount || 0),
+            dp.requested, dp.approved, dp.paid, dp.remaining,
             dp.created_at ? format(new Date(dp.created_at), 'dd MMM yyyy') : '—',
             dp.fully_paid_at ? format(new Date(dp.fully_paid_at), 'dd MMM yyyy') : '—',
           ], i % 2 === 0);
-          const statusArgb = DP_STATUS_COLOR[dp.status] || SLATE;
-          row.getCell(4).font = { bold: true, size: 10, color: { argb: `FF${statusArgb}`.replace(/^FFFF/, 'FF') } };
-          row.getCell(7).font = { size: 10 };
-          row.getCell(8).font = { size: 10, color: { argb: GREEN } };
-          row.getCell(9).font = { size: 10, color: { argb: totRem > 0 ? RED : GREEN } };
-          row.getCell(7).numFmt = AMOUNT_FORMAT;
-          row.getCell(8).numFmt = AMOUNT_FORMAT;
-          row.getCell(9).numFmt = AMOUNT_FORMAT;
+          const statusArgb = DP_STATUS_COLOR[dp.canonicalStatus] || SLATE;
+          row.getCell(5).font = { bold: true, size: 10, color: { argb: `FF${statusArgb}`.replace(/^FFFF/, 'FF') } };
+          row.getCell(9).font = { size: 10, color: { argb: 'FF0D9488' } };
+          row.getCell(10).font = { size: 10, color: { argb: GREEN } };
+          row.getCell(11).font = { size: 10, color: { argb: dp.remaining > 0 ? RED : GREEN } };
+          [8, 9, 10, 11].forEach(col => { row.getCell(col).numFmt = AMOUNT_FORMAT; });
         });
 
         const dpTot = addTotalsRow(wsDP, [
-          `TOTAL (${downPayments.length})`, '', '', '', '', '',
-          totReq, totPaid, totRem, '', '',
+          `TOTAL (${canonicalDownPayments.length})`, '', '', '', '', '', '',
+          totReq, totApproved, totPaid, totRem, '', '',
         ]);
-        dpTot.getCell(7).font = { bold: true, size: 10, color: { argb: GOLD } };
-        dpTot.getCell(8).font = { bold: true, size: 10, color: { argb: GREEN } };
-        dpTot.getCell(9).font = { bold: true, size: 10, color: { argb: totRem > 0 ? RED : GREEN } };
-        dpTot.getCell(7).numFmt = AMOUNT_FORMAT;
-        dpTot.getCell(8).numFmt = AMOUNT_FORMAT;
-        dpTot.getCell(9).numFmt = AMOUNT_FORMAT;
+        dpTot.getCell(8).font = { bold: true, size: 10, color: { argb: GOLD } };
+        dpTot.getCell(9).font = { bold: true, size: 10, color: { argb: 'FF2DD4BF' } };
+        dpTot.getCell(10).font = { bold: true, size: 10, color: { argb: GREEN } };
+        dpTot.getCell(11).font = { bold: true, size: 10, color: { argb: totRem > 0 ? RED : GREEN } };
+        [8, 9, 10, 11].forEach(col => { dpTot.getCell(col).numFmt = AMOUNT_FORMAT; });
       }
 
       // ════════════════════════════════════════════════════════════════
@@ -1032,8 +1298,8 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
 
               {/* ── Tab: By State ── */}
               <TabsContent value="overview" className="flex-1 overflow-auto px-5 py-3 mt-0">
-                <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm bg-white">
-                  <table className="w-full text-sm border-separate border-spacing-0">
+                <div className="rounded-xl border border-gray-200 overflow-auto shadow-sm bg-white">
+                  <table className="w-full min-w-[1550px] text-sm border-separate border-spacing-0">
                   <thead className="sticky top-0 bg-gray-50 z-10">
                     <tr>
                       <TH>State</TH>
@@ -1044,10 +1310,21 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                       <TH right>Pending</TH>
                       <TH>Coverage</TH>
                       <TH right>Coords</TH>
+                      <TH right>DP Requests</TH>
+                      <TH right>DP Requested</TH>
+                      <TH right>DP Approved</TH>
+                      <TH right>DP Paid</TH>
+                      <TH right>DP Remaining</TH>
+                      <TH right>Field Payable</TH>
+                      <TH right>Field Paid</TH>
+                      <TH right>Field Remaining</TH>
                     </tr>
                   </thead>
                   <tbody>
-                    {stats.byState.map((s, i) => (
+                    {stats.byState.map((s, i) => {
+                      const financial = downPaymentFinancials.byState.find(row => row.state === s.name);
+                      const fieldFinancial = fieldPaymentFinancials.byState.find(row => row.state === s.name);
+                      return (
                       <TR key={s.name} i={i}>
                         <td className="px-3 py-2 font-medium text-foreground">{s.name}</td>
                         <td className="px-3 py-2 text-right tabular-nums font-semibold text-foreground">{s.total}</td>
@@ -1057,8 +1334,16 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{s.pending}</td>
                         <td className="px-3 py-2 min-w-[140px]"><ProgressBar pct={s.coveragePct} /></td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{s.coordIds.size}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-foreground">{financial?.requests || 0}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-foreground">{(financial?.requested || 0).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-teal-600">{(financial?.approved || 0).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{(financial?.paid || 0).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-orange-600">{(financial?.remaining || 0).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-teal-600">{(fieldFinancial?.payable || 0).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{(fieldFinancial?.paid || 0).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-orange-600">{(fieldFinancial?.remaining || 0).toLocaleString()}</td>
                       </TR>
-                    ))}
+                    )})}
                     <TotalsRow>
                       <td className="px-3 py-2 text-foreground">TOTAL</td>
                       <td className="px-3 py-2 text-right tabular-nums text-foreground">{stats.total}</td>
@@ -1068,6 +1353,14 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{stats.pending}</td>
                       <td className="px-3 py-2"><ProgressBar pct={stats.coveragePct} /></td>
                       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{stats.coordCount}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-foreground">{downPaymentFinancials.totals.requests}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-foreground">{downPaymentFinancials.totals.requested.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-teal-600">{downPaymentFinancials.totals.approved.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{downPaymentFinancials.totals.paid.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-orange-600">{downPaymentFinancials.totals.remaining.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-teal-600">{fieldPaymentFinancials.totals.payable.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{fieldPaymentFinancials.totals.paid.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-orange-600">{fieldPaymentFinancials.totals.remaining.toLocaleString()}</td>
                     </TotalsRow>
                   </tbody>
                   </table>
@@ -1250,20 +1543,71 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                   </div>
                 ) : (
                   <>
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2 text-foreground">
+                        <DollarSign className="h-4 w-4 text-teal-600" />
+                        Field Payment Tracker by State
+                        <span className="text-xs font-normal text-muted-foreground">(WFP Confirmed sites only become payable)</span>
+                      </h3>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+                        {[
+                          { label: 'WFP Confirmed Sites', value: fieldPaymentFinancials.totals.wfpConfirmed, prefix: '', color: 'text-foreground' },
+                          { label: 'Payable Fees', value: fieldPaymentFinancials.totals.payable, prefix: 'SDG ', color: 'text-teal-600' },
+                          { label: 'Paid Fees', value: fieldPaymentFinancials.totals.paid, prefix: 'SDG ', color: 'text-emerald-600' },
+                          { label: 'Remaining Payable', value: fieldPaymentFinancials.totals.remaining, prefix: 'SDG ', color: 'text-orange-600' },
+                        ].map(({ label, value, prefix, color }) => (
+                          <div key={label} className="rounded-xl border border-border bg-muted/40 px-3 py-2">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
+                            <p className={`text-base font-bold tabular-nums ${color}`}>{prefix}{value.toLocaleString()}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="rounded-xl border border-gray-200 overflow-auto shadow-sm bg-white mb-5">
+                        <table className="w-full min-w-[760px] text-sm border-separate border-spacing-0">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <TH>State</TH><TH right>Sites</TH><TH right>WFP Confirmed</TH>
+                              <TH right>Payable (SDG)</TH><TH right>Paid (SDG)</TH><TH right>Remaining (SDG)</TH>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {fieldPaymentFinancials.byState.map((state, i) => (
+                              <TR key={state.state} i={i}>
+                                <td className="px-3 py-2 font-medium text-foreground">{state.state}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{state.sites}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{state.wfpConfirmed}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-teal-600">{state.payable.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{state.paid.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-orange-600">{state.remaining.toLocaleString()}</td>
+                              </TR>
+                            ))}
+                            <TotalsRow>
+                              <td className="px-3 py-2 text-foreground">TOTAL</td>
+                              <td className="px-3 py-2 text-right tabular-nums">{fieldPaymentFinancials.totals.sites}</td>
+                              <td className="px-3 py-2 text-right tabular-nums">{fieldPaymentFinancials.totals.wfpConfirmed}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-teal-600">{fieldPaymentFinancials.totals.payable.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{fieldPaymentFinancials.totals.paid.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-orange-600">{fieldPaymentFinancials.totals.remaining.toLocaleString()}</td>
+                            </TotalsRow>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
                     {/* ── Down Payments ─── */}
                     <div>
                       <h3 className="text-sm font-semibold mb-3 flex items-center gap-2 text-foreground">
                         <Banknote className="h-4 w-4 text-emerald-600" />
                         Down Payment Requests
-                        <span className="text-xs font-normal text-muted-foreground">({downPayments.length} records)</span>
+                        <span className="text-xs font-normal text-muted-foreground">({canonicalDownPayments.length} records)</span>
                       </h3>
-                      {downPayments.length === 0 ? (
+                      {canonicalDownPayments.length === 0 ? (
                         <p className="text-sm text-muted-foreground py-4 text-center">No down payment requests linked to this MMP.</p>
                       ) : (
                         <>
                           <div className="flex flex-wrap gap-2 mb-3">
                             {Object.entries(
-                              downPayments.reduce<Record<string, number>>((acc, dp) => { acc[dp.status] = (acc[dp.status] || 0) + 1; return acc; }, {})
+                              canonicalDownPayments.reduce<Record<string, number>>((acc, dp) => { acc[dp.canonicalStatus] = (acc[dp.canonicalStatus] || 0) + 1; return acc; }, {})
                             ).sort((a, b) => b[1] - a[1]).map(([status, count]) => {
                               const statusColors: Record<string, string> = {
                                 fully_paid: 'bg-emerald-100 text-emerald-700 border border-emerald-300',
@@ -1282,11 +1626,12 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                               );
                             })}
                           </div>
-                          <div className="grid grid-cols-3 gap-3 mb-3">
+                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
                             {[
-                              { label: 'Total Requested', value: downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0), color: 'text-foreground' },
-                              { label: 'Total Paid', value: downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0), color: 'text-emerald-600' },
-                              { label: 'Remaining Balance', value: downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0), color: 'text-orange-600' },
+                              { label: 'Total Requested', value: downPaymentFinancials.totals.requested, color: 'text-foreground' },
+                              { label: 'Total Approved', value: downPaymentFinancials.totals.approved, color: 'text-teal-600' },
+                              { label: 'Total Paid', value: downPaymentFinancials.totals.paid, color: 'text-emerald-600' },
+                              { label: 'Remaining Balance', value: downPaymentFinancials.totals.remaining, color: 'text-orange-600' },
                             ].map(({ label, value, color }) => (
                               <div key={label} className="rounded-xl border border-border bg-muted/40 px-3 py-2">
                                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
@@ -1294,16 +1639,62 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                               </div>
                             ))}
                           </div>
+                          <div className="rounded-xl border border-gray-200 overflow-auto shadow-sm bg-white mb-4">
+                            <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
+                              <p className="text-xs font-semibold text-foreground">Down-Payment Tracker by State</p>
+                              <p className="text-[10px] text-muted-foreground">Uses the same Requested, Approved, Paid, and Remaining rules as the Down-Payment Tracker.</p>
+                            </div>
+                            <table className="w-full min-w-[900px] text-sm border-separate border-spacing-0">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <TH>State</TH><TH right>Requests</TH><TH right>Requested</TH>
+                                  <TH right>Approved</TH><TH right>Paid</TH><TH right>Remaining</TH><TH>Payment Progress</TH><TH>Statuses</TH>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {downPaymentFinancials.byState.map((state, i) => {
+                                  const progress = state.approved > 0 ? Math.min(100, Math.round((state.paid / state.approved) * 100)) : 0;
+                                  return (
+                                    <TR key={state.state} i={i}>
+                                      <td className="px-3 py-2 font-medium text-foreground">{state.state}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums">{state.requests}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums">{state.requested.toLocaleString()}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums text-teal-600">{state.approved.toLocaleString()}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{state.paid.toLocaleString()}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums text-orange-600">{state.remaining.toLocaleString()}</td>
+                                      <td className="px-3 py-2 min-w-[150px]"><ProgressBar pct={progress} /></td>
+                                      <td className="px-3 py-2 text-xs text-muted-foreground min-w-[180px]">
+                                        {Object.entries(state.statuses)
+                                          .sort((a, b) => b[1] - a[1])
+                                          .map(([status, count]) => `${fmtStatus(status)}: ${count}`)
+                                          .join(' · ')}
+                                      </td>
+                                    </TR>
+                                  );
+                                })}
+                                <TotalsRow>
+                                  <td className="px-3 py-2 text-foreground">TOTAL</td>
+                                  <td className="px-3 py-2 text-right tabular-nums">{downPaymentFinancials.totals.requests}</td>
+                                  <td className="px-3 py-2 text-right tabular-nums">{downPaymentFinancials.totals.requested.toLocaleString()}</td>
+                                  <td className="px-3 py-2 text-right tabular-nums text-teal-600">{downPaymentFinancials.totals.approved.toLocaleString()}</td>
+                                  <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{downPaymentFinancials.totals.paid.toLocaleString()}</td>
+                                  <td className="px-3 py-2 text-right tabular-nums text-orange-600">{downPaymentFinancials.totals.remaining.toLocaleString()}</td>
+                                  <td className="px-3 py-2" />
+                                  <td className="px-3 py-2" />
+                                </TotalsRow>
+                              </tbody>
+                            </table>
+                          </div>
                           <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm bg-white">
                             <table className="w-full text-sm border-separate border-spacing-0">
                             <thead className="sticky top-0 bg-gray-50 z-10">
                               <tr>
                                 <TH>Site</TH><TH>Hub</TH><TH>Type</TH><TH>Status</TH>
-                                <TH right>Requested (SDG)</TH><TH right>Paid (SDG)</TH><TH right>Remaining</TH><TH>Date</TH>
+                                <TH right>Requested (SDG)</TH><TH right>Approved (SDG)</TH><TH right>Paid (SDG)</TH><TH right>Remaining</TH><TH>Date</TH>
                               </tr>
                             </thead>
                             <tbody>
-                              {downPayments.map((dp, i) => {
+                              {canonicalDownPayments.map((dp, i) => {
                                 const statusColors: Record<string, string> = {
                                   fully_paid: 'text-emerald-600', approved: 'text-teal-600',
                                   partially_paid: 'text-amber-600', pending_admin: 'text-purple-600',
@@ -1312,23 +1703,25 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                                 return (
                                   <TR key={dp.id} i={i}>
                                     <td className="px-3 py-1.5 font-medium text-foreground max-w-[140px] truncate" title={dp.site_name || ''}>{dp.site_name || '—'}</td>
-                                    <td className="px-3 py-1.5 text-muted-foreground text-xs">{dp.hub_name || '—'}</td>
+                                    <td className="px-3 py-1.5 text-muted-foreground text-xs">{dp.hubName}</td>
                                     <td className="px-3 py-1.5 text-muted-foreground text-xs capitalize">{(dp.payment_type || '').replace(/_/g, ' ') || '—'}</td>
-                                    <td className={`px-3 py-1.5 text-xs font-medium capitalize ${statusColors[dp.status] || 'text-muted-foreground'}`}>
-                                      {(dp.status || '').replace(/_/g, ' ')}
+                                    <td className={`px-3 py-1.5 text-xs font-medium capitalize ${statusColors[dp.canonicalStatus] || 'text-muted-foreground'}`}>
+                                      {(dp.canonicalStatus || '').replace(/_/g, ' ')}
                                     </td>
-                                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{Number(dp.requested_amount || 0).toLocaleString()}</td>
-                                    <td className="px-3 py-1.5 text-right tabular-nums text-emerald-600">{Number(dp.total_paid_amount || 0).toLocaleString()}</td>
-                                    <td className="px-3 py-1.5 text-right tabular-nums text-orange-600">{Number(dp.remaining_amount || 0).toLocaleString()}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{dp.requested.toLocaleString()}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums text-teal-600">{dp.approved.toLocaleString()}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums text-emerald-600">{dp.paid.toLocaleString()}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums text-orange-600">{dp.remaining.toLocaleString()}</td>
                                     <td className="px-3 py-1.5 text-xs text-muted-foreground">{dp.created_at ? format(new Date(dp.created_at), 'dd MMM yyyy') : '—'}</td>
                                   </TR>
                                 );
                               })}
                               <TotalsRow>
-                                <td className="px-3 py-2 text-foreground" colSpan={4}>TOTAL ({downPayments.length})</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-foreground">{downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0).toLocaleString()}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0).toLocaleString()}</td>
-                                <td className="px-3 py-2 text-right tabular-nums text-orange-600">{downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-foreground" colSpan={4}>TOTAL ({canonicalDownPayments.length})</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-foreground">{downPaymentFinancials.totals.requested.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-teal-600">{downPaymentFinancials.totals.approved.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{downPaymentFinancials.totals.paid.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-orange-600">{downPaymentFinancials.totals.remaining.toLocaleString()}</td>
                                 <td className="px-3 py-2" />
                               </TotalsRow>
                             </tbody>
