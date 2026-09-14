@@ -73,7 +73,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
-import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
+import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats, matchesDownPaymentHub } from '@/utils/downPaymentExport';
 import type { DownPaymentEvidenceMap } from '@/utils/downPaymentExport';
 import { resolveDownPaymentExportSelection } from '@/utils/downPaymentExportSelection';
 import { allocateExactProportionally } from '@/utils/proportionalAllocation';
@@ -476,7 +476,7 @@ export function DownPaymentApprovalPanel({
   const uniqueStates = useMemo(() => {
     const hubId = filters.hubId;
     const base = hubId
-      ? requests.filter(r => r.hubId === hubId || r.hubName?.toLowerCase() === hubId.toLowerCase())
+      ? requests.filter(r => matchesDownPaymentHub(r, hubId))
       : requests;
     return [...new Set(base.map(r => r.stateName).filter(Boolean))].sort() as string[];
   }, [requests, filters.hubId]);
@@ -485,7 +485,7 @@ export function DownPaymentApprovalPanel({
     const hubId = filters.hubId;
     const stateName = filters.stateName;
     let base = hubId
-      ? requests.filter(r => r.hubId === hubId || r.hubName?.toLowerCase() === hubId.toLowerCase())
+      ? requests.filter(r => matchesDownPaymentHub(r, hubId))
       : requests;
     if (stateName) {
       base = base.filter(r => r.stateName?.toLowerCase() === stateName.toLowerCase());

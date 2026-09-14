@@ -31,7 +31,7 @@ import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { format, parseISO } from 'date-fns';
 import type { DownPaymentRequest, DownPaymentFilter, DownPaymentStatus } from '@/types/down-payment';
-import { filterDownPayments } from '@/utils/downPaymentExport';
+import { filterDownPayments, matchesDownPaymentHub } from '@/utils/downPaymentExport';
 import { dispatchNotification } from '@/lib/notify';
 import { createRequiredPreFundPaymentEventKey, deleteLatestSourcePayment, fetchDeletedPreFundSourcePayments, fetchPreFundSourcePaymentGaps, fetchPreFundSourcePaymentLinks, isActivePreFundSourcePayment, type PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
 import { getDownPaymentBalance, isDownPaymentApprovedLifecycleStatus, isDownPaymentSettledStatus } from '@/utils/downPaymentBalance';
@@ -824,13 +824,13 @@ export default function DownPaymentApproval() {
   const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))].sort() as string[], [requests]);
   const uniqueStates = useMemo(() => {
     const base = filters.hubId
-      ? requests.filter(r => r.hubName?.toLowerCase() === filters.hubId!.toLowerCase())
+      ? requests.filter(r => matchesDownPaymentHub(r, filters.hubId))
       : requests;
     return [...new Set(base.map(r => r.stateName).filter(Boolean))].sort() as string[];
   }, [requests, filters.hubId]);
   const uniqueLocalities = useMemo(() => {
     let base = filters.hubId
-      ? requests.filter(r => r.hubName?.toLowerCase() === filters.hubId!.toLowerCase())
+      ? requests.filter(r => matchesDownPaymentHub(r, filters.hubId))
       : requests;
     if (filters.stateName) {
       base = base.filter(r => r.stateName?.toLowerCase() === filters.stateName!.toLowerCase());
@@ -845,7 +845,7 @@ export default function DownPaymentApproval() {
   const uniqueRequesters = useMemo(() => {
     let base = requests;
     if (filters.hubId) {
-      base = base.filter(r => r.hubName?.toLowerCase() === filters.hubId!.toLowerCase());
+      base = base.filter(r => matchesDownPaymentHub(r, filters.hubId));
     }
     if (filters.stateName) {
       base = base.filter(r => r.stateName?.toLowerCase() === filters.stateName!.toLowerCase());
@@ -1023,7 +1023,11 @@ export default function DownPaymentApproval() {
   const covRows = useMemo(() => {
     return siteCoverageData.filter(e => {
       // ── Page-level filters (same as Approval tab) ──────────────────────
-      if (filters.hubId && e.hub_name.toLowerCase() !== filters.hubId.toLowerCase()) return false;
+      if (!matchesDownPaymentHub({
+        hubId: undefined,
+        hubName: e.hub_name,
+        stateName: e.state_name,
+      }, filters.hubId)) return false;
       if (filters.stateName && e.state_name.toLowerCase() !== filters.stateName.toLowerCase()) return false;
       if (filters.localityName && e.locality_name.toLowerCase() !== filters.localityName.toLowerCase()) return false;
       if (filters.mmpName && e.mmp_name.toLowerCase() !== filters.mmpName.toLowerCase()) return false;

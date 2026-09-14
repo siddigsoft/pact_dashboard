@@ -10,8 +10,22 @@ import {
   isDownPaymentSettledStatus,
   type DownPaymentPaymentEvidence,
 } from '@/utils/downPaymentBalance';
+import { isStateNameInHub } from '@/utils/hubAccessControl';
+import { normalizeHubId } from '@/data/sudanStates';
 
 export type DownPaymentEvidenceMap = ReadonlyMap<string, readonly DownPaymentPaymentEvidence[]>;
+
+export function matchesDownPaymentHub(
+  request: Pick<DownPaymentRequest, 'hubId' | 'hubName' | 'stateName'>,
+  hubFilter: string | null | undefined,
+): boolean {
+  if (!hubFilter) return true;
+  if (request.hubId === hubFilter) return true;
+  const selectedHubId = normalizeHubId(hubFilter);
+  const requestHubId = normalizeHubId(request.hubName || request.hubId);
+  if (selectedHubId && requestHubId === selectedHubId) return true;
+  return isStateNameInHub(request.stateName, selectedHubId);
+}
 
 function balanceFor(
   request: DownPaymentRequest,
@@ -28,7 +42,7 @@ export function filterDownPayments(
     if (filters.status && filters.status.length > 0 && !filters.status.includes(req.status)) {
       return false;
     }
-    if (filters.hubId && req.hubId !== filters.hubId && req.hubName?.toLowerCase() !== filters.hubId.toLowerCase()) {
+    if (!matchesDownPaymentHub(req, filters.hubId)) {
       return false;
     }
     if (filters.stateName && req.stateName?.toLowerCase() !== filters.stateName.toLowerCase()) {

@@ -25,4 +25,4 @@ Tracker geography must prefer the linked MMP site’s state, locality, and hub o
 
 **Why:** Request-level hub values can become stale and caused Hub filters to return fewer rows than State + MMP filters for the same sites.
 
-**How to apply:** Use `mmp_site_entries` geography for Hub/State/Locality/MMP filters and report grouping; use request geography only when no linked site value exists.
+**How to apply:** Use `mmp_site_entries` geography for Hub/State/Locality/MMP filters and report grouping. Hub matching must also honor the canonical state-to-hub map, so stale request/site hub text cannot exclude a state assigned to the selected hub.

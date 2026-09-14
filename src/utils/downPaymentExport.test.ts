@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DownPaymentRequest } from '@/types/down-payment';
-import { exportToExcel, filterDownPayments, getDownPaymentStats } from './downPaymentExport';
+import { exportToExcel, filterDownPayments, getDownPaymentStats, matchesDownPaymentHub } from './downPaymentExport';
 
 const { exportStandardExcelMock } = vi.hoisted(() => ({
   exportStandardExcelMock: vi.fn().mockResolvedValue(undefined),
@@ -21,6 +21,14 @@ function requestAt(requestedAt: string): DownPaymentRequest {
 }
 
 describe('filterDownPayments', () => {
+  it('keeps an Al Gezira request under Kassala Hub when its copied request hub is stale', () => {
+    expect(matchesDownPaymentHub({
+      hubId: 'stale-hub',
+      hubName: 'Old Hub Name',
+      stateName: 'Al Gezira',
+    }, 'Kassala Hub')).toBe(true);
+  });
+
   it('includes the entire selected end date', () => {
     const requests = [
       requestAt('2026-09-14T00:00:00'),
