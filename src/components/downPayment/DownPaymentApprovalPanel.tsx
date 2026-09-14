@@ -3541,10 +3541,15 @@ export function DownPaymentApprovalPanel({
       >
         <CardContent className="p-3">
           <div className="text-xl font-bold text-orange-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-remaining-amount">{stats.amounts.totalRemaining.toLocaleString()}</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Remaining (SDG)</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Payable Remaining (SDG)</div>
           {stats.amounts.totalApproved > 0 && (
             <div className="text-[11px] font-semibold text-orange-600 dark:text-orange-400 tabular-nums" data-testid="text-stats-remaining-pct">
               {Math.round(stats.amounts.totalRemaining / stats.amounts.totalApproved * 100)}% of approved
+            </div>
+          )}
+          {stats.amounts.totalReconciliationGap > 0 && (
+            <div className="mt-1 text-[11px] font-semibold text-amber-700 dark:text-amber-400 tabular-nums" data-testid="text-stats-reconciliation-gap">
+              {stats.amounts.totalReconciliationGap.toLocaleString()} settled payment gap
             </div>
           )}
           {(approvedOutstandingRequests.length > 0 || processingOutstandingRequests.length > 0) && (

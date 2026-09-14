@@ -32,6 +32,8 @@ export interface DownPaymentBalance {
   paid: number;
   /** Open payable balance; settled rows contribute zero even if evidence needs reconciliation. */
   remaining: number;
+  /** Unresolved approved-versus-paid difference on a settled row; not payable again. */
+  reconciliationGap: number;
   paymentBasis: DownPaymentPaymentBasis;
   reconciliationRequired: boolean;
   reconciliationReason?: string;
@@ -180,6 +182,9 @@ export function getDownPaymentBalance(
   const remaining = isDownPaymentSettledStatus(status)
     ? 0
     : Math.max(0, approved - paid);
+  const reconciliationGap = isDownPaymentSettledStatus(status)
+    ? Math.max(0, approved - paid)
+    : 0;
 
   const legacyPositiveTotal = !hasEvidence && finiteAmount(request.totalPaidAmount) > 0;
   const settledWithoutEvidence = isDownPaymentSettledStatus(status) && !hasEvidence;
@@ -203,6 +208,7 @@ export function getDownPaymentBalance(
     approved,
     paid,
     remaining,
+    reconciliationGap,
     paymentBasis: hasEvidence
       ? 'active_immutable_links'
       : paid > 0

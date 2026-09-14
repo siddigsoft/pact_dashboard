@@ -48,6 +48,7 @@ describe('getDownPaymentStats', () => {
       totalApproved: 100,
       totalPaid: 25,
       totalRemaining: 0,
+      totalReconciliationGap: 75,
     });
   });
 });
@@ -78,9 +79,9 @@ describe('exportToExcel', () => {
     expect(report.mainSheet.rows[0][coverageIndex]).toBe('Covered / Completed');
 
     const stateSheet = report.breakdownSheets.find((sheet: { sheetName: string }) => sheet.sheetName === 'By State & Status');
-    expect(stateSheet.rows).toContainEqual(['Kassala', 'Approved', 1, 100, 100, 0, 100]);
+    expect(stateSheet.rows).toContainEqual(['Kassala', 'Approved', 1, 100, 100, 0, 100, 0]);
 
     const siteSheet = report.breakdownSheets.find((sheet: { sheetName: string }) => sheet.sheetName === 'By Site Status');
-    expect(siteSheet.rows).toContainEqual(['Kassala', 'Covered / Completed', 'Completed', 1, 100, 100, 0, 100]);
+    expect(siteSheet.rows).toContainEqual(['Kassala', 'Covered / Completed', 'Completed', 1, 100, 100, 0, 100, 0]);
   });
 });

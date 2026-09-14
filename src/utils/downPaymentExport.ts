@@ -181,6 +181,7 @@ export function exportToCSV(
     'Approved Amount (SDG)',
     'Paid Amount (SDG)',
     'Remaining (SDG)',
+    'Settled Reconciliation Gap (SDG)',
     'Remaining Includes',
     'Status',
     'Site Coverage',
@@ -211,6 +212,7 @@ export function exportToCSV(
       balance.approved,
       balance.paid,
       balance.remaining,
+      balance.reconciliationGap,
       getRemainingExplanation(req, evidenceByRequest),
       getStatusLabel(req.status),
       getSiteCoverageLabel(req),
@@ -255,11 +257,12 @@ export async function exportToExcel(
   const totalApproved = excelBalances.reduce((s, balance) => s + balance.approved, 0);
   const totalPaid = excelBalances.reduce((s, balance) => s + balance.paid, 0);
   const totalRemaining = excelBalances.reduce((s, balance) => s + balance.remaining, 0);
+  const totalReconciliationGap = excelBalances.reduce((s, balance) => s + balance.reconciliationGap, 0);
   const headers = [
     '#', 'Request ID', 'MMP', 'Requester Name', 'Site Name', 'State', 'Locality', 'Hub',
     'Activity Type', 'CP Name', 'Requested At', 'Transportation Budget (SDG)',
     'Requested Amount (SDG)', 'Approval Type', 'Approval %', 'Approved Amount (SDG)',
-    'Paid Amount (SDG)', 'Remaining (SDG)', 'Remaining Includes', 'Status',
+    'Paid Amount (SDG)', 'Remaining (SDG)', 'Settled Reconciliation Gap (SDG)', 'Remaining Includes', 'Status',
     'Site Coverage', 'Site System Status', 'Payment Type',
     'Payment Basis', 'Reconciliation',
     'Supervisor Status', 'Supervisor Approved By', 'Supervisor Approved At',
@@ -288,6 +291,7 @@ export async function exportToExcel(
       balance.approved,
       balance.paid,
       balance.remaining,
+      balance.reconciliationGap,
       getRemainingExplanation(req, evidenceByRequest),
       getStatusLabel(req.status),
       getSiteCoverageLabel(req),
@@ -315,6 +319,7 @@ export async function exportToExcel(
   totalsRow[15] = totalApproved as any;
   totalsRow[16] = totalPaid as any;
   totalsRow[17] = totalRemaining as any;
+  totalsRow[18] = totalReconciliationGap as any;
   const summaryRows = (status: string) => requests.filter(r => r.status === status);
   const summaryAmount = (status: string, rows: DownPaymentRequest[]) => rows.reduce((sum, row) => {
     const balance = balanceFor(row, evidenceByRequest);
@@ -333,25 +338,27 @@ export async function exportToExcel(
     ['Note', 'Requested totals include rejected/cancelled history', ''],
     ['', 'Total Approved', totalApproved],
     ['', 'Total Paid', totalPaid],
-    ['', 'Remaining', totalRemaining],
+    ['', 'Payable Remaining', totalRemaining],
+    ['', 'Settled Reconciliation Gap', totalReconciliationGap],
   ];
-  const hubGroups = new Map<string, { count: number; requested: number; approved: number; paid: number; remaining: number }>();
+  const hubGroups = new Map<string, { count: number; requested: number; approved: number; paid: number; remaining: number; reconciliationGap: number }>();
   requests.forEach(r => {
     const hub = r.hubName || 'Unknown';
-    const existing = hubGroups.get(hub) || { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
+    const existing = hubGroups.get(hub) || { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0, reconciliationGap: 0 };
     const balance = balanceFor(r, evidenceByRequest);
     existing.count++;
     existing.requested += r.requestedAmount;
     existing.approved += balance.approved;
     existing.paid += balance.paid;
     existing.remaining += balance.remaining;
+    existing.reconciliationGap += balance.reconciliationGap;
     hubGroups.set(hub, existing);
   });
   const hubData: (string | number)[][] = [
-    ['Hub', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)'],
+    ['Hub', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Payable Remaining (SDG)', 'Settled Reconciliation Gap (SDG)'],
   ];
   hubGroups.forEach((v, k) => {
-    hubData.push([k, v.count, v.requested, v.approved, v.paid, v.remaining]);
+    hubData.push([k, v.count, v.requested, v.approved, v.paid, v.remaining, v.reconciliationGap]);
   });
 
   type BreakdownTotals = {
@@ -360,6 +367,7 @@ export async function exportToExcel(
     approved: number;
     paid: number;
     remaining: number;
+    reconciliationGap: number;
   };
   const addBreakdownRow = (
     groups: Map<string, BreakdownTotals>,
@@ -367,12 +375,13 @@ export async function exportToExcel(
     request: DownPaymentRequest,
   ) => {
     const balance = balanceFor(request, evidenceByRequest);
-    const totals = groups.get(key) ?? { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
+    const totals = groups.get(key) ?? { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0, reconciliationGap: 0 };
     totals.count += 1;
     totals.requested += request.requestedAmount;
     totals.approved += balance.approved;
     totals.paid += balance.paid;
     totals.remaining += balance.remaining;
+    totals.reconciliationGap += balance.reconciliationGap;
     groups.set(key, totals);
   };
 
@@ -395,7 +404,7 @@ export async function exportToExcel(
   states.forEach(state => {
     statusOrder.forEach(status => {
       const totals = stateStatusGroups.get(`${state}\u0000${status}`)
-        ?? { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
+        ?? { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0, reconciliationGap: 0 };
       stateStatusRows.push([
         state,
         getStatusLabel(status),
@@ -404,6 +413,7 @@ export async function exportToExcel(
         totals.approved,
         totals.paid,
         totals.remaining,
+        totals.reconciliationGap,
       ]);
     });
   });
@@ -421,14 +431,14 @@ export async function exportToExcel(
       const [state, coverage, siteStatus] = key.split('\u0000');
       return [
         state, coverage, siteStatus, totals.count, totals.requested,
-        totals.approved, totals.paid, totals.remaining,
+        totals.approved, totals.paid, totals.remaining, totals.reconciliationGap,
       ] as (string | number)[];
     })
     .sort((a, b) => String(a[0]).localeCompare(String(b[0])) || String(a[1]).localeCompare(String(b[1])));
   await exportStandardExcel({
     reportTitle: 'PACT Command Center - Down-Payment Requests Report',
     subtitleLine: `Tab: ${tabLabel} | Total Requests: ${requests.length}`,
-    metaLine: `Total Requested: ${formatCurrency(totalRequested)} | Total Approved: ${formatCurrency(totalApproved)} | Total Paid: ${formatCurrency(totalPaid)} | Remaining: ${formatCurrency(totalRemaining)}`,
+    metaLine: `Total Requested: ${formatCurrency(totalRequested)} | Total Approved: ${formatCurrency(totalApproved)} | Total Paid: ${formatCurrency(totalPaid)} | Payable Remaining: ${formatCurrency(totalRemaining)} | Settled Gap: ${formatCurrency(totalReconciliationGap)}`,
     filenamePrefix: filename,
     mainSheet: {
       sheetName: 'Down Payments',
@@ -448,21 +458,21 @@ export async function exportToExcel(
         sheetName: 'By Hub',
         headers: hubData[0].map(String),
         rows: hubData.slice(1),
-        colWidths: [22, 12, 20, 20, 20, 20],
+        colWidths: [22, 12, 20, 20, 20, 20, 24],
       },
       {
         title: 'Breakdown by State and Request Status',
         sheetName: 'By State & Status',
-        headers: ['State', 'Request Status', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)'],
+        headers: ['State', 'Request Status', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Payable Remaining (SDG)', 'Settled Reconciliation Gap (SDG)'],
         rows: stateStatusRows,
-        colWidths: [22, 24, 12, 20, 20, 20, 20],
+        colWidths: [22, 24, 12, 20, 20, 20, 20, 24],
       },
       {
         title: 'Breakdown by State and Site Completion Status',
         sheetName: 'By Site Status',
-        headers: ['State', 'Site Coverage', 'Site System Status', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)'],
+        headers: ['State', 'Site Coverage', 'Site System Status', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Payable Remaining (SDG)', 'Settled Reconciliation Gap (SDG)'],
         rows: siteStatusRows,
-        colWidths: [22, 22, 22, 12, 20, 20, 20, 20],
+        colWidths: [22, 22, 22, 12, 20, 20, 20, 20, 24],
       },
     ],
   });
@@ -660,6 +670,7 @@ export function getDownPaymentStats(
   const totalApproved = balances.reduce((sum, balance) => sum + balance.approved, 0);
   const totalPaid = balances.reduce((sum, balance) => sum + balance.paid, 0);
   const totalRemaining = balances.reduce((sum, balance) => sum + balance.remaining, 0);
+  const totalReconciliationGap = balances.reduce((sum, balance) => sum + balance.reconciliationGap, 0);
   const paidRequests = requests.filter((request, index) => balances[index].paid > 0 && balances[index].approved > 0);
   const totalPendingAmount = requests
     .filter(r => r.status === 'pending_supervisor' || r.status === 'pending_admin')
@@ -687,6 +698,7 @@ export function getDownPaymentStats(
       totalApproved,
       totalPaid,
       totalRemaining,
+      totalReconciliationGap,
       totalPendingAmount,
     },
   };
