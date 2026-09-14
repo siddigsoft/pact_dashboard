@@ -47,6 +47,10 @@ Page access controls entry to the report area; a report action controls opening/
 
 **Why:** page access and report-button access are separate decisions. A user may enter MMP Management without being allowed to open or export sensitive reports.
 
+Visible launch, export, download, and generate controls belong under Buttons & Actions. Reports contains access to report pages, dashboards, and report content rather than their clickable controls.
+
+**Why:** administrators expect every UI button to be managed in one place, even when the button opens or downloads a report.
+
 ## Migration status
 `column_visibility_config` and `data_scope_config` tables exist in migration file `20260811_access_management_tables.sql` but must be run manually in Supabase Studio. Column visibility and data scope UI is built; query-level enforcement is not yet implemented in individual components.
 

@@ -321,8 +321,13 @@ export function PermissionsTab({
       pages: mod.pages.map(pg => ({
         ...pg,
         actions: pg.actions.filter(a => {
-          const isReport = a.action === 'export' || /report|analytics/i.test(`${a.label} ${a.description || ''} ${pg.page}`);
-          const matchesType = actionFilter === 'all' || (actionFilter === 'reports' ? isReport : !isReport);
+          // Reports contains access to report pages/content. Clickable operations
+          // such as export, download, generate, and MMP report launchers belong
+          // to Buttons & Actions.
+          const isReportAccess = a.action === 'read'
+            && /report|analytics/i.test(`${a.label} ${a.description || ''} ${pg.page}`);
+          const matchesType = actionFilter === 'all'
+            || (actionFilter === 'reports' ? isReportAccess : !isReportAccess);
           const matchesSearch = !q ||
             a.label.toLowerCase().includes(q) ||
             a.resource.toLowerCase().includes(q) ||
@@ -335,6 +340,8 @@ export function PermissionsTab({
   const visibleSection = section === 'all' ? activeSection : section;
 
   const pageDef = COLUMN_REGISTRY.find(p => p.pageSlug === selectedPage);
+  const mmpReportEffect = effectiveAction('mmp', 'export');
+  const mmpReportSaving = savingKey === 'perm:mmp:export';
   const userColMap = useMemo(() =>
     Object.fromEntries(columnConfigs.filter(c => c.user_id === userId).map(c => [`${c.page_slug}:${c.column_key}`, c])),
     [columnConfigs, userId],
@@ -400,6 +407,64 @@ export function PermissionsTab({
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
+              {!moduleSearch && actionFilter === 'buttons' && (
+                <div className={cn(
+                  'mb-3 rounded-xl border-2 p-3',
+                  mmpReportEffect === 'granted' ? 'border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/20' :
+                  mmpReportEffect === 'blocked' ? 'border-red-300 bg-red-50/60 dark:bg-red-950/20' :
+                  mmpReportEffect === 'role-yes' ? 'border-blue-300 bg-blue-50/60 dark:bg-blue-950/20' :
+                  'border-slate-200 bg-slate-50 dark:bg-slate-950/20'
+                )}>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <StatusIcon eff={mmpReportEffect} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">MMP Report Buttons</p>
+                      <p className="text-xs text-muted-foreground">
+                        Controls all three report entry points in MMP Management.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {['Full Report', 'State Report', 'Hub Report'].map(label => (
+                          <Badge key={label} variant="outline" className="bg-background text-[10px]">
+                            {label}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <Badge className={cn(
+                        'border-0 text-[9px]',
+                        mmpReportEffect === 'granted' ? 'bg-emerald-100 text-emerald-700' :
+                        mmpReportEffect === 'blocked' ? 'bg-red-100 text-red-700' :
+                        mmpReportEffect === 'role-yes' ? 'bg-blue-100 text-blue-700' :
+                        'bg-slate-100 text-slate-600'
+                      )}>
+                        {mmpReportEffect === 'granted' ? 'Granted' :
+                         mmpReportEffect === 'blocked' ? 'Blocked' :
+                         mmpReportEffect === 'role-yes' ? 'Role Default' : 'No Access'}
+                      </Badge>
+                      <button
+                        type="button"
+                        disabled={mmpReportSaving}
+                        onClick={() => toggleAction('mmp', 'export')}
+                        aria-label="Change access to Full, State, and Hub MMP report buttons"
+                        className={cn(
+                          'min-w-[92px] rounded border px-3 py-1 text-xs font-semibold transition-colors disabled:opacity-40',
+                          mmpReportEffect === 'granted' ? 'border-amber-200 text-amber-700 hover:bg-amber-50' :
+                          mmpReportEffect === 'blocked' ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' :
+                          mmpReportEffect === 'role-yes' ? 'border-red-200 text-red-700 hover:bg-red-50' :
+                          'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                        )}
+                      >
+                        {mmpReportSaving ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin" /> :
+                         mmpReportEffect === 'granted' ? 'Remove Grant' :
+                         mmpReportEffect === 'blocked' ? 'Restore Access' :
+                         mmpReportEffect === 'role-yes' ? 'Block' : 'Grant Access'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Pinned: Cost Submission fine-grained button access */}
               {!moduleSearch && actionFilter !== 'reports' && (
                 <CsButtonAccessSection
