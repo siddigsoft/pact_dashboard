@@ -13,7 +13,7 @@ Active immutable payment evidence is authoritative. A positive legacy source tot
 
 **Why:** Silently treating a stale source total as verified can misstate both paid and remaining amounts.
 
-**How to apply:** Calculate remaining per request as `max(approved - paid, 0)` and then sum; never derive the total by subtracting aggregate paid from aggregate approved when individual rows can be overpaid or excluded. A settled or fully-paid label never overrides a lower recorded payment amount: show the difference and flag the row for reconciliation.
+**How to apply:** For open approved/partially-paid requests, calculate remaining per request as `max(approved - paid, 0)` and then sum. Settled rows contribute zero payable Remaining; payment shortfalls on them are shown separately as reconciliation-required.
 
 Site completion/coverage is a separate dimension from the Down-Payment request/payment status and must be reported separately.
 

@@ -47,7 +47,7 @@ describe('getDownPaymentStats', () => {
     expect(stats.amounts).toMatchObject({
       totalApproved: 100,
       totalPaid: 25,
-      totalRemaining: 75,
+      totalRemaining: 0,
     });
   });
 });

@@ -218,7 +218,7 @@ class DownPaymentStats {
     );
     final remaining = requests.fold<double>(
       0,
-      (s, r) => s + ((r.remainingAmount ?? 0)),
+      (s, r) => s + r.balanceRemaining,
     );
     return DownPaymentStats(
       totalRequests: requests.length,

@@ -139,6 +139,10 @@ List<DownPaymentRequest> completedRequestsForRole(
       .where(
         (r) =>
             r.status == 'fully_paid' ||
+            r.status == 'paid' ||
+            r.status == 'reconciled' ||
+            r.status == 'completed' ||
+            r.status == 'closed' ||
             r.status == 'rejected' ||
             r.status == 'cancelled',
       )
@@ -157,6 +161,10 @@ String _statusLabel(String status) {
     'rejected': 'Rejected',
     'partially_paid': 'Partially Paid',
     'fully_paid': 'Fully Paid',
+    'paid': 'Paid',
+    'reconciled': 'Reconciled',
+    'completed': 'Completed',
+    'closed': 'Closed',
     'cancelled': 'Cancelled',
   };
   return labels[status] ?? status;
@@ -185,7 +193,7 @@ Future<void> exportDownPaymentsToCSV(List<DownPaymentRequest> requests) async {
           dateFormat.format(r.requestedAt),
           r.requestedAmount.toStringAsFixed(0),
           r.totalPaidAmount.toStringAsFixed(0),
-          (r.remainingAmount ?? 0).toStringAsFixed(0),
+          r.balanceRemaining.toStringAsFixed(0),
           _statusLabel(r.status),
           r.justification.replaceAll(',', ';'),
         ],
@@ -238,7 +246,7 @@ Future<void> exportDownPaymentsToExcel(
     sheet.cell(excel_lib.CellIndex.indexByString('F$row')).value =
         excel_lib.DoubleCellValue(r.totalPaidAmount);
     sheet.cell(excel_lib.CellIndex.indexByString('G$row')).value =
-        excel_lib.DoubleCellValue(r.remainingAmount ?? 0);
+        excel_lib.DoubleCellValue(r.balanceRemaining);
     sheet.cell(excel_lib.CellIndex.indexByString('H$row')).value =
         excel_lib.TextCellValue(_statusLabel(r.status));
     sheet.cell(excel_lib.CellIndex.indexByString('I$row')).value =
@@ -268,7 +276,7 @@ Future<void> exportDownPaymentsToPDF(List<DownPaymentRequest> requests) async {
   final totalPaid = requests.fold<double>(0, (s, r) => s + r.totalPaidAmount);
   final totalRemaining = requests.fold<double>(
     0,
-    (s, r) => s + (r.remainingAmount ?? 0),
+    (s, r) => s + r.balanceRemaining,
   );
 
   pdf.addPage(

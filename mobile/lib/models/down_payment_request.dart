@@ -203,9 +203,20 @@ abstract class DownPaymentRequest with _$DownPaymentRequest {
   /// Check if request is cancelled
   bool get isCancelled => status == DownPaymentStatus.cancelled.value;
 
-  /// Calculate remaining balance
-  double get balanceRemaining =>
-      (remainingAmount ?? 0.0) > 0 ? (remainingAmount ?? 0.0) : 0.0;
+  /// Open payable balance. Settled lifecycle rows may still need Finance
+  /// reconciliation, but they must not inflate the actionable Remaining total.
+  double get balanceRemaining {
+    const settledStatuses = {
+      'fully_paid',
+      'paid',
+      'reconciled',
+      'completed',
+      'closed',
+    };
+    if (settledStatuses.contains(status)) return 0.0;
+    final value = remainingAmount ?? 0.0;
+    return value > 0 ? value : 0.0;
+  }
 
   /// Check if there are pending installments
   bool get hasPendingInstallments {

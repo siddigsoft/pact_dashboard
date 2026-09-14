@@ -152,11 +152,11 @@ function getRemainingExplanation(
   if (request.status === 'pending_supervisor' || request.status === 'pending_admin') {
     return 'Pending approval; no approved balance yet';
   }
+  if (isDownPaymentSettledStatus(request.status) && balance.reconciliationRequired) {
+    return 'Settled request; excluded from payable Remaining, but payment evidence requires reconciliation';
+  }
   if (balance.remaining <= 0) return 'No outstanding approved balance';
   if (balance.paid <= 0) return 'Approved but unpaid; full approved amount outstanding';
-  if (isDownPaymentSettledStatus(request.status)) {
-    return 'Settled status has a payment shortfall; reconciliation required';
-  }
   return 'Partially paid; unpaid approved balance outstanding';
 }
 

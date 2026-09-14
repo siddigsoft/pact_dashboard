@@ -30,7 +30,7 @@ export interface DownPaymentBalance {
   approved: number;
   /** Amount paid according to immutable evidence, or the legacy source total. */
   paid: number;
-  /** Always non-negative and never greater than approved. */
+  /** Open payable balance; settled rows contribute zero even if evidence needs reconciliation. */
   remaining: number;
   paymentBasis: DownPaymentPaymentBasis;
   reconciliationRequired: boolean;
@@ -173,7 +173,13 @@ export function getDownPaymentBalance(
     : isFinancial
       ? finiteAmount(request.totalPaidAmount)
       : 0;
-  const remaining = Math.max(0, approved - paid);
+  // Remaining is the amount still payable through the open approval flow.
+  // Settled lifecycle rows are closed for payment and must not inflate the
+  // actionable balance card; any evidence mismatch is surfaced separately as
+  // reconciliation-required below.
+  const remaining = isDownPaymentSettledStatus(status)
+    ? 0
+    : Math.max(0, approved - paid);
 
   const legacyPositiveTotal = !hasEvidence && finiteAmount(request.totalPaidAmount) > 0;
   const settledWithoutEvidence = isDownPaymentSettledStatus(status) && !hasEvidence;
