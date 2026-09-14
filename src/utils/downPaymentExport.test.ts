@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { DownPaymentRequest } from '@/types/down-payment';
-import { filterDownPayments, getDownPaymentStats } from './downPaymentExport';
+import { exportToExcel, filterDownPayments, getDownPaymentStats } from './downPaymentExport';
+
+const { exportStandardExcelMock } = vi.hoisted(() => ({
+  exportStandardExcelMock: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@/utils/standardExcelExport', () => ({
+  exportStandardExcel: exportStandardExcelMock,
+}));
 
 function requestAt(requestedAt: string): DownPaymentRequest {
   return {
@@ -41,5 +49,38 @@ describe('getDownPaymentStats', () => {
       totalPaid: 25,
       totalRemaining: 75,
     });
+  });
+});
+
+describe('exportToExcel', () => {
+  it('lists approved unpaid requests and breaks them down by state and site status', async () => {
+    exportStandardExcelMock.mockClear();
+    const row = requestAt('2026-09-14T00:00:00');
+    Object.assign(row, {
+      id: 'approved-kassala',
+      stateName: 'Kassala',
+      siteCompletionStatus: 'completed',
+      totalTransportationBudget: 100,
+      approvedAmount: 100,
+      totalPaidAmount: 0,
+      paymentType: 'full_advance',
+    });
+
+    await exportToExcel([row], 'down-payments', 'All');
+
+    const report = exportStandardExcelMock.mock.calls[0][0];
+    const remainingIndex = report.mainSheet.headers.indexOf('Remaining (SDG)');
+    const explanationIndex = report.mainSheet.headers.indexOf('Remaining Includes');
+    const coverageIndex = report.mainSheet.headers.indexOf('Site Coverage');
+    expect(report.mainSheet.rows).toHaveLength(1);
+    expect(report.mainSheet.rows[0][remainingIndex]).toBe(100);
+    expect(report.mainSheet.rows[0][explanationIndex]).toContain('Approved but unpaid');
+    expect(report.mainSheet.rows[0][coverageIndex]).toBe('Covered / Completed');
+
+    const stateSheet = report.breakdownSheets.find((sheet: { sheetName: string }) => sheet.sheetName === 'By State & Status');
+    expect(stateSheet.rows).toContainEqual(['Kassala', 'Approved', 1, 100, 100, 0, 100]);
+
+    const siteSheet = report.breakdownSheets.find((sheet: { sheetName: string }) => sheet.sheetName === 'By Site Status');
+    expect(siteSheet.rows).toContainEqual(['Kassala', 'Covered / Completed', 'Completed', 1, 100, 100, 0, 100]);
   });
 });

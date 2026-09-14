@@ -60,6 +60,11 @@ function transformFromDB(data: any): DownPaymentRequest {
     projectName: cleanStr(mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name) || 'WFP TPM',
     wfpProjectName: cleanStr(mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name),
     activityType: data.metadata?.activity_type || undefined,
+    siteCompletionStatus: cleanStr(
+      mmpEntry?.status
+      || data.metadata?.site_status
+      || data.metadata?.site_completion_status,
+    ),
     requestedBy: data.requested_by,
     requestedByName: undefined,
     requestedAt: data.requested_at,
@@ -120,6 +125,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
       state,
       locality,
       cp_name,
+      status,
       mmp_file_id
     )
   `;

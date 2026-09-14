@@ -120,6 +120,46 @@ function getApprovalTypeLabel(type: string): string {
   return labels[type] || type;
 }
 
+function getSiteCoverageLabel(request: DownPaymentRequest): string {
+  const status = request.siteCompletionStatus?.trim().toLowerCase();
+  if (status === 'completed' || status === 'wfp_confirmed' || status === 'confirmed') {
+    return 'Covered / Completed';
+  }
+  if (status === 'not_covered' || status === 'rejected' || status === 'cancelled' || status === 'canceled') {
+    return 'Not Covered';
+  }
+  if (!status) return 'Unknown';
+  return 'Not Completed';
+}
+
+function getSiteStatusLabel(request: DownPaymentRequest): string {
+  const status = request.siteCompletionStatus?.trim();
+  if (!status) return 'Unknown';
+  return status
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function getRemainingExplanation(
+  request: DownPaymentRequest,
+  evidenceByRequest?: DownPaymentEvidenceMap,
+): string {
+  const balance = balanceFor(request, evidenceByRequest);
+  const classification = classifyDownPaymentStatus(request.status);
+  if (classification === 'closed' || classification === 'deleted') {
+    return 'Excluded historical record';
+  }
+  if (request.status === 'pending_supervisor' || request.status === 'pending_admin') {
+    return 'Pending approval; no approved balance yet';
+  }
+  if (balance.remaining <= 0) return 'No outstanding approved balance';
+  if (balance.paid <= 0) return 'Approved but unpaid; full approved amount outstanding';
+  if (isDownPaymentSettledStatus(request.status)) {
+    return 'Settled status has a payment shortfall; reconciliation required';
+  }
+  return 'Partially paid; unpaid approved balance outstanding';
+}
+
 export function exportToCSV(
   requests: DownPaymentRequest[],
   filename: string = 'down-payments',
@@ -141,7 +181,10 @@ export function exportToCSV(
     'Approved Amount (SDG)',
     'Paid Amount (SDG)',
     'Remaining (SDG)',
+    'Remaining Includes',
     'Status',
+    'Site Coverage',
+    'Site System Status',
     'Payment Basis',
     'Reconciliation',
     'Supervisor Status',
@@ -168,7 +211,10 @@ export function exportToCSV(
       balance.approved,
       balance.paid,
       balance.remaining,
+      getRemainingExplanation(req, evidenceByRequest),
       getStatusLabel(req.status),
+      getSiteCoverageLabel(req),
+      getSiteStatusLabel(req),
       balance.paymentBasis,
       balance.reconciliationRequired ? (balance.reconciliationReason || 'Required') : '',
       req.supervisorStatus ? (req.supervisorStatus === 'pending' ? 'Pending' : getStatusLabel(req.supervisorStatus)) : 'Pending',
@@ -213,7 +259,8 @@ export async function exportToExcel(
     '#', 'Request ID', 'MMP', 'Requester Name', 'Site Name', 'State', 'Locality', 'Hub',
     'Activity Type', 'CP Name', 'Requested At', 'Transportation Budget (SDG)',
     'Requested Amount (SDG)', 'Approval Type', 'Approval %', 'Approved Amount (SDG)',
-    'Paid Amount (SDG)', 'Remaining (SDG)', 'Status', 'Payment Type',
+    'Paid Amount (SDG)', 'Remaining (SDG)', 'Remaining Includes', 'Status',
+    'Site Coverage', 'Site System Status', 'Payment Type',
     'Payment Basis', 'Reconciliation',
     'Supervisor Status', 'Supervisor Approved By', 'Supervisor Approved At',
     'Supervisor Notes', 'Admin Status', 'Admin Processed By', 'Admin Processed At',
@@ -241,7 +288,10 @@ export async function exportToExcel(
       balance.approved,
       balance.paid,
       balance.remaining,
+      getRemainingExplanation(req, evidenceByRequest),
       getStatusLabel(req.status),
+      getSiteCoverageLabel(req),
+      getSiteStatusLabel(req),
       req.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
       balance.paymentBasis,
       balance.reconciliationRequired ? (balance.reconciliationReason || 'Required') : '',
@@ -303,6 +353,78 @@ export async function exportToExcel(
   hubGroups.forEach((v, k) => {
     hubData.push([k, v.count, v.requested, v.approved, v.paid, v.remaining]);
   });
+
+  type BreakdownTotals = {
+    count: number;
+    requested: number;
+    approved: number;
+    paid: number;
+    remaining: number;
+  };
+  const addBreakdownRow = (
+    groups: Map<string, BreakdownTotals>,
+    key: string,
+    request: DownPaymentRequest,
+  ) => {
+    const balance = balanceFor(request, evidenceByRequest);
+    const totals = groups.get(key) ?? { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
+    totals.count += 1;
+    totals.requested += request.requestedAmount;
+    totals.approved += balance.approved;
+    totals.paid += balance.paid;
+    totals.remaining += balance.remaining;
+    groups.set(key, totals);
+  };
+
+  const statusOrder = [
+    'pending_supervisor', 'pending_admin', 'approved', 'partially_paid',
+    'fully_paid', 'paid', 'reconciled', 'completed', 'closed',
+    'rejected', 'cancelled', 'deleted',
+  ];
+  const states = [...new Set(requests.map(request => request.stateName || 'Unknown'))]
+    .sort((a, b) => a.localeCompare(b));
+  const stateStatusGroups = new Map<string, BreakdownTotals>();
+  requests.forEach(request => {
+    addBreakdownRow(
+      stateStatusGroups,
+      `${request.stateName || 'Unknown'}\u0000${request.status}`,
+      request,
+    );
+  });
+  const stateStatusRows: (string | number)[][] = [];
+  states.forEach(state => {
+    statusOrder.forEach(status => {
+      const totals = stateStatusGroups.get(`${state}\u0000${status}`)
+        ?? { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
+      stateStatusRows.push([
+        state,
+        getStatusLabel(status),
+        totals.count,
+        totals.requested,
+        totals.approved,
+        totals.paid,
+        totals.remaining,
+      ]);
+    });
+  });
+
+  const siteStatusGroups = new Map<string, BreakdownTotals>();
+  requests.forEach(request => {
+    addBreakdownRow(
+      siteStatusGroups,
+      `${request.stateName || 'Unknown'}\u0000${getSiteCoverageLabel(request)}\u0000${getSiteStatusLabel(request)}`,
+      request,
+    );
+  });
+  const siteStatusRows = [...siteStatusGroups.entries()]
+    .map(([key, totals]) => {
+      const [state, coverage, siteStatus] = key.split('\u0000');
+      return [
+        state, coverage, siteStatus, totals.count, totals.requested,
+        totals.approved, totals.paid, totals.remaining,
+      ] as (string | number)[];
+    })
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])) || String(a[1]).localeCompare(String(b[1])));
   await exportStandardExcel({
     reportTitle: 'PACT Command Center - Down-Payment Requests Report',
     subtitleLine: `Tab: ${tabLabel} | Total Requests: ${requests.length}`,
@@ -320,13 +442,29 @@ export async function exportToExcel(
       rows: summaryData,
       colWidths: [28, 18, 24],
     },
-    breakdownSheets: [{
-      title: 'Breakdown by Hub',
-      sheetName: 'By Hub',
-      headers: hubData[0].map(String),
-      rows: hubData.slice(1),
-      colWidths: [22, 12, 20, 20, 20, 20],
-    }],
+    breakdownSheets: [
+      {
+        title: 'Breakdown by Hub',
+        sheetName: 'By Hub',
+        headers: hubData[0].map(String),
+        rows: hubData.slice(1),
+        colWidths: [22, 12, 20, 20, 20, 20],
+      },
+      {
+        title: 'Breakdown by State and Request Status',
+        sheetName: 'By State & Status',
+        headers: ['State', 'Request Status', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)'],
+        rows: stateStatusRows,
+        colWidths: [22, 24, 12, 20, 20, 20, 20],
+      },
+      {
+        title: 'Breakdown by State and Site Completion Status',
+        sheetName: 'By Site Status',
+        headers: ['State', 'Site Coverage', 'Site System Status', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)', 'Remaining (SDG)'],
+        rows: siteStatusRows,
+        colWidths: [22, 22, 22, 12, 20, 20, 20, 20],
+      },
+    ],
   });
 }
 

@@ -89,6 +89,8 @@ export interface DownPaymentRequest {
   /** The actual WFP project name from the projects table (e.g. "WFP TPM", "WFP VAM") */
   wfpProjectName?: string;
   activityType?: string;
+  /** Current workflow status of the linked MMP site entry, separate from payment status. */
+  siteCompletionStatus?: string;
   
   // Requester information
   requestedBy: string;
