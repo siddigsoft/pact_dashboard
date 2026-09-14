@@ -203,18 +203,32 @@ abstract class DownPaymentRequest with _$DownPaymentRequest {
   /// Check if request is cancelled
   bool get isCancelled => status == DownPaymentStatus.cancelled.value;
 
-  /// Open payable balance. Settled lifecycle rows may still need Finance
-  /// reconciliation, but they must not inflate the actionable Remaining total.
-  double get balanceRemaining {
-    const settledStatuses = {
+  /// Approved amount used by the web tracker. Legacy rows keep this value in
+  /// metadata; otherwise the requested amount is the compatibility basis.
+  double get approvedBalanceAmount {
+    const financialStatuses = {
+      'approved',
+      'partially_paid',
       'fully_paid',
       'paid',
       'reconciled',
       'completed',
       'closed',
     };
-    if (settledStatuses.contains(status)) return 0.0;
-    final value = remainingAmount ?? 0.0;
+    if (!financialStatuses.contains(status)) return 0.0;
+    final metadataAmount = metadata['approved_amount'];
+    if (metadataAmount is num) return metadataAmount.toDouble();
+    if (metadataAmount is String) {
+      final parsed = double.tryParse(metadataAmount);
+      if (parsed != null) return parsed;
+    }
+    return requestedAmount;
+  }
+
+  /// Unpaid approved balance. A completed site does not erase a payment
+  /// shortfall; Finance must reconcile any completed row with a positive value.
+  double get balanceRemaining {
+    final value = approvedBalanceAmount - totalPaidAmount;
     return value > 0 ? value : 0.0;
   }
 

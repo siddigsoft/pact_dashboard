@@ -179,6 +179,7 @@ Future<void> exportDownPaymentsToCSV(List<DownPaymentRequest> requests) async {
     'Hub',
     'Requested At',
     'Requested Amount (SDG)',
+    'Approved Amount (SDG)',
     'Paid (SDG)',
     'Remaining (SDG)',
     'Status',
@@ -192,6 +193,7 @@ Future<void> exportDownPaymentsToCSV(List<DownPaymentRequest> requests) async {
           r.hubName ?? 'N/A',
           dateFormat.format(r.requestedAt),
           r.requestedAmount.toStringAsFixed(0),
+          r.approvedBalanceAmount.toStringAsFixed(0),
           r.totalPaidAmount.toStringAsFixed(0),
           r.balanceRemaining.toStringAsFixed(0),
           _statusLabel(r.status),
@@ -221,6 +223,7 @@ Future<void> exportDownPaymentsToExcel(
     'Hub',
     'Requested At',
     'Requested Amount (SDG)',
+    'Approved Amount (SDG)',
     'Paid (SDG)',
     'Remaining (SDG)',
     'Status',
@@ -244,12 +247,14 @@ Future<void> exportDownPaymentsToExcel(
     sheet.cell(excel_lib.CellIndex.indexByString('E$row')).value =
         excel_lib.DoubleCellValue(r.requestedAmount);
     sheet.cell(excel_lib.CellIndex.indexByString('F$row')).value =
-        excel_lib.DoubleCellValue(r.totalPaidAmount);
+        excel_lib.DoubleCellValue(r.approvedBalanceAmount);
     sheet.cell(excel_lib.CellIndex.indexByString('G$row')).value =
-        excel_lib.DoubleCellValue(r.balanceRemaining);
+        excel_lib.DoubleCellValue(r.totalPaidAmount);
     sheet.cell(excel_lib.CellIndex.indexByString('H$row')).value =
-        excel_lib.TextCellValue(_statusLabel(r.status));
+        excel_lib.DoubleCellValue(r.balanceRemaining);
     sheet.cell(excel_lib.CellIndex.indexByString('I$row')).value =
+        excel_lib.TextCellValue(_statusLabel(r.status));
+    sheet.cell(excel_lib.CellIndex.indexByString('J$row')).value =
         excel_lib.TextCellValue(r.justification);
   }
   final dir = await getApplicationDocumentsDirectory();
@@ -274,6 +279,10 @@ Future<void> exportDownPaymentsToPDF(List<DownPaymentRequest> requests) async {
     (s, r) => s + r.requestedAmount,
   );
   final totalPaid = requests.fold<double>(0, (s, r) => s + r.totalPaidAmount);
+  final totalApproved = requests.fold<double>(
+    0,
+    (s, r) => s + r.approvedBalanceAmount,
+  );
   final totalRemaining = requests.fold<double>(
     0,
     (s, r) => s + r.balanceRemaining,
@@ -343,6 +352,22 @@ Future<void> exportDownPaymentsToPDF(List<DownPaymentRequest> requests) async {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Text(
+                  'Total Approved (SDG)',
+                  style: const pw.TextStyle(fontSize: 9),
+                ),
+                pw.Text(
+                  totalApproved.toStringAsFixed(0),
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
                   'Total Paid (SDG)',
                   style: const pw.TextStyle(fontSize: 9),
                 ),
@@ -375,7 +400,16 @@ Future<void> exportDownPaymentsToPDF(List<DownPaymentRequest> requests) async {
         ),
         pw.SizedBox(height: 12),
         pw.TableHelper.fromTextArray(
-          headers: ['Site', 'Hub', 'Date', 'Requested', 'Paid', 'Status'],
+          headers: [
+            'Site',
+            'Hub',
+            'Date',
+            'Requested',
+            'Approved',
+            'Paid',
+            'Remaining',
+            'Status',
+          ],
           data: requests
               .map(
                 (r) => [
@@ -385,7 +419,9 @@ Future<void> exportDownPaymentsToPDF(List<DownPaymentRequest> requests) async {
                   r.hubName ?? '-',
                   dateFormat.format(r.requestedAt),
                   r.requestedAmount.toStringAsFixed(0),
+                   r.approvedBalanceAmount.toStringAsFixed(0),
                   r.totalPaidAmount.toStringAsFixed(0),
+                   r.balanceRemaining.toStringAsFixed(0),
                   _statusLabel(r.status),
                 ],
               )

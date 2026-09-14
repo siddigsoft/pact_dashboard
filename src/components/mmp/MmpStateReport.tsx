@@ -11,6 +11,8 @@ import {
 import { format, differenceInDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
+import { getDownPaymentBalance, isDownPaymentSettledStatus } from '@/utils/downPaymentBalance';
+import { fetchPreFundSourcePaymentLinks } from '@/utils/preFundLinkage';
 import {
   exportMmpStateReport,
   MmpReportData,
@@ -299,7 +301,7 @@ export default function MmpStateReport({
       console.warn('[MmpStateReport] RPC get_advances_by_entry_ids unavailable, falling back:', rpcErr?.message);
       const direct = await inChunks(
         'down_payment_requests',
-        'id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,requested_by,requested_at,hub_name',
+        'id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,remaining_amount,requested_by,requested_at,hub_name,metadata',
         'mmp_site_entry_id',
         ids,
       );
@@ -315,9 +317,11 @@ export default function MmpStateReport({
           requested_amount: info.requestedAmount,
           approved_amount: info.approvedAmount,
           total_paid_amount: info.totalPaid,
+          remaining_amount: Math.max(info.approvedAmount - info.totalPaid, 0),
           requested_by: null,
           requested_at: null,
           hub_name: null,
+          metadata: {},
         }));
     };
 
@@ -357,15 +361,48 @@ export default function MmpStateReport({
           mmpId
             ? supabase
                 .from('down_payment_requests')
-                .select('id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,remaining_amount,hub_name,site_name,payment_type,created_at')
+                .select('id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,remaining_amount,hub_name,site_name,payment_type,created_at,metadata')
                 .eq('mmp_file_id', mmpId)
             : Promise.resolve({ data: [], error: null }),
         ]);
         setAuditLogs(logs);
-        // Prefer file-level advance fetch (complete); fall back to entry-level fetch
+        // Prefer file-level advance fetch (complete); fall back to entry-level fetch.
+        // Rebuild every financial amount from the same immutable Pre-Fund evidence
+        // used by the Down-Payment Tracker before any report aggregation occurs.
         const advFile: any[] = (advFileRes as any).data || [];
+        const selectedAdvances = advFile.length > 0 ? advFile : adv;
+        const paymentLinks = await fetchPreFundSourcePaymentLinks(
+          'down_payment_requests',
+          selectedAdvances.map((row: any) => row.id).filter(Boolean),
+        );
+        const linksByRequest = new Map<string, typeof paymentLinks>();
+        paymentLinks.forEach(link => {
+          const rows = linksByRequest.get(link.sourceId) ?? [];
+          rows.push(link);
+          linksByRequest.set(link.sourceId, rows);
+        });
+        const canonicalAdvances = selectedAdvances.map((row: any) => {
+          const approvedAmount = Number(row.approved_amount);
+          const balance = getDownPaymentBalance({
+            status: row.status,
+            requestedAmount: Number(row.requested_amount) || 0,
+            approvedAmount: approvedAmount > 0 ? approvedAmount : undefined,
+            totalPaidAmount: Number(row.total_paid_amount) || 0,
+          }, linksByRequest.get(row.id) ?? []);
+          return {
+            ...row,
+            status: isDownPaymentSettledStatus(row.status) && balance.remaining > 0
+              ? 'partially_paid'
+              : row.status,
+            approved_amount: balance.approved,
+            total_paid_amount: balance.paid,
+            remaining_amount: balance.remaining,
+            payment_evidence_source: balance.paymentBasis,
+            reconciliation_required: balance.reconciliationRequired,
+          };
+        });
         setAdvancesByFile(advFile);
-        setAdvancesDetail(advFile.length > 0 ? advFile : adv);
+        setAdvancesDetail(canonicalAdvances);
         setCostSubmissions((costSubsRes as any).data || []);
 
         // Build siteId → collectorId map from accepted_by / claimed_by
@@ -467,6 +504,22 @@ export default function MmpStateReport({
     return coordinatorNames[id] || userMap[id] || actorNameMap[id] || (isUuid ? id.substring(0, 8) + '…' : id);
   };
 
+  const canonicalAdvanceMap = useMemo(() => {
+    const map: Record<string, AdvanceInfo & { remainingAmount: number }> = {};
+    advancesDetail.forEach((row: any) => {
+      if (!row.mmp_site_entry_id) return;
+      map[row.mmp_site_entry_id] = {
+        id: row.id,
+        status: row.status,
+        requestedAmount: Number(row.requested_amount) || 0,
+        approvedAmount: Number(row.approved_amount) || 0,
+        totalPaid: Number(row.total_paid_amount) || 0,
+        remainingAmount: Number(row.remaining_amount) || 0,
+      };
+    });
+    return map;
+  }, [advancesDetail]);
+
   // ── Derived: sites ─────────────────────────────────────────────────────────
   const sites = useMemo<ReportSiteRow[]>(() => {
     const isUuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -474,7 +527,7 @@ export default function MmpStateReport({
       const ad     = e.additional_data || e.additionalData || {};
       const status = (e.status || '').toLowerCase().trim();
       const cat    = statusCategory(status);
-      const adv    = advanceMap[e.id];
+      const adv    = canonicalAdvanceMap[e.id] || advanceMap[e.id];
 
       const coordId = ad.assigned_to || e.forwarded_to_user_id || e.forwardedToUserId || '';
 
@@ -573,6 +626,7 @@ export default function MmpStateReport({
         advanceRequested: adv?.requestedAmount || 0,
         advanceApproved:  adv?.approvedAmount  || 0,
         advancePaid:      adv?.totalPaid       || 0,
+        advanceRemaining: 'remainingAmount' in (adv || {}) ? Number((adv as any).remainingAmount) || 0 : Math.max((adv?.approvedAmount || 0) - (adv?.totalPaid || 0), 0),
         transportBudget:  e.transport_fee != null ? Number(e.transport_fee) : 0,
         comments:   e.comments || '',
         nextStep:   nextStep(status),
@@ -580,7 +634,7 @@ export default function MmpStateReport({
       };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawEntries, coordinatorNames, userMap, advanceMap, siteCollectorMap, siteCollectorNameMap, actorNameMap]);
+  }, [rawEntries, coordinatorNames, userMap, advanceMap, canonicalAdvanceMap, siteCollectorMap, siteCollectorNameMap, actorNameMap]);
 
   // ── Derived: coordinators ──────────────────────────────────────────────────
   const coordinatorRows = useMemo<ReportCoordinatorRow[]>(() => {

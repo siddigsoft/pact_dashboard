@@ -73,7 +73,7 @@ describe('down-payment balance policy', () => {
     expect(balance).toMatchObject({
       approved: 100,
       paid: 40,
-      remaining: 0,
+      remaining: 60,
       paymentBasis: 'active_immutable_links',
       reconciliationRequired: true,
     });
@@ -123,24 +123,24 @@ describe('down-payment balance policy', () => {
     }))).toMatchObject({ approved: 100, paid: 100, remaining: 0, paymentBasis: 'legacy_source_total' });
   });
 
-  it('excludes a settled status from the open payable balance while flagging reconciliation', () => {
+  it('does not let a settled status hide an unpaid recorded balance', () => {
     expect(getDownPaymentBalance(request('fully_paid', {
       approvedAmount: 100,
       totalPaidAmount: 0,
     }))).toMatchObject({
       approved: 100,
       paid: 0,
-      remaining: 0,
+      remaining: 100,
       paymentBasis: 'no_payment_evidence',
       reconciliationRequired: true,
     });
   });
 
-  it('warns on settled authoritative evidence shortfall without inflating Remaining', () => {
+  it('warns when settled authoritative evidence proves a short payment', () => {
     expect(getDownPaymentBalance(request('fully_paid', {
       approvedAmount: 100,
     }), [{ paymentAmount: 80, historyStatus: 'active' }]))
-      .toMatchObject({ approved: 100, paid: 80, remaining: 0, reconciliationRequired: true });
+      .toMatchObject({ approved: 100, paid: 80, remaining: 20, reconciliationRequired: true });
   });
 
   it('matches the screenshot invariant of two approved and 41 settled rows', () => {
@@ -160,6 +160,6 @@ describe('down-payment balance policy', () => {
     expect(rows.filter(row => isDownPaymentSettledStatus(row.status))).toHaveLength(41);
     expect(balances.reduce((sum, row) => sum + row.approved, 0)).toBeCloseTo(3_170_000);
     expect(balances.reduce((sum, row) => sum + row.paid, 0)).toBeCloseTo(2_382_500);
-    expect(balances.reduce((sum, row) => sum + row.remaining, 0)).toBeCloseTo(150_000);
+    expect(balances.reduce((sum, row) => sum + row.remaining, 0)).toBeCloseTo(787_500);
   });
 });

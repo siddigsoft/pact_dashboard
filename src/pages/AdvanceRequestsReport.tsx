@@ -1092,19 +1092,20 @@ function AdvanceRequestsReportContent() {
 
   const stats = useMemo(() => {
     const totalRequested = filteredRequests.reduce((sum, r) => sum + r.requestedAmount, 0);
-    const totalApproved = filteredRequests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).reduce((sum, r) => sum + r.requestedAmount, 0);
+    const balances = filteredRequests.map(getRequestBalance);
+    const totalApproved = balances.reduce((sum, balance) => sum + balance.approved, 0);
     const totalPending = filteredRequests.filter(r => ['pending_supervisor', 'pending_admin'].includes(r.status)).reduce((sum, r) => sum + r.requestedAmount, 0);
     const totalRejected = filteredRequests.filter(r => r.status === 'rejected').reduce((sum, r) => sum + r.requestedAmount, 0);
-    const totalPaid = filteredRequests.reduce((sum, r) => sum + (r.totalPaidAmount || 0), 0);
+    const totalPaid = balances.reduce((sum, balance) => sum + balance.paid, 0);
     
     const pendingCount = filteredRequests.filter(r => ['pending_supervisor', 'pending_admin'].includes(r.status)).length;
-    const approvedCount = filteredRequests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).length;
+    const approvedCount = balances.filter(balance => balance.approved > 0).length;
     const rejectedCount = filteredRequests.filter(r => r.status === 'rejected').length;
     const paidCount = filteredRequests.filter(r => (r.totalPaidAmount || 0) > 0).length;
-    const remainingBalance = totalApproved - totalPaid;
+    const remainingBalance = balances.reduce((sum, balance) => sum + balance.remaining, 0);
     
     return { totalRequested, totalApproved, totalPending, totalRejected, totalPaid, pendingCount, approvedCount, rejectedCount, paidCount, remainingBalance, totalCount: filteredRequests.length };
-  }, [filteredRequests]);
+  }, [filteredRequests, getRequestBalance]);
 
   const byTeamMember = useMemo(() => {
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
@@ -1115,15 +1116,13 @@ function AdvanceRequestsReportContent() {
       grouped[req.requestedBy].requests++;
       grouped[req.requestedBy].totalRequested += req.requestedAmount;
       grouped[req.requestedBy].items.push(req);
-      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
-        grouped[req.requestedBy].totalApproved += req.requestedAmount;
-      }
+      grouped[req.requestedBy].totalApproved += getRequestBalance(req).approved;
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
         grouped[req.requestedBy].pending++;
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests, getProfileName]);
+  }, [filteredRequests, getProfileName, getRequestBalance]);
 
   const byHub = useMemo(() => {
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests, sites: Set<string> }> = {};
@@ -1139,9 +1138,7 @@ function AdvanceRequestsReportContent() {
       // the hub-level distinct-sites denominator stays consistent with the
       // per-site rows shown in the "By Site" tab.
       grouped[hubKey].sites.add(req.siteName || 'Unknown Site');
-      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
-        grouped[hubKey].totalApproved += req.requestedAmount;
-      }
+      grouped[hubKey].totalApproved += getRequestBalance(req).approved;
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
         grouped[hubKey].pending++;
       }
@@ -1153,7 +1150,7 @@ function AdvanceRequestsReportContent() {
         avgPerSite: h.sites.size > 0 ? Math.round(h.totalRequested / h.sites.size) : 0,
       }))
       .sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests]);
+  }, [filteredRequests, getRequestBalance]);
 
   // Per-site aggregation — used by the new "By Site" tab and the "Avg per Site"
   // column on the Hub summary. Groups by siteName + hub + locality so two
@@ -1194,9 +1191,7 @@ function AdvanceRequestsReportContent() {
       grouped[siteKey].requests++;
       grouped[siteKey].totalRequested += req.requestedAmount;
       grouped[siteKey].items.push(req);
-      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
-        grouped[siteKey].totalApproved += req.requestedAmount;
-      }
+      grouped[siteKey].totalApproved += getRequestBalance(req).approved;
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
         grouped[siteKey].pending++;
       }
@@ -1207,7 +1202,7 @@ function AdvanceRequestsReportContent() {
         avgPerRequest: s.requests > 0 ? Math.round(s.totalRequested / s.requests) : 0,
       }))
       .sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests]);
+  }, [filteredRequests, getRequestBalance]);
 
   const statusLabels: Record<string, string> = {
     'pending_supervisor': 'Pending Supervisor',
@@ -1229,15 +1224,13 @@ function AdvanceRequestsReportContent() {
       grouped[statusKey].requests++;
       grouped[statusKey].totalRequested += req.requestedAmount;
       grouped[statusKey].items.push(req);
-      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
-        grouped[statusKey].totalApproved += req.requestedAmount;
-      }
+      grouped[statusKey].totalApproved += getRequestBalance(req).approved;
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
         grouped[statusKey].pending++;
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests]);
+  }, [filteredRequests, getRequestBalance]);
 
   const byState = useMemo(() => {
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
@@ -1249,15 +1242,13 @@ function AdvanceRequestsReportContent() {
       grouped[stateKey].requests++;
       grouped[stateKey].totalRequested += req.requestedAmount;
       grouped[stateKey].items.push(req);
-      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
-        grouped[stateKey].totalApproved += req.requestedAmount;
-      }
+      grouped[stateKey].totalApproved += getRequestBalance(req).approved;
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
         grouped[stateKey].pending++;
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests]);
+  }, [filteredRequests, getRequestBalance]);
 
   const byLocality = useMemo(() => {
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
@@ -1269,15 +1260,13 @@ function AdvanceRequestsReportContent() {
       grouped[localityKey].requests++;
       grouped[localityKey].totalRequested += req.requestedAmount;
       grouped[localityKey].items.push(req);
-      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
-        grouped[localityKey].totalApproved += req.requestedAmount;
-      }
+      grouped[localityKey].totalApproved += getRequestBalance(req).approved;
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
         grouped[localityKey].pending++;
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests]);
+  }, [filteredRequests, getRequestBalance]);
 
   const byProject = useMemo(() => {
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
@@ -1289,15 +1278,13 @@ function AdvanceRequestsReportContent() {
       grouped[projectKey].requests++;
       grouped[projectKey].totalRequested += req.requestedAmount;
       grouped[projectKey].items.push(req);
-      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
-        grouped[projectKey].totalApproved += req.requestedAmount;
-      }
+      grouped[projectKey].totalApproved += getRequestBalance(req).approved;
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
         grouped[projectKey].pending++;
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests]);
+  }, [filteredRequests, getRequestBalance]);
 
   const byMMP = useMemo(() => {
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests, originalBudget: number }> = {};
@@ -1309,9 +1296,7 @@ function AdvanceRequestsReportContent() {
       grouped[mmpKey].requests++;
       grouped[mmpKey].totalRequested += req.requestedAmount;
       grouped[mmpKey].items.push(req);
-      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
-        grouped[mmpKey].totalApproved += req.requestedAmount;
-      }
+      grouped[mmpKey].totalApproved += getRequestBalance(req).approved;
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
         grouped[mmpKey].pending++;
       }
@@ -1330,12 +1315,12 @@ function AdvanceRequestsReportContent() {
       }, 0);
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests]);
+  }, [filteredRequests, getRequestBalance]);
 
   const agingData = useMemo(() => {
     const now = new Date();
     const outstanding = requests.filter(r => {
-      const isOutstanding = r.status === 'approved' || r.status === 'partially_paid';
+      const isOutstanding = getRequestBalance(r).remaining > 0;
       const isReconciled = r.metadata?.advance_reconciled_at;
       return isOutstanding && !isReconciled;
     });
@@ -1346,7 +1331,12 @@ function AdvanceRequestsReportContent() {
       if (daysOut > 90) bucket = '90+';
       else if (daysOut > 60) bucket = '61-90';
       else if (daysOut > 30) bucket = '31-60';
-      return { ...r, daysOutstanding: daysOut, bucket };
+      return {
+        ...r,
+        daysOutstanding: daysOut,
+        bucket,
+        outstandingAmount: getRequestBalance(r).remaining,
+      };
     });
     const buckets = {
       '0-30': { label: '0-30 Days', count: 0, total: 0, items: [] as typeof items },
@@ -1357,11 +1347,11 @@ function AdvanceRequestsReportContent() {
     items.forEach(item => {
       const b = buckets[item.bucket];
       b.count++;
-      b.total += item.requestedAmount;
+      b.total += item.outstandingAmount;
       b.items.push(item);
     });
-    return { items: items.sort((a, b) => b.daysOutstanding - a.daysOutstanding), buckets, totalCount: items.length, totalAmount: items.reduce((s, i) => s + i.requestedAmount, 0) };
-  }, [requests]);
+    return { items: items.sort((a, b) => b.daysOutstanding - a.daysOutstanding), buckets, totalCount: items.length, totalAmount: items.reduce((s, i) => s + i.outstandingAmount, 0) };
+  }, [requests, getRequestBalance]);
 
   const getAgingRowColor = (bucket: string) => {
     switch (bucket) {
@@ -1380,7 +1370,7 @@ function AdvanceRequestsReportContent() {
       buckets: agingData.buckets,
       items: agingData.items.map((item: any) => ({
         requester: getProfileName(item.requestedBy),
-        amount: item.requestedAmount,
+        amount: item.outstandingAmount,
         daysOutstanding: item.daysOutstanding,
         siteName: item.siteName,
         projectName: item.projectName || 'N/A',
@@ -4069,7 +4059,7 @@ function AdvanceRequestsReportContent() {
                         <TableRow key={item.id} className={getAgingRowColor(item.bucket)} data-testid={`row-aging-${idx}`}>
                           <TableCell className="font-medium">{getProfileName(item.requestedBy)}</TableCell>
                           <TableCell>{item.hubName || 'N/A'}</TableCell>
-                          <TableCell className="text-right font-mono">{item.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono">{item.outstandingAmount.toLocaleString()}</TableCell>
                           <TableCell className="text-sm">{format(parseISO(item.createdAt || item.requestedAt), 'MMM dd, yyyy')}</TableCell>
                           <TableCell className="text-right">
                             <Badge variant={item.bucket === '90+' ? 'destructive' : item.bucket === '61-90' ? 'default' : 'outline'} className={item.bucket === '61-90' ? 'bg-orange-500' : item.bucket === '31-60' ? 'border-yellow-500 text-yellow-600' : ''}>

@@ -31,6 +31,7 @@ export interface ReportSiteRow {
   advanceRequested: number;
   advanceApproved: number;
   advancePaid: number;
+  advanceRemaining: number;
   transportBudget: number;
   comments: string;
   nextStep: string;
@@ -359,14 +360,14 @@ function buildAllSitesSheet(data: MmpReportData): any {
   let r = 0;
 
   writeCell(ws, r, 0, c(`All Sites — ${data.stateName} (A→Z)`, TITLE_STYLE));
-  mergeRange(ws, r, 0, r, 18); r++;
+  mergeRange(ws, r, 0, r, 20); r++;
   r++;
 
   const headers = [
     '#', 'Site Name', 'Site Code', 'Locality', 'Hub', 'CP Name',
     'Status', 'Coordinator', 'Data Collector', 'Days in Status',
     'Plan Received', 'Dispatched', 'Accepted', 'Visit Started', 'Completed/Verified',
-    'Advance Status', 'Adv. Requested', 'Adv. Approved', 'Next Step',
+    'Advance Status', 'Adv. Requested', 'Adv. Approved', 'Adv. Paid', 'Adv. Remaining', 'Next Step',
   ];
   headers.forEach((h, i) => writeCell(ws, r, i, c(h, DARK_HEADER)));
   r++;
@@ -380,14 +381,15 @@ function buildAllSitesSheet(data: MmpReportData): any {
       site.planReceivedAt, site.dispatchedAt, site.acceptedAt, site.visitStartedAt,
       site.verifiedAt || site.visitCompletedAt,
       site.advanceStatus || '—', site.advanceRequested || 0, site.advanceApproved || 0,
+      site.advancePaid || 0, site.advanceRemaining || 0,
       site.nextStep,
     ];
-    row.forEach((v, i) => writeCell(ws, r, i, c(v, { font: { sz: 9 }, fill, alignment: { horizontal: i > 1 ? 'center' : 'left', wrapText: i === 18 } })));
+    row.forEach((v, i) => writeCell(ws, r, i, c(v, { font: { sz: 9 }, fill, alignment: { horizontal: i > 1 ? 'center' : 'left', wrapText: i === 20 } })));
     r++;
   });
 
   setRef(ws, r, headers.length - 1);
-  setW(ws, [4, 30, 14, 20, 18, 22, 18, 26, 26, 14, 16, 16, 16, 16, 18, 16, 16, 16, 30]);
+  setW(ws, [4, 30, 14, 20, 18, 22, 18, 26, 26, 14, 16, 16, 16, 16, 18, 16, 16, 16, 16, 16, 30]);
   return ws;
 }
 
