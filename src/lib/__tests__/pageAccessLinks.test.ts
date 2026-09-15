@@ -27,9 +27,19 @@ describe('related page access families', () => {
     expect(expandRelatedPageSlugs('projects').sort()).toEqual(['my-projects', 'projects']);
   });
 
-  it('returns only the primary slug when no family is configured', () => {
-    expect(expandRelatedPageSlugs('dashboard')).toEqual(['dashboard']);
-    expect(getRelatedPageSlugs('dashboard')).toEqual([]);
+  it('links Approval Dashboard with the Super Admin hub tab it redirects to', () => {
+    expect(resolveSlug('/approval-dashboard')).toBe('approval-dashboard');
+    expect(resolveSlug('/super-admin-hub?tab=approval-dashboard')).toBe('sa-approval-dashboard');
+    expect(expandRelatedPageSlugs('approval-dashboard').sort()).toEqual([
+      'approval-dashboard',
+      'sa-approval-dashboard',
+      'super-admin-hub',
+    ]);
+    expect(expandRelatedPageSlugs('sa-approval-dashboard').sort()).toEqual([
+      'approval-dashboard',
+      'sa-approval-dashboard',
+      'super-admin-hub',
+    ]);
   });
 
   it('maps UI button effects to a cascade intent', () => {

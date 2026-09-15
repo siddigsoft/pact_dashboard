@@ -150,7 +150,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'approvals',           label:'Approvals Hub',          path:'/approvals',              icon:ListChecks, group:'Finance',
     roles:['superAdmin','admin','financialAdmin','auditor','supervisor','fom','countryDirector','seniorOperationsLead','projectManager'] },
   { slug:'approval-dashboard',  label:'Approval Dashboard',     path:'/approval-dashboard',     icon:ClipboardCheck, group:'Finance',
-    roles:['superAdmin','admin','financialAdmin','supervisor','fom'] },
+    roles:['superAdmin','admin','financialAdmin','supervisor','fom'], note:'Redirects to Super Admin → Approval Dashboard. Linked with sa-approval-dashboard — grants cascade together.' },
   { slug:'down-payment-approval', label:'Down Payment Approval', path:'/down-payment-approval', icon:ClipboardCheck, group:'Finance',
     roles:['superAdmin','admin','financialAdmin','auditor','countryDirector','fom','supervisor','hubsupervisor'] },
   { slug:'cost-submission-reports', label:'Cost Submission Reports', path:'/cost-submission/reports', icon:BarChart3, group:'Finance',
@@ -382,8 +382,8 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin'] },
   { slug:'cycle-health',        label:'Cycle Health Dashboard', path:'/super-admin-hub?tab=cycle-health', icon:Activity, group:'Super Admin',
     roles:['superAdmin','admin'] },
-  { slug:'sa-approval-dashboard', label:'Approval Dashboard',   path:'/super-admin-hub?tab=approval-dashboard', icon:ClipboardCheck, group:'Super Admin',
-    roles:['superAdmin','admin'] },
+  { slug:'sa-approval-dashboard', label:'Approval Dashboard (SA Hub)', path:'/super-admin-hub?tab=approval-dashboard', icon:ClipboardCheck, group:'Super Admin',
+    roles:['superAdmin','admin'], note:'Live URL for Approval Dashboard. Linked with Finance Approval Dashboard — grants cascade together.' },
 
   // Permissions & Audit section
   { slug:'sa-permissions-mgmt', label:'User Permissions (SA)',  path:'/super-admin-hub?tab=permissions', icon:Lock, group:'Super Admin',

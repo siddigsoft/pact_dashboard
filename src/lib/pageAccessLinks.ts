@@ -10,6 +10,9 @@ import type { AccessEffect } from '@/lib/effectiveAccess';
 export const PAGE_RELATED: Record<string, readonly string[]> = {
   'my-projects': ['projects'],
   projects: ['my-projects'],
+  // /approval-dashboard redirects to Super Admin hub tab — keep grants aligned.
+  'approval-dashboard': ['sa-approval-dashboard', 'super-admin-hub'],
+  'sa-approval-dashboard': ['approval-dashboard', 'super-admin-hub'],
 };
 
 export type PageToggleIntent = 'grant' | 'block' | 'clear' | 'noop';
