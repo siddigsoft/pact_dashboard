@@ -62,7 +62,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
   const [selectedPermissions, setSelectedPermissions] = useState<Record<string, boolean>>({});
   const [selectedPages, setSelectedPages] = useState<Record<string, boolean>>({});
   const [selectedUsers, setSelectedUsers] = useState<Record<string, boolean>>({});
-  const [setAsPrimary, setSetAsPrimary] = useState(true);
+  const [setAsPrimary, setSetAsPrimary] = useState(false);
   const [userFilter, setUserFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -104,7 +104,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
     setSelectedPermissions({});
     setSelectedPages({});
     setSelectedUsers({});
-    setSetAsPrimary(true);
+    setSetAsPrimary(false);
     setUserFilter('');
     setError(null);
   };

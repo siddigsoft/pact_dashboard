@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { X, Plus, Loader2 } from 'lucide-react';
-import { RoleWithPermissions, AppRole, AssignRoleRequest } from '@/types/roles';
+import { RoleWithPermissions, AssignRoleRequest } from '@/types/roles';
 
 interface User {
   id: string;
@@ -23,7 +23,7 @@ interface UserRoleAssignmentProps {
   assignedUsers: User[];
   availableRoles: RoleWithPermissions[];
   onAssignRole: (data: AssignRoleRequest) => Promise<void>;
-  onRemoveRole: (userId: string, roleId?: string, role?: AppRole) => Promise<void>;
+  onRemoveRole: (userId: string, roleId: string) => Promise<void>;
   isLoading: boolean;
 }
 
@@ -56,9 +56,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
 
     setIsAssigning(true);
     try {
-      const assignData: AssignRoleRequest = role.is_system_role 
-        ? { user_id: selectedUserId, role: role.name as AppRole }
-        : { user_id: selectedUserId, role_id: role.id };
+      const assignData: AssignRoleRequest = { user_id: selectedUserId, role_id: role.id };
 
       await onAssignRole(assignData);
       setSelectedUserId('');
@@ -71,11 +69,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   const handleRemoveRole = async (userId: string) => {
     if (!role) return;
 
-    if (role.is_system_role) {
-      await onRemoveRole(userId, undefined, role.name as AppRole);
-    } else {
-      await onRemoveRole(userId, role.id);
-    }
+    await onRemoveRole(userId, role.id);
   };
 
   const getInitials = (name: string) =>

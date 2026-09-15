@@ -32,7 +32,7 @@ interface RoleManagementContextType {
   
   // User role assignment
   assignRoleToUser: (assignData: AssignRoleRequest) => Promise<boolean>;
-  removeRoleFromUser: (userId: string, roleId?: string, role?: AppRole) => Promise<boolean>;
+  removeRoleFromUser: (userId: string, roleId: string) => Promise<boolean>;
   fetchUserRoles: (userId?: string) => Promise<void>;
   
   // Permission checking
@@ -320,44 +320,12 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     if (!session.success) return false;
     setIsLoading(true);
     try {
-      const { data: auth } = await supabase.auth.getUser();
-      const assignedBy = auth?.user?.id ?? null;
-      const now = new Date().toISOString();
-
-      // user_roles is additive: profiles.role remains the primary/navigation role,
-      // while this table may contain multiple system and custom assignments.
-      if (assignData.role) {
-        const { error: upsertErr } = await supabase
-          .from('user_roles')
-          .upsert({ user_id: assignData.user_id, role: assignData.role, assigned_by: assignedBy, assigned_at: now }, { onConflict: 'user_id,role', ignoreDuplicates: true });
-        if (upsertErr) throw upsertErr;
-        // The newly selected system role becomes the primary role, but existing
-        // additive assignments are deliberately preserved.
-        await supabase
-          .from('profiles')
-          .update({ role: assignData.role })
-          .eq('id', assignData.user_id);
-      } else if (assignData.role_id) {
-        // Custom roles: avoid ON CONFLICT (user_id, role_id) because the live DB
-        // uses a partial unique index. Check first, then insert without removing
-        // any of the user's other assignments.
-        const { data: existing, error: existingErr } = await supabase
-          .from('user_roles')
-          .select('id')
-          .eq('user_id', assignData.user_id)
-          .eq('role_id', assignData.role_id)
-          .maybeSingle();
-        if (existingErr) throw existingErr;
-
-        if (!existing) {
-          const { error: insErr } = await supabase
-            .from('user_roles')
-            .insert({ user_id: assignData.user_id, role_id: assignData.role_id, assigned_by: assignedBy, assigned_at: now });
-          if (insErr) throw insErr;
-        }
-      } else {
-        throw new Error('Either role or role_id must be provided');
-      }
+      const { error } = await supabase.rpc('assign_role_to_user', {
+        p_target_user_id: assignData.user_id,
+        p_target_role_id: assignData.role_id,
+        p_reason: 'Assigned from Role Management',
+      });
+      if (error) throw error;
 
       toast({ title: 'Role assigned', description: 'User role assignment saved.' });
       await fetchUserRoles();
@@ -376,16 +344,16 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  const removeRoleFromUser = async (userId: string, roleId?: string, role?: AppRole): Promise<boolean> => {
+  const removeRoleFromUser = async (userId: string, roleId: string): Promise<boolean> => {
     const session = await ensureValidSession();
     if (!session.success) return false;
     setIsLoading(true);
     try {
-      if (!roleId && !role) throw new Error('Specify roleId or role to remove');
-      let query = supabase.from('user_roles').delete().eq('user_id', userId);
-      if (roleId) query = query.eq('role_id', roleId);
-      if (!roleId && role) query = query.eq('role', role);
-      const { error } = await query;
+      const { error } = await supabase.rpc('remove_role_from_user', {
+        p_target_user_id: userId,
+        p_target_role_id: roleId,
+        p_reason: 'Removed from Role Management',
+      });
       if (error) throw error;
 
       toast({ title: 'Role removed', description: 'User role removed.' });

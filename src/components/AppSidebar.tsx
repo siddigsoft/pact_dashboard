@@ -116,7 +116,7 @@
   } from "@/components/ui/sidebar";
   import { AppRole } from "@/types";
   import { useAuthorization } from "@/hooks/use-authorization";
-  import { canSeePage, canSeePath, resolveSlug } from "@/lib/page-roles";
+  import { canSeePage, canSeePath, resolveRoutePermission, resolveSlug } from "@/lib/page-roles";
   import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
   import { useSettings } from "@/context/settings/SettingsContext";
   import {
@@ -138,6 +138,7 @@
   import { normalizeRole } from "@/utils/roleMapping";
   import { useViewAs } from "@/context/ViewAsContext";
   import { useCurrentUserAccessManifest } from "@/hooks/useCurrentUserAccessManifest";
+  import { evaluateManifestPageAccess, manifestHasPermission } from "@/lib/current-user-access";
   import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
   import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
   import { CSS } from '@dnd-kit/utilities';
@@ -884,7 +885,7 @@
           .eq('user_id', effectiveAccessUserId);
         return (data ?? []) as { page_slug: string; is_blocked: boolean }[];
       },
-      enabled: !!effectiveAccessUserId && !isSuperAdmin && (!!viewAs || !currentAccessManifest),
+      enabled: !!effectiveAccessUserId && !isSuperAdmin && !!viewAs,
       staleTime: 30_000,
     });
 
@@ -895,7 +896,7 @@
         if (error) throw error;
         return Object.fromEntries((data ?? []).map((row: any) => [row.page_slug, row.roles ?? []]));
       },
-      enabled: !!viewAs || !currentAccessManifest,
+      enabled: !!viewAs,
       staleTime: 30_000,
     });
 
@@ -915,31 +916,28 @@
     }, [currentAccessManifest, myPageOverrides]);
     
     const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
-    const isAdmin = hasAnyRole(['admin']);
-    // isDataCollector must use user_roles (via `roles`) as the authoritative source.
-    // Falling back to currentUser.role is only correct when NO roles have been
-    // loaded yet — because profiles.role can be stale (e.g. 'dataCollector')
-    // even after an admin assigned a higher role via user_roles only.
-    // Using currentUser.role unconditionally caused the sidebar to flip to
-    // data-collector mode on any profiles UPDATE realtime event.
-    // When viewAs is active, determine isDataCollector purely from the previewed role
-    const effectiveRoleForSidebar = viewAs?.role ?? currentUser?.role ?? '';
-    const isDataCollector = viewAs
-      ? (effectiveRoleForSidebar.toLowerCase() === 'datacollector' || effectiveRoleForSidebar.toLowerCase() === 'data_collector' || effectiveRoleForSidebar.toLowerCase() === 'data collector')
-      : (roles?.includes('DataCollector' as AppRole) || 
-         roles?.includes('dataCollector' as AppRole) || 
-         ((!roles || roles.length === 0) && (
-           currentUser?.role?.toLowerCase() === 'datacollector' ||
-           currentUser?.role?.toLowerCase() === 'data collector'
-         )));
+    // The signed-in user's navigation decisions use only the server-derived
+    // manifest. View As is deliberately separate: it previews a role/user and
+    // is not an authenticated session for that target.
+    const sidebarRoles = viewAs ? [viewAs.role] : (currentAccessManifest?.roles ?? []);
+    const sidebarHasAnyRole = (candidateRoles: string[]) => viewAs
+      ? hasAnyRole(candidateRoles)
+      : sidebarRoles.some(role => candidateRoles.some(candidate =>
+          normalizeRole(role) === normalizeRole(candidate),
+        ));
+    const sidebarHasPermission = (resource: string, action: string) => currentAccessManifest
+      ? manifestHasPermission(currentAccessManifest, resource, action)
+      : checkPermission(resource as any, action as any);
+    const isAdmin = sidebarHasAnyRole(['admin']);
+    const isDataCollector = sidebarHasAnyRole(['datacollector', 'data_collector', 'data collector']);
 
     // Pre-compute stable role booleans so they can be used as useEffect deps
     // (the hasAnyRole function reference changes every render â€” never put it in deps)
-    const roleIsCoordinator = hasAnyRole(['coordinator', 'Coordinator']);
-    const roleIsSupervisor   = hasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
-    const roleIsFomOrAdmin   = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin']);
-    const roleIsFinance      = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
-    const roleCanSeeIncident = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
+    const roleIsCoordinator = sidebarHasAnyRole(['coordinator', 'Coordinator']);
+    const roleIsSupervisor   = sidebarHasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
+    const roleIsFomOrAdmin   = isSuperAdmin || sidebarHasAnyRole(['fom', 'FOM', 'admin', 'Admin']);
+    const roleIsFinance      = isSuperAdmin || sidebarHasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
+    const roleCanSeeIncident = isSuperAdmin || sidebarHasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
 
     // Check if the current user (or the ViewAs-previewed user) is a fund holder.
     // Fund holders get a "My Fund" sidebar entry and can access /pre-funding even
@@ -952,7 +950,7 @@
     const FINANCE_ADMIN_ROLES = ['super_admin', 'admin', 'financialAdmin'];
     const isFinanceAdminRole = viewAs
       ? FINANCE_ADMIN_ROLES.includes(viewAs.role)
-      : hasAnyRole(FINANCE_ADMIN_ROLES);
+      : sidebarHasAnyRole(FINANCE_ADMIN_ROLES);
     // The user ID to check fund holder status for — uses previewed user when ViewAs active
     const effectiveHolderCheckId = (viewAs?.mode === 'user' ? viewAs.userId : undefined) ?? currentUser?.id;
     const { data: isFundHolder = false } = useQuery({
@@ -1030,7 +1028,7 @@
     // Â§6 DP pending_admin: admin/FOM/financialAdmin (pendingDpAdmin now fetched for all these roles)
     // Â§7 pending users: admin only
     // Â§8 MMP unassigned: FOM/admin
-    const isStrictAdmin = isSuperAdmin || hasAnyRole(['admin', 'Admin']);
+    const isStrictAdmin = isSuperAdmin || sidebarHasAnyRole(['admin', 'Admin']);
     const approvalsHubCount =
       ((roleIsSupervisor || roleIsFomOrAdmin) ? counts.pendingWithdrawals : 0)        // Â§1
       + (roleIsFinance ? counts.pendingFinanceWithdrawals : 0)                         // Â§2
@@ -1119,30 +1117,23 @@
     // on every single render.
     const perms = useMemo(() => ({
       dashboard: true,
-      projects: checkPermission('projects', 'read') || isAdmin || hasAnyRole(['ict']),
-      mmp: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),
-      monitoringPlan: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),
-      siteVisits: checkPermission('site_visits', 'read') || isAdmin || hasAnyRole(['ict']),
-      archive: checkPermission('reports', 'read') || isAdmin,
-      fieldTeam: checkPermission('users', 'read') || isAdmin,
-      fieldOpManager: checkPermission('site_visits', 'update') || isAdmin || hasAnyRole(['fom']),
-      dataVisibility: checkPermission('reports', 'read') || isAdmin,
-      reports: checkPermission('reports', 'read') || isAdmin,
-      users: checkPermission('users', 'read') || isAdmin || hasAnyRole(['ict']),
-      roleManagement: canManageRoles() || isAdmin,
-      settings: checkPermission('settings', 'read') || isAdmin,
-      financialOperations: checkPermission('finances', 'update') || checkPermission('finances', 'approve') || isAdmin || hasAnyRole(['financialAdmin']),
+      projects: sidebarHasPermission('projects', 'read') || isAdmin || sidebarHasAnyRole(['ict']),
+      mmp: sidebarHasPermission('mmp', 'read') || isAdmin || sidebarHasAnyRole(['ict']),
+      monitoringPlan: sidebarHasPermission('mmp', 'read') || isAdmin || sidebarHasAnyRole(['ict']),
+      siteVisits: sidebarHasPermission('site_visits', 'read') || isAdmin || sidebarHasAnyRole(['ict']),
+      archive: sidebarHasPermission('reports', 'read') || isAdmin,
+      fieldTeam: sidebarHasPermission('users', 'read') || isAdmin,
+      fieldOpManager: sidebarHasPermission('site_visits', 'update') || isAdmin || sidebarHasAnyRole(['fom']),
+      dataVisibility: sidebarHasPermission('reports', 'read') || isAdmin,
+      reports: sidebarHasPermission('reports', 'read') || isAdmin,
+      users: sidebarHasPermission('users', 'read') || isAdmin || sidebarHasAnyRole(['ict']),
+      roleManagement: (currentAccessManifest
+        ? ['create', 'update', 'delete'].some(action => sidebarHasPermission('roles', action))
+        : canManageRoles()) || isAdmin,
+      settings: sidebarHasPermission('settings', 'read') || isAdmin,
+      financialOperations: sidebarHasPermission('finances', 'update') || sidebarHasPermission('finances', 'approve') || isAdmin || sidebarHasAnyRole(['financialAdmin']),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [isSuperAdmin, isAdmin, currentUser?.id, currentUser?.role]);
-
-    // Memoize extraRoles — spread/map creates a new array reference every render
-    const extraRoles: AppRole[] = useMemo(
-      () => Array.isArray(currentUser?.additionalRoles)
-        ? (currentUser!.additionalRoles as any[]).map((r: any) => r?.role as AppRole).filter(Boolean)
-        : [],
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      [currentUser?.id, currentUser?.additionalRoles]
-    );
+    }), [isSuperAdmin, isAdmin, currentAccessManifest, viewAs, sidebarRoles.join('|')]);
 
     // Apply page_access_overrides: granted overrides add items even if the role
     // check denied them; blocked overrides remove items even if the role check
@@ -1152,13 +1143,9 @@
     // reference every render, making menuGroups and the useEffect(menuGroups)
     // fire on every render, creating a continuous sidebar flicker.
     const menuGroups = useMemo(() => {
-      const effectiveRole = viewAs ? viewAs.role : currentUser?.role;
+      const effectiveRole = viewAs ? viewAs.role : sidebarRoles[0];
       const smtCandidates = [
-        effectiveRole,
-        ...(currentAccessManifest?.roles ?? []),
-        ...(roles || []),
-        ...extraRoles,
-        ...((currentUser?.additionalRoles as any[]) || []).map((r: any) => r?.role ?? r?.name ?? r?.roleName),
+        ...sidebarRoles,
       ];
       const isSMTUser = smtCandidates.some(r => /^(smt)$/i.test(String(r ?? '').trim()));
       const SMT_ALLOW = new Set([
@@ -1170,8 +1157,8 @@
 
       const rawMenuGroups = currentUser
         ? getWorkflowMenuGroups(
-            viewAs ? [viewAs.role as AppRole] : [...(roles || []), ...extraRoles],
-            viewAs ? viewAs.role : currentUser.role,
+            sidebarRoles as AppRole[],
+            effectiveRole ?? 'dataCollector',
             perms,
             isSuperAdmin,
             menuPrefs,
@@ -1192,8 +1179,21 @@
 
       const accessRoles = viewAs
         ? [viewAs.role]
-        : (currentAccessManifest?.roles ?? [currentUser?.role, ...(roles || []), ...extraRoles])
-            .filter((role): role is string => Boolean(role));
+        : sidebarRoles;
+
+      const isAllowedPage = (slug: string, path: string) => {
+        if (currentAccessManifest) {
+          const [pathWithQuery, hash = ''] = path.split('#', 2);
+          const [pathname, query = ''] = pathWithQuery.split('?', 2);
+          return evaluateManifestPageAccess(
+            currentAccessManifest,
+            slug,
+            resolveRoutePermission(pathname, query ? `?${query}` : '', hash ? `#${hash}` : ''),
+          ).allowed;
+        }
+        const configuredRoles = sidebarRoleConfigs[slug];
+        return accessRoles.some(role => canSeePage(slug, role, configuredRoles));
+      };
 
       // A configured page-role row is authoritative for that page. Apply it to
       // existing navigation items and add configured grants the legacy builder
@@ -1203,15 +1203,14 @@
           ...group,
           items: group.items.filter(item => {
             const slug = resolveSlug(item.url);
-            const configuredRoles = slug ? sidebarRoleConfigs[slug] : undefined;
-            return !slug || !configuredRoles || accessRoles.some(role => canSeePage(slug, role, configuredRoles));
+            return !slug || isAllowedPage(slug, item.url);
           }),
         }));
 
         for (const [slug, configuredRoles] of Object.entries(sidebarRoleConfigs)) {
-          if (!accessRoles.some(role => canSeePage(slug, role, configuredRoles))) continue;
           const pageDef = PAGE_DEFS.find(page => page.slug === slug);
-          if (!pageDef || (isSMTUser && !isSmtAllowedUrl(pageDef.path))) continue;
+          if (!pageDef || !isAllowedPage(slug, pageDef.path)) continue;
+          if (isSMTUser && !isSmtAllowedUrl(pageDef.path)) continue;
           const alreadyExists = groups.some(group => group.items.some(item => item.url === pageDef.path));
           if (!alreadyExists) {
             const sidebarGroupId = PAGEDEF_GROUP_TO_SIDEBAR[pageDef.group] ?? 'admin';
@@ -1255,6 +1254,19 @@
 
       }
 
+      // The workflow builder is now presentation-only for signed-in users.
+      // Its legacy role checks may suggest candidates, but the manifest is the
+      // final decision for every registered navigation target.
+      if (currentAccessManifest) {
+        groups = groups.map(group => ({
+          ...group,
+          items: group.items.filter(item => {
+            const slug = resolveSlug(item.url);
+            return !slug || isAllowedPage(slug, item.url);
+          }),
+        }));
+      }
+
       // Re-sort after configured-role and per-user override injections.
       groups.sort((a, b) => a.order - b.order);
       groups.forEach(g => g.items.sort((a, b) => a.priority - b.priority));
@@ -1269,7 +1281,7 @@
       return groups.filter(g => g.items.length > 0);
     // viewAs MUST be in the dep array — switching between two non-SA roles doesn't
     // change isSuperAdmin (stays false), so without viewAs the sidebar never re-renders.
-    }, [currentUser, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, isFundHolder, pageOverrideMap, sidebarRoleConfigs, currentAccessManifest, viewAs]);
+    }, [currentUser, sidebarRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, isFundHolder, pageOverrideMap, sidebarRoleConfigs, currentAccessManifest, viewAs]);
 
     const toggleGroupCollapse = (groupId: string) => {
       setCollapsedGroups(prev => {

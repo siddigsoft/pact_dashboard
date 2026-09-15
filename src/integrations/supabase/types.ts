@@ -1815,6 +1815,10 @@ export type Database = {
         Args: { p_exclusions?: Json; p_mmp_id: string }
         Returns: Json
       }
+      assign_role_to_user: {
+        Args: { p_reason?: string | null; p_target_role_id: string; p_target_user_id: string }
+        Returns: Json
+      }
       get_nav_badge_counts: {
         Args: {
           p_hub_id?: string | null
@@ -1876,6 +1880,10 @@ export type Database = {
           p_justification: string
         }
         Returns: undefined
+      }
+      remove_role_from_user: {
+        Args: { p_reason?: string | null; p_target_role_id: string; p_target_user_id: string }
+        Returns: Json
       }
       revoke_mmp_incentive_eligibility_override: {
         Args: { p_note: string; p_override_id: string }

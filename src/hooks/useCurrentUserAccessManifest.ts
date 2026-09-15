@@ -1,15 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { CurrentUserAccessManifest } from '@/lib/current-user-access';
 
-export interface CurrentUserAccessManifest {
-  user_id: string;
-  roles: string[];
-  page_role_configs: Record<string, string[]>;
-  page_overrides: Record<string, { is_blocked: boolean; notes?: string | null }>;
-  action_overrides: Record<string, { is_granted: boolean; expires_at?: string | null; reason?: string | null }>;
-  role_permissions: Array<{ resource: string; action: string }>;
-  generated_at: string;
-}
+export type { CurrentUserAccessManifest } from '@/lib/current-user-access';
 
 const EMPTY_MANIFEST: CurrentUserAccessManifest = {
   user_id: '',

@@ -197,24 +197,16 @@ export const fetchMMPSummary = async (mmpFileId: string): Promise<MmpCostSubmiss
  */
 export const createCostSubmission = async (
   request: CreateCostSubmissionRequest,
-  userId: string
+  _userId: string
 ): Promise<SiteVisitCostSubmission> => {
-  const totalCostCents =
-    request.transportationCostCents +
-    request.accommodationCostCents +
-    request.mealAllowanceCents +
-    request.otherCostsCents;
-
   const dbData = {
     site_visit_id: request.siteVisitId,
     mmp_file_id: request.mmpFileId,
     project_id: request.projectId,
-    submitted_by: userId,
     transportation_cost_cents: request.transportationCostCents,
     accommodation_cost_cents: request.accommodationCostCents,
     meal_allowance_cents: request.mealAllowanceCents,
     other_costs_cents: request.otherCostsCents,
-    total_cost_cents: totalCostCents,
     currency: request.currency || 'SDG',
     transportation_details: request.transportationDetails,
     accommodation_details: request.accommodationDetails,
@@ -222,13 +214,14 @@ export const createCostSubmission = async (
     other_details: request.otherCostsDetails,
     submission_notes: request.submissionNotes,
     supporting_documents: request.supportingDocuments || [], // Store full JSONB objects
-    status: 'pending'
   };
 
-  const { data, error } = await supabase
-    .from('site_visit_cost_submissions')
-    .insert(dbData)
-    .select()
+  const { data, error } = await (supabase as any)
+    .rpc('mutate_site_visit_cost_submission', {
+      p_action: 'create',
+      p_submission_id: null,
+      p_payload: dbData,
+    })
     .single();
 
   if (error) {
@@ -246,29 +239,7 @@ export const updateCostSubmission = async (
   id: string,
   request: UpdateCostSubmissionRequest
 ): Promise<SiteVisitCostSubmission> => {
-  // Fetch existing record first to preserve current values
-  const { data: existing, error: fetchError } = await supabase
-    .from('site_visit_cost_submissions')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (fetchError) {
-    console.error('Error fetching existing submission:', fetchError);
-    throw fetchError;
-  }
-
-  // Calculate total based on existing + updated values
-  const transportation = request.transportationCostCents ?? existing.transportation_cost_cents;
-  const accommodation = request.accommodationCostCents ?? existing.accommodation_cost_cents;
-  const meals = request.mealAllowanceCents ?? existing.meal_allowance_cents;
-  const other = request.otherCostsCents ?? existing.other_costs_cents;
-  const totalCostCents = transportation + accommodation + meals + other;
-
-  const dbData: any = {
-    updated_at: new Date().toISOString(),
-    total_cost_cents: totalCostCents
-  };
+  const dbData: Record<string, unknown> = {};
 
   if (request.transportationCostCents !== undefined) {
     dbData.transportation_cost_cents = request.transportationCostCents;
@@ -301,12 +272,12 @@ export const updateCostSubmission = async (
     dbData.supporting_documents = request.supportingDocuments;
   }
 
-  const { data, error } = await supabase
-    .from('site_visit_cost_submissions')
-    .update(dbData)
-    .eq('id', id)
-    .eq('status', 'pending') // Only update if still pending
-    .select()
+  const { data, error } = await (supabase as any)
+    .rpc('mutate_site_visit_cost_submission', {
+      p_action: 'update',
+      p_submission_id: id,
+      p_payload: dbData,
+    })
     .single();
 
   if (error) {
@@ -322,47 +293,18 @@ export const updateCostSubmission = async (
  * Now includes signature tracking for audit trail
  */
 export const reviewCostSubmission = async (
-  request: ReviewCostSubmissionRequest & { signatureId?: string },
-  reviewerId: string
+  request: ReviewCostSubmissionRequest & { signatureId?: string }
 ): Promise<SiteVisitCostSubmission> => {
-  const dbData: any = {
-    reviewed_by: reviewerId,
-    reviewed_at: new Date().toISOString(),
-    reviewer_notes: request.reviewerNotes,
-    approval_notes: request.approvalNotes,
-    updated_at: new Date().toISOString()
-  };
-  
-  // Include signature reference if provided
-  if (request.signatureId) {
-    dbData.approval_signature_id = request.signatureId;
-  }
-
-  // Set status based on action - aligned with SQL workflow
-  if (request.action === 'approve') {
-    dbData.status = 'approved';
-    // If adjusted amount provided, use it for payment; otherwise will use total_cost_cents
-    if (request.adjustedAmountCents !== undefined) {
-      dbData.paid_amount_cents = request.adjustedAmountCents;
-    }
-    if (request.paymentNotes) {
-      dbData.payment_notes = request.paymentNotes;
-    }
-  } else if (request.action === 'reject') {
-    dbData.status = 'rejected';
-  } else if (request.action === 'request_revision') {
-    // Set to 'under_review' to indicate active review with requested changes
-    // Valid statuses per schema: pending, under_review, approved, rejected, paid, cancelled
-    dbData.status = 'under_review';
-  }
-
-  const { data, error } = await supabase
-    .from('site_visit_cost_submissions')
-    .update(dbData)
-    .eq('id', request.submissionId)
-    .in('status', ['pending', 'under_review']) // Can review pending or under_review
-    .select()
-    .single();
+  const { data, error } = await (supabase as any).rpc('transition_site_visit_cost_submission', {
+    p_submission_id: request.submissionId,
+    p_action: request.action,
+    p_reviewer_notes: request.reviewerNotes ?? null,
+    p_approval_notes: request.approvalNotes ?? null,
+    p_adjusted_amount_cents: request.adjustedAmountCents ?? null,
+    p_payment_notes: request.paymentNotes ?? null,
+    p_wallet_transaction_id: null,
+    p_signature_id: request.signatureId ?? null
+  }).single();
 
   if (error) {
     console.error('Error reviewing cost submission:', error);
@@ -382,41 +324,16 @@ export const markCostSubmissionPaid = async (
   paidAmountCents?: number,
   paymentSignatureId?: string
 ): Promise<SiteVisitCostSubmission> => {
-  // Fetch existing submission to get approved amount
-  const { data: existing, error: fetchError } = await supabase
-    .from('site_visit_cost_submissions')
-    .select('paid_amount_cents, total_cost_cents')
-    .eq('id', submissionId)
-    .single();
-
-  if (fetchError) {
-    console.error('Error fetching submission for payment:', fetchError);
-    throw fetchError;
-  }
-
-  // Use provided amount, or approved amount, or total cost
-  const finalPaidAmount = paidAmountCents ?? existing.paid_amount_cents ?? existing.total_cost_cents;
-
-  const updateData: any = {
-    status: 'paid',
-    wallet_transaction_id: walletTransactionId,
-    paid_at: new Date().toISOString(),
-    paid_amount_cents: finalPaidAmount,
-    updated_at: new Date().toISOString()
-  };
-  
-  // Include payment signature reference if provided
-  if (paymentSignatureId) {
-    updateData.payment_signature_id = paymentSignatureId;
-  }
-
-  const { data, error } = await supabase
-    .from('site_visit_cost_submissions')
-    .update(updateData)
-    .eq('id', submissionId)
-    .eq('status', 'approved') // Only mark paid if approved
-    .select()
-    .single();
+  const { data, error } = await (supabase as any).rpc('transition_site_visit_cost_submission', {
+    p_submission_id: submissionId,
+    p_action: 'mark_paid',
+    p_reviewer_notes: null,
+    p_approval_notes: null,
+    p_adjusted_amount_cents: paidAmountCents ?? null,
+    p_payment_notes: null,
+    p_wallet_transaction_id: walletTransactionId,
+    p_signature_id: paymentSignatureId ?? null
+  }).single();
 
   if (error) {
     console.error('Error marking cost submission paid:', error);
@@ -431,18 +348,14 @@ export const markCostSubmissionPaid = async (
  */
 export const cancelCostSubmission = async (
   id: string,
-  userId: string
+  _userId: string
 ): Promise<SiteVisitCostSubmission> => {
-  const { data, error } = await supabase
-    .from('site_visit_cost_submissions')
-    .update({
-      status: 'cancelled',
-      updated_at: new Date().toISOString()
+  const { data, error } = await (supabase as any)
+    .rpc('mutate_site_visit_cost_submission', {
+      p_action: 'cancel',
+      p_submission_id: id,
+      p_payload: {},
     })
-    .eq('id', id)
-    .eq('submitted_by', userId) // User can only cancel their own submissions
-    .eq('status', 'pending') // Only cancel if pending
-    .select()
     .single();
 
   if (error) {
@@ -458,14 +371,10 @@ export const cancelCostSubmission = async (
  */
 export const deleteCostSubmission = async (
   id: string,
-  userId: string
+  _userId: string
 ): Promise<void> => {
-  const { error } = await supabase
-    .from('site_visit_cost_submissions')
-    .delete()
-    .eq('id', id)
-    .eq('submitted_by', userId) // User can only delete their own submissions
-    .eq('status', 'pending'); // Only delete if pending
+  const { error } = await (supabase as any)
+    .rpc('delete_site_visit_cost_submission', { p_submission_id: id });
 
   if (error) {
     console.error('Error deleting cost submission:', error);
