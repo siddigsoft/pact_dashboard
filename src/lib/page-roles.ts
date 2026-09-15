@@ -230,6 +230,33 @@ const PATH_TO_SLUG: Record<string, string> = (() => {
   return m;
 })();
 
+function splitLocation(value: string): { pathname: string; query: URLSearchParams } {
+  const withoutHash = value.split('#', 1)[0];
+  const [pathname, query = ''] = withoutHash.split('?', 2);
+  return { pathname: pathname || '/', query: new URLSearchParams(query) };
+}
+
+/**
+ * Resolves a registered target from a URL without relying on query-string
+ * order. This matters for hub pages: `/finance-hub?source=x&tab=budget`
+ * must resolve to the same target as the sidebar's canonical destination.
+ */
+function resolveRegisteredLocation(value: string): string | null {
+  const location = splitLocation(value);
+  const matches = PAGE_DEFS
+    .map(def => ({ def, location: splitLocation(def.path) }))
+    .filter(candidate => candidate.location.pathname === location.pathname)
+    .filter(candidate => [...candidate.location.query].every(([key, value]) =>
+      location.query.get(key) === value,
+    ));
+
+  if (matches.length === 0) return null;
+  // Prefer the most specific query-tab target; a plain parent page is the
+  // fallback when no registered query target matches.
+  matches.sort((a, b) => [...b.location.query].length - [...a.location.query].length);
+  return matches[0].def.slug;
+}
+
 /**
  * Resolves any URL pathname to a PAGE_DEFS slug, handling dynamic route
  * segments (e.g. "/mmp/abc123/edit" → slug of "/mmp") by walking
@@ -238,13 +265,15 @@ const PATH_TO_SLUG: Record<string, string> = (() => {
  * or fail-closed (the route guard fails-open so new pages work automatically).
  */
 export function resolveSlug(pathname: string): string | null {
-  // Exact match first
-  if (PATH_TO_SLUG[pathname]) return PATH_TO_SLUG[pathname];
+  const registered = resolveRegisteredLocation(pathname);
+  if (registered) return registered;
+
+  const cleanPath = splitLocation(pathname).pathname;
   // The report has a dynamic MMP id between its parent path and fixed suffix.
   // It must use its own permission instead of inheriting the broader /mmp page.
-  if (/^\/mmp\/[^/]+\/full-report\/?$/.test(pathname)) return 'mmp-full-report';
+  if (/^\/mmp\/[^/]+\/full-report\/?$/.test(cleanPath)) return 'mmp-full-report';
   // Walk up the path, stripping dynamic segments one at a time
-  const segments = pathname.split('/').filter(Boolean);
+  const segments = cleanPath.split('/').filter(Boolean);
   for (let len = segments.length - 1; len >= 1; len--) {
     const candidate = '/' + segments.slice(0, len).join('/');
     if (PATH_TO_SLUG[candidate]) return PATH_TO_SLUG[candidate];

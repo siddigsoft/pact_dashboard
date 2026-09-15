@@ -54,6 +54,11 @@ describe('page access registry integrity', () => {
     expect(resolveSlug('/accounting?tab=bank-recon')).toBe('accounting-bank-recon');
   });
 
+  it('resolves query-tab definitions when query parameters are reordered', () => {
+    expect(resolveSlug('/finance-hub?source=sidebar&tab=subscriptions')).toBe('finance-subscriptions');
+    expect(resolveSlug('/accounting?view=summary&tab=bank-recon')).toBe('accounting-bank-recon');
+  });
+
   it('grants a custom role only when that role is explicitly configured', () => {
     expect(canSeePage('finance-subscriptions', 'Procurement Lead')).toBe(false);
     expect(canSeePage('finance-subscriptions', 'Procurement Lead', ['Procurement Lead'])).toBe(true);
