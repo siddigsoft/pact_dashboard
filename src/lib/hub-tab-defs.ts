@@ -33,6 +33,30 @@ export function isHubTabSlug(slug: string): boolean {
 }
 
 export const HUB_TAB_REGISTRY: HubDef[] = [
+  // ── Down-Payment Approval ────────────────────────────────────────────────
+  // This is a page with internal views rather than a conventional hub. It uses
+  // the same tab-override mechanism so the Access Control Workspace has one
+  // place to manage every navigable view.
+  {
+    hubSlug: 'down-payment-approval',
+    hubLabel: 'Down-Payment Approval',
+    sections: [
+      {
+        sectionId: 'views',
+        sectionLabel: 'Approval Views',
+        tabs: [
+          { tabId: 'approval', label: 'Approval', description: 'Tier 1 and Tier 2 workflow queue.' },
+          { tabId: 'byState', label: 'By State', description: 'Request summary grouped by state.' },
+          { tabId: 'byProject', label: 'By Project', description: 'Request summary grouped by project.' },
+          { tabId: 'byMMP', label: 'By MMP', description: 'Request summary grouped by monitoring plan.' },
+          { tabId: 'allRequests', label: 'All Requests', description: 'Detailed list of every request the user may read.' },
+          { tabId: 'disbursement', label: 'Disbursement Tracker', description: 'Approved and paid request tracking.' },
+          { tabId: 'coverage', label: 'Site Coverage', description: 'Site coverage and request-status summary.' },
+        ],
+      },
+    ],
+  },
+
   // ── Admin Hub ──────────────────────────────────────────────────────────────
   {
     hubSlug: 'admin-hub',

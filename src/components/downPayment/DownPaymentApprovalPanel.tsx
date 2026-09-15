@@ -127,6 +127,10 @@ interface DownPaymentApprovalPanelProps {
   onCorrectPreFund?: (paymentEventId: string) => void;
   canDeletePayment?: boolean;
   onDeletePayment?: (paymentEventId: string) => void;
+  /** These are resolved from the user's Down Payment button grants. */
+  canApproveActions?: boolean;
+  canEditActions?: boolean;
+  canExportActions?: boolean;
 }
 
 const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
@@ -376,6 +380,9 @@ export function DownPaymentApprovalPanel({
   onCorrectPreFund,
   canDeletePayment = false,
   onDeletePayment,
+  canApproveActions = true,
+  canEditActions = true,
+  canExportActions = true,
 }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
@@ -3134,7 +3141,7 @@ export function DownPaymentApprovalPanel({
           )}
 
           <div className="flex flex-wrap gap-2">
-            {userRole === 'supervisor' && request.status === 'pending_supervisor' && (
+            {canApproveActions && userRole === 'supervisor' && request.status === 'pending_supervisor' && (
               <>
                 <Button
                   size="sm"
@@ -3156,7 +3163,7 @@ export function DownPaymentApprovalPanel({
               </>
             )}
 
-            {userRole === 'admin' && request.status === 'pending_admin' && (
+            {canApproveActions && userRole === 'admin' && request.status === 'pending_admin' && (
               <>
                 <Button
                   size="sm"
@@ -3187,7 +3194,7 @@ export function DownPaymentApprovalPanel({
               </>
             )}
 
-            {userRole === 'admin' && request.status === 'pending_supervisor' && (
+            {canApproveActions && userRole === 'admin' && request.status === 'pending_supervisor' && (
               <>
                 <Button
                   size="sm"
@@ -3209,7 +3216,7 @@ export function DownPaymentApprovalPanel({
               </>
             )}
 
-            {userRole === 'admin' && request.status === 'rejected' && (
+            {canApproveActions && userRole === 'admin' && request.status === 'rejected' && (
               <Button
                 size="sm"
                 variant="outline"
@@ -3221,7 +3228,7 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {userRole === 'admin' && request.status === 'fully_paid' && (
+            {canApproveActions && userRole === 'admin' && request.status === 'fully_paid' && (
               <Button
                 size="sm"
                 variant="outline"
@@ -3233,7 +3240,7 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {userRole === 'admin' && (request.status === 'approved' || request.status === 'partially_paid') && (
+            {canApproveActions && userRole === 'admin' && (request.status === 'approved' || request.status === 'partially_paid') && (
               <>
                 <Button
                   size="sm"
@@ -3307,7 +3314,7 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {(userRole === 'admin' || isSuperAdmin) && request.status !== 'pending_supervisor' && (
+            {canEditActions && (userRole === 'admin' || isSuperAdmin) && request.status !== 'pending_supervisor' && (
               <Button
                 size="sm"
                 variant="outline"
@@ -3795,7 +3802,7 @@ export function DownPaymentApprovalPanel({
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <Popover open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
+          {canExportActions && <Popover open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" data-testid="button-export">
                 <Download className="h-4 w-4 mr-1" />
@@ -3817,8 +3824,9 @@ export function DownPaymentApprovalPanel({
                 PDF
               </Button>
             </PopoverContent>
-          </Popover>
-          <span className="text-xs text-muted-foreground whitespace-nowrap">Bank Statement / كشف مالي:</span>
+          </Popover>}
+          {canExportActions && <span className="text-xs text-muted-foreground whitespace-nowrap">Bank Statement / كشف مالي:</span>}
+          {canExportActions && <>
           <Button
             variant="outline"
             size="sm"
@@ -3839,6 +3847,7 @@ export function DownPaymentApprovalPanel({
             <FileSpreadsheet className="h-4 w-4 mr-1" />
             Excel
           </Button>
+          </>}
         </div>
       </div>
 

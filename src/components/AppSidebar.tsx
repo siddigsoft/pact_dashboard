@@ -137,6 +137,7 @@
   import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from "@/types/user-preferences";
   import { normalizeRole } from "@/utils/roleMapping";
   import { useViewAs } from "@/context/ViewAsContext";
+  import { useCurrentUserAccessManifest } from "@/hooks/useCurrentUserAccessManifest";
   import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
   import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
   import { CSS } from '@dnd-kit/utilities';
@@ -864,6 +865,12 @@
     }, [openPickerRequest]);
 
     const effectiveAccessUserId = viewAs?.mode === 'user' ? viewAs.userId : (viewAs ? undefined : currentUser?.id);
+    // For the signed-in user, access inputs arrive from one server-derived
+    // endpoint. View As intentionally retains the admin-only fallback queries:
+    // a preview must never pretend to be another user's authenticated session.
+    const { data: currentAccessManifest } = useCurrentUserAccessManifest(
+      !!currentUser?.id && !viewAs && !isSuperAdmin,
+    );
 
     // Fetch this user's page_access_overrides so that manually granted pages
     // appear in the sidebar even when the role-based check would deny them.
@@ -877,26 +884,35 @@
           .eq('user_id', effectiveAccessUserId);
         return (data ?? []) as { page_slug: string; is_blocked: boolean }[];
       },
-      enabled: !!effectiveAccessUserId && !isSuperAdmin,
+      enabled: !!effectiveAccessUserId && !isSuperAdmin && (!!viewAs || !currentAccessManifest),
       staleTime: 30_000,
     });
 
-    const { data: sidebarRoleConfigs = {} } = useQuery<Record<string, string[]>>({
+    const { data: queriedRoleConfigs = {} } = useQuery<Record<string, string[]>>({
       queryKey: ['sidebar-page-role-configs'],
       queryFn: async () => {
         const { data, error } = await supabase.from('page_role_configs').select('page_slug, roles');
         if (error) throw error;
         return Object.fromEntries((data ?? []).map((row: any) => [row.page_slug, row.roles ?? []]));
       },
+      enabled: !!viewAs || !currentAccessManifest,
       staleTime: 30_000,
     });
+
+    const sidebarRoleConfigs = currentAccessManifest?.page_role_configs ?? queriedRoleConfigs;
 
     // slug â†’ is_blocked  (false = granted, true = blocked)
     const pageOverrideMap = useMemo(() => {
       const m: Record<string, boolean> = {};
-      myPageOverrides.forEach(o => { m[o.page_slug] = o.is_blocked; });
+      if (currentAccessManifest) {
+        Object.entries(currentAccessManifest.page_overrides).forEach(([slug, override]) => {
+          m[slug] = override.is_blocked;
+        });
+      } else {
+        myPageOverrides.forEach(o => { m[o.page_slug] = o.is_blocked; });
+      }
       return m;
-    }, [myPageOverrides]);
+    }, [currentAccessManifest, myPageOverrides]);
     
     const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
     const isAdmin = hasAnyRole(['admin']);
@@ -1139,6 +1155,7 @@
       const effectiveRole = viewAs ? viewAs.role : currentUser?.role;
       const smtCandidates = [
         effectiveRole,
+        ...(currentAccessManifest?.roles ?? []),
         ...(roles || []),
         ...extraRoles,
         ...((currentUser?.additionalRoles as any[]) || []).map((r: any) => r?.role ?? r?.name ?? r?.roleName),
@@ -1175,7 +1192,7 @@
 
       const accessRoles = viewAs
         ? [viewAs.role]
-        : [currentUser?.role, ...(roles || []), ...extraRoles]
+        : (currentAccessManifest?.roles ?? [currentUser?.role, ...(roles || []), ...extraRoles])
             .filter((role): role is string => Boolean(role));
 
       // A configured page-role row is authoritative for that page. Apply it to
@@ -1252,7 +1269,7 @@
       return groups.filter(g => g.items.length > 0);
     // viewAs MUST be in the dep array — switching between two non-SA roles doesn't
     // change isSuperAdmin (stays false), so without viewAs the sidebar never re-renders.
-    }, [currentUser, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, isFundHolder, pageOverrideMap, sidebarRoleConfigs, viewAs]);
+    }, [currentUser, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, isFundHolder, pageOverrideMap, sidebarRoleConfigs, currentAccessManifest, viewAs]);
 
     const toggleGroupCollapse = (groupId: string) => {
       setCollapsedGroups(prev => {

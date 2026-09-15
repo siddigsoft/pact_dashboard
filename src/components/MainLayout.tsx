@@ -17,21 +17,10 @@ import { NavBadgeCountsProvider } from "@/context/NavBadgeCountsContext";
 import { normalizeRole } from "@/utils/roleMapping";
 import { PAGE_DEFS } from "@/pages/PageAccessControl";
 import { PageAccessModal } from "@/components/access/PageAccessModal";
-import { PageAccessDenied } from "@/components/access/PageAccessDenied";
-import { usePageAccessGuard } from "@/hooks/usePageAccessGuard";
 import { Shield } from "lucide-react";
 import { PageLoader } from "@/components/ui/page-loader";
 import { TourButton, HUB_SLUGS } from "@/components/onboarding/TourButton";
-
-// Map current pathname to a PAGE_DEFS slug
-function pathToSlug(pathname: string): string | null {
-  const exact = PAGE_DEFS.find(p => p.path === pathname || p.path.split('?')[0] === pathname);
-  if (exact) return exact.slug;
-  const prefix = PAGE_DEFS
-    .filter(p => pathname.startsWith(p.path.split('?')[0]))
-    .sort((a, b) => b.path.length - a.path.length)[0];
-  return prefix?.slug ?? null;
-}
+import { resolveSlug } from "@/lib/page-roles";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -46,21 +35,11 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   const [accessModalOpen, setAccessModalOpen] = useState(false);
 
   const isSuperAdmin = normalizeRole(currentUser?.role ?? '') === 'superAdmin';
-  const currentSlug = pathToSlug(location.pathname);
+  // App's PageRouteGuard is the sole route authorization decision. Resolve the
+  // same canonical target here only for presentation (tour/access modal).
+  const currentSlug = resolveSlug(`${location.pathname}${location.search}${location.hash}`)
+    ?? resolveSlug(location.pathname);
   const currentPageDef = currentSlug ? PAGE_DEFS.find(p => p.slug === currentSlug) : null;
-
-  const { isBlocked: pageIsBlocked, isChecking: pageIsChecking, pageLabel } = usePageAccessGuard();
-  // Safety: never leave the content pane spinning if access check hangs
-  const [accessCheckTimedOut, setAccessCheckTimedOut] = useState(false);
-  React.useEffect(() => {
-    if (!pageIsChecking) {
-      setAccessCheckTimedOut(false);
-      return;
-    }
-    const t = setTimeout(() => setAccessCheckTimedOut(true), 8000);
-    return () => clearTimeout(t);
-  }, [pageIsChecking, location.pathname]);
-  const showAccessSpinner = pageIsChecking && !accessCheckTimedOut;
 
   const handleGlobalRefresh = useCallback(async () => {
     await queryClient.invalidateQueries();
@@ -104,13 +83,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
               </div>
               <div className="global-scrollable flex-1 flex flex-col relative min-w-0 min-h-0 bg-transparent px-1.5 py-1.5 sm:px-2 sm:py-2 lg:px-3 lg:py-2.5">
                 <div className="w-full rounded-xl border border-slate-200/70 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
-                  {showAccessSpinner ? (
-                    <PageLoader className="min-h-[60vh]" />
-                  ) : pageIsBlocked && !accessCheckTimedOut ? (
-                    <PageAccessDenied pageLabel={pageLabel} reason="blocked" />
-                  ) : (
-                    children || <Outlet />
-                  )}
+                  {children || <Outlet />}
                 </div>
               </div>
               <OnlineOfflineToggle variant="floating" />
