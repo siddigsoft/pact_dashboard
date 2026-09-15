@@ -259,6 +259,8 @@ import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useFCM } from './hooks/useFCM';
 import { useAuthorization } from './hooks/use-authorization';
+import { useCurrentUserAccessManifest } from './hooks/useCurrentUserAccessManifest';
+import { useViewAs } from './context/ViewAsContext';
 import {
   canSeePage,
   canSeePageWithOverridesResult,
@@ -268,7 +270,7 @@ import {
   getPageLabel,
   type RoutePermission,
 } from './lib/page-roles';
-import { resolveReportsDirectoryRoutePermission } from './lib/reports-directory-permissions';
+import { evaluateManifestPageAccess } from './lib/current-user-access';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 import SessionManager from './components/layout/SessionManager';
@@ -299,39 +301,6 @@ const SuperAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { isSuperAdmin } = useAuthorization();
   if (!isSuperAdmin()) {
     return <PageRoleDenied pageLabel="Super Admin Area" />;
-  }
-  return <>{children}</>;
-};
-
-const FinanceAdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { hasAnyRole } = useAuthorization();
-  if (!hasAnyRole(['super_admin', 'admin', 'financialAdmin'])) {
-    return <PageRoleDenied pageLabel="Finance Administration" />;
-  }
-  return <>{children}</>;
-};
-
-/** Accounting is readable by finance staff and auditors; panels retain their own action gates. */
-const AccountingRoute = ({ children }: { children: React.ReactNode }) => {
-  const location = useLocation();
-  const { hasAnyRole } = useAuthorization();
-  const directoryPermission = resolveReportsDirectoryRoutePermission(
-    location.pathname,
-    location.search,
-    location.hash,
-  );
-  // Accounting contains several resource-specific report tabs (fixed assets
-  // and procurement in particular).  The outer PageRouteGuard may have
-  // admitted a user through an explicit action grant; do not reject that
-  // grant with the legacy accounting-role wrapper.
-  // It also owns explicit blocks, so preserving the outer guard as the sole
-  // gate for registered directory destinations prevents a stale permission
-  // cache in this wrapper from rejecting a valid grant.
-  if (
-    !directoryPermission
-    && !hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor'])
-  ) {
-    return <PageRoleDenied pageLabel="Accounting" />;
   }
   return <>{children}</>;
 };
@@ -398,31 +367,32 @@ const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
 const PageRouteGuardAsync = ({
   slug,
   roleKey,
+  userId,
   children,
   routePermission,
   routeBaseline,
 }: {
   slug: string;
   roleKey: string;
+  userId: string | null | undefined;
   children: React.ReactNode;
   routePermission?: RoutePermission | null;
   routeBaseline?: boolean;
 }) => {
-  const { currentUser } = useAppContext();
   // Resolve role defaults and explicit overrides before mounting children so
   // a configured block never flashes or starts protected data queries.
   const [status, setStatus] = useState<'ok' | 'checking' | 'denied'>('checking');
 
   useEffect(() => {
     setStatus('checking');
-    if (!currentUser?.id) {
+    if (!userId) {
       setStatus('denied');
       return;
     }
     canSeePageWithOverridesResult(
       slug,
       roleKey ? roleKey.split('|') : [],
-      currentUser.id,
+      userId,
       routePermission ?? undefined,
       routeBaseline,
     ).then(({ allowed }) => {
@@ -431,7 +401,7 @@ const PageRouteGuardAsync = ({
   }, [
     slug,
     roleKey,
-    currentUser?.id,
+    userId,
     routePermission?.resource,
     routePermission?.action,
     routeBaseline,
@@ -452,30 +422,50 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { currentUser } = useAppContext();
   const { isSuperAdmin, checkPermission } = useAuthorization();
+  const { viewAs } = useViewAs();
+  const viewingAsSuperAdmin = isSuperAdmin();
+  const { data: currentAccessManifest, isLoading: isManifestLoading, isError: isManifestError } = useCurrentUserAccessManifest(
+    !!currentUser?.id && !viewAs && !viewingAsSuperAdmin,
+  );
 
   // SuperAdmin bypasses all page-level checks
-  if (isSuperAdmin()) return <>{children}</>;
+  if (viewingAsSuperAdmin) return <>{children}</>;
 
-  const role = (currentUser as any)?.role as string | undefined;
   const slug = resolveSlug(`${location.pathname}${location.search}${location.hash}`)
     ?? resolveSlug(location.pathname);
 
   // Unknown path (no slug in PAGE_DEFS) → fail-open so new routes work
   if (!slug) return <>{children}</>;
 
-  // Compute an immediate baseline for action-protected routes, then resolve
-  // page-role configuration and per-user overrides before mounting the page.
-  const guardRoles = Array.from(new Set([
-    role,
-    ...(Array.isArray((currentUser as any)?.additionalRoles)
-      ? (currentUser as any).additionalRoles.map((assignment: any) => assignment?.role ?? assignment?.name ?? assignment?.roleName)
-      : []),
-  ].filter((roleName): roleName is string => Boolean(roleName))));
   const routePermission = resolveRoutePermission(
     location.pathname,
     location.search,
     location.hash,
   );
+
+  // Normal navigation is evaluated exclusively from the server-derived
+  // manifest. Do not silently fall back to profile roles or browser-side
+  // override queries: a missing/failed manifest must not create a bypass.
+  if (!viewAs) {
+    if (isManifestLoading) return null;
+    if (isManifestError || !currentAccessManifest) {
+      return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
+    }
+    const decision = evaluateManifestPageAccess(currentAccessManifest, slug, routePermission);
+    return decision.allowed
+      ? <>{children}</>
+      : <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
+  }
+
+  // View As is an administrator preview, not another authenticated session.
+  // It intentionally retains the admin-only lookup path until the server can
+  // issue an evaluated manifest for an impersonated target.
+  const guardRoles = Array.from(new Set([
+    viewAs.role,
+    ...(Array.isArray((currentUser as any)?.additionalRoles)
+      ? (currentUser as any).additionalRoles.map((assignment: any) => assignment?.role ?? assignment?.name ?? assignment?.roleName)
+      : []),
+  ].filter((roleName): roleName is string => Boolean(roleName))));
   const roleAllowed = routePermission
     ? checkPermission(routePermission.resource, routePermission.action) ||
       guardRoles.some(roleName => canSeeRoutePermission(routePermission, roleName))
@@ -483,9 +473,10 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <PageRouteGuardAsync
-      key={`${slug}:${guardRoles.join(',')}:${currentUser?.id ?? ''}:${routePermission?.resource ?? ''}:${routePermission?.action ?? ''}`}
+      key={`${slug}:${guardRoles.join(',')}:${viewAs.userId ?? currentUser?.id ?? ''}:${routePermission?.resource ?? ''}:${routePermission?.action ?? ''}`}
       slug={slug}
       roleKey={guardRoles.join('|')}
+      userId={viewAs.mode === 'user' ? viewAs.userId : undefined}
       routePermission={routePermission}
       routeBaseline={routePermission ? roleAllowed : undefined}
     >
@@ -818,7 +809,7 @@ const AppRoutes = () => {
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
         <Route path="/recycle-bin" element={<SuperAdminRoute><RecycleBin /></SuperAdminRoute>} />
         <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
-        <Route path="/accounting" element={<AccountingRoute><AccountingHub /></AccountingRoute>} />
+        <Route path="/accounting" element={<AccountingHub />} />
         <Route path="/pre-funding" element={<PreFundingRoute><PageWrapper><PreFundingHub /></PageWrapper></PreFundingRoute>} />
         <Route path="/pre-funding/overview" element={<Navigate to="/pre-funding?tab=overview" replace />} />
         <Route path="/pre-funding/registry" element={<Navigate to="/pre-funding?tab=registry" replace />} />
