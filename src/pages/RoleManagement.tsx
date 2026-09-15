@@ -15,8 +15,7 @@ import { PermissionTester } from '@/components/role-management/PermissionTester'
 import { SecurityPanel } from '@/components/role-management/SecurityPanel';
 import { UnifiedAccessManager } from '@/components/role-management/UnifiedAccessManager';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
-import { supabase } from '@/integrations/supabase/client';
+import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest } from '@/types/roles';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useApproval } from '@/context/approval/ApprovalContext';
 import { useToast } from '@/hooks/use-toast';
@@ -147,12 +146,9 @@ const RoleManagement = () => {
     const roleNorm = norm(role.name);
 
     return users.filter(user => {
-      // 1. Check user_roles table entries (case-insensitive role name match)
+      // 1. Canonical assignments always reference roles.id.
       const uroles = getUserRolesByUserId(user.id);
-      const inUserRolesTable = uroles.some(ur =>
-        (role.is_system_role && norm(ur.role as string) === roleNorm) ||
-        (!role.is_system_role && ur.role_id === role.id)
-      );
+      const inUserRolesTable = uroles.some(ur => ur.role_id === role.id);
       if (inUserRolesTable) return true;
 
       // 2. Fallback: match via profiles.role for users with no user_roles row
@@ -174,22 +170,12 @@ const RoleManagement = () => {
     const ok = await assignRoleToUser(data);
     if (!ok) return;
 
-    // Persist the role name on profiles so page access (PAGE_DEFS / canSeePage)
-    // can resolve custom roles like SMT instead of the opaque 'custom' marker.
-    if (!selectedRole.is_system_role) {
-      const { error: profErr } = await supabase
-        .from('profiles')
-        .update({ role: selectedRole.name })
-        .eq('id', data.user_id);
-      if (profErr) console.warn('profiles.role update failed (RLS?):', profErr);
-    }
-
     await fetchUserRoles();
     await refreshUsers();
   };
 
-  const handleRemoveRoleFromUser = async (userId: string, roleId?: string, role?: AppRole): Promise<void> => {
-    await removeRoleFromUser(userId, roleId, role);
+  const handleRemoveRoleFromUser = async (userId: string, roleId: string): Promise<void> => {
+    await removeRoleFromUser(userId, roleId);
     await refreshUsers();
   };
 

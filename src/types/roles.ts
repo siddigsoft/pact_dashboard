@@ -19,7 +19,8 @@ export type AppRole =
 export interface UserRole {
   id: string;
   user_id: string;
-  role: AppRole;
+  /** Legacy role name; new assignments use role_id and leave this null. */
+  role?: AppRole | null;
   role_id?: string;
   assigned_by?: string;
   assigned_at?: string;
@@ -61,7 +62,7 @@ export interface CreateRoleRequest {
   page_slugs?: string[];
   /** Users to assign additively via user_roles.role_id. */
   assign_user_ids?: string[];
-  /** When true (default), assigned users get profiles.role = role.name (primary). */
+  /** Legacy compatibility only. New assignments should remain additive by default. */
   set_as_primary?: boolean;
   reason?: string;
   /** When set, upsert_role_access updates this role instead of creating. */
@@ -85,8 +86,8 @@ export interface UpdateRoleRequest {
 
 export interface AssignRoleRequest {
   user_id: string;
-  role?: AppRole;
-  role_id?: string;
+  /** Canonical role definition ID. Do not send a display/name role value. */
+  role_id: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
