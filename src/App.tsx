@@ -430,7 +430,7 @@ const PageRouteGuardAsync = ({
     });
   }, [
     slug,
-    role,
+    roleKey,
     currentUser?.id,
     routePermission?.resource,
     routePermission?.action,
@@ -466,7 +466,7 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   // Compute an immediate baseline for action-protected routes, then resolve
   // page-role configuration and per-user overrides before mounting the page.
   const guardRoles = Array.from(new Set([
-    roleKey,
+    role,
     ...(Array.isArray((currentUser as any)?.additionalRoles)
       ? (currentUser as any).additionalRoles.map((assignment: any) => assignment?.role ?? assignment?.name ?? assignment?.roleName)
       : []),
