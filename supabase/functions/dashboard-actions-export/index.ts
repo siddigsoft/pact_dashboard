@@ -41,15 +41,14 @@ async function verifyCallerIsSuperAdmin(authHeader: string): Promise<{ userId: s
   )
   if (permissionError) return null
 
-  const svc = createServiceClient()
-  const { data: sa } = await svc
-    .from('super_admins')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .maybeSingle()
+  // Use the same database-authoritative predicate as report/export RPCs.
+  // Checking only super_admins here would reject valid Super Admins whose
+  // authority comes from profiles.role or normalized user_roles.
+  const { data: isSuperAdmin, error: superAdminError } = await anonClient.rpc(
+    'current_user_is_super_admin',
+  )
+  if (superAdminError || isSuperAdmin !== true) return null
 
-  if (!sa) return null
   return { userId: user.id, email: user.email ?? '' }
 }
 

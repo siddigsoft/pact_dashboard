@@ -61,6 +61,13 @@ Cost Submission scope is enforced by one shared database predicate used by RLS a
 
 **How to apply:** each new scoped resource needs one server predicate shared by RLS and RPCs, a fail-closed client path, and one transactional Super Admin-only policy replacement operation. User Role Default means inheritance, not a stored bypass row.
 
+## Super Admin bypass
+True Super Admins are unrestricted even when a user-level deny override exists. Enforce this before overrides and scope filters at every database or Edge Function authorization boundary, not only in the client.
+
+**Why:** the UI correctly allowed Super Admin, but server-side report helpers still required permission rows and applied hub scope, causing an access-denied response.
+
+**How to apply:** use the canonical current-user Super Admin predicate before checking deny overrides, role grants, or data scope. View As remains a client-only simulation and must not change the authenticated database identity.
+
 ## Component locations
 - `src/components/role-management/UnifiedAccessManager.tsx` — main assembler
 - `src/components/role-management/unified/` — OverviewTab, PageAccessTab, TabAccessTab, PermissionsTab, DataScopeTab, types.ts
