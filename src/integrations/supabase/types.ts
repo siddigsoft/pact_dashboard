@@ -1852,6 +1852,10 @@ export type Database = {
         Args: { project_id: string }
         Returns: boolean
       }
+      upsert_role_access: {
+        Args: { payload: Json }
+        Returns: Json
+      }
       user_has_role: {
         Args:
           | { user_id: number; role_name: string }

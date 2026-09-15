@@ -160,8 +160,6 @@ const TaskDetail = lazy(() => import('./pages/TaskDetail'));
 const TeamTaskMonitor = lazy(() => import('./pages/TeamTaskMonitor'));
 const LeaveRequests = lazy(() => import('./pages/LeaveRequests'));
 const WorkspaceHub = lazy(() => import('./pages/WorkspaceHub'));
-const PageAccessControl = lazy(() => import('./pages/PageAccessControl'));
-const FieldOperationManager = lazy(() => import('./pages/FieldOperationManager'));
 const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
 const CycleExceptionRollover = lazy(() => import('./pages/CycleExceptionRollover'));
 const CycleExceptionResolution = lazy(() => import('./pages/CycleExceptionResolution'));
@@ -221,7 +219,6 @@ const AccountingGRN        = lazy(() => import('./pages/AccountingGRN'));
 const AccountingAPInvoices = lazy(() => import('./pages/AccountingAPInvoices'));
 const AccountingChequeRegister = lazy(() => import('./pages/AccountingChequeRegister'));
 const AccountingPeriodClose = lazy(() => import('./pages/AccountingPeriodClose'));
-const CoverageMap = lazy(() => import('./pages/CoverageMap'));
 const ExecutiveDashboard = lazy(() => import('./pages/ExecutiveDashboard'));
 const AccountingTaxManagement = lazy(() => import('./pages/AccountingTaxManagement'));
 const AccountingMultiCurrency = lazy(() => import('./pages/AccountingMultiCurrency'));
@@ -400,64 +397,41 @@ const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
 // and the Security Panel both read from there automatically.
 const PageRouteGuardAsync = ({
   slug,
-  role,
+  roleKey,
   children,
-  startDenied = false,
   routePermission,
   routeBaseline,
 }: {
   slug: string;
-  role: string | undefined;
+  roleKey: string;
   children: React.ReactNode;
-  /** When true, the role check already failed — show nothing until the DB
-   *  confirms whether a grant override exists. Prevents a flash of content. */
-  startDenied?: boolean;
   routePermission?: RoutePermission | null;
   routeBaseline?: boolean;
 }) => {
   const { currentUser } = useAppContext();
-  // Direct report routes have an action-level permission which must be
-  // resolved before mounting their children. Starting those routes as "ok"
-  // would allow report components to fetch data before an explicit action
-  // block is read. Role-denied routes also wait so an explicit grant can open
-  // them without flashing the restricted page.
-  const waitsForActionOverride = Boolean(routePermission);
-  const [status, setStatus] = useState<'ok' | 'checking' | 'denied'>(
-    startDenied || waitsForActionOverride ? 'checking' : 'ok',
-  );
+  // Resolve role defaults and explicit overrides before mounting children so
+  // a configured block never flashes or starts protected data queries.
+  const [status, setStatus] = useState<'ok' | 'checking' | 'denied'>('checking');
 
   useEffect(() => {
-    setStatus(startDenied || waitsForActionOverride ? 'checking' : 'ok');
+    setStatus('checking');
     if (!currentUser?.id) {
-      if (startDenied || waitsForActionOverride) setStatus('denied');
+      setStatus('denied');
       return;
     }
     canSeePageWithOverridesResult(
       slug,
-      role,
+      roleKey ? roleKey.split('|') : [],
       currentUser.id,
       routePermission ?? undefined,
       routeBaseline,
     ).then(({ allowed }) => {
-      if (waitsForActionOverride) {
-        // Action overrides are authoritative for direct report routes. This
-        // deliberately does not render from the role baseline while lookup
-        // is pending: an explicit block must not be ORed away by a default.
-        setStatus(allowed ? 'ok' : 'denied');
-      } else if (startDenied) {
-        // Grant check: only open the page if DB explicitly grants access
-        setStatus(allowed ? 'ok' : 'denied');
-      } else {
-        // Block check: only close the page if DB explicitly blocks access
-        if (!allowed) setStatus('denied');
-      }
+      setStatus(allowed ? 'ok' : 'denied');
     });
   }, [
     slug,
     role,
     currentUser?.id,
-    startDenied,
-    waitsForActionOverride,
     routePermission?.resource,
     routePermission?.action,
     routeBaseline,
@@ -483,24 +457,20 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   if (isSuperAdmin()) return <>{children}</>;
 
   const role = (currentUser as any)?.role as string | undefined;
-  const slug = resolveSlug(location.pathname);
+  const slug = resolveSlug(`${location.pathname}${location.search}${location.hash}`)
+    ?? resolveSlug(location.pathname);
 
   // Unknown path (no slug in PAGE_DEFS) → fail-open so new routes work
   if (!slug) return <>{children}</>;
 
-  // Layer 1: instant role check.
-  // If the role passes → render immediately, then let Layer 2 apply any block.
-  // If the role fails  → don't block immediately; delegate to Layer 2 which
-  //   checks page_access_overrides for an explicit grant (e.g. a Super Admin
-  //   granting a non-default role access to a restricted page). Only deny once
-  //   we confirm no grant exists in the DB.
-  const hasAdditionalSupervisorRole = slug === 'mmp-full-report'
-    && Array.isArray((currentUser as any)?.additionalRoles)
-    && (currentUser as any).additionalRoles.some((assignment: any) => {
-      const key = String(assignment?.role || '').toLowerCase().replace(/[\s_-]/g, '');
-      return key === 'supervisor' || key === 'hubsupervisor';
-    });
-  const guardRole = hasAdditionalSupervisorRole ? 'supervisor' : role;
+  // Compute an immediate baseline for action-protected routes, then resolve
+  // page-role configuration and per-user overrides before mounting the page.
+  const guardRoles = Array.from(new Set([
+    roleKey,
+    ...(Array.isArray((currentUser as any)?.additionalRoles)
+      ? (currentUser as any).additionalRoles.map((assignment: any) => assignment?.role ?? assignment?.name ?? assignment?.roleName)
+      : []),
+  ].filter((roleName): roleName is string => Boolean(roleName))));
   const routePermission = resolveRoutePermission(
     location.pathname,
     location.search,
@@ -508,15 +478,14 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   );
   const roleAllowed = routePermission
     ? checkPermission(routePermission.resource, routePermission.action) ||
-      canSeeRoutePermission(routePermission, guardRole)
-    : canSeePage(slug, guardRole);
+      guardRoles.some(roleName => canSeeRoutePermission(routePermission, roleName))
+    : guardRoles.some(roleName => canSeePage(slug, roleName));
 
   return (
     <PageRouteGuardAsync
-      key={`${slug}:${guardRole ?? ''}:${currentUser?.id ?? ''}:${routePermission?.resource ?? ''}:${routePermission?.action ?? ''}`}
+      key={`${slug}:${guardRoles.join(',')}:${currentUser?.id ?? ''}:${routePermission?.resource ?? ''}:${routePermission?.action ?? ''}`}
       slug={slug}
-      role={guardRole}
-      startDenied={!roleAllowed}
+      roleKey={guardRoles.join('|')}
       routePermission={routePermission}
       routeBaseline={routePermission ? roleAllowed : undefined}
     >
@@ -754,7 +723,7 @@ const AppRoutes = () => {
         <Route path="/archive" element={<Navigate to="/analytics?tab=archive" replace />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/role-management" element={<Navigate to="/admin-hub?tab=role-management" replace />} />
-        <Route path="/page-access" element={<Navigate to="/admin-hub?tab=page-access" replace />} />
+        <Route path="/page-access" element={<Navigate to="/super-admin-hub?tab=user-access" replace />} />
         {/* ── Super Admin Hub ── */}
         <Route path="/super-admin-hub" element={<SuperAdminHub />} />
         <Route path="/super-admin-management" element={<Navigate to="/super-admin-hub?tab=super-admin" replace />} />
@@ -787,7 +756,7 @@ const AppRoutes = () => {
         <Route path="/task-admin" element={<Navigate to="/admin-hub?tab=task-admin" replace />} />
         <Route path="/admin/project-flow-stages" element={<Navigate to="/admin-hub?tab=project-flow-stages" replace />} />
         <Route path="/admin/transaction-scanner" element={<Navigate to="/super-admin-hub?tab=transaction-scanner" replace />} />
-        <Route path="/permissions-management" element={<Navigate to="/super-admin-hub?tab=permissions" replace />} />
+        <Route path="/permissions-management" element={<Navigate to="/super-admin-hub?tab=user-access" replace />} />
         <Route path="/role-perspective" element={<RolePerspectiveViewer />} />
         <Route path="/support-contacts" element={<SupportContacts />} />
         <Route path="/mobile-support-tickets" element={<MobileSupportTickets />} />
@@ -828,7 +797,6 @@ const AppRoutes = () => {
         <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />
         <Route path="/data-quality" element={<PageWrapper><DataQualityPage /></PageWrapper>} />
         {/* WorkspaceHub moved to its own full-screen route (see below) */}
-        <Route path="/field-operation-manager" element={<FieldOperationManager />} />
         <Route path="/mmp-management" element={<MMPManagementPage />} />
         <Route path="/cycle-exceptions/rollover" element={<PageWrapper><CycleExceptionRollover /></PageWrapper>} />
         <Route path="/cycle-exceptions/resolution" element={<PageWrapper><CycleExceptionResolution /></PageWrapper>} />
@@ -880,7 +848,6 @@ const AppRoutes = () => {
         <Route path="/accounting/ap-invoices" element={<Navigate to="/accounting?tab=ap-invoices" replace />} />
         <Route path="/accounting/cheque-register" element={<Navigate to="/accounting?tab=cheque-register" replace />} />
         <Route path="/accounting/period-close" element={<Navigate to="/accounting?tab=period-close" replace />} />
-        <Route path="/coverage-map" element={<PageWrapper><CoverageMap /></PageWrapper>} />
         <Route path="/executive" element={<SuperAdminRoute><PageWrapper><ExecutiveDashboard /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/tax" element={<Navigate to="/accounting?tab=tax" replace />} />
         <Route path="/accounting/multi-currency" element={<Navigate to="/accounting?tab=multi-currency" replace />} />

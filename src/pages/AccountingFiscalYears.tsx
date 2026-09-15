@@ -53,7 +53,7 @@ export default function AccountingFiscalYears() {
   const allowed    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanManage = hasAnyRole(['super_admin', 'admin']);
 
-  const overrideCanManage = usePageManageOverride('acct-fiscal-years', roleCanManage);
+  const overrideCanManage = usePageManageOverride('accounting-fiscal-years', roleCanManage);
 
   const canManage = roleCanManage || overrideCanManage;
   const { toast }  = useToast();

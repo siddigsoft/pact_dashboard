@@ -127,7 +127,7 @@ export default function AccountingCOA() {
   const roleCanManage = hasAnyRole(['super_admin', 'admin']);
   const canExport = checkPermission('accounting', 'export');
 
-  const overrideCanManage = usePageManageOverride('acct-coa', roleCanManage);
+  const overrideCanManage = usePageManageOverride('accounting-coa', roleCanManage);
 
   const canManage = roleCanManage || overrideCanManage;
   const { toast } = useToast();

@@ -98,7 +98,7 @@ export default function AccountingFixedAssets() {
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
-  const overrideCanEdit = usePageManageOverride('acct-fixed-assets', roleCanEdit);
+  const overrideCanEdit = usePageManageOverride('accounting-fixed-assets', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();

@@ -26,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 
 // ── Role code constants (matching normalizeRole() output exactly) ─────────────
 //  superAdmin | admin | ict | fom | financialAdmin | auditor | supervisor
@@ -128,6 +129,8 @@ export const PAGE_DEFS: PageDef[] = [
   // ── Finance ───────────────────────────────────────────────────────────────
   { slug:'finance-hub',         label:'Finance Hub',            path:'/finance-hub',            icon:Landmark, group:'Finance',
     roles:['superAdmin','admin','financialAdmin','auditor','fom','countryDirector','seniorOperationsLead'], note:'Unified hub: financial ops, wallets admin, advances report' },
+  { slug:'finance-subscriptions', label:'Subscriptions',         path:'/finance-hub?tab=subscriptions', icon:CreditCard, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
   { slug:'finance',             label:'Finance (Legacy)',        path:'/finance',                icon:Banknote, group:'Finance',
     roles:['superAdmin','admin','financialAdmin','auditor'], note:'Legacy finance page; most functionality moved to Finance Hub' },
   { slug:'mobile-cost-submission', label:'Mobile Cost Submission', path:'/mobile-cost-submission', icon:Smartphone, group:'Finance',
@@ -324,8 +327,6 @@ export const PAGE_DEFS: PageDef[] = [
   // ── Administration ────────────────────────────────────────────────────────
   { slug:'admin-hub',           label:'Admin Hub',              path:'/admin-hub',              icon:LayoutDashboard, group:'Administration',
     roles:['superAdmin','admin','ict'], note:'Unified admin interface' },
-  { slug:'super-admin-hub',     label:'Super Admin Hub',        path:'/super-admin-hub',        icon:Shield, group:'Administration',
-    roles:['superAdmin'] },
   { slug:'users',               label:'User Management',        path:'/users',                  icon:Users, group:'Administration',
     roles:['superAdmin','admin','ict'] },
   { slug:'departments',         label:'Departments',            path:'/departments',            icon:Building2, group:'Administration',
@@ -779,9 +780,14 @@ export function UserAccessRow({
 // ── Main page component ───────────────────────────────────────────────────────
 export default function PageAccessControl() {
   const { currentUser } = useAppContext();
+  const { roles: managedRoles } = useRoleManagement();
   const { toast } = useToast();
   const qc = useQueryClient();
   const isSuperAdmin = normalizeRole(currentUser?.role ?? '') === 'superAdmin';
+  const pageRoleOptions = useMemo(() => Array.from(new Set([
+    ...PAGE_ROLE_ALL_OPTIONS,
+    ...managedRoles.filter(role => role.is_active).map(role => role.name),
+  ])), [managedRoles]);
 
   // View mode
   const [viewMode, setViewMode] = useState<'page' | 'user'>('page');
@@ -1207,7 +1213,7 @@ export default function PageAccessControl() {
                             Toggle which roles have default access to <span className="font-medium">{selectedPage.label}</span>. Changes are saved immediately to the database.
                           </p>
                           <div className="flex flex-wrap gap-1.5 mb-3">
-                            {PAGE_ROLE_ALL_OPTIONS.map(r => {
+                            {pageRoleOptions.map(r => {
                               const active = effectiveRoles.includes(r);
                               return (
                                 <button
