@@ -306,7 +306,7 @@ export function canSeePage(
   return false;
 }
 
-export type PageAccessLookupErrorSource = 'action' | 'page';
+export type PageAccessLookupErrorSource = 'config' | 'action' | 'page';
 
 /**
  * Result of resolving the asynchronous access layers.
@@ -328,26 +328,36 @@ export interface PageAccessResult {
 /** Async variant that layers page_role_configs + per-user page_access_overrides. */
 export async function canSeePageWithOverridesResult(
   slug: string,
-  role: string | null | undefined,
+  role: string | string[] | null | undefined,
   userId: string | null | undefined,
   routePermission?: RoutePermission,
   routeBaseline?: boolean,
 ): Promise<PageAccessResult> {
   let effectiveRoles: string[] | undefined;
   try {
-    const { data: cfg } = await supabase
+    const { data: cfg, error } = await supabase
       .from('page_role_configs')
       .select('roles')
       .eq('page_slug', slug)
       .maybeSingle();
-    if (cfg?.roles && Array.isArray(cfg.roles) && cfg.roles.length > 0) {
+    if (error) {
+      return {
+        allowed: false,
+        error: { type: 'override_lookup_failed', source: 'config' },
+      };
+    }
+    if (cfg?.roles && Array.isArray(cfg.roles)) {
       effectiveRoles = cfg.roles as string[];
     }
   } catch {
-    // ignore — fall back to PAGE_DEFS
+    return {
+      allowed: false,
+      error: { type: 'override_lookup_failed', source: 'config' },
+    };
   }
 
-  const baseline = routeBaseline ?? canSeePage(slug, role, effectiveRoles);
+  const roleNames = Array.isArray(role) ? role : [role];
+  const baseline = routeBaseline ?? roleNames.some(roleName => canSeePage(slug, roleName, effectiveRoles));
   if (!userId) return { allowed: baseline };
 
   // Action-level overrides are the same permission checked by report buttons.
@@ -430,7 +440,7 @@ export async function canSeePageWithOverridesResult(
  */
 export async function canSeePageWithOverrides(
   slug: string,
-  role: string | null | undefined,
+  role: string | string[] | null | undefined,
   userId: string | null | undefined,
   routePermission?: RoutePermission,
   routeBaseline?: boolean,

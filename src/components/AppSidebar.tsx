@@ -116,7 +116,7 @@
   } from "@/components/ui/sidebar";
   import { AppRole } from "@/types";
   import { useAuthorization } from "@/hooks/use-authorization";
-  import { canSeePath } from "@/lib/page-roles";
+  import { canSeePage, canSeePath, resolveSlug } from "@/lib/page-roles";
   import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
   import { useSettings } from "@/context/settings/SettingsContext";
   import {
@@ -863,19 +863,31 @@
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openPickerRequest]);
 
+    const effectiveAccessUserId = viewAs?.mode === 'user' ? viewAs.userId : (viewAs ? undefined : currentUser?.id);
+
     // Fetch this user's page_access_overrides so that manually granted pages
     // appear in the sidebar even when the role-based check would deny them.
     const { data: myPageOverrides = [] } = useQuery({
-      queryKey: ['sidebar-page-overrides', currentUser?.id],
+      queryKey: ['sidebar-page-overrides', effectiveAccessUserId],
       queryFn: async () => {
-        if (!currentUser?.id) return [];
+        if (!effectiveAccessUserId) return [];
         const { data } = await supabase
           .from('page_access_overrides')
           .select('page_slug, is_blocked')
-          .eq('user_id', currentUser.id);
+          .eq('user_id', effectiveAccessUserId);
         return (data ?? []) as { page_slug: string; is_blocked: boolean }[];
       },
-      enabled: !!currentUser?.id && !isSuperAdmin,
+      enabled: !!effectiveAccessUserId && !isSuperAdmin,
+      staleTime: 30_000,
+    });
+
+    const { data: sidebarRoleConfigs = {} } = useQuery<Record<string, string[]>>({
+      queryKey: ['sidebar-page-role-configs'],
+      queryFn: async () => {
+        const { data, error } = await supabase.from('page_role_configs').select('page_slug, roles');
+        if (error) throw error;
+        return Object.fromEntries((data ?? []).map((row: any) => [row.page_slug, row.roles ?? []]));
+      },
       staleTime: 30_000,
     });
 
@@ -1154,14 +1166,50 @@
       // Deep-clone so we never mutate the cached builder result.
       let groups: typeof rawMenuGroups = rawMenuGroups.map(g => ({ ...g, items: [...g.items] }));
 
-      if (Object.keys(pageOverrideMap).length > 0) {
-        // Helper: find or create a group by id
-        const getOrCreateGroup = (groupId: string, label: string, order: number) => {
-          let g = groups.find(x => x.id === groupId);
-          if (!g) { g = { id: groupId, label, order, items: [] }; groups.push(g); }
-          return g;
-        };
+      // Helper: find or create a group by id.
+      const getOrCreateGroup = (groupId: string, label: string, order: number) => {
+        let g = groups.find(x => x.id === groupId);
+        if (!g) { g = { id: groupId, label, order, items: [] }; groups.push(g); }
+        return g;
+      };
 
+      const accessRoles = viewAs
+        ? [viewAs.role]
+        : [currentUser?.role, ...(roles || []), ...extraRoles]
+            .filter((role): role is string => Boolean(role));
+
+      // A configured page-role row is authoritative for that page. Apply it to
+      // existing navigation items and add configured grants the legacy builder
+      // did not know how to surface (especially custom roles).
+      if (!isSuperAdmin && Object.keys(sidebarRoleConfigs).length > 0) {
+        groups = groups.map(group => ({
+          ...group,
+          items: group.items.filter(item => {
+            const slug = resolveSlug(item.url);
+            const configuredRoles = slug ? sidebarRoleConfigs[slug] : undefined;
+            return !slug || !configuredRoles || accessRoles.some(role => canSeePage(slug, role, configuredRoles));
+          }),
+        }));
+
+        for (const [slug, configuredRoles] of Object.entries(sidebarRoleConfigs)) {
+          if (!accessRoles.some(role => canSeePage(slug, role, configuredRoles))) continue;
+          const pageDef = PAGE_DEFS.find(page => page.slug === slug);
+          if (!pageDef || (isSMTUser && !isSmtAllowedUrl(pageDef.path))) continue;
+          const alreadyExists = groups.some(group => group.items.some(item => item.url === pageDef.path));
+          if (!alreadyExists) {
+            const sidebarGroupId = PAGEDEF_GROUP_TO_SIDEBAR[pageDef.group] ?? 'admin';
+            getOrCreateGroup(sidebarGroupId, pageDef.group, 99).items.push({
+              id: pageDef.slug,
+              title: pageDef.label,
+              url: pageDef.path,
+              icon: pageDef.icon,
+              priority: 99,
+            });
+          }
+        }
+      }
+
+      if (Object.keys(pageOverrideMap).length > 0) {
         for (const [slug, isBlocked] of Object.entries(pageOverrideMap)) {
           const pageDef = PAGE_DEFS.find(p => p.slug === slug);
           if (!pageDef) continue;
@@ -1188,10 +1236,11 @@
           }
         }
 
-        // Re-sort groups and items by order/priority
-        groups.sort((a, b) => a.order - b.order);
-        groups.forEach(g => g.items.sort((a, b) => a.priority - b.priority));
       }
+
+      // Re-sort after configured-role and per-user override injections.
+      groups.sort((a, b) => a.order - b.order);
+      groups.forEach(g => g.items.sort((a, b) => a.priority - b.priority));
 
       // SMT final hard filter — only the allowlisted project pages, no leaks
       if (isSMTUser) {
@@ -1201,10 +1250,9 @@
       }
 
       return groups.filter(g => g.items.length > 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     // viewAs MUST be in the dep array — switching between two non-SA roles doesn't
     // change isSuperAdmin (stays false), so without viewAs the sidebar never re-renders.
-    }, [currentUser?.id, currentUser?.role, currentUser?.additionalRoles, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, isFundHolder, pageOverrideMap, viewAs]);
+    }, [currentUser, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, isFundHolder, pageOverrideMap, sidebarRoleConfigs, viewAs]);
 
     const toggleGroupCollapse = (groupId: string) => {
       setCollapsedGroups(prev => {

@@ -121,7 +121,7 @@ export default function AccountingAMLCompliance() {
   const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin']);
 
-  const overrideCanEdit = usePageManageOverride('acct-aml', roleCanEdit);
+  const overrideCanEdit = usePageManageOverride('accounting-aml', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();

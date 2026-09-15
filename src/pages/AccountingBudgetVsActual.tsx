@@ -46,7 +46,7 @@ export default function AccountingBudgetVsActual() {
   const canExport = checkPermission('finances', 'export');
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
-  const overrideCanEdit = usePageManageOverride('acct-budget-variance', roleCanEdit);
+  const overrideCanEdit = usePageManageOverride('accounting-budget-variance', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();

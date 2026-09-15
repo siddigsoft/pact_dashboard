@@ -3,29 +3,7 @@ import { useAppContext } from '@/context/AppContext';
 import { normalizeRole } from '@/utils/roleMapping';
 import { PAGE_DEFS } from '@/pages/PageAccessControl';
 import { usePagePermissions } from '@/hooks/usePageManageOverride';
-
-/**
- * Resolves the current pathname to a PAGE_DEFS slug.
- * Tries exact match first, then longest-prefix match so that
- * /crm/partners → 'crm', /accounting → 'accounting-hub', etc.
- */
-function pathToSlug(pathname: string): string | null {
-  const clean = pathname.endsWith('/') && pathname !== '/'
-    ? pathname.slice(0, -1)
-    : pathname;
-
-  const exact = PAGE_DEFS.find(p => p.path.split('?')[0] === clean);
-  if (exact) return exact.slug;
-
-  const prefix = PAGE_DEFS
-    .filter(p => {
-      const base = p.path.split('?')[0];
-      return clean.startsWith(base + '/') || base === clean;
-    })
-    .sort((a, b) => b.path.split('?')[0].length - a.path.split('?')[0].length)[0];
-
-  return prefix?.slug ?? null;
-}
+import { resolveSlug } from '@/lib/page-roles';
 
 export interface PageGuardResult {
   /** True when the current user is explicitly blocked or stripped of read access for this page. */
@@ -52,7 +30,8 @@ export function usePageAccessGuard(): PageGuardResult {
   const location = useLocation();
   const isSuperAdmin = normalizeRole(currentUser?.role ?? '') === 'superAdmin';
 
-  const slug = pathToSlug(location.pathname);
+  const slug = resolveSlug(`${location.pathname}${location.search}${location.hash}`)
+    ?? resolveSlug(location.pathname);
   const pageDef = slug ? PAGE_DEFS.find(p => p.slug === slug) : null;
 
   // Delegate to the full 3-layer resolver.

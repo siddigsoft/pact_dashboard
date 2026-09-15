@@ -50,7 +50,7 @@ export default function AccountingBudgetPlanning() {
   const canExport = checkPermission('finances', 'export');
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
-  const overrideCanEdit = usePageManageOverride('acct-budget-planning', roleCanEdit);
+  const overrideCanEdit = usePageManageOverride('accounting-budget', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();

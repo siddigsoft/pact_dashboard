@@ -83,6 +83,9 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   const [permOverrides, setPermOverrides] = useState<PermissionOverride[]>([]);
   const [columnConfigs, setColumnConfigs] = useState<ColumnVisibilityRow[]>([]);
   const [dataScopeRows, setDataScopeRows] = useState<DataScopeRow[]>([]);
+  const [effectiveRoleNames, setEffectiveRoleNames] = useState<string[]>([userRole]);
+  const [rolePermissionKeys, setRolePermissionKeys] = useState<Set<string>>(new Set());
+  const [pageRoleConfigs, setPageRoleConfigs] = useState<Record<string, string[]>>({});
   const [scopePreview, setScopePreview] = useState<ScopePreview | null>(null);
   const [scopePreviewError, setScopePreviewError] = useState<string | null>(null);
 
@@ -97,11 +100,14 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     if (!userId) return;
     setLoading(true);
     try {
-      const [pageRes, permRes, colRes, scopeRes] = await Promise.all([
+      const [pageRes, permRes, colRes, scopeRes, roleConfigRes, permissionRes, userRolesRes] = await Promise.all([
         supabase.from('page_access_overrides').select('*').eq('user_id', userId),
         supabase.from('user_permission_overrides').select('*').eq('user_id', userId),
         supabase.from('column_visibility_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`),
         supabase.from('data_scope_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`),
+        supabase.from('page_role_configs').select('page_slug, roles'),
+        supabase.rpc('get_user_permissions', { user_uuid: userId }),
+        supabase.from('user_roles').select('role, role_id').eq('user_id', userId),
       ]);
       setPageOverrides(pageRes.data ?? []);
       setPermOverrides(permRes.data ?? []);
@@ -134,6 +140,42 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
 
       setColumnConfigs(colRes.data ?? []);
       setDataScopeRows(scopeRes.data ?? []);
+
+      if (roleConfigRes.error) {
+        console.error('[SelectedUserAccess] page_role_configs load error:', roleConfigRes.error);
+      }
+      setPageRoleConfigs(Object.fromEntries(
+        (roleConfigRes.data ?? []).map((row: any) => [row.page_slug, row.roles ?? []]),
+      ));
+
+      if (permissionRes.error) {
+        console.error('[SelectedUserAccess] get_user_permissions error:', permissionRes.error);
+      }
+      setRolePermissionKeys(new Set(
+        (permissionRes.data ?? []).map((permission: any) => `${permission.resource}:${permission.action}`),
+      ));
+
+      const assignedRows = userRolesRes.data ?? [];
+      const customRoleIds = assignedRows
+        .map((row: any) => row.role_id)
+        .filter((id: string | null): id is string => Boolean(id));
+      let customRoleNames: string[] = [];
+      if (customRoleIds.length > 0) {
+        const { data: customRoles, error: customRolesError } = await supabase
+          .from('roles')
+          .select('name')
+          .in('id', customRoleIds);
+        if (customRolesError) {
+          console.error('[SelectedUserAccess] custom role names load error:', customRolesError);
+        } else {
+          customRoleNames = (customRoles ?? []).map((role: any) => role.name);
+        }
+      }
+      setEffectiveRoleNames(Array.from(new Set([
+        userRole,
+        ...assignedRows.map((row: any) => row.role).filter(Boolean),
+        ...customRoleNames,
+      ])));
     } finally {
       setLoading(false);
     }
@@ -158,13 +200,19 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     // Hub tab slugs (contain ':') default to visible — no PAGE_DEFS entry
     if (slug.includes(':')) return 'role-yes';
     const def = PAGE_DEFS.find(p => p.slug === slug);
-    return (def && hasDefaultAccess(def, userRole)) ? 'role-yes' : 'role-no';
+    const configuredRoles = pageRoleConfigs[slug];
+    return (def && effectiveRoleNames.some(role => hasDefaultAccess(def, role, configuredRoles)))
+      ? 'role-yes'
+      : 'role-no';
   }
 
   function effectiveAction(resource: string, action: string): AccessEffect {
     const key = `${resource}:${action}`;
     if (key in permOvMap) return permOvMap[key] ? 'granted' : 'blocked';
-    return roleHasAction(userRole, resource as ResourceType, action as ActionType) ? 'role-yes' : 'role-no';
+    if (rolePermissionKeys.has(key)) return 'role-yes';
+    return effectiveRoleNames.some(role => roleHasAction(role, resource as ResourceType, action as ActionType))
+      ? 'role-yes'
+      : 'role-no';
   }
 
   // ── Page toggle ──────────────────────────────────────────────────────────

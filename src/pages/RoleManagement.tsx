@@ -171,22 +171,12 @@ const RoleManagement = () => {
   const handleAssignRoleToUser = async (data: AssignRoleRequest): Promise<void> => {
     if (!selectedRole) return;
 
-    const { error: clearErr } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', data.user_id);
-    if (clearErr) {
-      console.error('Clear user roles failed:', clearErr);
-      toast({ title: 'Failed to assign role', description: clearErr.message, variant: 'destructive' });
-      return;
-    }
-
     const ok = await assignRoleToUser(data);
     if (!ok) return;
 
     // Persist the role name on profiles so page access (PAGE_DEFS / canSeePage)
     // can resolve custom roles like SMT instead of the opaque 'custom' marker.
-    {
+    if (!selectedRole.is_system_role) {
       const { error: profErr } = await supabase
         .from('profiles')
         .update({ role: selectedRole.name })

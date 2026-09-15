@@ -47,7 +47,7 @@ export default function AccountingBankRecon() {
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
-  const overrideCanEdit = usePageManageOverride('acct-bank-recon', roleCanEdit);
+  const overrideCanEdit = usePageManageOverride('accounting-bank-recon', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();

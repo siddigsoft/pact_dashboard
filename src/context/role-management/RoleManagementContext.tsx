@@ -328,40 +328,37 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
       const assignedBy = auth?.user?.id ?? null;
       const now = new Date().toISOString();
 
-      // Single-role enforcement (safe order):
-      // 1. Upsert the new role first so the user is never left with zero roles.
-      // 2. Delete all OTHER conflicting roles.
+      // user_roles is additive: profiles.role remains the primary/navigation role,
+      // while this table may contain multiple system and custom assignments.
       if (assignData.role) {
         const { error: upsertErr } = await supabase
           .from('user_roles')
           .upsert({ user_id: assignData.user_id, role: assignData.role, assigned_by: assignedBy, assigned_at: now }, { onConflict: 'user_id,role', ignoreDuplicates: true });
         if (upsertErr) throw upsertErr;
-        // Remove any other role entries (role column) that differ from the new role
-        await supabase
-          .from('user_roles')
-          .delete()
-          .eq('user_id', assignData.user_id)
-          .neq('role', assignData.role)
-          .not('role', 'is', null);
-        // Keep profiles.role in sync so both sources agree on the single role.
+        // The newly selected system role becomes the primary role, but existing
+        // additive assignments are deliberately preserved.
         await supabase
           .from('profiles')
           .update({ role: assignData.role })
           .eq('id', assignData.user_id);
       } else if (assignData.role_id) {
-        // Custom roles: avoid ON CONFLICT (user_id, role_id) — live DB only has a
-        // partial unique index, which Postgres rejects as an ON CONFLICT target.
-        // Clear existing rows for this user, then insert the new assignment.
-        const { error: clearErr } = await supabase
+        // Custom roles: avoid ON CONFLICT (user_id, role_id) because the live DB
+        // uses a partial unique index. Check first, then insert without removing
+        // any of the user's other assignments.
+        const { data: existing, error: existingErr } = await supabase
           .from('user_roles')
-          .delete()
-          .eq('user_id', assignData.user_id);
-        if (clearErr) throw clearErr;
+          .select('id')
+          .eq('user_id', assignData.user_id)
+          .eq('role_id', assignData.role_id)
+          .maybeSingle();
+        if (existingErr) throw existingErr;
 
-        const { error: insErr } = await supabase
-          .from('user_roles')
-          .insert({ user_id: assignData.user_id, role_id: assignData.role_id, assigned_by: assignedBy, assigned_at: now });
-        if (insErr) throw insErr;
+        if (!existing) {
+          const { error: insErr } = await supabase
+            .from('user_roles')
+            .insert({ user_id: assignData.user_id, role_id: assignData.role_id, assigned_by: assignedBy, assigned_at: now });
+          if (insErr) throw insErr;
+        }
       } else {
         throw new Error('Either role or role_id must be provided');
       }
