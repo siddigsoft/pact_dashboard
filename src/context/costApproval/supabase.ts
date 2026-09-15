@@ -322,47 +322,18 @@ export const updateCostSubmission = async (
  * Now includes signature tracking for audit trail
  */
 export const reviewCostSubmission = async (
-  request: ReviewCostSubmissionRequest & { signatureId?: string },
-  reviewerId: string
+  request: ReviewCostSubmissionRequest & { signatureId?: string }
 ): Promise<SiteVisitCostSubmission> => {
-  const dbData: any = {
-    reviewed_by: reviewerId,
-    reviewed_at: new Date().toISOString(),
-    reviewer_notes: request.reviewerNotes,
-    approval_notes: request.approvalNotes,
-    updated_at: new Date().toISOString()
-  };
-  
-  // Include signature reference if provided
-  if (request.signatureId) {
-    dbData.approval_signature_id = request.signatureId;
-  }
-
-  // Set status based on action - aligned with SQL workflow
-  if (request.action === 'approve') {
-    dbData.status = 'approved';
-    // If adjusted amount provided, use it for payment; otherwise will use total_cost_cents
-    if (request.adjustedAmountCents !== undefined) {
-      dbData.paid_amount_cents = request.adjustedAmountCents;
-    }
-    if (request.paymentNotes) {
-      dbData.payment_notes = request.paymentNotes;
-    }
-  } else if (request.action === 'reject') {
-    dbData.status = 'rejected';
-  } else if (request.action === 'request_revision') {
-    // Set to 'under_review' to indicate active review with requested changes
-    // Valid statuses per schema: pending, under_review, approved, rejected, paid, cancelled
-    dbData.status = 'under_review';
-  }
-
-  const { data, error } = await supabase
-    .from('site_visit_cost_submissions')
-    .update(dbData)
-    .eq('id', request.submissionId)
-    .in('status', ['pending', 'under_review']) // Can review pending or under_review
-    .select()
-    .single();
+  const { data, error } = await (supabase as any).rpc('transition_site_visit_cost_submission', {
+    p_submission_id: request.submissionId,
+    p_action: request.action,
+    p_reviewer_notes: request.reviewerNotes ?? null,
+    p_approval_notes: request.approvalNotes ?? null,
+    p_adjusted_amount_cents: request.adjustedAmountCents ?? null,
+    p_payment_notes: request.paymentNotes ?? null,
+    p_wallet_transaction_id: null,
+    p_signature_id: request.signatureId ?? null
+  }).single();
 
   if (error) {
     console.error('Error reviewing cost submission:', error);
@@ -382,41 +353,16 @@ export const markCostSubmissionPaid = async (
   paidAmountCents?: number,
   paymentSignatureId?: string
 ): Promise<SiteVisitCostSubmission> => {
-  // Fetch existing submission to get approved amount
-  const { data: existing, error: fetchError } = await supabase
-    .from('site_visit_cost_submissions')
-    .select('paid_amount_cents, total_cost_cents')
-    .eq('id', submissionId)
-    .single();
-
-  if (fetchError) {
-    console.error('Error fetching submission for payment:', fetchError);
-    throw fetchError;
-  }
-
-  // Use provided amount, or approved amount, or total cost
-  const finalPaidAmount = paidAmountCents ?? existing.paid_amount_cents ?? existing.total_cost_cents;
-
-  const updateData: any = {
-    status: 'paid',
-    wallet_transaction_id: walletTransactionId,
-    paid_at: new Date().toISOString(),
-    paid_amount_cents: finalPaidAmount,
-    updated_at: new Date().toISOString()
-  };
-  
-  // Include payment signature reference if provided
-  if (paymentSignatureId) {
-    updateData.payment_signature_id = paymentSignatureId;
-  }
-
-  const { data, error } = await supabase
-    .from('site_visit_cost_submissions')
-    .update(updateData)
-    .eq('id', submissionId)
-    .eq('status', 'approved') // Only mark paid if approved
-    .select()
-    .single();
+  const { data, error } = await (supabase as any).rpc('transition_site_visit_cost_submission', {
+    p_submission_id: submissionId,
+    p_action: 'mark_paid',
+    p_reviewer_notes: null,
+    p_approval_notes: null,
+    p_adjusted_amount_cents: paidAmountCents ?? null,
+    p_payment_notes: null,
+    p_wallet_transaction_id: walletTransactionId,
+    p_signature_id: paymentSignatureId ?? null
+  }).single();
 
   if (error) {
     console.error('Error marking cost submission paid:', error);

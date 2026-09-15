@@ -399,17 +399,8 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
           throw new Error(session.error || 'Session expired');
         }
 
-        const user = await queryClient.fetchQuery({
-          queryKey: ['user'],
-          staleTime: 1000 * 60 * 5
-        }) as any;
-        
-        if (!user?.id) {
-          throw new Error('User not authenticated');
-        }
-
         await withTimeout(
-          supabaseApi.reviewCostSubmission(request, user.id),
+          supabaseApi.reviewCostSubmission(request),
           15000,
           'Review cost submission timed out'
         );
