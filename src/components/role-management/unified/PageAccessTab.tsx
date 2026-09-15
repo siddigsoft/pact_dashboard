@@ -32,6 +32,7 @@ import { COLUMN_REGISTRY } from '@/lib/column-registry';
 import { useSelectedUserAccess } from '@/context/role-management/SelectedUserAccessContext';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
+import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { TabProps } from './types';
 
 // ── Page → resources mapping (used to surface action overrides inline) ────────
@@ -295,8 +296,13 @@ interface PageAccessTabProps extends TabProps {
 
 export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, userId }: PageAccessTabProps) {
   const { currentUser } = useAppContext();
+  const { roles: managedRoles } = useRoleManagement();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const pageRoleOptions = useMemo(() => Array.from(new Set([
+    ...PAGE_ROLE_ALL_OPTIONS,
+    ...managedRoles.filter(role => role.is_active).map(role => role.name),
+  ])), [managedRoles]);
 
   // ── Context (By-User mode) ────────────────────────────────────────────────
   const {
@@ -695,7 +701,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
                         Changes are saved immediately.
                       </p>
                       <div className="flex flex-wrap gap-1 mb-2.5">
-                        {PAGE_ROLE_ALL_OPTIONS.map(r => {
+                        {pageRoleOptions.map(r => {
                           const active = effectiveRoles.includes(r);
                           return (
                             <button key={r} disabled={savingRoles}

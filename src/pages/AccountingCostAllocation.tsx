@@ -69,7 +69,7 @@ export default function AccountingCostAllocation() {
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
 
-  const overrideCanEdit = usePageManageOverride('acct-cost-allocation', roleCanEdit);
+  const overrideCanEdit = usePageManageOverride('accounting-cost-allocation', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();

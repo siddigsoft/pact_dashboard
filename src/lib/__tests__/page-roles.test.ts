@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
@@ -7,12 +9,15 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 import {
+  canSeePage,
   canSeeRoutePermission,
   canSeePageWithOverrides,
   canSeePageWithOverridesResult,
   resolveResourcePermissionOverride,
   resolveRoutePermission,
+  resolveSlug,
 } from '@/lib/page-roles';
+import { PAGE_DEFS } from '@/pages/PageAccessControl';
 import {
   getReportPermission,
   REPORTS_DIRECTORY_PATHS,
@@ -29,6 +34,43 @@ const mockedFrom = vi.mocked(supabase.from);
 const QUERY_TAB_DESTINATIONS = REPORTS_DIRECTORY_PATHS.filter(destination =>
   destination.includes('?tab='),
 );
+
+function sourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return sourceFiles(path);
+    return /\.(ts|tsx)$/.test(entry.name) ? [path] : [];
+  });
+}
+
+describe('page access registry integrity', () => {
+  it('keeps page slugs unique', () => {
+    const slugs = PAGE_DEFS.map(page => page.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
+  });
+
+  it('resolves query-tab page definitions without falling back to the hub', () => {
+    expect(resolveSlug('/finance-hub?tab=subscriptions')).toBe('finance-subscriptions');
+    expect(resolveSlug('/accounting?tab=bank-recon')).toBe('accounting-bank-recon');
+  });
+
+  it('grants a custom role only when that role is explicitly configured', () => {
+    expect(canSeePage('finance-subscriptions', 'Procurement Lead')).toBe(false);
+    expect(canSeePage('finance-subscriptions', 'Procurement Lead', ['Procurement Lead'])).toBe(true);
+  });
+
+  it('uses registered page slugs in every page-management override hook', () => {
+    const registered = new Set(PAGE_DEFS.map(page => page.slug));
+    const unknown = sourceFiles(join(process.cwd(), 'src')).flatMap(file => {
+      const source = readFileSync(file, 'utf8');
+      return Array.from(source.matchAll(/usePageManageOverride\(\s*['"]([^'"]+)['"]/g))
+        .map(match => match[1])
+        .filter(slug => !registered.has(slug))
+        .map(slug => `${slug} (${file})`);
+    });
+    expect(unknown).toEqual([]);
+  });
+});
 
 function mockOverrideQueries({
   actionOverride = null,

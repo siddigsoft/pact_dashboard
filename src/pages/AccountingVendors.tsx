@@ -34,7 +34,7 @@ export default function AccountingVendors() {
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
-  const overrideCanEdit = usePageManageOverride('acct-vendors', roleCanEdit);
+  const overrideCanEdit = usePageManageOverride('accounting-vendors', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();

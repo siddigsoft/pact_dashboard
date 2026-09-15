@@ -114,7 +114,7 @@ export default function SubscriptionsPage() {
   const qc = useQueryClient();
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const roleCanManage = isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin']);
-  const overrideCanManage = usePageManageOverride('subscriptions', roleCanManage);
+  const overrideCanManage = usePageManageOverride('finance-subscriptions', roleCanManage);
   const canManage = roleCanManage || overrideCanManage;
   const isAuthorized = canManage;
 
