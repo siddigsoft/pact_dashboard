@@ -417,6 +417,7 @@ const RoleManagement = () => {
         onCreateRole={handleCreateRole}
         isLoading={isLoading}
         cloneSourceRole={cloneSourceRole}
+        users={users}
       />
 
       <EditRoleDialog

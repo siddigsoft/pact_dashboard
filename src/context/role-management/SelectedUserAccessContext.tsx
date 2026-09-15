@@ -13,6 +13,12 @@ import {
   AccessEffect, PageOverride, PermissionOverride, ColumnVisibilityRow, DataScopeRow,
   DataScopePolicyMode, DataScopeSelector, ScopePreview,
 } from '@/components/role-management/unified/types';
+import {
+  isSuperAdminRole,
+  resolveActionEffect,
+  resolvePageEffect,
+  unionRoleNames,
+} from '@/lib/effectiveAccess';
 
 // ── Role→AppRole mapping ──────────────────────────────────────────────────────
 const ROLE_CODE_TO_APP_ROLE: Record<string, AppRole> = {
@@ -171,11 +177,13 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
           customRoleNames = (customRoles ?? []).map((role: any) => role.name);
         }
       }
-      setEffectiveRoleNames(Array.from(new Set([
+      setEffectiveRoleNames(unionRoleNames(
         userRole,
-        ...assignedRows.map((row: any) => row.role).filter(Boolean),
-        ...customRoleNames,
-      ])));
+        [
+          ...assignedRows.map((row: any) => row.role).filter(Boolean),
+          ...customRoleNames,
+        ],
+      ));
     } finally {
       setLoading(false);
     }
@@ -193,32 +201,47 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     [permOverrides],
   );
 
-  // ── Effective helpers ────────────────────────────────────────────────────
+  // ── Effective helpers (see src/lib/effectiveAccess.ts for precedence) ──
   function effectivePage(slug: string): AccessEffect {
     const ov = pageOvMap[slug];
-    if (ov) return ov.is_blocked ? 'blocked' : 'granted';
-    // Hub tab slugs (contain ':') default to visible — no PAGE_DEFS entry
-    if (slug.includes(':')) return 'role-yes';
+    if (slug.includes(':') && !ov) {
+      // Hub tab slugs without an override default to visible.
+      return resolvePageEffect({
+        isSuperAdmin: effectiveRoleNames.some(isSuperAdminRole),
+        override: null,
+        roleAllows: true,
+      });
+    }
     const def = PAGE_DEFS.find(p => p.slug === slug);
     const configuredRoles = pageRoleConfigs[slug];
-    return (def && effectiveRoleNames.some(role => hasDefaultAccess(def, role, configuredRoles)))
-      ? 'role-yes'
-      : 'role-no';
+    const roleAllows = !!(def && effectiveRoleNames.some(role => hasDefaultAccess(def, role, configuredRoles)));
+    return resolvePageEffect({
+      isSuperAdmin: effectiveRoleNames.some(isSuperAdminRole),
+      override: ov ?? null,
+      roleAllows,
+    });
   }
 
   function effectiveAction(resource: string, action: string): AccessEffect {
     const key = `${resource}:${action}`;
-    if (key in permOvMap) return permOvMap[key] ? 'granted' : 'blocked';
-    if (rolePermissionKeys.has(key)) return 'role-yes';
-    return effectiveRoleNames.some(role => roleHasAction(role, resource as ResourceType, action as ActionType))
-      ? 'role-yes'
-      : 'role-no';
+    const explicit = key in permOvMap ? permOvMap[key] : null;
+    const roleAllows = rolePermissionKeys.has(key)
+      || effectiveRoleNames.some(role => roleHasAction(role, resource as ResourceType, action as ActionType));
+    return resolveActionEffect({
+      isSuperAdmin: effectiveRoleNames.some(isSuperAdminRole),
+      explicitGrant: explicit,
+      roleAllows,
+    });
   }
 
   // ── Page toggle ──────────────────────────────────────────────────────────
   async function togglePage(slug: string) {
     setSavingKey(`page:${slug}`);
     const eff = effectivePage(slug);
+    if (eff === 'superadmin') {
+      setSavingKey(null);
+      return;
+    }
     try {
       if (eff === 'granted' || eff === 'blocked') {
         const { error } = await supabase.from('page_access_overrides').delete().eq('user_id', userId).eq('page_slug', slug);
@@ -252,6 +275,10 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     const key = `${resource}:${action}`;
     setSavingKey(`perm:${key}`);
     const eff = effectiveAction(resource, action);
+    if (eff === 'superadmin') {
+      setSavingKey(null);
+      return;
+    }
     try {
       if (eff === 'granted' || eff === 'blocked') {
         const { error } = await supabase.from('user_permission_overrides')

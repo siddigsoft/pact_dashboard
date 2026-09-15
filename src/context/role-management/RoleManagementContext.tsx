@@ -154,42 +154,38 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     if (!session.success) return null;
     setIsLoading(true);
     try {
-      const { data: roleResult, error: roleError } = await supabase
-        .from('roles')
-        .insert({
+      const { data, error } = await supabase.rpc('upsert_role_access', {
+        payload: {
+          role_id: roleData.role_id ?? null,
           name: roleData.name,
           display_name: roleData.display_name,
-          description: roleData.description,
-          is_system_role: false,
-          is_active: true
-        })
-        .select()
-        .single();
+          description: roleData.description ?? '',
+          is_active: true,
+          permissions: (roleData.permissions ?? []).map((p) => ({
+            resource: p.resource,
+            action: p.action,
+            conditions: (p as { conditions?: unknown }).conditions ?? null,
+          })),
+          page_slugs: roleData.page_slugs ?? [],
+          assign_user_ids: roleData.assign_user_ids ?? [],
+          set_as_primary: roleData.set_as_primary ?? true,
+          reason: roleData.reason ?? 'Role saved via Role Management wizard',
+        },
+      });
 
-      if (roleError) throw roleError;
+      if (error) throw error;
 
-      if (roleData.permissions && roleData.permissions.length > 0) {
-        const permissionsToInsert = roleData.permissions.map(perm => ({
-          role_id: roleResult.id,
-          resource: perm.resource,
-          action: perm.action,
-          conditions: perm.conditions
-        }));
-
-        const { error: permissionsError } = await supabase
-          .from('permissions')
-          .insert(permissionsToInsert);
-
-        if (permissionsError) throw permissionsError;
-      }
+      const role = (data as { role?: Role } | null)?.role ?? null;
+      if (!role?.id) throw new Error('upsert_role_access returned no role');
 
       toast({
-        title: 'Role created successfully',
-        description: `Role "${roleData.display_name}" has been created.`,
+        title: 'Role saved',
+        description: `Role "${roleData.display_name}" was saved transactionally.`,
       });
 
       await fetchRoles();
-      return roleResult;
+      await fetchUserRoles();
+      return role;
     } catch (error: any) {
       console.error('Error creating role:', error);
       toast({

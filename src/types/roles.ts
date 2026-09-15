@@ -57,6 +57,23 @@ export interface CreateRoleRequest {
   display_name: string;
   description?: string;
   permissions: Omit<Permission, 'id' | 'role_id' | 'created_at'>[];
+  /** Page slugs that should include this role in page_role_configs. */
+  page_slugs?: string[];
+  /** Users to assign additively via user_roles.role_id. */
+  assign_user_ids?: string[];
+  /** When true (default), assigned users get profiles.role = role.name (primary). */
+  set_as_primary?: boolean;
+  reason?: string;
+  /** When set, upsert_role_access updates this role instead of creating. */
+  role_id?: string;
+}
+
+export interface UpsertRoleAccessResult {
+  role: Role;
+  permissions: Array<{ resource: string; action: string }>;
+  page_slugs: string[];
+  assign_user_ids: string[];
+  set_as_primary: boolean;
 }
 
 export interface UpdateRoleRequest {
