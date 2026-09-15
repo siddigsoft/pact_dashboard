@@ -197,24 +197,16 @@ export const fetchMMPSummary = async (mmpFileId: string): Promise<MmpCostSubmiss
  */
 export const createCostSubmission = async (
   request: CreateCostSubmissionRequest,
-  userId: string
+  _userId: string
 ): Promise<SiteVisitCostSubmission> => {
-  const totalCostCents =
-    request.transportationCostCents +
-    request.accommodationCostCents +
-    request.mealAllowanceCents +
-    request.otherCostsCents;
-
   const dbData = {
     site_visit_id: request.siteVisitId,
     mmp_file_id: request.mmpFileId,
     project_id: request.projectId,
-    submitted_by: userId,
     transportation_cost_cents: request.transportationCostCents,
     accommodation_cost_cents: request.accommodationCostCents,
     meal_allowance_cents: request.mealAllowanceCents,
     other_costs_cents: request.otherCostsCents,
-    total_cost_cents: totalCostCents,
     currency: request.currency || 'SDG',
     transportation_details: request.transportationDetails,
     accommodation_details: request.accommodationDetails,
@@ -222,13 +214,14 @@ export const createCostSubmission = async (
     other_details: request.otherCostsDetails,
     submission_notes: request.submissionNotes,
     supporting_documents: request.supportingDocuments || [], // Store full JSONB objects
-    status: 'pending'
   };
 
-  const { data, error } = await supabase
-    .from('site_visit_cost_submissions')
-    .insert(dbData)
-    .select()
+  const { data, error } = await (supabase as any)
+    .rpc('mutate_site_visit_cost_submission', {
+      p_action: 'create',
+      p_submission_id: null,
+      p_payload: dbData,
+    })
     .single();
 
   if (error) {
@@ -246,29 +239,7 @@ export const updateCostSubmission = async (
   id: string,
   request: UpdateCostSubmissionRequest
 ): Promise<SiteVisitCostSubmission> => {
-  // Fetch existing record first to preserve current values
-  const { data: existing, error: fetchError } = await supabase
-    .from('site_visit_cost_submissions')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (fetchError) {
-    console.error('Error fetching existing submission:', fetchError);
-    throw fetchError;
-  }
-
-  // Calculate total based on existing + updated values
-  const transportation = request.transportationCostCents ?? existing.transportation_cost_cents;
-  const accommodation = request.accommodationCostCents ?? existing.accommodation_cost_cents;
-  const meals = request.mealAllowanceCents ?? existing.meal_allowance_cents;
-  const other = request.otherCostsCents ?? existing.other_costs_cents;
-  const totalCostCents = transportation + accommodation + meals + other;
-
-  const dbData: any = {
-    updated_at: new Date().toISOString(),
-    total_cost_cents: totalCostCents
-  };
+  const dbData: Record<string, unknown> = {};
 
   if (request.transportationCostCents !== undefined) {
     dbData.transportation_cost_cents = request.transportationCostCents;
@@ -301,12 +272,12 @@ export const updateCostSubmission = async (
     dbData.supporting_documents = request.supportingDocuments;
   }
 
-  const { data, error } = await supabase
-    .from('site_visit_cost_submissions')
-    .update(dbData)
-    .eq('id', id)
-    .eq('status', 'pending') // Only update if still pending
-    .select()
+  const { data, error } = await (supabase as any)
+    .rpc('mutate_site_visit_cost_submission', {
+      p_action: 'update',
+      p_submission_id: id,
+      p_payload: dbData,
+    })
     .single();
 
   if (error) {
@@ -377,18 +348,14 @@ export const markCostSubmissionPaid = async (
  */
 export const cancelCostSubmission = async (
   id: string,
-  userId: string
+  _userId: string
 ): Promise<SiteVisitCostSubmission> => {
-  const { data, error } = await supabase
-    .from('site_visit_cost_submissions')
-    .update({
-      status: 'cancelled',
-      updated_at: new Date().toISOString()
+  const { data, error } = await (supabase as any)
+    .rpc('mutate_site_visit_cost_submission', {
+      p_action: 'cancel',
+      p_submission_id: id,
+      p_payload: {},
     })
-    .eq('id', id)
-    .eq('submitted_by', userId) // User can only cancel their own submissions
-    .eq('status', 'pending') // Only cancel if pending
-    .select()
     .single();
 
   if (error) {
@@ -404,14 +371,10 @@ export const cancelCostSubmission = async (
  */
 export const deleteCostSubmission = async (
   id: string,
-  userId: string
+  _userId: string
 ): Promise<void> => {
-  const { error } = await supabase
-    .from('site_visit_cost_submissions')
-    .delete()
-    .eq('id', id)
-    .eq('submitted_by', userId) // User can only delete their own submissions
-    .eq('status', 'pending'); // Only delete if pending
+  const { error } = await (supabase as any)
+    .rpc('delete_site_visit_cost_submission', { p_submission_id: id });
 
   if (error) {
     console.error('Error deleting cost submission:', error);
