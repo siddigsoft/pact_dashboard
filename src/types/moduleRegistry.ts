@@ -207,12 +207,12 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         ],
       },
       {
-        page: 'Permissions Management',
-        route: '/permissions-management',
-        description: 'Granular per-user permission overrides — grant or block individual actions',
+        page: 'Access Management',
+        route: '/super-admin-hub?tab=user-access',
+        description: 'Authoritative access admin — role baselines and per-user typed overrides (legacy screen JSON retired)',
         actions: [
-          { key: 'permissions:read',     label: 'View Permissions',     description: 'See the full permission matrix',         resource: 'permissions', action: 'read' },
-          { key: 'permissions:override', label: 'Override Permissions', description: 'Grant or revoke per-user permissions',   resource: 'permissions', action: 'override', isSuperAdminOnly: true },
+          { key: 'permissions:read',     label: 'View Access',     description: 'See effective access and overrides',         resource: 'permissions', action: 'read' },
+          { key: 'permissions:override', label: 'Override Access', description: 'Grant or revoke per-user page/action access',   resource: 'permissions', action: 'override', isSuperAdminOnly: true },
         ],
       },
       {

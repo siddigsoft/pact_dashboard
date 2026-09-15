@@ -756,7 +756,7 @@ const AppRoutes = () => {
         <Route path="/task-admin" element={<Navigate to="/admin-hub?tab=task-admin" replace />} />
         <Route path="/admin/project-flow-stages" element={<Navigate to="/admin-hub?tab=project-flow-stages" replace />} />
         <Route path="/admin/transaction-scanner" element={<Navigate to="/super-admin-hub?tab=transaction-scanner" replace />} />
-        <Route path="/permissions-management" element={<Navigate to="/super-admin-hub?tab=permissions" replace />} />
+        <Route path="/permissions-management" element={<Navigate to="/super-admin-hub?tab=user-access" replace />} />
         <Route path="/role-perspective" element={<RolePerspectiveViewer />} />
         <Route path="/support-contacts" element={<SupportContacts />} />
         <Route path="/mobile-support-tickets" element={<MobileSupportTickets />} />

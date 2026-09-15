@@ -18,8 +18,7 @@ export interface PageGuardResult {
 
 /**
  * Checks whether the currently-authenticated user is blocked from the
- * current page via a `page_access_overrides` row (is_blocked=true or r:false)
- * OR via a `user_screen_permissions` row (isVisible=false or read:false).
+ * current page via a `page_access_overrides` row (is_blocked=true or r:false).
  *
  * Super Admins are always allowed (never blocked).
  * Unknown routes (no matching slug) are always allowed (fail-open for
@@ -34,13 +33,12 @@ export function usePageAccessGuard(): PageGuardResult {
     ?? resolveSlug(location.pathname);
   const pageDef = slug ? PAGE_DEFS.find(p => p.slug === slug) : null;
 
-  // Delegate to the full 3-layer resolver.
+  // Typed override resolver only (legacy screen JSON removed from runtime).
   // skip=true for super admins (always allowed) and unknown routes (fail-open).
   const perms = usePagePermissions(slug ?? '', isSuperAdmin || !slug);
 
-  // Blocked when an explicit override exists that removes access:
+  // Blocked when an explicit typed override removes access:
   //   • page_access_overrides.is_blocked = true
-  //   • user_screen_permissions.isVisible = false
   //   • r:false in the notes JSON
   const isBlocked = !isSuperAdmin && !!slug && perms.hasOverride &&
     (perms.isBlocked || !perms.canRead);

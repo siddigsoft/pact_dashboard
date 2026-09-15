@@ -52,4 +52,20 @@ describe('effectiveAccess precedence', () => {
       'Coordinator',
     ]);
   });
+
+  it('treats multi-role union as role-yes when any assigned role allows', () => {
+    // Evaluator contracts: callers pass roleAllows = union already computed.
+    expect(resolvePageEffect({ isSuperAdmin: false, roleAllows: true })).toBe('role-yes');
+    expect(effectAllowsAccess(resolvePageEffect({ isSuperAdmin: false, roleAllows: true }))).toBe(true);
+  });
+
+  it('lets explicit block win even when multi-role union would allow', () => {
+    expect(
+      resolvePageEffect({
+        isSuperAdmin: false,
+        override: { is_blocked: true },
+        roleAllows: true,
+      }),
+    ).toBe('blocked');
+  });
 });

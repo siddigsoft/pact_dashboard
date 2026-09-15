@@ -13,7 +13,6 @@ const SuperAdminMgmtPanel     = lazy(() => import('../components/superAdmin/Supe
 const MonitoringDashboardPanel = lazy(() => import('./MonitoringDashboard'));
 const CycleHealthPanel        = lazy(() => import('./AdminCycleHealth'));
 const ApprovalDashboardPanel  = lazy(() => import('./ApprovalDashboard'));
-const PermissionsPanel        = lazy(() => import('./PermissionsManagement'));
 const AuditLogsPanel          = lazy(() => import('./AuditLogs'));
 const EmailTrackingPanel      = lazy(() => import('./EmailTracking'));
 const EmailManagementPanel    = lazy(() => import('./EmailManagement'));
@@ -32,7 +31,7 @@ const UserAccessPanel         = lazy(() => import('../components/superAdmin/Inli
 type SASection = 'monitoring' | 'permissions' | 'email' | 'mobile' | 'data';
 type SATab =
   | 'super-admin' | 'system-monitoring' | 'cycle-health' | 'approval-dashboard'
-  | 'roles' | 'user-access' | 'permissions' | 'audit-logs' | 'page-grants' | 'button-registry'
+  | 'roles' | 'user-access' | 'audit-logs' | 'page-grants' | 'button-registry'
   | 'email-tracking' | 'email-management' | 'email-preview'
   | 'mobile-help-articles' | 'mobile-signatures' | 'mobile-call-scheduling' | 'mobile-document-sync'
   | 'transaction-scanner' | 'data-management';
@@ -64,32 +63,28 @@ const SECTIONS: SectionDef[] = [
     ],
   },
   {
-    id: 'permissions', label: 'Permissions & Audit', icon: Lock, color: '#1e3a5f',
-    description: 'Role management, per-user access overrides, page grants, button registry, and full system audit trail.',
+    id: 'permissions', label: 'Access Management', icon: Lock, color: '#1e3a5f',
+    description: 'One access administration surface — role baselines, user exceptions, pages, actions, data scope, and audit.',
     tabs: [
       {
         id: 'roles', label: 'Roles', icon: Shield,
-        description: 'Manage system and custom roles — create, edit, clone, delete roles and assign users. Full role CRUD with approval workflow and user assignment.',
+        description: 'Role baselines — create and edit roles, page defaults, action permissions, and user assignment via transactional upsert.',
       },
       {
-        id: 'user-access', label: 'User Access', icon: KeyRound,
-        description: 'Per-user control of page access, hub-tab visibility, action permission overrides, column visibility, and data scope rules.',
+        id: 'user-access', label: 'Users', icon: KeyRound,
+        description: 'Per-user exceptions — page access, hub-tab visibility, action overrides, column visibility, and data scope rules.',
       },
       {
-        id: 'permissions', label: 'Screen Permissions', icon: Lock,
-        description: 'Fine-grained screen-level permission matrix — grant or revoke read/write/open/create/delete per user across all 174+ pages.',
+        id: 'page-grants', label: 'Pages', icon: Users,
+        description: 'Page and hub-tab grants — override Super Admin Hub tab visibility per user.',
       },
       {
-        id: 'audit-logs', label: 'Audit Logs', icon: ScrollText,
-        description: 'Immutable record of all system actions — user logins, data changes, approvals, and admin operations with timestamps, IPs, and change diffs.',
+        id: 'button-registry', label: 'Actions', icon: LayoutGrid,
+        description: 'Action map across the platform — which roles can perform each button/action, with links into Role Management.',
       },
       {
-        id: 'page-grants', label: 'Page Grants', icon: Users,
-        description: 'Grant or restrict individual users\' access to Super Admin Hub tabs — override visibility per user without opening the Access Manager.',
-      },
-      {
-        id: 'button-registry', label: 'Button Registry', icon: LayoutGrid,
-        description: 'Full button and permission map across the entire platform — see every action, which roles can perform it, and jump to Role Management for changes.',
+        id: 'audit-logs', label: 'Audit', icon: ScrollText,
+        description: 'Immutable record of system actions — logins, data changes, approvals, and admin operations.',
       },
     ],
   },
@@ -159,7 +154,6 @@ const PanelMap: Record<SATab, React.LazyExoticComponent<any>> = {
   'approval-dashboard': ApprovalDashboardPanel,
   'roles': RolesPanel,
   'user-access': UserAccessPanel,
-  'permissions': PermissionsPanel,
   'audit-logs': AuditLogsPanel,
   'email-tracking': EmailTrackingPanel,
   'email-management': EmailManagementPanel,
@@ -182,7 +176,9 @@ const Spinner = () => (
 
 export default function SuperAdminHub() {
   const [params, setParams] = useSearchParams();
-  const rawTab = params.get('tab') as SATab | null;
+  const rawTabParam = params.get('tab');
+  // Legacy Screen Permissions tab → Users (typed overrides).
+  const rawTab = (rawTabParam === 'permissions' ? 'user-access' : rawTabParam) as SATab | null;
   const _savedSA = localStorage.getItem('hub_last_tab_super_admin') as SATab | null;
 
   const { isTabBlocked } = useCurrentUserAccess();
@@ -218,7 +214,7 @@ export default function SuperAdminHub() {
   return (
     <HubLayout
       title="Super Admin Hub"
-      subtitle="Monitoring · Permissions · Email · Mobile · Data"
+      subtitle="Monitoring · Access · Email · Mobile · Data"
       hubIcon={ShieldCheck}
       sections={visibleSections}
       activeSectionId={activeSection.id}
