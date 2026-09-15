@@ -9,6 +9,7 @@
  *   - checkPermission('resource', 'action')
  *   - hasPermission(userId, 'resource', 'action')
  *   - PermissionGuard / FieldTeamMapPermissions with literal resource + action
+ *   - ReportExportGate with a literal resource and optional action (defaults to export)
  *
  * Dynamic gates are not guessed by this test. For example,
  * MmpFullReportDialog calls checkPermission('mmp', reportKind), where
@@ -72,6 +73,7 @@ function collectLiteralPermissionUses(): PermissionUse[] {
   // context, so the resource/action pair is the second and third argument.
   const hasPermission = /\bhasPermission\(\s*[^,]+,\s*(['"])([^'"]+)\1\s*,\s*(['"])([^'"]+)\3\s*\)/g;
   const gatedComponent = /<(?:PermissionGuard|FieldTeamMapPermissions)\b[^>]*\bresource\s*=\s*(['"])([^'"]+)\1[^>]*\baction\s*=\s*(['"])([^'"]+)\3[^>]*>/g;
+  const reportExportGate = /<ReportExportGate\b[^>]*\bresource\s*=\s*(['"])([^'"]+)\1(?:[^>]*\baction\s*=\s*(['"])([^'"]+)\3)?[^>]*>/g;
 
   for (const absolutePath of sourceFiles(SRC_ROOT)) {
     const source = readFileSync(absolutePath, 'utf8');
@@ -101,6 +103,11 @@ function collectLiteralPermissionUses(): PermissionUse[] {
     collect(
       gatedComponent,
       match => `${match[2]}:${match[4]}`,
+      match => match[0],
+    );
+    collect(
+      reportExportGate,
+      match => `${match[2]}:${match[4] ?? 'export'}`,
       match => match[0],
     );
   }

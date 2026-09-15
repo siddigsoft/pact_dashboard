@@ -1,0 +1,1341 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`report export access-control inventory > does not add ungated export controls to the audited production inventory 1`] = `
+[
+  {
+    "expression": "<Button variant="outline" onClick={handleDownloadReport}>",
+    "line": 341,
+    "source": "src/components/ComplianceTracker.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={handlePolicyReportDownload}>",
+    "line": 380,
+    "source": "src/components/ComplianceTracker.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleSummaryReportDownload} variant="outline">",
+    "line": 494,
+    "source": "src/components/ComplianceTracker.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="flex items-center gap-1" onClick={handleExportExcel} >",
+    "line": 115,
+    "source": "src/components/SiteEntriesTable.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="flex items-center gap-1" onClick={handleExportPDF} >",
+    "line": 124,
+    "source": "src/components/SiteEntriesTable.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => { const url = versionInfo.download_url || 'https://play.google.com/store/apps/details?id=com.pact.workflow'; window.open(url, '_system'); }} className="flex-1 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90" data-testid="button-update-now" >",
+    "line": 112,
+    "source": "src/components/UpdateDialog.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={handleExportPDF} data-testid="button-export-budget-pdf">",
+    "line": 531,
+    "source": "src/components/budget/ProjectBudgetTab.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={handleExport} data-testid="button-export-budget">",
+    "line": 534,
+    "source": "src/components/budget/ProjectBudgetTab.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={downloadTemplate} data-testid="button-download-template" >",
+    "line": 411,
+    "source": "src/components/cost-submission/ExcelUploadParser.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="outline" size="sm" onClick={exportCycleSummary} disabled={!wizardState.selectedMmpId} data-testid="button-export-cycle-summary" >",
+    "line": 439,
+    "source": "src/components/cycle/steps/Step1SelectCycle.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="outline" size="sm" onClick={exportMatchingReport} data-testid="button-export-matching" >",
+    "line": 1326,
+    "source": "src/components/cycle/steps/Step2UploadMatch.tsx",
+  },
+  {
+    "expression": "<Button type="button" size="sm" variant="outline" className="h-7 text-xs mr-2 border-orange-300 text-orange-700 hover:bg-orange-50" onClick={exportUnmatched}>",
+    "line": 747,
+    "source": "src/components/cycle/steps/Step4MarkUncovered.tsx",
+  },
+  {
+    "expression": "<Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={exportSiteStatus}>",
+    "line": 1094,
+    "source": "src/components/cycle/steps/Step4MarkUncovered.tsx",
+  },
+  {
+    "expression": "<Button type="button" size="sm" variant="outline" className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-50" onClick={() => exportNotInWfpReport( niw.map(s => ({ site_code: s.site_code, site_name: s.site_name, state: s.state, locality: s.locality, hub_office: s.hub_office, system_status: s.system_status, } satisfies NotInWfpSite)), wizardState.selectedMmp?.name ?? 'Cycle' )} >",
+    "line": 1100,
+    "source": "src/components/cycle/steps/Step4MarkUncovered.tsx",
+  },
+  {
+    "expression": "<Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={exportNotCoveredReport} disabled={sites.length === 0}>",
+    "line": 1117,
+    "source": "src/components/cycle/steps/Step4MarkUncovered.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="outline" size="sm" onClick={exportExceptions} data-testid="button-export-exceptions">",
+    "line": 1281,
+    "source": "src/components/cycle/steps/Step5Exceptions.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={() => handleDownloadCertificate(request)} data-testid={\`button-download-cert-\${request.id}\`} >",
+    "line": 3299,
+    "source": "src/components/downPayment/DownPaymentApprovalPanel.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" data-testid="button-export">",
+    "line": 3800,
+    "source": "src/components/downPayment/DownPaymentApprovalPanel.tsx",
+  },
+  {
+    "expression": "<Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleExport('csv'); }} data-testid="button-export-csv">",
+    "line": 3807,
+    "source": "src/components/downPayment/DownPaymentApprovalPanel.tsx",
+  },
+  {
+    "expression": "<Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleExport('excel'); }} data-testid="button-export-excel">",
+    "line": 3811,
+    "source": "src/components/downPayment/DownPaymentApprovalPanel.tsx",
+  },
+  {
+    "expression": "<Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleExport('pdf'); }} data-testid="button-export-pdf">",
+    "line": 3815,
+    "source": "src/components/downPayment/DownPaymentApprovalPanel.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => void handleStatementExport('pdf')} disabled={activeExportSelection.data.length === 0} data-testid="button-statement-pdf" >",
+    "line": 3822,
+    "source": "src/components/downPayment/DownPaymentApprovalPanel.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => void handleStatementExport('excel')} disabled={activeExportSelection.data.length === 0} data-testid="button-statement-excel" >",
+    "line": 3832,
+    "source": "src/components/downPayment/DownPaymentApprovalPanel.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={() => { if (selectedApproved.length > 0) handleDownloadBulkPdf(selectedApproved, \`\${selectedApproved.length} Selected\`); }} disabled={processing} data-testid="button-approved-bulk-pdf">",
+    "line": 4016,
+    "source": "src/components/downPayment/DownPaymentApprovalPanel.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={() => handleDownloadBulkPdf(approvedForPayment, 'All Approved')} data-testid="button-bulk-pdf-all" >",
+    "line": 4200,
+    "source": "src/components/downPayment/DownPaymentApprovalPanel.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={() => { if (selectedProcessing.length > 0) handleDownloadBulkPdf(selectedProcessing, \`\${selectedProcessing.length} Selected\`); }} disabled={processing} data-testid="button-selected-bulk-pdf">",
+    "line": 4274,
+    "source": "src/components/downPayment/DownPaymentApprovalPanel.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" data-testid="button-export-retainers" aria-label="Export retainers" >",
+    "line": 385,
+    "source": "src/components/finance/RetainerDashboard.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleDownloadPDF} disabled={downloading} className="flex-1 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border border-yellow-500/30 gap-2" variant="outline" data-testid="button-download-badge-pdf" >",
+    "line": 585,
+    "source": "src/components/hr/EmployeeBadgeDialog.tsx",
+  },
+  {
+    "expression": "<Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-primary hover:bg-primary/10" onClick={() => handleDownload(doc)} title="Download" data-testid={\`button-download-doc-\${doc.id}\`}>",
+    "line": 506,
+    "source": "src/components/hr/EmployeeDocumentsTab.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleDownload(previewDoc)} data-testid="button-preview-download" >",
+    "line": 594,
+    "source": "src/components/hr/EmployeeDocumentsTab.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => handleDownload(previewDoc)} className="gap-2">",
+    "line": 643,
+    "source": "src/components/hr/EmployeeDocumentsTab.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => { const template = 'Hub,State,Locality,Site name,CP name,Activity at the site,Tool to be used,Use Market Diversion Monitoring,Use Warehouse Monitoring,SECTION_A/_A05_latitude,SECTION_A/_A05_longitude,SECTION_A/_A05_altitude,SECTION_A/_A05_precision,SECTION_A/_A06_latitude,SECTION_A/_A06_longitude,SECTION_A/_A06_altitude,SECTION_A/_A06_precision\\nKassala Hub,Kassala,Reifi Kassla,Health Center A,WFP,DM,ODK,Yes,No,15.4510,36.4045,430.50,5.20,15.4500,36.4000,432.19,6.65'; const blob = new Blob([template], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'gps_sites_template.csv'; a.click(); }} data-testid="button-download-template" >",
+    "line": 997,
+    "source": "src/components/hub-operations/GPSSitesUpload.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={onDownload}>",
+    "line": 58,
+    "source": "src/components/mmp/MMPDetailHeader.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={handleDownload}>",
+    "line": 56,
+    "source": "src/components/mmp/MMPHeader.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="outline" className="gap-1.5 border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/40" onClick={() => { const mmp = allMMPFiles.find(m => m.id === confirmId); exportMMPPaymentReport(mmp?.name ?? mmp?.id ?? 'MMP', paymentDetails); }} >",
+    "line": 927,
+    "source": "src/components/mmp/MMPList.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportExcel} disabled={!stats || !canUseMmpReports || excelLoading} className="border-white/30 text-white bg-white/10 hover:bg-white/20 hover:border-white/50 h-8 text-xs" >",
+    "line": 1198,
+    "source": "src/components/mmp/MmpFullReportDialog.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportPDF} disabled={!stats || !canUseMmpReports} className="bg-white/15 hover:bg-white/25 text-white border border-white/30 h-8 text-xs" >",
+    "line": 1210,
+    "source": "src/components/mmp/MmpFullReportDialog.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleUpdate} className="w-full sm:w-auto bg-black text-white hover:bg-black/90" data-testid="button-download-update" >",
+    "line": 106,
+    "source": "src/components/mobile/AppUpdateDialog.tsx",
+  },
+  {
+    "expression": "<Button variant={hasOfflineData ? "outline" : "default"} size="sm" onClick={handleDownload} disabled={isDownloading} className={cn("gap-2", className)} data-testid="button-download-offline-compact" >",
+    "line": 64,
+    "source": "src/components/mobile/DownloadForOffline.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleDownload} disabled={isDownloading} className="w-full gap-2" variant={hasOfflineData ? "outline" : "default"} data-testid="button-download-offline" >",
+    "line": 161,
+    "source": "src/components/mobile/DownloadForOffline.tsx",
+  },
+  {
+    "expression": "<Button className="w-full rounded-full" onClick={() => { hapticPresets.buttonPress(); toast({ title: "Export Requested", description: "Your data export will be sent to your email within 24 hours.", }); setShowExportInfo(false); }} data-testid="button-request-export" aria-label="Request data export" >",
+    "line": 1439,
+    "source": "src/components/mobile/MobileSettingsScreen.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleDownload} className="rounded-full" data-testid="button-download-signature" >",
+    "line": 371,
+    "source": "src/components/mobile/MobileSignaturePad.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => downloadForOffline()} disabled={isDownloading} className="flex-1 gap-2" data-testid="button-refresh-offline" >",
+    "line": 233,
+    "source": "src/components/mobile/OfflineDataDashboard.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => setShowNewRegionDialog(true)} disabled={!currentBounds || isDownloading} className="flex-1" data-testid="button-download-region" aria-label="Download current map area" >",
+    "line": 234,
+    "source": "src/components/mobile/OfflineMapDownloader.tsx",
+  },
+  {
+    "expression": "<Button variant="destructive" onClick={handleCancelDownload} className="w-full" data-testid="button-cancel-download" aria-label="Cancel download" >",
+    "line": 409,
+    "source": "src/components/mobile/OfflineMapDownloader.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleStartDownload} disabled={!regionName.trim()} className="flex-1" data-testid="button-confirm-download" aria-label="Start download" >",
+    "line": 430,
+    "source": "src/components/mobile/OfflineMapDownloader.tsx",
+  },
+  {
+    "expression": "<Button className="w-full gap-2" data-testid="button-download-app">",
+    "line": 72,
+    "source": "src/components/onboarding/MobileAppDownloadCard.tsx",
+  },
+  {
+    "expression": "<Button className="w-full gap-2 bg-blue-600 hover:bg-blue-700" data-testid="button-download-app-full">",
+    "line": 134,
+    "source": "src/components/onboarding/MobileAppDownloadCard.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={exportData} data-testid="button-export-costs">",
+    "line": 702,
+    "source": "src/components/project/ProjectCostTab.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportPdf} data-testid="button-export-pdf" >",
+    "line": 956,
+    "source": "src/components/project/ProjectDetail.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExport}>",
+    "line": 626,
+    "source": "src/components/project/ProjectProfessionalFeesTab.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="h-7 text-xs px-3 shrink-0" disabled={!!exporting} data-testid="button-export-flow">",
+    "line": 326,
+    "source": "src/components/project/flow/FlowTab.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={handleExportProductivityPDF} disabled={exporting} data-testid="button-export-productivity-pdf">",
+    "line": 658,
+    "source": "src/components/reports/AnalyticsReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportProductivityExcel} data-testid="button-export-productivity-excel">",
+    "line": 659,
+    "source": "src/components/reports/AnalyticsReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportProductivityCSV} data-testid="button-export-productivity-csv">",
+    "line": 660,
+    "source": "src/components/reports/AnalyticsReports.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={handleExportEfficiencyPDF} disabled={exporting} data-testid="button-export-efficiency-pdf">",
+    "line": 700,
+    "source": "src/components/reports/AnalyticsReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportEfficiencyCSV} data-testid="button-export-efficiency-csv">",
+    "line": 701,
+    "source": "src/components/reports/AnalyticsReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('hub')} data-testid="button-export-coverage-hub">",
+    "line": 736,
+    "source": "src/components/reports/AnalyticsReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('state')} data-testid="button-export-coverage-state">",
+    "line": 763,
+    "source": "src/components/reports/AnalyticsReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('locality')} data-testid="button-export-coverage-locality">",
+    "line": 790,
+    "source": "src/components/reports/AnalyticsReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('activity')} data-testid="button-export-coverage-activity">",
+    "line": 817,
+    "source": "src/components/reports/AnalyticsReports.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-pdf">",
+    "line": 242,
+    "source": "src/components/reports/AuditingReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">",
+    "line": 246,
+    "source": "src/components/reports/AuditingReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">",
+    "line": 250,
+    "source": "src/components/reports/AuditingReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">",
+    "line": 279,
+    "source": "src/components/reports/DocumentsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">",
+    "line": 283,
+    "source": "src/components/reports/DocumentsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-executive-pdf">",
+    "line": 260,
+    "source": "src/components/reports/ExecutiveDashboard.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-executive-excel">",
+    "line": 264,
+    "source": "src/components/reports/ExecutiveDashboard.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-executive-csv">",
+    "line": 268,
+    "source": "src/components/reports/ExecutiveDashboard.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">",
+    "line": 207,
+    "source": "src/components/reports/FinancialReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">",
+    "line": 211,
+    "source": "src/components/reports/FinancialReports.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-pdf">",
+    "line": 215,
+    "source": "src/components/reports/FinancialReports.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-export-pdf">",
+    "line": 204,
+    "source": "src/components/reports/ProjectCostReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">",
+    "line": 208,
+    "source": "src/components/reports/ProjectCostReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">",
+    "line": 212,
+    "source": "src/components/reports/ProjectCostReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">",
+    "line": 301,
+    "source": "src/components/reports/ReceiptsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">",
+    "line": 305,
+    "source": "src/components/reports/ReceiptsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" data-testid="button-export" aria-label="Export signatures" >",
+    "line": 305,
+    "source": "src/components/signature/SignatureVerificationPanel.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="outline" size="sm" onClick={downloadSignature} disabled={!hasSignature || disabled} data-testid="button-download-signature" >",
+    "line": 212,
+    "source": "src/components/signatures/SignaturePad.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => { const url = photos[selectedPhotoIndex]?.photo_url; if (url) void openStoredFile(url); }} data-testid="button-download-photo" >",
+    "line": 346,
+    "source": "src/components/site-visit/CompletedVisitReportCard.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" data-testid="button-export">",
+    "line": 2101,
+    "source": "src/components/superAdmin/SuperAdminDataManagement.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" data-testid="button-preview-download">",
+    "line": 34,
+    "source": "src/components/ui/FilePreviewDialog.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="gap-2" data-testid="button-preview-download-fallback">",
+    "line": 76,
+    "source": "src/components/ui/FilePreviewDialog.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="outline" size="sm" onClick={exportLines}>",
+    "line": 296,
+    "source": "src/pages/AccountingAnnualBudget.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="outline" size="sm" onClick={() => downloadCsv('statement_lines.csv', [ ['Date','Description','Debit','Credit','Reference','Status'], ...stmtLines.map(l => [l.transaction_date, l.description, l.debit, l.credit, l.reference??'', l.status]), ])}>",
+    "line": 277,
+    "source": "src/pages/AccountingBankStatementImport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={downloadTemplate} disabled={!accounts.length} data-testid="button-download-template">",
+    "line": 515,
+    "source": "src/pages/AccountingBudgetPlanning.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={() => exportToExcel(filtered.map(c => ({ Code:c.code,'Name':c.name_en,'Country':getCountry(c.country_id)?.name_en??'','Currency':c.currency_code,'Active':c.is_active?'Yes':'No','Parent':c.is_parent?'Yes':'No', })),'Companies','companies.xlsx')} data-testid="button-export-companies">",
+    "line": 130,
+    "source": "src/pages/AccountingCompanies.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportRuns} disabled={!runs.length}>",
+    "line": 379,
+    "source": "src/pages/AccountingCostAllocation.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => exportToExcel(filtered, 'customer-invoices')} disabled={!filtered.length}>",
+    "line": 203,
+    "source": "src/pages/AccountingCustomerInvoices.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => exportToExcel(filtered, 'customer-payments')} disabled={!filtered.length}>",
+    "line": 100,
+    "source": "src/pages/AccountingCustomerPayments.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={()=>exportToExcel(filtered.map(i=>({Name:i.name,Type:i.deferred_type,Original:i.original_amount,Remaining:i.remaining_amount,Recognized:i.original_amount-i.remaining_amount,Currency:i.currency,'Start':i.start_date,'End':i.end_date,Status:i.status})),'Deferred Items','deferred-items.xlsx')}>",
+    "line": 117,
+    "source": "src/pages/AccountingDeferredItems.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={exportData}>",
+    "line": 119,
+    "source": "src/pages/AccountingDepreciationSchedule.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => exportToExcel(rows, \`donor-statement-\${donor}\`)} disabled={!rows.length}>",
+    "line": 78,
+    "source": "src/pages/AccountingDonorStatement.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={()=>exportToExcel(positions.map(p=>({Name:p.name_en,Country:countries.find(c=>c.id===p.country_id)?.name_en??'',AutoApply:p.auto_apply?'Yes':'No',Active:p.is_active?'Yes':'No'})),'Fiscal Positions','fiscal-positions.xlsx')}>",
+    "line": 97,
+    "source": "src/pages/AccountingFiscalPositions.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportExcel} disabled={!years.length} data-testid="button-export-fiscal-years">",
+    "line": 252,
+    "source": "src/pages/AccountingFiscalYears.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportFunds} disabled={!filtered.length} data-testid="button-export-funds">",
+    "line": 190,
+    "source": "src/pages/AccountingFunds.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" data-testid="button-export-gl-bridge-log" onClick={() => { const rows = logRows.map(row => ({ 'Status': row.status, 'Source Table': row.source_table, 'Event Type': row.event_type, 'Source ID': row.source_id, 'Journal Entry ID': row.journal_entry_id ?? '', 'Error': row.error_message ?? '', 'Fired At': format(new Date(row.created_at), 'yyyy-MM-dd HH:mm:ss'), })); exportToExcel(rows, 'GL Bridge Execution Log', \`gl-bridge-log-\${format(new Date(), 'yyyy-MM-dd')}.xlsx\`); }} >",
+    "line": 635,
+    "source": "src/pages/AccountingGLBridge.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-excel">",
+    "line": 282,
+    "source": "src/pages/AccountingIntercompany.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">",
+    "line": 285,
+    "source": "src/pages/AccountingIntercompany.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={exportData}>",
+    "line": 144,
+    "source": "src/pages/AccountingJournalItems.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => exportToExcel(filtered, 'journal-templates')} disabled={!filtered.length}>",
+    "line": 97,
+    "source": "src/pages/AccountingJournalTemplates.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={()=>exportToExcel(filtered.map(l=>({'#':l.loan_number,Name:l.name,Type:l.loan_type,Partner:l.partner_name??'',Principal:l.principal_amount,Outstanding:l.outstanding_balance,Currency:l.currency,'Rate':l.interest_rate+'%',Status:l.status})),'Loans','loans.xlsx')}>",
+    "line": 152,
+    "source": "src/pages/AccountingLoans.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>",
+    "line": 237,
+    "source": "src/pages/AccountingOpeningBalances.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => exportToExcel(filtered, 'outstanding-checks')} disabled={!filtered.length}>",
+    "line": 90,
+    "source": "src/pages/AccountingOutstandingChecks.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={exportData}>",
+    "line": 126,
+    "source": "src/pages/AccountingPartnerLedger.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => exportToExcel(filtered, 'per-diem-rates')} disabled={!filtered.length}>",
+    "line": 107,
+    "source": "src/pages/AccountingPerDiemRates.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => exportToExcel(activeTxns, \`petty-cash-\${activeBox.name}\`)} disabled={!activeTxns.length}>",
+    "line": 203,
+    "source": "src/pages/AccountingPettyCash.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={()=>exportToExcel(filtered.map(l=>({Project:getProject(l.project_id),Account:getAccount(l.account_id)?.code??'',AccountName:getAccount(l.account_id)?.name_en??'',Type:l.link_type,Company:getCompany(l.company_id),Default:l.is_default?'Yes':'No',Description:l.description??''})),'Project Account Links','project-account-links.xlsx')}>",
+    "line": 150,
+    "source": "src/pages/AccountingProjectLinks.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => handleStatementExport('pdf')} disabled={!canExport || filteredRequests.length === 0} data-testid="button-statement-pdf" >",
+    "line": 2611,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={() => handleStatementExport('excel')} disabled={!canExport || filteredRequests.length === 0} data-testid="button-statement-excel" >",
+    "line": 2621,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportToPDF} disabled={!canExport} data-testid="button-overview-pdf">",
+    "line": 2638,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportToExcel} disabled={!canExport} data-testid="button-overview-excel">",
+    "line": 2642,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleDownloadCertificate(req)} data-testid={\`button-download-cert-\${req.id}\`} >",
+    "line": 2719,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportTeamToPDF} disabled={!canExport} data-testid="button-team-pdf">",
+    "line": 2936,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportTeamToExcel} disabled={!canExport} data-testid="button-team-excel">",
+    "line": 2940,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportHubToPDF} disabled={!canExport} data-testid="button-hub-pdf">",
+    "line": 3124,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportHubToExcel} disabled={!canExport} data-testid="button-hub-excel">",
+    "line": 3128,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportSiteToPDF} disabled={!canExport} data-testid="button-site-pdf">",
+    "line": 3264,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportSiteToExcel} disabled={!canExport} data-testid="button-site-excel">",
+    "line": 3268,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportStatusToPDF} disabled={!canExport} data-testid="button-status-pdf">",
+    "line": 3351,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportStatusToExcel} disabled={!canExport} data-testid="button-status-excel">",
+    "line": 3355,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportStateToPDF} disabled={!canExport} data-testid="button-state-pdf">",
+    "line": 3473,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportStateToExcel} disabled={!canExport} data-testid="button-state-excel">",
+    "line": 3477,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportLocalityToPDF} disabled={!canExport} data-testid="button-locality-pdf">",
+    "line": 3602,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportLocalityToExcel} disabled={!canExport} data-testid="button-locality-excel">",
+    "line": 3606,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportProjectToPDF} disabled={!canExport} data-testid="button-project-pdf">",
+    "line": 3733,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportProjectToExcel} disabled={!canExport} data-testid="button-project-excel">",
+    "line": 3737,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportMMPToPDF} disabled={!canExport} data-testid="button-mmp-pdf">",
+    "line": 3862,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportMMPToExcel} disabled={!canExport} data-testid="button-mmp-excel">",
+    "line": 3866,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportAgingToExcel} disabled={!canExport} data-testid="button-aging-excel">",
+    "line": 4002,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportReclaimImpactPdf} disabled={!canExport || (filteredReclaimHistory.length === 0 && allReclaimedAdvances.length === 0)} data-testid="button-reclaim-impact-pdf">",
+    "line": 4292,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportReclaimImpactExcel} disabled={!canExport || (filteredReclaimHistory.length === 0 && allReclaimedAdvances.length === 0)} data-testid="button-reclaim-impact-excel">",
+    "line": 4296,
+    "source": "src/pages/AdvanceRequestsReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={handleExportData} disabled={loading} data-testid="button-export-data">",
+    "line": 232,
+    "source": "src/pages/AuditCompliance.tsx",
+  },
+  {
+    "expression": "<Button disabled={loading} data-testid="button-export-excel">",
+    "line": 239,
+    "source": "src/pages/AuditCompliance.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleExportExcel} className="w-full" data-testid="button-confirm-export-excel">",
+    "line": 285,
+    "source": "src/pages/AuditCompliance.tsx",
+  },
+  {
+    "expression": "<Button variant="ghost" size="sm" className="h-8" onClick={handleExportData} data-testid="button-export-logs">",
+    "line": 476,
+    "source": "src/pages/AuditCompliance.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" data-testid="button-export-dropdown">",
+    "line": 842,
+    "source": "src/pages/AuditLogs.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportToCSV} data-testid="button-export-csv" >",
+    "line": 389,
+    "source": "src/pages/Classifications.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" data-testid="button-export">",
+    "line": 2005,
+    "source": "src/pages/CostPredictions.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={handleDownloadTemplate} data-testid="button-download-template">",
+    "line": 2087,
+    "source": "src/pages/CostPredictions.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" data-testid="button-export-reconciliation">",
+    "line": 4645,
+    "source": "src/pages/CostSubmission.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" data-testid="button-export-outstanding">",
+    "line": 5101,
+    "source": "src/pages/CostSubmission.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" data-testid="button-export-history">",
+    "line": 5450,
+    "source": "src/pages/CostSubmission.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => handleOperationalStatementExport('pdf')} disabled={filteredOperationalCosts.length === 0} data-testid="button-op-statement-pdf" >",
+    "line": 5502,
+    "source": "src/pages/CostSubmission.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => handleOperationalStatementExport('excel')} disabled={filteredOperationalCosts.length === 0} data-testid="button-op-statement-excel" >",
+    "line": 5512,
+    "source": "src/pages/CostSubmission.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="h-7 px-2.5 text-xs" onClick={() => handleDownloadCertificate(oc)} data-testid={\`button-download-certificate-\${oc.id}\`} >",
+    "line": 7181,
+    "source": "src/pages/CostSubmission.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={exportToExcel} disabled={filteredRequests.length === 0} data-testid="button-export-excel" >",
+    "line": 265,
+    "source": "src/pages/CostSubmissionReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={exportToPDF} disabled={filteredRequests.length === 0} data-testid="button-export-pdf" >",
+    "line": 274,
+    "source": "src/pages/CostSubmissionReports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport}>",
+    "line": 2554,
+    "source": "src/pages/DCTPDMDashboard.tsx",
+  },
+  {
+    "expression": "<Button size="sm" className="h-8 text-xs gap-1.5 bg-[#0F2041] hover:bg-[#1D3461] text-white" onClick={handleExportReport} data-testid="button-export-report">",
+    "line": 2557,
+    "source": "src/pages/DCTPDMDashboard.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 text-muted-foreground" onClick={handleDownloadTemplate} data-testid="button-download-template">",
+    "line": 2673,
+    "source": "src/pages/DCTPDMDashboard.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExportProgress} data-testid="button-export-progress">",
+    "line": 2678,
+    "source": "src/pages/DCTPDMDashboard.tsx",
+  },
+  {
+    "expression": "<Button onClick={onExport} disabled={isExporting} className="w-full" data-testid={\`button-export-\${category}\`} >",
+    "line": 377,
+    "source": "src/pages/DataExportCenter.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportFullReport}>",
+    "line": 1532,
+    "source": "src/pages/DataQualityPage.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportEnumeratorCSV}>",
+    "line": 1781,
+    "source": "src/pages/DataQualityPage.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportFlagsCSV}>",
+    "line": 1834,
+    "source": "src/pages/DataQualityPage.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={downloadAiReport} className="bg-purple-600 hover:bg-purple-700 text-white gap-1.5">",
+    "line": 2251,
+    "source": "src/pages/DataQualityPage.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={exportFullReport} className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400">",
+    "line": 2257,
+    "source": "src/pages/DataQualityPage.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" data-testid="button-export">",
+    "line": 656,
+    "source": "src/pages/DataVisibility.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={handleExportCSV}>",
+    "line": 1119,
+    "source": "src/pages/DataVisibility.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={handleExportExcel}>",
+    "line": 1123,
+    "source": "src/pages/DataVisibility.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={() => handleDownloadTemplate("Project Status Report")}>",
+    "line": 1127,
+    "source": "src/pages/DataVisibility.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={() => handleDownloadTemplate("Compliance Summary")}>",
+    "line": 1202,
+    "source": "src/pages/DataVisibility.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={() => handleDownloadTemplate("MMP Template")}>",
+    "line": 1206,
+    "source": "src/pages/DataVisibility.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleExportPDF} disabled={exporting} variant="outline" className="gap-2" data-testid="button-export-pdf" >",
+    "line": 155,
+    "source": "src/pages/Documentation.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleExportDOCX} disabled={exporting} className="gap-2" data-testid="button-export-docx" >",
+    "line": 165,
+    "source": "src/pages/Documentation.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleExportArabicDOCX} disabled={exporting} variant="outline" className="gap-2" data-testid="button-export-arabic" >",
+    "line": 174,
+    "source": "src/pages/Documentation.tsx",
+  },
+  {
+    "expression": "<Button variant="ghost" size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-footer-pdf">",
+    "line": 481,
+    "source": "src/pages/Documentation.tsx",
+  },
+  {
+    "expression": "<Button variant="ghost" size="sm" onClick={handleExportDOCX} disabled={exporting} data-testid="button-footer-docx">",
+    "line": 485,
+    "source": "src/pages/Documentation.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" disabled={busy || !filtered.length} className="gap-1.5 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white" data-testid="button-export-menu">",
+    "line": 1873,
+    "source": "src/pages/Employees.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={exportCsv} data-testid="button-export-fees-csv">",
+    "line": 754,
+    "source": "src/pages/EnumeratorFeesReport.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={exportExcel} data-testid="button-export-fees-xlsx">",
+    "line": 757,
+    "source": "src/pages/EnumeratorFeesReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportCSV} className="ml-auto" data-testid="btn-export-usage">",
+    "line": 700,
+    "source": "src/pages/FieldDataAPI.tsx",
+  },
+  {
+    "expression": "<Button variant="ghost" size="icon" className="h-7 w-7" disabled={b.status !== 'success' || !b.storage_path} onClick={() => downloadBackup(b)} title="Download backup" data-testid={\`download-backup-\${b.id}\`}>",
+    "line": 287,
+    "source": "src/pages/FieldDataBackup.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" data-testid="btn-download-archive">",
+    "line": 782,
+    "source": "src/pages/FieldDataBackup.tsx",
+  },
+  {
+    "expression": "<Button variant="ghost" size="icon" className="h-7 w-7" onClick={async () => { const { data, error } = await supabase.functions.invoke('create-pact-archive', { body: { action: 'sign-download', archive_id: a.id }, }); if (error || !data?.signed_url) { toast({ title: 'Download denied', description: 'You do not have permission to download this archive.', variant: 'destructive', }); return; } window.open(data.signed_url, '_blank'); }} data-testid={\`download-archive-\${a.id}\`}>",
+    "line": 830,
+    "source": "src/pages/FieldDataBackup.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportComments} data-testid="export-comments">",
+    "line": 196,
+    "source": "src/pages/FieldDataCollaboration.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={step === 1 ? handleClose : () => setStep(s => (s - 1) as any)} data-testid="btn-export-back">",
+    "line": 451,
+    "source": "src/pages/FieldDataExports.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => setStep(s => (s + 1) as any)} disabled={step === 1 && !formId} data-testid="btn-export-next" >",
+    "line": 456,
+    "source": "src/pages/FieldDataExports.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => onSubmit({ form_id: formId, format: fmt, options: opts, save_as_template: saveTemplate, template_name: templateName })} disabled={isSaving} data-testid="btn-export-submit" >",
+    "line": 464,
+    "source": "src/pages/FieldDataExports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => refetchJobs()} data-testid="btn-refresh-exports">",
+    "line": 637,
+    "source": "src/pages/FieldDataExports.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={() => setShowNew(true)} data-testid="btn-new-export">",
+    "line": 640,
+    "source": "src/pages/FieldDataExports.tsx",
+  },
+  {
+    "expression": "<Button className="mt-4" size="sm" onClick={() => setShowNew(true)} data-testid="btn-new-export-empty">",
+    "line": 690,
+    "source": "src/pages/FieldDataExports.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={() => setExportDialog(true)} data-testid="button-export">",
+    "line": 821,
+    "source": "src/pages/FieldDataFormDetail.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => setExportDialog(true)} data-testid="button-prepare-export">",
+    "line": 1239,
+    "source": "src/pages/FieldDataFormDetail.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExportDialog(true)}>",
+    "line": 1300,
+    "source": "src/pages/FieldDataFormDetail.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={() => setExportDialog(false)}>",
+    "line": 2425,
+    "source": "src/pages/FieldDataFormDetail.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleExport} disabled={exportLoading || submissions.length === 0} data-testid="button-run-export">",
+    "line": 2426,
+    "source": "src/pages/FieldDataFormDetail.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={exportUnits} data-testid="button-export-sample">",
+    "line": 894,
+    "source": "src/pages/FieldDataSampling.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={exportWithWeights} disabled={!weightRows.length} data-testid="button-export-weights">",
+    "line": 1302,
+    "source": "src/pages/FieldDataSampling.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={exportPDF} data-testid="button-export-pdf">",
+    "line": 1580,
+    "source": "src/pages/FieldDataSampling.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={exportConsolidatedExcel} disabled={!csData || csLoading} data-testid="button-export-excel">",
+    "line": 1821,
+    "source": "src/pages/Finance.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5 h-8 text-xs" data-testid="button-export-assets">",
+    "line": 372,
+    "source": "src/pages/HRAssets.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={exportXLSX}>",
+    "line": 1503,
+    "source": "src/pages/HRHub.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={handleExport} data-testid="button-export-compliance">",
+    "line": 427,
+    "source": "src/pages/HRPolicyLibrary.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportExcel} disabled={!reportReady || !!exporting || reportLoading || !snapshots.length} className="bg-[#123942] hover:bg-[#1b4d57]">",
+    "line": 428,
+    "source": "src/pages/IncentiveSettingsPage.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={exportPdf} disabled={!reportReady || !!exporting || reportLoading || !snapshots.length}>",
+    "line": 429,
+    "source": "src/pages/IncentiveSettingsPage.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={() => toast({ title: "Download", description: "Downloading financial report..." })}>",
+    "line": 430,
+    "source": "src/pages/MMPDetail.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={() => toast({ description: "Downloading tracking logs..." })}>",
+    "line": 534,
+    "source": "src/pages/MMPDetail.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportExcel} disabled={!overall || !canUseFullReport} data-testid="button-export-excel">",
+    "line": 354,
+    "source": "src/pages/MMPFullReport.tsx",
+  },
+  {
+    "expression": "<Button variant="default" size="sm" onClick={exportPDF} disabled={!overall || !canUseFullReport} data-testid="button-export-pdf">",
+    "line": 358,
+    "source": "src/pages/MMPFullReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" data-testid="button-export-outstanding">",
+    "line": 1220,
+    "source": "src/pages/MobileCostSubmission.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" data-testid="button-export-reconciliation">",
+    "line": 1286,
+    "source": "src/pages/MobileCostSubmission.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="icon" data-testid="button-export-history">",
+    "line": 1529,
+    "source": "src/pages/MobileCostSubmission.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={() => handleDownloadCertificate(oc)} data-testid={\`button-download-certificate-\${oc.id}\`}>",
+    "line": 1752,
+    "source": "src/pages/MobileCostSubmission.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => handleExport('pdf')} disabled={exporting} variant="outline" className="gap-2" data-testid="button-export-mobile-pdf" >",
+    "line": 169,
+    "source": "src/pages/MobileDocumentation.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => handleExport('docx')} disabled={exporting} className="gap-2" data-testid="button-export-mobile-docx" >",
+    "line": 179,
+    "source": "src/pages/MobileDocumentation.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => handleExport('arabic-docx')} disabled={exporting} variant="outline" className="gap-2" data-testid="button-export-mobile-arabic" >",
+    "line": 188,
+    "source": "src/pages/MobileDocumentation.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={() => { const link = document.createElement('a'); link.href = selectedSignature.signature_data; link.download = \`signature-\${selectedSignature.id}.png\`; link.click(); }} >",
+    "line": 494,
+    "source": "src/pages/MobileSignatureAdmin.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportTicketsCSV} variant="secondary" className="bg-white/10 text-white border-0" data-testid="button-export">",
+    "line": 427,
+    "source": "src/pages/MobileSupportTickets.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleExportCSV} disabled={allActions.length === 0} data-testid="button-export-csv">",
+    "line": 902,
+    "source": "src/pages/MonitoringDashboard.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900" data-testid="button-export" disabled={reportIncomplete || isLoading}>",
+    "line": 673,
+    "source": "src/pages/MonthEndFinancialSummary.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportAdvances} data-testid="button-export-my-advances">",
+    "line": 155,
+    "source": "src/pages/MyAdvances.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportNotifications} data-testid="button-export">",
+    "line": 163,
+    "source": "src/pages/NotificationHistory.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="outline" size="sm" onClick={onExportPDF}>",
+    "line": 457,
+    "source": "src/pages/OperationalBudgetRequests.tsx",
+  },
+  {
+    "expression": "<Button type="button" variant="outline" size="sm" onClick={onExportExcel}>",
+    "line": 462,
+    "source": "src/pages/OperationalBudgetRequests.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportExcel} disabled={items.length === 0} size="sm" variant="outline" className="ml-auto h-9 gap-2 text-xs bg-white dark:bg-slate-900">",
+    "line": 1848,
+    "source": "src/pages/PayrollAdmin.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportExcel} size="sm" variant="outline" disabled={withExpiry.length === 0} className="h-9 gap-2 text-xs bg-white">",
+    "line": 2155,
+    "source": "src/pages/PayrollAdmin.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportExcel} size="sm" variant="outline" className="h-7 gap-1.5 text-xs">",
+    "line": 2308,
+    "source": "src/pages/PayrollAdmin.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportExcel} size="sm" variant="outline" className="h-9 gap-2 text-xs bg-white">",
+    "line": 2450,
+    "source": "src/pages/PayrollAdmin.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportExcel} size="sm" variant="outline" disabled={itemsA.length === 0 && itemsB.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">",
+    "line": 2670,
+    "source": "src/pages/PayrollAdmin.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportExcel} size="sm" variant="outline" disabled={items.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">",
+    "line": 2847,
+    "source": "src/pages/PayrollAdmin.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportExcel} size="sm" variant="outline" disabled={deptActuals.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">",
+    "line": 3018,
+    "source": "src/pages/PayrollAdmin.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportExcel} size="sm" variant="outline" className="h-9 gap-2 text-xs bg-white" disabled={advances.length === 0}>",
+    "line": 3221,
+    "source": "src/pages/PayrollAdmin.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={downloadAll} className="bg-[#0F2041] hover:bg-[#1D3461] text-white h-8 gap-2 text-xs">",
+    "line": 4474,
+    "source": "src/pages/PayrollAdmin.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={() => downloadPDF(item)} className="h-8 gap-1.5 text-xs bg-white dark:bg-slate-800 opacity-0 group-hover:opacity-100 transition-opacity">",
+    "line": 4533,
+    "source": "src/pages/PayrollAdmin.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportExecutivePDF} className="border-white/30 text-white hover:bg-white/10 gap-1.5" data-testid="button-export-report">",
+    "line": 1973,
+    "source": "src/pages/PortfolioDashboard.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={exportFunds} data-testid="button-export-prefunding-approvals">",
+    "line": 550,
+    "source": "src/pages/PreFundingApprovalFlow.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={downloadCSV} disabled={projects.length === 0} className="h-8 text-xs gap-1.5">",
+    "line": 801,
+    "source": "src/pages/ProjectAnalytics.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleDownloadPDF} disabled={loadingPDF} className="flex-1" data-testid="button-download-manual-pdf" >",
+    "line": 346,
+    "source": "src/pages/PublicDocumentation.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleDownloadDOCX} disabled={loadingDOCX} variant="outline" className="flex-1" data-testid="button-download-manual-docx" >",
+    "line": 359,
+    "source": "src/pages/PublicDocumentation.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleDownloadWorkflowPDF} disabled={loadingWorkflowPDF} className="flex-1" data-testid="button-download-workflow-pdf" >",
+    "line": 402,
+    "source": "src/pages/PublicDocumentation.tsx",
+  },
+  {
+    "expression": "<Button onClick={handleDownloadWorkflowDOCX} disabled={loadingWorkflowDOCX} variant="outline" className="flex-1" data-testid="button-download-workflow-docx" >",
+    "line": 415,
+    "source": "src/pages/PublicDocumentation.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-hub-drilldown">",
+    "line": 5039,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="gap-1.5" data-testid="button-export">",
+    "line": 5323,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => exportCollectorPdf(item)} data-testid={\`button-export-collector-pdf-\${i}\`}>",
+    "line": 6323,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-tracker">",
+    "line": 6352,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-hub-tracker">",
+    "line": 6463,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-state-tracker">",
+    "line": 6600,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-act-state">",
+    "line": 6731,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={() => { setPaymentExportType('csvEnum'); setPaymentDialogOpen(true); }} data-testid="button-export-csv-enum-table">",
+    "line": 6827,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5" disabled={enumTrackerRows.length === 0} data-testid="button-enum-export-tracker">",
+    "line": 7112,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-report">",
+    "line": 7476,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" className="gap-1.5" onClick={downloadReviewExcel} data-testid="button-download-review">",
+    "line": 8164,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" className="gap-1.5" onClick={downloadCleanedExcel} data-testid="button-download-cleaned">",
+    "line": 8168,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" className="w-full" onClick={() => { setPaymentDialogOpen(false); exportCsvEnumTableFormattedExcel(0, 0); }} data-testid="button-payment-export-no-payment" >",
+    "line": 8614,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button className="flex-[2]" disabled={!paymentCostPerSite || !paymentExchangeRate || Number(paymentCostPerSite) <= 0 || Number(paymentExchangeRate) <= 0} onClick={() => { const cost = parseFloat(paymentCostPerSite) || 0; const rate = parseFloat(paymentExchangeRate) || 0; setPaymentDialogOpen(false); if (paymentExportType === 'standard') { exportEnumeratorTrackerExcel(paymentPendingRows, \`Enumerator_Tracker_\${format(new Date(), 'yyyy-MM-dd')}.xlsx\`, cost, rate); } else if (paymentExportType === 'formatted') { exportEnumeratorTrackerFormattedExcel(paymentPendingRows, \`Enumerator_Tracker_Formatted_\${format(new Date(), 'yyyy-MM-dd')}.xlsx\`, cost, rate); } else if (paymentExportType === 'csvEnum') { exportCsvEnumTableFormattedExcel(cost, rate); } else if (paymentExportType === 'perHubExcel') { exportTrackerPerHubExcel(cost, rate); } else if (paymentExportType === 'perHubFormatted') { exportTrackerPerHubFormattedExcel(cost, rate); } }} data-testid="button-payment-export-confirm" >",
+    "line": 8627,
+    "source": "src/pages/QuestionnaireAnalytics.tsx",
+  },
+  {
+    "expression": "<Button size="sm" onClick={handleExport} data-testid="button-export-excel">",
+    "line": 510,
+    "source": "src/pages/ReconciliationDashboard.tsx",
+  },
+  {
+    "expression": "<Button onClick={exportToExcel} disabled={loading || !dataLoaded} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="btn-hr-summary-export">",
+    "line": 917,
+    "source": "src/pages/Reports.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900" data-testid="button-export">",
+    "line": 356,
+    "source": "src/pages/SalaryRetainerReport.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" disabled={busy || !profiles.length} className="gap-1.5" data-testid="button-export-menu">",
+    "line": 825,
+    "source": "src/pages/StaffDirectory.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={downloadAttachmentsZip} disabled={downloadingAttachments} className="gap-1.5 text-xs h-8 shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50" data-testid="btn-download-attachments">",
+    "line": 2645,
+    "source": "src/pages/SurveyDetail.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" onClick={exportCSV} className="h-7 gap-1 text-xs">",
+    "line": 3994,
+    "source": "src/pages/SurveyDetail.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleDownloadQR} data-testid="btn-download-qr">",
+    "line": 1185,
+    "source": "src/pages/SurveysPage.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleDownload} disabled={!svgText} className="gap-1.5 text-xs h-8">",
+    "line": 659,
+    "source": "src/pages/SystemDiagrams.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" onClick={handleDownload} disabled={!svgText} className="gap-1.5 text-xs h-8">",
+    "line": 684,
+    "source": "src/pages/SystemDiagrams.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={exportToExcel} data-testid="button-export-excel">",
+    "line": 716,
+    "source": "src/pages/TrackerPreparationPlan.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={exportToPDF} data-testid="button-export-pdf">",
+    "line": 720,
+    "source": "src/pages/TrackerPreparationPlan.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={exportToExcel}>",
+    "line": 1425,
+    "source": "src/pages/TrackerPreparationPlan.tsx",
+  },
+  {
+    "expression": "<Button onClick={() => { exportToPDF(); setInvoiceDialogOpen(false); }}>",
+    "line": 1429,
+    "source": "src/pages/TrackerPreparationPlan.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" onClick={() => setFilterExportOpen(false)}>",
+    "line": 1560,
+    "source": "src/pages/TransactionScanner.tsx",
+  },
+  {
+    "expression": "<Button disabled={selectedAccounts.size === 0} onClick={() => { const filtered = filterExportSource.filter(r => selectedAccounts.has(r.to_account || r.recipient_name || 'Unknown') ); const label = selectedAccounts.size === 1 ? Array.from(selectedAccounts)[0].slice(-8) : \`\${selectedAccounts.size}_accounts\`; handleExportToExcel(filtered, filterExportSessionName); setFilterExportOpen(false); }} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" >",
+    "line": 1561,
+    "source": "src/pages/TransactionScanner.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="h-7 px-2 text-xs gap-1.5" disabled={exportingIncentive} onClick={async () => { if (!user) return; setExportingIncentive(true); try { generateIncentivePDF({ userName: user.name ?? user.email ?? 'Staff', userRole: user.role ?? '', userEmail: user.email ?? null, isAdmin, payments: incentivePayments, }); } finally { setExportingIncentive(false); } }} >",
+    "line": 3326,
+    "source": "src/pages/UserDetail.tsx",
+  },
+  {
+    "expression": "<Button variant="ghost" size="sm" onClick={() => handleContractDownload(c)} className="h-8 w-8 p-0 text-indigo-600 hover:bg-indigo-50" title="Download" data-testid={\`button-download-contract-\${c.id}\`} >",
+    "line": 3620,
+    "source": "src/pages/UserDetail.tsx",
+  },
+  {
+    "expression": "<Button variant="outline" size="sm" className="h-9 px-3 rounded-lg" onClick={handleExportUsers} disabled={isExporting || isInitialLoad} data-testid="button-export-users" title="Export the full user directory to Excel" >",
+    "line": 1279,
+    "source": "src/pages/Users.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={downloadFile}>",
+    "line": 1923,
+    "source": "src/pages/WorkspaceHub.tsx",
+  },
+  {
+    "expression": "<Button size="sm" variant="outline" className="gap-1.5" onClick={() => openFileAs(previewFile, 'download')}>",
+    "line": 5578,
+    "source": "src/pages/WorkspaceHub.tsx",
+  },
+]
+`;
