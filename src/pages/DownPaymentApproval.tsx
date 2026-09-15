@@ -29,6 +29,9 @@ import {
 } from 'lucide-react';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
+import { hubTabSlug } from '@/lib/hub-tab-defs';
 import { format, parseISO } from 'date-fns';
 import type { DownPaymentRequest, DownPaymentFilter, DownPaymentStatus } from '@/types/down-payment';
 import { filterDownPayments, matchesDownPaymentHub } from '@/utils/downPaymentExport';
@@ -506,6 +509,8 @@ export default function DownPaymentApproval() {
   const { isSuperAdmin } = useSuperAdmin();
   const { requests, loading, refreshRequests } = useDownPayment();
   const { toast } = useToast();
+  const { canApproveDownPayment, checkPermission } = useAuthorization();
+  const { isTabBlocked } = useCurrentUserAccess();
 
   const userRole = currentUser?.role?.toLowerCase();
   const normalizedRole = userRole?.replace(/[\s_-]/g, '') ?? '';
@@ -514,9 +519,32 @@ export default function DownPaymentApproval() {
   const isFOM = userRole === 'fom' || userRole === 'field operation manager';
   const isCountryDirector = userRole === 'countrydirector' || userRole === 'country_director';
   const isFinanceAdmin = ['financialadmin', 'financeadmin', 'finance', 'accountant'].includes(normalizedRole);
+  // Page access is a read grant. Workflow buttons require their own action
+  // grant (or an existing workflow role), so a view-only user cannot approve
+  // or pay merely because they can see every request.
+  const hasWorkflowRole = isSupervisor || isAdmin;
+  // A grant can hide/show an action for a workflow role. It deliberately does
+  // not promote a read-only role into a financial approver: that needs a
+  // server-side workflow-role assignment, not a browser-side checkbox.
+  const canApproveActions = hasWorkflowRole && canApproveDownPayment();
+  const canEditActions = isAdmin && checkPermission('down_payments', 'update');
+  const canExportActions = checkPermission('down_payments', 'export');
+  const isDownPaymentTabVisible = useCallback(
+    (tabId: string) => !isTabBlocked(hubTabSlug('down-payment-approval', tabId)),
+    [isTabBlocked],
+  );
 
   const [selectedTier, setSelectedTier] = useState<'tier1' | 'tier2'>(isAdmin ? 'tier2' : 'tier1');
-  const [viewTab, setViewTab] = useState('approval');
+  const [viewTab, setViewTab] = useState(canApproveActions ? 'approval' : 'allRequests');
+  const visibleViewTabs = useMemo(
+    () => ['approval', 'byState', 'byProject', 'byMMP', 'allRequests', 'disbursement', 'coverage']
+      .filter(isDownPaymentTabVisible),
+    [isDownPaymentTabVisible],
+  );
+
+  useEffect(() => {
+    if (!visibleViewTabs.includes(viewTab)) setViewTab(visibleViewTabs[0] ?? 'allRequests');
+  }, [viewTab, visibleViewTabs]);
   // Persisted dismissal: keyed by sorted site names so a new duplicate re-shows the banner.
   const LS_BANNER_KEY = 'dp_dup_banner_dismissed_key';
   const [dismissedDupKey, setDismissedDupKey] = useState<string>(() => localStorage.getItem(LS_BANNER_KEY) ?? '');
@@ -1049,20 +1077,6 @@ export default function DownPaymentApproval() {
     });
   }, [siteCoverageData, filters, covMmpFilter, covHubFilter, covStateFilter, covDcFilter, covStatusFilter]);
 
-  if (!isSupervisor && !isAdmin && !isFOM && !isCountryDirector) {
-    return (
-      <div className="p-6">
-        <Card>
-          <CardContent className="py-12 text-center space-y-4">
-            <AlertTriangle className="h-12 w-12 text-destructive mx-auto" />
-            <h2 className="text-xl font-semibold">Access Denied</h2>
-            <p className="text-muted-foreground max-w-md mx-auto">Only supervisors and administrators can access this page.</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   const approvalRole = selectedTier === 'tier1' ? 'supervisor' : 'admin';
   const partialBalance = partialPayDialog.req ? getDownPaymentBalance(partialPayDialog.req) : null;
 
@@ -1085,6 +1099,8 @@ export default function DownPaymentApproval() {
           <p className="text-muted-foreground mt-1">
             {isCountryDirector
               ? 'Monitor all transportation advance requests across the programme'
+              : !canApproveActions
+                ? 'View all transportation advance requests you have been granted access to'
               : selectedTier === 'tier1'
                 ? 'Review and approve transportation advance requests from team members'
                 : 'Process approved down-payment requests and manage payments'}
@@ -1100,10 +1116,16 @@ export default function DownPaymentApproval() {
             </Button>
           </div>
         )}
-        {!isAdmin && !isCountryDirector && (
+        {!isAdmin && !isCountryDirector && canApproveActions && (
           <Badge variant="outline" className="self-start flex items-center gap-1">
             <Shield className="h-3 w-3" />
             {isSupervisor ? 'Tier 1: Supervisor Review' : 'Tier 2: Admin Processing'}
+          </Badge>
+        )}
+        {!isAdmin && !isCountryDirector && !canApproveActions && (
+          <Badge variant="secondary" className="self-start flex items-center gap-1">
+            <Shield className="h-3 w-3" />
+            View only
           </Badge>
         )}
         {isCountryDirector && (
@@ -1386,34 +1408,34 @@ export default function DownPaymentApproval() {
       {/* ── View tabs ── */}
       <Tabs value={viewTab} onValueChange={setViewTab} className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="approval" className="gap-1.5" data-testid="tab-approval">
+          {isDownPaymentTabVisible('approval') && <TabsTrigger value="approval" className="gap-1.5" data-testid="tab-approval">
             <ClipboardCheck className="h-4 w-4" />Approval
-          </TabsTrigger>
-          <TabsTrigger value="byState" className="gap-1.5" data-testid="tab-down-by-state">
+          </TabsTrigger>}
+          {isDownPaymentTabVisible('byState') && <TabsTrigger value="byState" className="gap-1.5" data-testid="tab-down-by-state">
             <MapPin className="h-4 w-4" />By State
-          </TabsTrigger>
-          <TabsTrigger value="byProject" className="gap-1.5" data-testid="tab-down-by-project">
+          </TabsTrigger>}
+          {isDownPaymentTabVisible('byProject') && <TabsTrigger value="byProject" className="gap-1.5" data-testid="tab-down-by-project">
             <FolderKanban className="h-4 w-4" />By Project
-          </TabsTrigger>
-          <TabsTrigger value="byMMP" className="gap-1.5" data-testid="tab-down-by-mmp">
+          </TabsTrigger>}
+          {isDownPaymentTabVisible('byMMP') && <TabsTrigger value="byMMP" className="gap-1.5" data-testid="tab-down-by-mmp">
             <ClipboardList className="h-4 w-4" />By MMP
-          </TabsTrigger>
-          <TabsTrigger value="allRequests" className="gap-1.5" data-testid="tab-down-all-requests">
+          </TabsTrigger>}
+          {isDownPaymentTabVisible('allRequests') && <TabsTrigger value="allRequests" className="gap-1.5" data-testid="tab-down-all-requests">
             <FileText className="h-4 w-4" />All Requests
-          </TabsTrigger>
-          <TabsTrigger value="disbursement" className="gap-1.5" data-testid="tab-down-disbursement">
+          </TabsTrigger>}
+          {isDownPaymentTabVisible('disbursement') && <TabsTrigger value="disbursement" className="gap-1.5" data-testid="tab-down-disbursement">
             <BarChart3 className="h-4 w-4" />Disbursement Tracker
-          </TabsTrigger>
-          <TabsTrigger value="coverage" className="gap-1.5" data-testid="tab-down-coverage">
+          </TabsTrigger>}
+          {isDownPaymentTabVisible('coverage') && <TabsTrigger value="coverage" className="gap-1.5" data-testid="tab-down-coverage">
             <CheckCircle2 className="h-4 w-4" />Site Coverage
             {!coverageLoading && covSummary.noReq > 0 && (
               <Badge variant="destructive" className="ml-1 text-[9px] h-4 px-1">{covSummary.noReq}</Badge>
             )}
-          </TabsTrigger>
+          </TabsTrigger>}
         </TabsList>
 
         {/* ─── Approval (default) ─── */}
-        <TabsContent value="approval" className="space-y-4">
+        {isDownPaymentTabVisible('approval') && <TabsContent value="approval" className="space-y-4">
           <Alert className={selectedTier === 'tier1' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : ''}>
             <Info className="h-4 w-4" />
             <AlertDescription>
@@ -1440,13 +1462,16 @@ export default function DownPaymentApproval() {
               if (evidence) void openPreFundCorrectionDialog(evidence);
             }}
             canDeletePayment={isAdmin || isFinanceAdmin || isSuperAdmin}
+            canApproveActions={canApproveActions}
+            canEditActions={canEditActions}
+            canExportActions={canExportActions}
             onDeletePayment={paymentEventId => {
               const payment = Array.from(preFundLinksByRequest.values()).flat().find(link => link.paymentEventId === paymentEventId);
               if (payment) setPaymentDeleteDialog({ payment, reason: '', saving: false });
             }}
             hideFiltersBar={true}
           />
-        </TabsContent>
+        </TabsContent>}
 
         {/* ─── By State ─── */}
         <TabsContent value="byState" className="space-y-4">

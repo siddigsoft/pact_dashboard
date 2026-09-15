@@ -307,9 +307,10 @@ export const useAuthorization = () => {
 
   const canApproveDownPayment = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('down_payments', 'approve') ||
-           hasAnyRole(['admin', 'financialAdmin', 'countryDirector',
-                       'FinancialAdmin', 'CountryDirector']);
+    // checkPermission applies per-user grants/blocks before role defaults.
+    // Do not append a role fallback here, otherwise an explicit button block
+    // is bypassed by the user's role and the Access Control Workspace lies.
+    return checkPermission('down_payments', 'approve');
   };
 
   // ── HR / Payroll / Leave ────────────────────────────────────────────────

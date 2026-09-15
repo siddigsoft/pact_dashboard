@@ -563,6 +563,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'cost_submissions', action: 'submit' }, { resource: 'cost_submissions', action: 'read' },
     { resource: 'cost_submissions', action: 'approve' }, { resource: 'cost_submissions', action: 'export' },
     { resource: 'down_payments', action: 'submit' }, { resource: 'down_payments', action: 'read' },
+    { resource: 'down_payments', action: 'approve' },
     { resource: 'wallets', action: 'read' }, { resource: 'wallets', action: 'update' },
     { resource: 'reports', action: 'read' }, { resource: 'reports', action: 'export' },
     { resource: 'tasks', action: 'read' }, { resource: 'tasks', action: 'create' },

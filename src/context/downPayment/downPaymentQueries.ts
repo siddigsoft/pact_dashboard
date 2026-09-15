@@ -171,7 +171,8 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   // Always fetch without a join so RLS on mmp_site_entries never silently
   // drops down_payment_requests rows.  Geographic fields (state/locality/mmpName)
   // are populated from metadata first, then filled in by the enrichment RPC below.
-  // Try the SECURITY DEFINER RPC first (bypasses RLS, applies role filter in SQL).
+  // Try the SECURITY DEFINER RPC first. It derives identity and access from
+  // auth.uid() on the server; never send role or hub claims from the browser.
   // Falls back to a direct query if the migration hasn't been applied yet.
   //
   let allData: any[] = [];
@@ -185,9 +186,6 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     if (useRpc) {
       const res = await (supabase as any)
         .rpc('get_dp_requests_for_user_v2', {
-          p_user_id: user.id,
-          p_role: userRole || '',
-          p_hub_ids: allSupervisedHubIds,
           p_limit: 1000,
           p_offset: _dpf,
         })
