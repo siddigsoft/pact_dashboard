@@ -19,6 +19,7 @@ import {
   resolvePageEffect,
   unionRoleNames,
 } from '@/lib/effectiveAccess';
+import { expandRelatedPageSlugs, resolvePageToggleIntent } from '@/lib/pageAccessLinks';
 
 // ── Role→AppRole mapping ──────────────────────────────────────────────────────
 const ROLE_CODE_TO_APP_ROLE: Record<string, AppRole> = {
@@ -234,33 +235,47 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     });
   }
 
-  // ── Page toggle ──────────────────────────────────────────────────────────
+  // ── Page toggle (cascades to related page family, e.g. my-projects ↔ projects)
   async function togglePage(slug: string) {
-    setSavingKey(`page:${slug}`);
+    setSavingKey(`page-family:${expandRelatedPageSlugs(slug).slice().sort().join('|')}`);
     const eff = effectivePage(slug);
-    if (eff === 'superadmin') {
+    const intent = resolvePageToggleIntent(eff);
+    if (intent === 'noop') {
       setSavingKey(null);
       return;
     }
+    const targets = expandRelatedPageSlugs(slug);
     try {
-      if (eff === 'granted' || eff === 'blocked') {
-        const { error } = await supabase.from('page_access_overrides').delete().eq('user_id', userId).eq('page_slug', slug);
+      if (intent === 'clear') {
+        const { error } = await supabase
+          .from('page_access_overrides')
+          .delete()
+          .eq('user_id', userId)
+          .in('page_slug', targets);
         if (error) throw error;
-        toast({ title: 'Override removed', description: 'Restored to role default.' });
-      } else if (eff === 'role-yes') {
-        const { error } = await supabase.from('page_access_overrides').upsert(
-          { user_id: userId, page_slug: slug, is_blocked: true, granted_by: currentUser?.id ?? null },
-          { onConflict: 'user_id,page_slug' },
-        );
-        if (error) throw error;
-        toast({ title: 'Blocked', description: `Access removed.` });
+        toast({
+          title: 'Override removed',
+          description: targets.length > 1
+            ? `Restored role default for ${targets.length} linked pages.`
+            : 'Restored to role default.',
+        });
       } else {
-        const { error } = await supabase.from('page_access_overrides').upsert(
-          { user_id: userId, page_slug: slug, is_blocked: false, granted_by: currentUser?.id ?? null },
-          { onConflict: 'user_id,page_slug' },
-        );
+        const rows = targets.map((page_slug) => ({
+          user_id: userId,
+          page_slug,
+          is_blocked: intent === 'block',
+          granted_by: currentUser?.id ?? null,
+        }));
+        const { error } = await supabase
+          .from('page_access_overrides')
+          .upsert(rows, { onConflict: 'user_id,page_slug' });
         if (error) throw error;
-        toast({ title: 'Granted', description: `Access granted.` });
+        toast({
+          title: intent === 'block' ? 'Blocked' : 'Granted',
+          description: targets.length > 1
+            ? `${intent === 'block' ? 'Blocked' : 'Granted'} ${targets.length} linked pages together.`
+            : intent === 'block' ? 'Access removed.' : 'Access granted.',
+        });
       }
       await load();
     } catch (e: any) {

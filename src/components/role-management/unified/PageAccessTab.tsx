@@ -34,6 +34,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { TabProps } from './types';
+import { expandRelatedPageSlugs, getRelatedPageSlugs } from '@/lib/pageAccessLinks';
 
 // ── Page → resources mapping (used to surface action overrides inline) ────────
 const PAGE_SLUG_TO_RESOURCES: Record<string, string[]> = {
@@ -51,6 +52,7 @@ const PAGE_SLUG_TO_RESOURCES: Record<string, string[]> = {
   'pre-funding':          ['pre_funding'],
   'down-payment-tracker': ['down_payments'],
   'projects':             ['projects'],
+  'my-projects':          ['projects'],
   'programme-hub':        ['projects', 'portfolio', 'analytics'],
   'field-ops':            ['site_visits', 'safety', 'incidents', 'equipment'],
   'mmp':                  ['mmp'],
@@ -420,17 +422,27 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
     try {
       const level: 'view' | 'manage' = (perms.w || perms.c || perms.d) ? 'manage' : 'view';
       const notes = isBlocked ? null : packPermissions(perms);
-      if (existingId) {
-        await supabase.from('page_access_overrides')
-          .update({ is_blocked: isBlocked, level, notes, granted_by: currentUser?.id })
-          .eq('id', existingId);
-      } else {
-        await supabase.from('page_access_overrides')
-          .insert({ page_slug: selectedPage.slug, user_id: profile.id, is_blocked: isBlocked, level, notes, granted_by: currentUser?.id });
-      }
+      const targets = expandRelatedPageSlugs(selectedPage.slug);
+      const rows = targets.map((page_slug) => ({
+        page_slug,
+        user_id: profile.id,
+        is_blocked: isBlocked,
+        level,
+        notes,
+        granted_by: currentUser?.id,
+      }));
+      const { error } = await supabase
+        .from('page_access_overrides')
+        .upsert(rows, { onConflict: 'user_id,page_slug' });
+      if (error) throw error;
       const permStr = isBlocked ? 'Blocked' :
         [perms.r && 'Read', perms.w && 'Write', perms.c && 'Create', perms.d && 'Delete'].filter(Boolean).join(' + ');
-      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: `${profile.full_name ?? 'User'} → ${pageDisplayLabel(selectedPage, profile.role)} (${permStr})` });
+      toast({
+        title: isBlocked ? 'Access blocked' : 'Access granted',
+        description: targets.length > 1
+          ? `${profile.full_name ?? 'User'} → ${targets.length} linked pages (${permStr})`
+          : `${profile.full_name ?? 'User'} → ${pageDisplayLabel(selectedPage, profile.role)} (${permStr})`,
+      });
       refetchOverrides();
       qc.invalidateQueries({ queryKey: ['bp-page-overrides'] });
     } catch (e: any) {
@@ -441,8 +453,19 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
   async function removeByPageOverride(id: string, userId: string) {
     setSavingByPageId(userId);
     try {
-      await supabase.from('page_access_overrides').delete().eq('id', id);
-      toast({ title: 'Override removed', description: 'User reverts to role-based access.' });
+      const targets = expandRelatedPageSlugs(selectedPage.slug);
+      const { error } = await supabase
+        .from('page_access_overrides')
+        .delete()
+        .eq('user_id', userId)
+        .in('page_slug', targets);
+      if (error) throw error;
+      toast({
+        title: 'Override removed',
+        description: targets.length > 1
+          ? `Cleared ${targets.length} linked pages; role default restored.`
+          : 'User reverts to role-based access.',
+      });
       refetchOverrides();
       qc.invalidateQueries({ queryKey: ['bp-page-overrides'] });
     } catch (e: any) {
@@ -901,7 +924,8 @@ function ByUserBody({
                 {pages.map(page => {
                   const eff = effectivePage(page.slug);
                   const cfg = EFF_CONFIG[eff];
-                  const saving = savingKey === `page:${page.slug}`;
+                  const familyKey = `page-family:${expandRelatedPageSlugs(page.slug).slice().sort().join('|')}`;
+                  const saving = savingKey === `page:${page.slug}` || savingKey === familyKey;
                   const isExpanded = expandedPages.has(page.slug);
 
                   const colDef = colRegBySlug[page.slug];
@@ -914,6 +938,11 @@ function ByUserBody({
                     return userColMap[k] || roleColMap[k];
                   }).length;
                   const actionOverrideCount = pagePermOverrides.length;
+
+                  const relatedSlugs = getRelatedPageSlugs(page.slug);
+                  const relatedLabels = relatedSlugs
+                    .map(s => PAGE_DEFS.find(p => p.slug === s)?.label ?? s)
+                    .join(', ');
 
                   return (
                     <div key={page.slug} className="rounded-lg overflow-hidden">
@@ -932,6 +961,11 @@ function ByUserBody({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <p className="text-xs font-medium truncate">{pageDisplayLabel(page, userRole)}</p>
+                            {relatedLabels && (
+                              <Badge className="text-[9px] h-3.5 px-1 bg-indigo-100 text-indigo-700 border-0 shrink-0" title={`Also updates: ${relatedLabels}`}>
+                                Linked · {relatedLabels}
+                              </Badge>
+                            )}
                             {colRuleCount > 0 && (
                               <Badge className="text-[9px] h-3.5 px-1 bg-blue-100 text-blue-700 border-0 shrink-0">
                                 <Columns className="h-2 w-2 mr-0.5" />{colRuleCount}
