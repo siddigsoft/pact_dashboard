@@ -116,17 +116,74 @@ serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    if (!supabaseUrl || !serviceKey)
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    if (!supabaseUrl || !serviceKey || !anonKey)
       return new Response(JSON.stringify({ error: 'Supabase env vars not set' }),
         { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     const authHeader = req.headers.get('Authorization') ?? '';
-    const client = createClient(supabaseUrl, serviceKey, {
+    if (!authHeader)
+      return new Response(JSON.stringify({ error: 'Authorization required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+    // This endpoint creates a ZIP containing form definitions and submissions.
+    // Check the caller JWT before any service-role form/submission query.
+    const callerClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false },
     });
+    const { error: permissionError } = await callerClient.rpc(
+      'assert_report_export_permission',
+      { p_resource: 'analytics', p_action: 'export' },
+    );
+    if (permissionError)
+      return new Response(JSON.stringify({ error: 'Export permission denied' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     const body = await req.json();
-    const { form_id, include_media = true, include_exports = true, include_charts = false } = body;
+    const {
+      action = 'generate',
+      archive_id,
+      form_id,
+      include_media = true,
+      include_exports = true,
+      include_charts = false,
+    } = body;
+
+    const client = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
+
+    if (action === 'sign-download') {
+      if (!archive_id)
+        return new Response(JSON.stringify({ error: 'archive_id required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      const { data: archive, error: archiveError } = await client
+        .from('fd_archive_logs')
+        .select('id, storage_path, status')
+        .eq('id', archive_id)
+        .eq('status', 'success')
+        .maybeSingle();
+
+      if (archiveError || !archive?.storage_path)
+        return new Response(JSON.stringify({ error: 'Archive not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      const { data: signed, error: signedError } = await client.storage
+        .from('field-data-archives')
+        .createSignedUrl(archive.storage_path, 300);
+
+      if (signedError || !signed?.signedUrl)
+        return new Response(JSON.stringify({ error: 'Could not sign archive download' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      return new Response(
+        JSON.stringify({ ok: true, signed_url: signed.signedUrl }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     if (!form_id)
       return new Response(JSON.stringify({ error: 'form_id required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

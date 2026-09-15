@@ -66,3 +66,4 @@
 - [Cycle Close matching boundary](cycle-close-matching-boundary.md) — Step 2 resolves every WFP row; Step 3 alone owns reasons for MMP sites not confirmed by WFP.
 - [Incentive server authority](incentive-server-authority.md) — Bonus calculations and settlements must be database-authoritative, atomic, and fail closed on unresolved recipients.
 - [WFP-confirmed enumerator fees](wfp-confirmed-enumerator-fees.md) — Ordinary enumerator wallet credit and fee payment require WFP-confirmed site status; completion alone never pays.
+- [Report export server boundaries](report-export-server-boundaries.md) — Enforce export permission only at true file-producing backend boundaries; shared page-data RPCs must keep read authorization.

@@ -829,10 +829,18 @@ function PactArchiveTab() {
                       {a.storage_path && a.status === 'success' && (
                         <Button variant="ghost" size="icon" className="h-7 w-7"
                           onClick={async () => {
-                            const { data } = await supabase.storage
-                              .from('field-data-archives')
-                              .createSignedUrl(a.storage_path, 300);
-                            if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                            const { data, error } = await supabase.functions.invoke('create-pact-archive', {
+                              body: { action: 'sign-download', archive_id: a.id },
+                            });
+                            if (error || !data?.signed_url) {
+                              toast({
+                                title: 'Download denied',
+                                description: 'You do not have permission to download this archive.',
+                                variant: 'destructive',
+                              });
+                              return;
+                            }
+                            window.open(data.signed_url, '_blank');
                           }}
                           data-testid={`download-archive-${a.id}`}>
                           <Download className="h-4 w-4" />

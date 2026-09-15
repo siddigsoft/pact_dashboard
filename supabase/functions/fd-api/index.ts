@@ -327,6 +327,10 @@ serve(async (req: Request) => {
 
     // ── GET /forms/:id/submissions.csv ─────────────────────────────────────
     if (route === 'submissions_csv') {
+      // API-key callers intentionally remain on fd_api_keys authorization:
+      // this credential has no user UUID to evaluate against the unified
+      // moduleRegistry permission tables. Do not invent a user identity or
+      // call assert_report_export_permission with the service client.
       const { formId } = routeInfo as any;
       const { data, error } = await db.from('fd_submissions')
         .select('*').eq('form_id', formId)

@@ -31,6 +31,16 @@ async function verifyCallerIsSuperAdmin(authHeader: string): Promise<{ userId: s
   const { data: { user }, error } = await anonClient.auth.getUser()
   if (error || !user) return null
 
+  // Keep the existing Super Admin gate and also enforce the module-registry
+  // export permission server-side before any service-role report query.  The
+  // RPC runs through the caller JWT; using the service client here would
+  // intentionally bypass the user permission assertion.
+  const { error: permissionError } = await anonClient.rpc(
+    'assert_report_export_permission',
+    { p_resource: 'analytics', p_action: 'export' },
+  )
+  if (permissionError) return null
+
   const svc = createServiceClient()
   const { data: sa } = await svc
     .from('super_admins')
