@@ -306,7 +306,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
 
   // ── Context (By-User mode) ────────────────────────────────────────────────
   const {
-    loading, savingKey, effectivePage, togglePage,
+    loading, savingKey, effectivePage, explainPage, togglePage,
     columnConfigs, permOverrides, upsertColumnVisibility, removeColumnVisibility,
   } = useSelectedUserAccess();
 
@@ -592,6 +592,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
             loading={loading}
             savingKey={savingKey}
             effectivePage={effectivePage}
+            explainPage={explainPage}
             togglePage={togglePage}
             expandedGroups={expandedGroups}
             setExpandedGroups={setExpandedGroups}
@@ -859,7 +860,7 @@ function ModeToggle({ viewMode, onSwitch }: { viewMode: 'user' | 'page'; onSwitc
 
 // ── By-User body extracted to avoid re-renders on mode switch ─────────────────
 function ByUserBody({
-  loading, savingKey, effectivePage, togglePage,
+  loading, savingKey, effectivePage, explainPage, togglePage,
   expandedGroups, setExpandedGroups, expandedPages, setExpandedPages,
   groupedPages, effectiveExpanded,
   colRegBySlug, userColMap, roleColMap, permOverrides,
@@ -869,6 +870,7 @@ function ByUserBody({
   loading: boolean;
   savingKey: string | null;
   effectivePage: (slug: string) => import('./types').AccessEffect;
+  explainPage: (slug: string) => import('./types').AccessDecisionTrace;
   togglePage: (slug: string) => void;
   expandedGroups: Set<string>;
   setExpandedGroups: (fn: (prev: Set<string>) => Set<string>) => void;
@@ -921,6 +923,7 @@ function ByUserBody({
               <div className="ml-2 space-y-0.5 mb-1">
                 {pages.map(page => {
                   const eff = effectivePage(page.slug);
+                  const trace = explainPage(page.slug);
                   const cfg = EFF_CONFIG[eff];
                   const familyKey = `page-family:${expandRelatedPageSlugs(page.slug).slice().sort().join('|')}`;
                   const saving = savingKey === `page:${page.slug}` || savingKey === familyKey;
@@ -975,7 +978,10 @@ function ByUserBody({
                               </Badge>
                             )}
                           </div>
-                          {page.note && <p className="text-[10px] text-muted-foreground truncate mt-0.5">{page.note}</p>}
+                          <p className="text-[10px] text-muted-foreground truncate mt-0.5" title={trace.summary}>
+                            {trace.source === 'user_override' ? 'Override' : trace.source === 'super_admin' ? 'Super Admin' : 'Role default'}: {trace.summary}
+                          </p>
+                          {page.note && <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">{page.note}</p>}
                         </div>
                         <Tooltip>
                           <TooltipTrigger asChild>

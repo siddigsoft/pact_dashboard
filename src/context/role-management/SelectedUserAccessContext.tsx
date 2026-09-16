@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PAGE_DEFS, hasDefaultAccess } from '@/pages/PageAccessControl';
 import { DEFAULT_ROLE_PERMISSIONS, AppRole, ResourceType, ActionType } from '@/types/roles';
 import {
-  AccessEffect, PageOverride, PermissionOverride, ColumnVisibilityRow, DataScopeRow,
+  AccessEffect, AccessDecisionTrace, PageOverride, PermissionOverride, ColumnVisibilityRow, DataScopeRow,
   DataScopePolicyMode, DataScopeSelector, ScopePreview,
 } from '@/components/role-management/unified/types';
 import {
@@ -51,6 +51,8 @@ interface SelectedUserAccessValue {
   permOvMap: Record<string, boolean>;  // resource:action → is_granted
   effectivePage: (slug: string) => AccessEffect;
   effectiveAction: (resource: string, action: string) => AccessEffect;
+  explainPage: (slug: string) => AccessDecisionTrace;
+  explainAction: (resource: string, action: string) => AccessDecisionTrace;
   togglePage: (slug: string) => Promise<void>;
   toggleAction: (resource: string, action: string) => Promise<void>;
   upsertColumnVisibility: (pageSlug: string, columnKey: string, isHidden: boolean, target: 'user' | 'role') => Promise<void>;
@@ -114,7 +116,10 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
         supabase.from('data_scope_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`),
         supabase.from('page_role_configs').select('page_slug, roles'),
         supabase.rpc('get_user_permissions', { user_uuid: userId }),
-        supabase.from('user_roles').select('role, role_id').eq('user_id', userId),
+        supabase
+          .from('canonical_user_role_assignments')
+          .select('role_id, roles(name)')
+          .eq('user_id', userId),
       ]);
       setPageOverrides(pageRes.data ?? []);
       setPermOverrides(permRes.data ?? []);
@@ -162,28 +167,16 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
         (permissionRes.data ?? []).map((permission: any) => `${permission.resource}:${permission.action}`),
       ));
 
-      const assignedRows = userRolesRes.data ?? [];
-      const customRoleIds = assignedRows
-        .map((row: any) => row.role_id)
-        .filter((id: string | null): id is string => Boolean(id));
-      let customRoleNames: string[] = [];
-      if (customRoleIds.length > 0) {
-        const { data: customRoles, error: customRolesError } = await supabase
-          .from('roles')
-          .select('name')
-          .in('id', customRoleIds);
-        if (customRolesError) {
-          console.error('[SelectedUserAccess] custom role names load error:', customRolesError);
-        } else {
-          customRoleNames = (customRoles ?? []).map((role: any) => role.name);
-        }
+      if (userRolesRes.error) {
+        console.error('[SelectedUserAccess] canonical role assignments load error:', userRolesRes.error);
       }
+      const assignedRows = userRolesRes.data ?? [];
+      const customRoleNames = assignedRows
+        .map((row: any) => row.roles?.name)
+        .filter((name: string | null): name is string => Boolean(name));
       setEffectiveRoleNames(unionRoleNames(
         userRole,
-        [
-          ...assignedRows.map((row: any) => row.role).filter(Boolean),
-          ...customRoleNames,
-        ],
+        customRoleNames,
       ));
     } finally {
       setLoading(false);
@@ -233,6 +226,54 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       explicitGrant: explicit,
       roleAllows,
     });
+  }
+
+  function explainPage(slug: string): AccessDecisionTrace {
+    const effect = effectivePage(slug);
+    const override = pageOvMap[slug];
+    if (effect === 'superadmin') {
+      return { effect, source: 'super_admin', summary: 'Super Admin bypass grants access.' };
+    }
+    if (override) {
+      return {
+        effect,
+        source: 'user_override',
+        summary: override.is_blocked
+          ? 'Explicit user page block overrides all role defaults.'
+          : 'Explicit user page grant overrides the role default.',
+      };
+    }
+    return {
+      effect,
+      source: 'role_default',
+      summary: effect === 'role-yes'
+        ? `Allowed by role default (${effectiveRoleNames.join(', ')}).`
+        : `No assigned role grants this page (${effectiveRoleNames.join(', ')}).`,
+    };
+  }
+
+  function explainAction(resource: string, action: string): AccessDecisionTrace {
+    const effect = effectiveAction(resource, action);
+    const override = permOverrides.find(item => item.resource === resource && item.action === action);
+    if (effect === 'superadmin') {
+      return { effect, source: 'super_admin', summary: 'Super Admin bypass grants this action.' };
+    }
+    if (override) {
+      return {
+        effect,
+        source: 'user_override',
+        summary: override.is_granted
+          ? 'Explicit user action grant overrides the role default.'
+          : 'Explicit user action block overrides all role defaults.',
+      };
+    }
+    return {
+      effect,
+      source: 'role_default',
+      summary: effect === 'role-yes'
+        ? 'Allowed by the effective role permission set.'
+        : 'No effective role permission grants this action.',
+    };
   }
 
   // ── Page toggle (cascades to related page family, e.g. my-projects ↔ projects)
@@ -457,7 +498,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     loading, savingKey,
     pageOverrides, permOverrides, columnConfigs, dataScopeRows, scopePreview, scopePreviewError,
     pageOvMap, permOvMap,
-    effectivePage, effectiveAction,
+    effectivePage, effectiveAction, explainPage, explainAction,
     togglePage, toggleAction,
     upsertColumnVisibility, removeColumnVisibility,
     upsertDataScope, replaceCostSubmissionPolicy, removeDataScope,

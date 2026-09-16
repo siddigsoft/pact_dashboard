@@ -196,7 +196,7 @@ function ActiveGrantsPanel() {
 
 // ── Cost Submission Button Access section ─────────────────────────────────────
 function CsButtonAccessSection({ userId, userRole, isSelectedSuperAdmin }: { userId: string; userRole: string; isSelectedSuperAdmin: boolean }) {
-  const { loading, savingKey, effectiveAction, toggleAction } = useSelectedUserAccess();
+  const { loading, savingKey, effectiveAction, explainAction, toggleAction } = useSelectedUserAccess();
   const [expanded, setExpanded] = useState(false);
 
   if (isSelectedSuperAdmin) return null;
@@ -235,6 +235,7 @@ function CsButtonAccessSection({ userId, userRole, isSelectedSuperAdmin }: { use
                 <div className="space-y-2">
                   {groupActions.map(perm => {
                     const eff = effectiveAction('cost_submissions', perm.action);
+                    const trace = explainAction('cost_submissions', perm.action);
                     const saving = savingKey === `perm:cost_submissions:${perm.action}`;
                     const Icon = perm.icon;
                     const colors = CS_COLOR_CLASSES[perm.color] ?? CS_COLOR_CLASSES.blue;
@@ -255,6 +256,9 @@ function CsButtonAccessSection({ userId, userRole, isSelectedSuperAdmin }: { use
                           </p>
                           <p className="text-[10px] text-muted-foreground leading-snug mt-0.5">{perm.description}</p>
                           <p className="text-[9px] text-muted-foreground/60 mt-0.5">Default: {perm.defaultRoles}</p>
+                          <p className="text-[9px] text-muted-foreground/80 mt-0.5" title={trace.summary}>
+                            {trace.source === 'user_override' ? 'Override' : 'Role default'}: {trace.summary}
+                          </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
                           {hasOverride && (
@@ -304,7 +308,7 @@ export function PermissionsTab({
   section = 'all',
   actionFilter = 'all',
 }: TabProps & { section?: PermissionsSection; actionFilter?: ActionFilter }) {
-  const { loading, savingKey, effectiveAction, toggleAction, columnConfigs, upsertColumnVisibility, removeColumnVisibility } = useSelectedUserAccess();
+  const { loading, savingKey, effectiveAction, explainAction, toggleAction, columnConfigs, upsertColumnVisibility, removeColumnVisibility } = useSelectedUserAccess();
   const [activeSection, setActiveSection] = useState<'actions' | 'columns' | 'grants'>('actions');
   const [moduleSearch, setModuleSearch] = useState('');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
@@ -479,6 +483,7 @@ export function PermissionsTab({
                         <div className="space-y-0.5">
                           {pg.actions.map(a => {
                             const eff = effectiveAction(a.resource, a.action as ActionType);
+                            const trace = explainAction(a.resource, a.action as ActionType);
                             const saving = savingKey === `perm:${a.resource}:${a.action}`;
                             const Icon = ACTION_ICONS[a.action as ActionType] ?? Key;
                             const hasOverride = eff === 'granted' || eff === 'blocked';
@@ -496,6 +501,9 @@ export function PermissionsTab({
                                   {a.description && (
                                     <span className="basis-full text-[10px] leading-snug text-muted-foreground">{a.description}</span>
                                   )}
+                                  <span className="basis-full text-[10px] leading-snug text-muted-foreground/80" title={trace.summary}>
+                                    {trace.source === 'user_override' ? 'Override' : trace.source === 'super_admin' ? 'Super Admin' : 'Role default'}: {trace.summary}
+                                  </span>
                                 </div>
                                 {hasOverride && (
                                   <Badge className={cn('text-[9px] h-4 px-1.5 border-0 shrink-0',

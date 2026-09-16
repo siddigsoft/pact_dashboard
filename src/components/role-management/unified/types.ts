@@ -29,6 +29,13 @@ export interface PermissionOverride {
   created_at: string;
 }
 
+/** Human-readable provenance for a resolved page or action decision. */
+export interface AccessDecisionTrace {
+  effect: AccessEffect;
+  source: 'super_admin' | 'user_override' | 'role_default';
+  summary: string;
+}
+
 export interface ColumnVisibilityRow {
   id: string;
   user_id?: string | null;
