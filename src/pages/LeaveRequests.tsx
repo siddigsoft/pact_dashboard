@@ -91,6 +91,9 @@ export default function LeaveRequests() {
   const { toast } = useToast();
   const { hasAnyRole, checkPermission } = useAuthorization();
   const canExport = checkPermission('leave', 'export');
+  const canCreate = checkPermission('leave', 'create');
+  const canApprove = checkPermission('leave', 'approve');
+  const canUpdate = checkPermission('leave', 'update');
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
   const { check: checkLeaveWrite, perms: leavePerms } = useRestrictedAction('leave');
   const invalidateLeave = useInvalidateLeaveQueries();
@@ -216,6 +219,10 @@ export default function LeaveRequests() {
   const setF = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const submitRequest = async () => {
+    if (!canCreate) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to submit leave requests.', variant: 'destructive' });
+      return;
+    }
     if (!form.start_date || !form.end_date) { toast({ title: 'Start and end dates are required', variant: 'destructive' }); return; }
     const days = calcDays(form.start_date, form.end_date);
     if (days <= 0) { toast({ title: 'End date must be after start date', variant: 'destructive' }); return; }
@@ -288,6 +295,10 @@ export default function LeaveRequests() {
 
   const cancel = async (id: string) => {
     if (!confirm('Cancel this leave request?')) return;
+    if (!canUpdate && !canCreate) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to update leave requests.', variant: 'destructive' });
+      return;
+    }
     const { error } = await supabase.from('leave_requests').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', id);
     if (error) toast({ title: 'Error cancelling', variant: 'destructive' });
     else { toast({ title: 'Request cancelled' }); load(); }
@@ -356,6 +367,10 @@ export default function LeaveRequests() {
 
   const submitReview = async () => {
     if (!reviewDialog) return;
+    if (!canApprove) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to approve or reject leave.', variant: 'destructive' });
+      return;
+    }
     if (!checkLeaveWrite('write')) return;
     setSaving(true);
     try {
@@ -543,9 +558,9 @@ export default function LeaveRequests() {
               className="border-white/30 text-white hover:bg-white/10">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </Button>
-            <Button size="sm" onClick={() => setDialogOpen(true)} className="bg-white text-[#0F2041] hover:bg-blue-50">
+            {canCreate && <Button size="sm" onClick={() => setDialogOpen(true)} className="bg-white text-[#0F2041] hover:bg-blue-50">
               <Plus className="h-4 w-4 mr-1" />Request Leave
-            </Button>
+            </Button>}
             <Button size="sm" variant="outline" onClick={() => setShowBalance(v => !v)}
               className={cn('border-white/30 text-white hover:bg-white/10', showBalance && 'bg-white/20')}>
               <PieChart className="h-4 w-4 mr-1" />My Balance
@@ -759,9 +774,9 @@ export default function LeaveRequests() {
             <CalendarOff className="h-12 w-12 mb-3 opacity-30" />
             <p className="font-medium">{requests.length === 0 ? 'No leave requests yet' : 'No requests match your filters'}</p>
             {requests.length === 0 && (
-              <Button className="mt-4" onClick={() => setDialogOpen(true)}>
+              {canCreate && <Button className="mt-4" onClick={() => setDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-1" />Submit first request
-              </Button>
+              </Button>}
             )}
           </div>
         ) : (
@@ -828,7 +843,7 @@ export default function LeaveRequests() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {isAdmin && req.status === 'pending' && (!leavePerms.hasOverride || leavePerms.canWrite) && (
+                      {isAdmin && canApprove && req.status === 'pending' && (!leavePerms.hasOverride || leavePerms.canWrite) && (
                         <Button size="sm" onClick={() => openReviewDialog(req)}
                           className="bg-[#1D3461] hover:bg-[#0F2041] text-white h-8 text-xs">
                           Review

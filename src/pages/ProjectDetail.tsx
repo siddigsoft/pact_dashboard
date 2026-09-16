@@ -24,7 +24,7 @@ const ProjectDetailPage = () => {
   const [project, setProject] = useState<Project | undefined>(undefined);
   const { toast } = useToast();
   const [deleting, setDeleting] = useState(false);
-  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const { isSuperAdmin, hasAnyRole, checkPermission } = useAuthorization();
   const { currentUser, authReady } = useUser();
   const { data: activities } = useProjectActivitiesQuery(id);
   const updateProjectCache = useUpdateProjectInCache();
@@ -54,6 +54,10 @@ const ProjectDetailPage = () => {
   }, [id, projects, loading, authReady, activities]);
 
   const handleEdit = () => {
+    if (!checkPermission('projects', 'update')) {
+      toast({ title: 'Permission denied', description: 'You do not have permission to edit this project.', variant: 'destructive' });
+      return;
+    }
     navigate(`/projects/${id}/edit`);
   };
 
@@ -67,11 +71,12 @@ const ProjectDetailPage = () => {
       return;
     }
     // Only Super Admin / Admin / FOM, OR the project's own Project Manager may delete.
-    const isPrivileged = isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'fom', 'FOM']);
+    const isPrivileged = checkPermission('projects', 'delete') &&
+      (isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'fom', 'FOM']));
     const isPM = !!project?.team?.projectManager &&
       ((!!currentUser?.id && project.team.projectManager === currentUser.id) ||
         (!!currentUser?.fullName && project.team.projectManager === currentUser.fullName));
-    if (!isPrivileged && !isPM) {
+    if (!checkPermission('projects', 'delete') || (!isPrivileged && !isPM)) {
       toast({
         title: 'Permission denied',
         description: 'Only Super Admins, Admins, FOM, or the project\'s Project Manager can delete this project.',
@@ -186,7 +191,7 @@ const ProjectDetailPage = () => {
             <AlertDescription>
               Some required project information is missing. Please update the project details.
               <div className="mt-4">
-                <Button variant="outline" onClick={() => navigate(`/projects/${id}/edit`)}>
+                <Button variant="outline" onClick={handleEdit}>
                   Edit Project
                 </Button>
               </div>

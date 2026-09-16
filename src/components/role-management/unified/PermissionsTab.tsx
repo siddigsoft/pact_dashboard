@@ -57,11 +57,17 @@ const CS_COLOR_CLASSES: Record<string, { bg: string; text: string; border: strin
 
 const ACTION_LABELS: Partial<Record<ActionType, string>> = {
   read: 'View', create: 'Create', update: 'Edit', delete: 'Delete',
-  approve: 'Approve', export: 'Export',
+  approve: 'Approve', reject: 'Reject', assign: 'Assign', archive: 'Archive',
+  close: 'Close', reverse: 'Reverse', reconcile: 'Reconcile', import: 'Import',
+  publish: 'Publish', send: 'Send', recall: 'Recall', revert: 'Revert',
+  restore: 'Restore', submit: 'Submit', override: 'Override', export: 'Export',
 };
 const ACTION_ICONS: Partial<Record<ActionType, any>> = {
   read: Eye, create: CheckCircle2, update: Key, delete: XCircle,
-  approve: CheckCircle2, export: Columns,
+  approve: CheckCircle2, reject: XCircle, assign: Users, archive: Settings2,
+  close: X, reverse: RotateCcw, reconcile: ArrowLeftRight, import: ArrowLeftRight,
+  publish: CheckCircle2, send: Mail, recall: RefreshCcw, revert: RotateCcw,
+  restore: RotateCcw, submit: CheckCircle2, override: Settings2, export: Columns,
 };
 
 const MMP_REPORT_BUTTONS = [

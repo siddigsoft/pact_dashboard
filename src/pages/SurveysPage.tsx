@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
-import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
-import { usePageManageOverride } from '@/hooks/usePageManageOverride';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
 import { QRCodeSVG } from 'qrcode.react';
@@ -117,15 +116,17 @@ function sortSurveys(surveys: Survey[], key: SortKey): Survey[] {
 export default function SurveysPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { currentUser, hasRole } = useUser();
-  const { isSuperAdmin } = useSuperAdmin();
+  const { currentUser } = useUser();
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
 
-  const isAdmin = isSuperAdmin || hasRole('admin') || hasRole('super_admin');
-  const roleCanManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer');
-
-  const overrideCanManage = usePageManageOverride('surveys', roleCanManage);
-  const canManage = roleCanManage || overrideCanManage;
+  // Role names remain a compatibility fallback for the page shell, but every
+  // mutating control is governed by the effective action manifest.
+  const canManage = checkPermission('surveys', 'create') ||
+    checkPermission('surveys', 'update') ||
+    checkPermission('surveys', 'delete');
+  const canChangeStatus = checkPermission('surveys', 'status') ||
+    false;
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SurveyStatus>('all');
@@ -160,6 +161,7 @@ export default function SurveysPage() {
 
   // Auto-close any active survey whose deadline has passed
   useEffect(() => {
+    if (!checkPermission('surveys', 'status')) return;
     if (!surveys.length) return;
     const now = new Date();
     const expired = surveys.filter(s => {
@@ -172,10 +174,13 @@ export default function SurveysPage() {
     Promise.all(
       expired.map(s => supabase.from('surveys').update({ status: 'closed' }).eq('id', s.id))
     ).then(() => qc.invalidateQueries({ queryKey: ['surveys'] }));
-  }, [surveys]);
+  }, [surveys, checkPermission]);
 
   const createSurvey = useMutation({
     mutationFn: async () => {
+      if (!checkPermission('surveys', 'create')) {
+        throw new Error('You are not authorized to create surveys');
+      }
       if (!newTitle.trim()) throw new Error('Title is required');
       const { data, error } = await supabase.from('surveys').insert({
         title: newTitle.trim(), description: newDesc.trim() || null,
@@ -195,6 +200,9 @@ export default function SurveysPage() {
 
   const deleteSurvey = useMutation({
     mutationFn: async (id: string) => {
+      if (!checkPermission('surveys', 'delete')) {
+        throw new Error('You are not authorized to delete surveys');
+      }
       const { error } = await supabase.from('surveys').delete().eq('id', id);
       if (error) throw error;
     },
@@ -208,6 +216,9 @@ export default function SurveysPage() {
 
   const duplicateSurvey = useMutation({
     mutationFn: async (survey: Survey) => {
+      if (!checkPermission('surveys', 'create')) {
+        throw new Error('You are not authorized to duplicate surveys');
+      }
       const { data: newSurvey, error: sErr } = await supabase.from('surveys').insert({
         title: `${survey.title} (Copy)`, description: survey.description,
         status: 'draft', created_by: currentUser?.id, settings: survey.settings,
@@ -229,6 +240,7 @@ export default function SurveysPage() {
 
   const changeStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: SurveyStatus }) => {
+      if (!canChangeStatus) throw new Error('You are not authorized to change survey status');
       const { error } = await supabase.from('surveys').update({ status }).eq('id', id);
       if (error) throw error;
       return status;
@@ -268,7 +280,10 @@ export default function SurveysPage() {
 
   const cardProps = (survey: Survey) => ({
     survey,
-    canManage,
+    canCreate: checkPermission('surveys', 'create'),
+    canUpdate: checkPermission('surveys', 'update'),
+    canDelete: checkPermission('surveys', 'delete'),
+    canChangeStatus,
     onOpen:      () => navigate(`/surveys/${survey.id}`),
     onDuplicate: () => duplicateSurvey.mutate(survey),
     onDelete:    () => setDeleteTarget(survey),
@@ -280,7 +295,7 @@ export default function SurveysPage() {
   });
 
   // ── Fill-only view for users without manage permission ──────────────────────
-  if (!canManage) {
+  if (!canManage && !canChangeStatus) {
     const activeSurveys = surveys
       .filter(s => s.status === 'active')
       .filter(s => {
@@ -731,7 +746,10 @@ function getLocalDraft(surveyId: string): { hasDraft: boolean; savedAt: number |
 ───────────────────────────────────────────── */
 interface CardProps {
   survey: Survey;
-  canManage: boolean;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  canChangeStatus: boolean;
   onOpen: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -745,7 +763,7 @@ interface CardProps {
 /* ─────────────────────────────────────────────
    Survey Card (grid)
 ───────────────────────────────────────────── */
-function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLink, onShare, onChangeStatus, duplicating, statusChanging }: CardProps) {
+function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, onOpen, onDuplicate, onDelete, onCopyLink, onShare, onChangeStatus, duplicating, statusChanging }: CardProps) {
   const cfg = STATUS_CFG[survey.status];
   const StatusIcon = cfg.icon;
   const hasResponses = (survey._r_count ?? 0) > 0;
@@ -843,7 +861,7 @@ function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLi
       </div>
 
       {/* Quick status buttons */}
-      {canManage && (
+      {canChangeStatus && (
         <div className="flex items-center gap-1.5 mb-3" onClick={e => e.stopPropagation()}>
           {survey.status === 'draft' && (
             <button
@@ -928,9 +946,9 @@ function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLi
             </>
           )}
 
-          {canManage && (
+          {(canCreate || canDelete) && (
             <>
-              <Tooltip>
+              {canCreate && <Tooltip>
                 <TooltipTrigger asChild>
                   <button onClick={onDuplicate} disabled={duplicating}
                     className="flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
@@ -939,8 +957,8 @@ function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLi
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>Duplicate</TooltipContent>
-              </Tooltip>
-              <Tooltip>
+              </Tooltip>}
+              {canDelete && <Tooltip>
                 <TooltipTrigger asChild>
                   <button onClick={onDelete}
                     className="flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
@@ -949,7 +967,7 @@ function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLi
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>Delete</TooltipContent>
-              </Tooltip>
+              </Tooltip>}
             </>
           )}
         </TooltipProvider>
@@ -961,7 +979,7 @@ function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLi
 /* ─────────────────────────────────────────────
    Survey Row (list)
 ───────────────────────────────────────────── */
-function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLink, onShare, onChangeStatus, duplicating, statusChanging }: CardProps) {
+function SurveyRow({ survey, canCreate, canUpdate, canDelete, canChangeStatus, onOpen, onDuplicate, onDelete, onCopyLink, onShare, onChangeStatus, duplicating, statusChanging }: CardProps) {
   const cfg = STATUS_CFG[survey.status];
   const localDraft = getLocalDraft(survey.id);
 
@@ -1021,7 +1039,7 @@ function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLin
       </div>
 
       {/* Quick status */}
-      {canManage && (
+      {canChangeStatus && (
         <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
           {survey.status === 'draft' && (
             <button onClick={() => onChangeStatus('active')} disabled={statusChanging}
@@ -1072,9 +1090,9 @@ function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLin
             </Tooltip>
           </>
         )}
-        {canManage && (
+        {(canCreate || canDelete) && (
           <>
-            <Tooltip>
+              {canCreate && <Tooltip>
               <TooltipTrigger asChild>
                 <button onClick={onDuplicate} disabled={duplicating}
                   className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
@@ -1083,8 +1101,8 @@ function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLin
                 </button>
               </TooltipTrigger>
               <TooltipContent>Duplicate</TooltipContent>
-            </Tooltip>
-            <Tooltip>
+              </Tooltip>}
+              {canDelete && <Tooltip>
               <TooltipTrigger asChild>
                 <button onClick={onDelete}
                   className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
@@ -1093,7 +1111,7 @@ function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLin
                 </button>
               </TooltipTrigger>
               <TooltipContent>Delete</TooltipContent>
-            </Tooltip>
+              </Tooltip>}
           </>
         )}
         <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 transition-colors ml-1" />

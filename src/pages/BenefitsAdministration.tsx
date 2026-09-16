@@ -76,6 +76,10 @@ export default function BenefitsAdministration() {
   const canExport = checkPermission('benefits', 'export');
   const { toast } = useToast();
   const isAdmin = hasAnyRole(['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin', 'hr', 'hr_manager']);
+  const canCreate = isAdmin && checkPermission('benefits', 'create');
+  const canUpdate = isAdmin && checkPermission('benefits', 'update');
+  const canApprove = isAdmin && checkPermission('benefits', 'approve');
+  const canSubmit = checkPermission('benefits', 'submit');
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -160,6 +164,7 @@ export default function BenefitsAdministration() {
     setPlanDialogOpen(true);
   }
   async function savePlan() {
+    if (!(editingPlan ? canUpdate : canCreate)) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     if (!planForm.name.trim()) { toast({ title: 'Plan name is required', variant: 'destructive' }); return; }
     setSaving(true);
     const payload: any = {
@@ -177,6 +182,7 @@ export default function BenefitsAdministration() {
     else { toast({ title: editingPlan ? 'Plan updated' : 'Plan created' }); setPlanDialogOpen(false); fetchAll(); }
   }
   async function deletePlan(p: Plan) {
+    if (!canUpdate) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     if (!confirm(`Delete plan "${p.name}"? This removes all enrollments too.`)) return;
     const { error } = await supabase.from('hr_benefit_plans' as any).delete().eq('id', p.id);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -186,6 +192,7 @@ export default function BenefitsAdministration() {
   // ── Admin Enrollment CRUD ─────────────────────────────────────────────────
   function openNewEnroll() { setEnrollForm({ ...BLANK_ENROLL }); setEnrollDialogOpen(true); }
   async function saveAdminEnroll() {
+    if (!canApprove) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     if (!enrollForm.user_id || !enrollForm.plan_id) { toast({ title: 'Select a staff member and plan', variant: 'destructive' }); return; }
     setSaving(true);
     const payload: any = {
@@ -213,6 +220,7 @@ export default function BenefitsAdministration() {
 
   // ── Approve / Reject pending enrollment ──────────────────────────────────
   async function approveEnrollment(e: Enrollment) {
+    if (!canApprove) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     const { error } = await supabase.from('hr_benefit_enrollments' as any)
       .update({ status: 'active', approved_by: currentUser?.id, approved_at: new Date().toISOString() })
       .eq('id', e.id);
@@ -229,6 +237,7 @@ export default function BenefitsAdministration() {
     fetchAll();
   }
   async function rejectEnrollment(e: Enrollment) {
+    if (!canApprove) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     if (!confirm('Reject this enrollment request?')) return;
     const { error } = await supabase.from('hr_benefit_enrollments' as any)
       .update({ status: 'terminated', approved_by: currentUser?.id, approved_at: new Date().toISOString() })
@@ -248,6 +257,7 @@ export default function BenefitsAdministration() {
 
   // ── Employee Self-Service Enrollment ──────────────────────────────────────
   async function submitSelfEnroll() {
+    if (!canSubmit) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     if (!selfEnrollPlanId || !currentUser?.id) return;
     if (enrolledPlanIds.has(selfEnrollPlanId)) {
       toast({ title: 'Already enrolled in this plan', variant: 'destructive' }); return;
@@ -278,6 +288,7 @@ export default function BenefitsAdministration() {
     setPeriodDialogOpen(true);
   }
   async function savePeriod() {
+    if (!(editingPeriod ? canUpdate : canCreate)) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     if (!periodForm.title.trim() || !periodForm.starts_at || !periodForm.ends_at) {
       toast({ title: 'Title, start and end dates are required', variant: 'destructive' }); return;
     }
@@ -295,6 +306,7 @@ export default function BenefitsAdministration() {
     else { toast({ title: 'Enrollment period saved' }); setPeriodDialogOpen(false); fetchAll(); }
   }
   async function deletePeriod(p: EnrollmentPeriod) {
+    if (!canUpdate) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     if (!confirm(`Delete period "${p.title}"?`)) return;
     const { error } = await supabase.from('hr_open_enrollment_periods' as any).delete().eq('id', p.id);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -613,14 +625,14 @@ export default function BenefitsAdministration() {
                         </p>
                       </div>
                       <div className="flex gap-2 shrink-0">
-                        <Button size="sm" variant="outline" className="text-emerald-700 border-emerald-300"
+                        {canApprove && <Button size="sm" variant="outline" className="text-emerald-700 border-emerald-300"
                           onClick={() => approveEnrollment(e)} data-testid={`button-approve-${e.id}`}>
                           <CheckCircle2 className="h-3.5 w-3.5 mr-1" />Approve
-                        </Button>
-                        <Button size="sm" variant="outline" className="text-red-600 border-red-200"
+                        </Button>}
+                        {canApprove && <Button size="sm" variant="outline" className="text-red-600 border-red-200"
                           onClick={() => rejectEnrollment(e)} data-testid={`button-reject-${e.id}`}>
                           <XCircle className="h-3.5 w-3.5 mr-1" />Reject
-                        </Button>
+                        </Button>}
                       </div>
                     </CardContent>
                   </Card>
@@ -659,7 +671,7 @@ export default function BenefitsAdministration() {
                       </div>
                       <div className="flex gap-1">
                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEditPeriod(p)}><Edit2 className="h-3.5 w-3.5" /></Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-red-600" onClick={() => deletePeriod(p)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        {canUpdate && <Button size="icon" variant="ghost" className="h-7 w-7 text-red-600" onClick={() => deletePeriod(p)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                       </div>
                     </CardContent>
                   </Card>

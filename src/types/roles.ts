@@ -134,6 +134,7 @@ export type ResourceType =
   // HR
   | 'hr'
   | 'payroll'
+  | 'salary_advances'
   | 'leave'
   | 'benefits'
   | 'succession'
@@ -144,6 +145,7 @@ export type ResourceType =
   | 'tasks'
   | 'notifications'
   | 'broadcast'
+  | 'chat'
   | 'whatsapp'
   | 'calendar'
   | 'signatures'
@@ -159,8 +161,21 @@ export type ActionType =
   | 'update'
   | 'delete'
   | 'approve'
+  | 'reject'
   | 'assign'
   | 'archive'
+  | 'close'
+  | 'reverse'
+  | 'reconcile'
+  | 'import'
+  | 'publish'
+  | 'send'
+  | 'recall'
+  | 'revert'
+  /** Fine-grained cost-submission workflow capabilities. */
+  | 'send_to_finance'
+  | 'revert_paid'
+  | 'revert_tier'
   | 'restore'
   | 'override'
   | 'submit'
@@ -173,7 +188,10 @@ export type ActionType =
   | 'hub_report'
   // Financial button permissions are separate from page/resource CRUD.
   | 'mark_paid'
-  | 'use_for_payment';
+  | 'use_for_payment'
+  /** Explicit lifecycle/status and configuration mutations. */
+  | 'status'
+  | 'settings';
 
 export const RESOURCES: ResourceType[] = [
   'users', 'roles', 'permissions', 'settings', 'system', 'super_admins', 'audit_logs',
@@ -181,17 +199,19 @@ export const RESOURCES: ResourceType[] = [
   'safety', 'incidents', 'equipment', 'coverage_map',
   'finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions',
   'pre_funding', 'procurement', 'fixed_assets',
-  'hr', 'payroll', 'leave', 'benefits', 'succession', 'pulse_surveys', 'hr_analytics',
+  'hr', 'payroll', 'salary_advances', 'leave', 'benefits', 'succession', 'pulse_surveys', 'hr_analytics',
   'surveys', 'tasks', 'notifications', 'broadcast', 'whatsapp', 'calendar',
-  'signatures', 'integrations', 'transactions',
+  'signatures', 'integrations', 'transactions', 'chat',
   'crm', 'reports',
 ];
 
 export const ACTIONS: ActionType[] = [
-  'create', 'read', 'update', 'delete', 'approve',
-  'assign', 'archive', 'restore', 'override', 'submit', 'export',
+  'create', 'read', 'update', 'delete', 'approve', 'reject',
+  'assign', 'archive', 'close', 'reverse', 'reconcile', 'import',
+  'publish', 'send', 'recall', 'revert', 'send_to_finance', 'revert_paid', 'revert_tier',
+  'restore', 'override', 'submit', 'export',
   'full_report', 'state_report', 'hub_report',
-  'mark_paid', 'use_for_payment',
+  'mark_paid', 'use_for_payment', 'status', 'settings',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -206,22 +226,28 @@ export const RESOURCE_LABELS: Record<ResourceType, string> = {
   finances: 'Finances', wallets: 'Wallets', accounting: 'Accounting',
   down_payments: 'Down Payments', cost_submissions: 'Cost Submissions',
   pre_funding: 'Pre-Funding', procurement: 'Procurement (P2P)', fixed_assets: 'Fixed Assets',
-  hr: 'HR Hub', payroll: 'Payroll', leave: 'Leave Management',
+  hr: 'HR Hub', payroll: 'Payroll', salary_advances: 'Salary Advances', leave: 'Leave Management',
   benefits: 'Benefits Enrollment', succession: 'Succession Planning', pulse_surveys: 'Pulse Surveys',
   hr_analytics: 'HR Analytics',
   surveys: 'Surveys', tasks: 'Tasks', notifications: 'Notifications',
   broadcast: 'Broadcast', whatsapp: 'WhatsApp', calendar: 'Calendar',
-  signatures: 'Signatures', integrations: 'Integrations', transactions: 'Transactions',
+  signatures: 'Signatures', integrations: 'Integrations', transactions: 'Transactions', chat: 'Chat',
   crm: 'CRM', reports: 'Reports',
 };
 
 export const ACTION_LABELS: Record<ActionType, string> = {
   create: 'Create', read: 'Read', update: 'Update', delete: 'Delete',
-  approve: 'Approve', assign: 'Assign', archive: 'Archive', restore: 'Restore',
+  approve: 'Approve', reject: 'Reject', assign: 'Assign', archive: 'Archive',
+  close: 'Close', reverse: 'Reverse', reconcile: 'Reconcile', import: 'Import',
+  publish: 'Publish', send: 'Send', recall: 'Recall', revert: 'Revert',
+  send_to_finance: 'Send to Finance', revert_paid: 'Revert Paid', revert_tier: 'Revert Approval Tier',
+  restore: 'Restore',
   override: 'Override', submit: 'Submit', export: 'Export',
   full_report: 'Full MMP Report', state_report: 'State MMP Report', hub_report: 'Hub MMP Report',
   mark_paid: 'Mark Cost Submission Paid',
   use_for_payment: 'Use Pre-Fund for Payment',
+  status: 'Change Status',
+  settings: 'Manage Settings',
 };
 
 const allActionsFor = (resource: ResourceType): { resource: ResourceType; action: ActionType }[] =>
@@ -281,14 +307,23 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'wallets', action: 'update' }, { resource: 'wallets', action: 'approve' },
     { resource: 'wallets', action: 'export' },
     { resource: 'accounting', action: 'read' }, { resource: 'accounting', action: 'export' },
+    { resource: 'accounting', action: 'reverse' },
     { resource: 'down_payments', action: 'create' }, { resource: 'down_payments', action: 'read' },
     { resource: 'down_payments', action: 'update' }, { resource: 'down_payments', action: 'approve' },
+    { resource: 'down_payments', action: 'reject' }, { resource: 'down_payments', action: 'delete' },
+    { resource: 'down_payments', action: 'reconcile' },
     { resource: 'cost_submissions', action: 'create' }, { resource: 'cost_submissions', action: 'read' },
     { resource: 'cost_submissions', action: 'update' }, { resource: 'cost_submissions', action: 'approve' },
     { resource: 'cost_submissions', action: 'mark_paid' },
+    { resource: 'cost_submissions', action: 'send_to_finance' },
+    { resource: 'cost_submissions', action: 'recall' },
+    { resource: 'cost_submissions', action: 'revert_tier' },
+    { resource: 'cost_submissions', action: 'reconcile' },
     { resource: 'cost_submissions', action: 'delete' }, { resource: 'cost_submissions', action: 'export' },
     { resource: 'pre_funding', action: 'read' }, { resource: 'pre_funding', action: 'create' },
     { resource: 'pre_funding', action: 'approve' }, { resource: 'pre_funding', action: 'export' },
+    { resource: 'pre_funding', action: 'update' }, { resource: 'pre_funding', action: 'close' },
+    { resource: 'pre_funding', action: 'reconcile' },
     { resource: 'pre_funding', action: 'use_for_payment' },
     { resource: 'procurement', action: 'read' }, { resource: 'procurement', action: 'approve' },
     { resource: 'procurement', action: 'export' },
@@ -296,10 +331,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     // HR
     { resource: 'hr', action: 'read' }, { resource: 'hr', action: 'update' },
     { resource: 'hr', action: 'export' },
-    { resource: 'payroll', action: 'read' }, { resource: 'payroll', action: 'approve' },
+    { resource: 'hr', action: 'create' }, { resource: 'hr', action: 'delete' },
+    { resource: 'hr', action: 'submit' }, { resource: 'hr', action: 'approve' }, { resource: 'hr', action: 'send' },
+    { resource: 'payroll', action: 'read' }, { resource: 'payroll', action: 'create' },
+    { resource: 'payroll', action: 'update' }, { resource: 'payroll', action: 'approve' },
     { resource: 'payroll', action: 'export' },
-    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'approve' },
-    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'update' },
+    { resource: 'salary_advances', action: 'create' }, { resource: 'salary_advances', action: 'update' },
+    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'create' }, { resource: 'leave', action: 'approve' },
+    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'create' },
+    { resource: 'benefits', action: 'submit' }, { resource: 'benefits', action: 'update' },
     { resource: 'benefits', action: 'approve' }, { resource: 'benefits', action: 'export' },
     { resource: 'succession', action: 'read' }, { resource: 'succession', action: 'update' },
     { resource: 'succession', action: 'export' },
@@ -309,6 +349,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     // Tools
     { resource: 'surveys', action: 'create' }, { resource: 'surveys', action: 'read' },
     { resource: 'surveys', action: 'update' }, { resource: 'surveys', action: 'delete' },
+    { resource: 'surveys', action: 'status' },
     { resource: 'surveys', action: 'export' },
     { resource: 'tasks', action: 'create' }, { resource: 'tasks', action: 'read' },
     { resource: 'tasks', action: 'update' }, { resource: 'tasks', action: 'delete' },
@@ -363,7 +404,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'hr', action: 'read' }, { resource: 'hr', action: 'export' },
     { resource: 'hr_analytics', action: 'read' }, { resource: 'hr_analytics', action: 'export' },
     { resource: 'payroll', action: 'read' }, { resource: 'payroll', action: 'export' },
-    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'approve' },
+    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'create' }, { resource: 'leave', action: 'approve' },
+    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'submit' },
     { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'export' },
     { resource: 'succession', action: 'read' }, { resource: 'succession', action: 'approve' },
     { resource: 'pulse_surveys', action: 'read' },
@@ -465,6 +507,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'crm', action: 'create' }, { resource: 'crm', action: 'read' },
     { resource: 'crm', action: 'update' }, { resource: 'crm', action: 'export' },
     { resource: 'surveys', action: 'read' }, { resource: 'surveys', action: 'create' },
+    { resource: 'surveys', action: 'status' },
     { resource: 'tasks', action: 'create' }, { resource: 'tasks', action: 'read' },
     { resource: 'tasks', action: 'update' }, { resource: 'tasks', action: 'assign' },
     { resource: 'notifications', action: 'read' },
@@ -472,6 +515,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'signatures', action: 'read' }, { resource: 'signatures', action: 'create' },
     { resource: 'pulse_surveys', action: 'read' },
     { resource: 'succession', action: 'read' },
+    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'create' },
+    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'submit' },
   ],
 
   // ── Financial Admin ──────────────────────────────────────────────────────
@@ -481,12 +526,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'finances', action: 'approve' }, { resource: 'finances', action: 'export' },
     { resource: 'cost_submissions', action: 'read' }, { resource: 'cost_submissions', action: 'approve' },
     { resource: 'cost_submissions', action: 'mark_paid' },
+    { resource: 'cost_submissions', action: 'send_to_finance' },
+    { resource: 'cost_submissions', action: 'recall' },
+    { resource: 'cost_submissions', action: 'revert_tier' },
+    { resource: 'cost_submissions', action: 'reconcile' },
     { resource: 'cost_submissions', action: 'export' },
     { resource: 'wallets', action: 'read' }, { resource: 'wallets', action: 'update' },
     { resource: 'wallets', action: 'approve' }, { resource: 'wallets', action: 'export' },
     { resource: 'accounting', action: 'read' }, { resource: 'accounting', action: 'create' },
     { resource: 'accounting', action: 'update' }, { resource: 'accounting', action: 'export' },
     { resource: 'down_payments', action: 'read' }, { resource: 'down_payments', action: 'approve' },
+    { resource: 'down_payments', action: 'delete' }, { resource: 'down_payments', action: 'reconcile' },
     { resource: 'down_payments', action: 'export' },
     { resource: 'pre_funding', action: 'read' }, { resource: 'pre_funding', action: 'create' },
     { resource: 'pre_funding', action: 'approve' }, { resource: 'pre_funding', action: 'export' },
@@ -503,7 +553,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'transactions', action: 'read' }, { resource: 'transactions', action: 'create' },
     { resource: 'notifications', action: 'read' },
     { resource: 'signatures', action: 'read' }, { resource: 'signatures', action: 'create' },
-    { resource: 'payroll', action: 'read' }, { resource: 'payroll', action: 'export' },
+    { resource: 'payroll', action: 'read' }, { resource: 'payroll', action: 'create' },
+    { resource: 'payroll', action: 'update' }, { resource: 'payroll', action: 'approve' }, { resource: 'payroll', action: 'export' },
+    { resource: 'salary_advances', action: 'create' }, { resource: 'salary_advances', action: 'update' },
     { resource: 'hr', action: 'read' },
   ],
 
@@ -525,6 +577,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'cost_submissions', action: 'read' }, { resource: 'cost_submissions', action: 'export' },
     { resource: 'wallets', action: 'read' }, { resource: 'wallets', action: 'approve' },
     { resource: 'users', action: 'read' }, { resource: 'users', action: 'assign' },
+    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'create' },
+    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'submit' },
     { resource: 'reports', action: 'read' }, { resource: 'reports', action: 'create' },
     { resource: 'reports', action: 'export' },
     { resource: 'audit_logs', action: 'read' },
@@ -565,6 +619,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'notifications', action: 'read' },
     { resource: 'calendar', action: 'read' },
     { resource: 'hr', action: 'read' },
+    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'create' },
+    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'submit' },
     { resource: 'pulse_surveys', action: 'read' },
     { resource: 'succession', action: 'read' }, { resource: 'succession', action: 'update' },
     { resource: 'pre_funding', action: 'read' },
@@ -587,7 +643,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'reports', action: 'read' }, { resource: 'reports', action: 'export' },
     { resource: 'tasks', action: 'read' }, { resource: 'tasks', action: 'create' },
     { resource: 'tasks', action: 'update' },
-    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'approve' },
+    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'create' }, { resource: 'leave', action: 'approve' },
+    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'submit' },
     { resource: 'notifications', action: 'read' },
     { resource: 'calendar', action: 'read' },
     { resource: 'signatures', action: 'read' },
@@ -600,6 +657,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'site_visits', action: 'export' },
     { resource: 'mmp', action: 'read' }, { resource: 'mmp', action: 'export' },
     { resource: 'safety', action: 'read' },
+    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'create' },
+    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'submit' },
     { resource: 'incidents', action: 'read' }, { resource: 'incidents', action: 'create' },
     { resource: 'cost_submissions', action: 'submit' }, { resource: 'cost_submissions', action: 'read' },
     { resource: 'cost_submissions', action: 'export' },
@@ -633,6 +692,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'notifications', action: 'read' },
     { resource: 'transactions', action: 'read' }, { resource: 'transactions', action: 'create' },
     { resource: 'pulse_surveys', action: 'read' },
+    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'create' },
+    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'submit' },
   ],
 
   // ── Data Collector ───────────────────────────────────────────────────────
@@ -648,6 +709,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'notifications', action: 'read' },
     { resource: 'surveys', action: 'read' }, { resource: 'surveys', action: 'submit' },
     { resource: 'pulse_surveys', action: 'read' }, { resource: 'pulse_surveys', action: 'submit' },
+    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'create' },
+    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'submit' },
   ],
 
   // ── Reviewer ─────────────────────────────────────────────────────────────

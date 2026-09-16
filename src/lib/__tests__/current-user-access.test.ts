@@ -5,6 +5,7 @@ import {
   getManifestNavigationPages,
   manifestHasExplicitActionGrant,
   manifestHasPermission,
+  legacySurveyActionAllowed,
   manifestIsTabBlocked,
   overrideIsActive,
   type CurrentUserAccessManifest,
@@ -22,6 +23,26 @@ const manifest = (overrides: Partial<CurrentUserAccessManifest> = {}): CurrentUs
 });
 
 describe('current user access manifest evaluator', () => {
+  it.each([
+    'hub_manager', 'Hub Manager', 'hubManager', 'HubManager',
+    'sr_program_officer', 'Senior Programme Officer', 'seniorProgramOfficer',
+  ])('preserves legacy survey lifecycle access for %s', (role) => {
+    const context = manifest({ roles: [role] });
+    expect(legacySurveyActionAllowed(context, 'create')).toBe(true);
+    expect(legacySurveyActionAllowed(context, 'update')).toBe(true);
+    expect(legacySurveyActionAllowed(context, 'delete')).toBe(true);
+    expect(legacySurveyActionAllowed(context, 'status')).toBe(true);
+  });
+
+  it('honors explicit user denial over legacy survey compatibility access', () => {
+    const context = manifest({
+      roles: ['hub_manager'],
+      action_overrides: { 'surveys:status': { is_granted: false } },
+    });
+    expect(legacySurveyActionAllowed(context, 'status')).toBe(false);
+    expect(legacySurveyActionAllowed(context, 'create')).toBe(true);
+  });
+
   it('uses the same denial for direct URLs and pinned or favorite navigation candidates', () => {
     const context = manifest({ roles: ['Admin'], page_overrides: { reports: { is_blocked: true } },
       action_overrides: { 'reports:read': { is_granted: true } } });

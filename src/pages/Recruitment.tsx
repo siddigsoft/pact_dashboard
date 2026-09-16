@@ -208,6 +208,12 @@ export default function Recruitment() {
   const { currentUser } = useAppContext();
   const { hasAnyRole, checkPermission } = useAuthorization();
   const canExport = checkPermission('hr', 'export');
+  const canCreate = checkPermission('hr', 'create');
+  const canUpdate = checkPermission('hr', 'update');
+  const canDelete = checkPermission('hr', 'delete');
+  const canSubmit = checkPermission('hr', 'submit');
+  const canApprove = checkPermission('hr', 'approve');
+  const canSend = checkPermission('hr', 'send');
   const { toast } = useToast();
   const navigate = useNavigate();
   const { isConnected: outlookConnected, createEvent: createOutlookEvent } = useOutlookCalendar();
@@ -339,6 +345,7 @@ export default function Recruitment() {
     setJobDialogOpen(true);
   }
   async function saveJob() {
+    if (!(editingJob ? canUpdate : canCreate)) return;
     if (!jobForm.title.trim()) { toast({ title: 'Title required', variant: 'destructive' }); return; }
     setSaving(true);
     const payload: any = {
@@ -356,6 +363,7 @@ export default function Recruitment() {
     else { toast({ title: editingJob ? 'Posting updated' : 'Posting created' }); setJobDialogOpen(false); fetchAll(); }
   }
   async function deleteJob(p: JobPosting) {
+    if (!canDelete) return;
     if (!confirm(`Delete posting "${p.title}"? This removes all candidates.`)) return;
     await supabase.from('hr_job_postings' as any).delete().eq('id', p.id);
     if (selectedPosting === p.id) setSelectedPosting(null);
@@ -378,6 +386,7 @@ export default function Recruitment() {
     setRubricNewLabel('');
   }
   async function saveRubric() {
+    if (!canUpdate) return;
     if (!rubricTargetPosting) return;
     const rubric = rubricDraft.length > 0 ? rubricDraft : null;
     await supabase.from('hr_job_postings' as any)
@@ -401,6 +410,7 @@ export default function Recruitment() {
     setCandDialogOpen(true);
   }
   async function saveCandidate() {
+    if (!(editingCand ? canUpdate : canCreate)) return;
     if (!selectedPosting || !candForm.full_name.trim()) {
       toast({ title: 'Candidate name required', variant: 'destructive' }); return;
     }
@@ -431,6 +441,7 @@ export default function Recruitment() {
     setCandDialogOpen(false); fetchAll();
   }
   async function deleteCandidate(c: Candidate) {
+    if (!canDelete) return;
     if (!confirm(`Remove "${c.full_name}"?`)) return;
     await supabase.from('hr_candidates' as any).delete().eq('id', c.id);
     fetchAll();
@@ -438,6 +449,7 @@ export default function Recruitment() {
 
   // ── Stage quick-set + hired dialog ────────────────────────────────────────
   async function quickSetStage(c: Candidate, stage: Candidate['stage']) {
+    if (!canUpdate) return;
     if (stage === 'hired') { setHiredDialog(c); setHiredProfileId(c.linked_profile_id ?? ''); return; }
     await supabase.from('hr_candidates' as any).update({ stage }).eq('id', c.id);
     if (stage === 'offer') { setDetailCand({ ...c, stage }); setDetailTab('offer'); }
@@ -445,7 +457,7 @@ export default function Recruitment() {
   }
 
   async function confirmHired() {
-    if (!hiredDialog) return;
+    if (!hiredDialog || !canUpdate) return;
     setSaving(true);
     const posting = postings.find(p => p.id === hiredDialog.job_posting_id);
 
@@ -515,7 +527,7 @@ export default function Recruitment() {
     else { setMyScores({}); setScoreNotes(''); }
   }
   async function submitScorecard() {
-    if (!detailCand || !currentUser) return;
+    if (!detailCand || !currentUser || !canSubmit) return;
     setSavingScore(true);
     const overall = calcOverall(myScores);
     const existing = scores.find(s => s.candidate_id === detailCand.id && s.interviewer_id === currentUser.id);
@@ -536,6 +548,7 @@ export default function Recruitment() {
     setSlotDialogOpen(true);
   }
   async function saveSlot() {
+    if (!canCreate) return;
     if (!slotCandId || !slotForm.scheduled_at) {
       toast({ title: 'Date/time required', variant: 'destructive' }); return;
     }
@@ -642,6 +655,7 @@ export default function Recruitment() {
 
   // ── Offer email send ───────────────────────────────────────────────────────
   async function sendOfferEmail(c: Candidate, posting: JobPosting | undefined) {
+    if (!canSend) return;
     if (!c.email || !posting) {
       toast({ title: 'Candidate has no email address', variant: 'destructive' }); return;
     }
@@ -708,6 +722,7 @@ export default function Recruitment() {
     setJrDialogOpen(true);
   }
   async function saveJr() {
+    if (!(editingJr ? canUpdate : canCreate)) return;
     if (!jrForm.title.trim()) { toast({ title: 'Title required', variant: 'destructive' }); return; }
     setSaving(true);
     const payload: any = {
@@ -725,6 +740,7 @@ export default function Recruitment() {
     else { toast({ title: editingJr ? 'Requisition updated' : 'Requisition created' }); setJrDialogOpen(false); fetchAll(); }
   }
   async function submitJr(jr: JobRequisition) {
+    if (!canSubmit) return;
     await supabase.from('hr_job_requisitions' as any).update({ status: 'pending_manager' }).eq('id', jr.id);
     try {
       await NotificationTriggerService.sendToRoles(['super_admin','admin','manager'], {
@@ -737,7 +753,7 @@ export default function Recruitment() {
     toast({ title: 'Requisition submitted for manager approval' });
   }
   async function handleApproveAction() {
-    if (!approveDialog || !currentUser) return;
+    if (!approveDialog || !currentUser || !canApprove) return;
     const { jr, action, layer } = approveDialog;
     setSavingApprove(true);
     let update: any = {};
@@ -775,6 +791,7 @@ export default function Recruitment() {
     fetchAll();
   }
   async function deleteJr(jr: JobRequisition) {
+    if (!canDelete) return;
     if (!confirm(`Delete requisition "${jr.title}"?`)) return;
     await supabase.from('hr_job_requisitions' as any).delete().eq('id', jr.id);
     fetchAll();
@@ -849,6 +866,7 @@ export default function Recruitment() {
     });
 
     async function saveOfferDetails() {
+      if (!canUpdate) return;
       setSavingOffer(true);
       await supabase.from('hr_candidates' as any)
         .update({ salary_offer: parseFloat(offerSalary) || null, offer_currency: offerCurrency, offer_start_date: offerStart || null })
@@ -882,6 +900,7 @@ export default function Recruitment() {
     }
 
     async function handleSendEmail() {
+      if (!canSend) return;
       setSendingEmail(true);
       const updatedCand = { ...c,
         salary_offer: parseFloat(offerSalary) || c.salary_offer,
@@ -940,12 +959,12 @@ export default function Recruitment() {
               )}
               {c.notes && <p className="text-sm text-muted-foreground border-t pt-2">{c.notes}</p>}
               <div className="flex gap-2 pt-2 border-t">
-                <Button size="sm" variant="outline" onClick={() => { setDetailCand(null); openEditCand(c); }}>
+                {canUpdate && <Button size="sm" variant="outline" onClick={() => { setDetailCand(null); openEditCand(c); }}>
                   <Edit2 className="h-3.5 w-3.5 mr-1" />Edit
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => { setDetailCand(null); openSlotDialog(c.id); }}>
+                </Button>}
+                {canCreate && <Button size="sm" variant="outline" onClick={() => { setDetailCand(null); openSlotDialog(c.id); }}>
                   <CalendarPlus className="h-3.5 w-3.5 mr-1" />Schedule Interview
-                </Button>
+                </Button>}
               </div>
             </TabsContent>
 
@@ -1013,10 +1032,10 @@ export default function Recruitment() {
                   ))}
                 </div>
                 <Textarea rows={2} placeholder="Notes (optional)" value={scoreNotes} onChange={e => setScoreNotes(e.target.value)} />
-                <Button size="sm" onClick={submitScorecard} disabled={savingScore}>
+                {canSubmit && <Button size="sm" onClick={submitScorecard} disabled={savingScore}>
                   {savingScore && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
                   {myExistingScore ? 'Update Scorecard' : 'Submit Scorecard'}
-                </Button>
+                </Button>}
               </div>
             </TabsContent>
 
@@ -1046,9 +1065,9 @@ export default function Recruitment() {
                   </CardContent>
                 </Card>
               ))}
-              <Button size="sm" variant="outline" onClick={() => { setDetailCand(null); openSlotDialog(c.id); }}>
+              {canCreate && <Button size="sm" variant="outline" onClick={() => { setDetailCand(null); openSlotDialog(c.id); }}>
                 <CalendarPlus className="h-3.5 w-3.5 mr-1" />Schedule New Interview
-              </Button>
+              </Button>}
             </TabsContent>
 
             {/* Offer Letter */}
@@ -1074,9 +1093,9 @@ export default function Recruitment() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={saveOfferDetails} disabled={savingOffer}>
+                {canUpdate && <Button size="sm" variant="outline" onClick={saveOfferDetails} disabled={savingOffer}>
                   {savingOffer && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Save Details
-                </Button>
+                </Button>}
                 {canExport && <ReportExportGate resource="hr">
                   <Button size="sm" variant="outline" onClick={previewPdf}>
                     <Eye className="h-3.5 w-3.5 mr-1" />Preview PDF
@@ -1087,7 +1106,7 @@ export default function Recruitment() {
                     <FileDown className="h-3.5 w-3.5 mr-1" />Download PDF
                   </Button>
                 </ReportExportGate>}
-                {c.email && (
+                {c.email && canSend && (
                   <Button size="sm" onClick={handleSendEmail} disabled={sendingEmail || saving}>
                     {(sendingEmail || saving) ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Mail className="h-3.5 w-3.5 mr-1" />}
                     Send via Email
@@ -1135,12 +1154,12 @@ export default function Recruitment() {
               <FileDown className="h-4 w-4 mr-1" />Export
             </Button>
           </ReportExportGate>}
-          {pageTab === 'postings' && isAdmin && (
+          {pageTab === 'postings' && isAdmin && canCreate && (
             <Button onClick={openNewJob} data-testid="button-new-posting">
               <Plus className="h-4 w-4 mr-1" />New Posting
             </Button>
           )}
-          {pageTab === 'requisitions' && (
+          {pageTab === 'requisitions' && canCreate && (
             <Button onClick={openNewJr} data-testid="button-new-jr">
               <Plus className="h-4 w-4 mr-1" />New Requisition
             </Button>
@@ -1220,15 +1239,15 @@ export default function Recruitment() {
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      {isAdmin && (
+                      {isAdmin && canUpdate && (
                         <Button size="sm" variant="outline" title="Configure scoring rubric"
                           onClick={() => openRubricDialog(activePosting)} data-testid="button-configure-rubric">
                           <Settings2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      {isAdmin && <Button size="sm" variant="outline" onClick={() => openEditJob(activePosting)}><Edit2 className="h-3.5 w-3.5" /></Button>}
-                      {isAdmin && <Button size="sm" variant="outline" className="text-red-600" onClick={() => deleteJob(activePosting)}><Trash2 className="h-3.5 w-3.5" /></Button>}
-                      {isAdmin && <Button size="sm" onClick={openNewCand} data-testid="button-add-candidate"><Plus className="h-3.5 w-3.5 mr-1" />Add Candidate</Button>}
+                      {isAdmin && canUpdate && <Button size="sm" variant="outline" onClick={() => openEditJob(activePosting)}><Edit2 className="h-3.5 w-3.5" /></Button>}
+                      {isAdmin && canDelete && <Button size="sm" variant="outline" className="text-red-600" onClick={() => deleteJob(activePosting)}><Trash2 className="h-3.5 w-3.5" /></Button>}
+                      {isAdmin && canCreate && <Button size="sm" onClick={openNewCand} data-testid="button-add-candidate"><Plus className="h-3.5 w-3.5 mr-1" />Add Candidate</Button>}
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -1267,13 +1286,13 @@ export default function Recruitment() {
                               <p className="text-xs text-muted-foreground">{c.email}{c.phone ? ` · ${c.phone}` : ''}</p>
                             </div>
                             <div className="flex flex-col items-end gap-2">
-                              <Select value={c.stage} onValueChange={(v) => quickSetStage(c, v as Candidate['stage'])} disabled={!isAdmin}>
+                              <Select value={c.stage} onValueChange={(v) => quickSetStage(c, v as Candidate['stage'])} disabled={!canUpdate}>
                                 <SelectTrigger className={cn('h-7 text-xs w-32', STAGE_CFG[c.stage].class)} data-testid={`select-stage-${c.id}`}>
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>{STAGES.map(s => <SelectItem key={s} value={s}>{STAGE_CFG[s].label}</SelectItem>)}</SelectContent>
                               </Select>
-                              {isAdmin && (
+                              {canUpdate && (
                                 <div className="flex gap-1">
                                   <Button size="icon" variant="ghost" className="h-6 w-6" title="Scorecard"
                                     onClick={() => openDetailForCand(c, 'scorecards')}>
@@ -1289,8 +1308,8 @@ export default function Recruitment() {
                                       <FileText className="h-3 w-3 text-emerald-500" />
                                     </Button>
                                   )}
-                                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEditCand(c)}><Edit2 className="h-3 w-3" /></Button>
-                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-red-600" onClick={() => deleteCandidate(c)}><Trash2 className="h-3 w-3" /></Button>
+                                  {canUpdate && <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEditCand(c)}><Edit2 className="h-3 w-3" /></Button>}
+                                  {canDelete && <Button size="icon" variant="ghost" className="h-6 w-6 text-red-600" onClick={() => deleteCandidate(c)}><Trash2 className="h-3 w-3" /></Button>}
                                 </div>
                               )}
                             </div>
@@ -1318,8 +1337,8 @@ export default function Recruitment() {
           )}
           {requisitions.map(jr => {
             const cfg = JR_STATUS_CFG[jr.status];
-            const canManagerApprove = isManager && jr.status === 'pending_manager';
-            const canHrApprove      = isAdmin   && jr.status === 'pending_hr';
+            const canManagerApprove = canApprove && isManager && jr.status === 'pending_manager';
+            const canHrApprove      = canApprove && isAdmin   && jr.status === 'pending_hr';
             return (
               <Card key={jr.id} data-testid={`card-jr-${jr.id}`}>
                 <CardContent className="p-4">
@@ -1374,7 +1393,7 @@ export default function Recruitment() {
                       </div>
                     </div>
                     <div className="flex gap-2 flex-wrap shrink-0">
-                      {jr.status === 'draft' && jr.requested_by === currentUser?.id && (
+                      {jr.status === 'draft' && jr.requested_by === currentUser?.id && canSubmit && (
                         <Button size="sm" onClick={() => submitJr(jr)} data-testid={`btn-submit-jr-${jr.id}`}>
                           Submit for Approval
                         </Button>
@@ -1407,12 +1426,12 @@ export default function Recruitment() {
                           </Button>
                         </>
                       )}
-                      {isAdmin && jr.status === 'draft' && (
+                      {isAdmin && canUpdate && jr.status === 'draft' && (
                         <Button size="sm" variant="ghost" onClick={() => openEditJr(jr)} data-testid={`btn-edit-jr-${jr.id}`}>
                           <Edit2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      {isAdmin && (
+                      {isAdmin && canDelete && (
                         <Button size="sm" variant="ghost" className="text-red-500" onClick={() => deleteJr(jr)}
                           data-testid={`btn-delete-jr-${jr.id}`}>
                           <Trash2 className="h-3.5 w-3.5" />
@@ -1679,7 +1698,7 @@ export default function Recruitment() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setJrDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveJr} disabled={saving} data-testid="button-save-jr">
+            <Button onClick={saveJr} disabled={saving || !(editingJr ? canUpdate : canCreate)} data-testid="button-save-jr">
               {saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}Save
             </Button>
           </DialogFooter>
@@ -1755,7 +1774,7 @@ export default function Recruitment() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setHiredDialog(null)}>Cancel</Button>
-            <Button onClick={confirmHired} disabled={saving} data-testid="button-confirm-hired">
+            <Button onClick={confirmHired} disabled={saving || !canUpdate} data-testid="button-confirm-hired">
               {saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
               Confirm Hired
             </Button>

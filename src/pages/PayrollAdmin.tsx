@@ -474,12 +474,12 @@ function generatePayslipPDF(emp: EmployeeRow, run: PayrollRun, item: RunItem, yt
 // ── Root ─────────────────────────────────────────────────────────────────────
 export default function PayrollAdmin() {
   const { currentUser } = useUser();
-  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin, checkPermission } = useAuthorization();
 
   // Schedule tab is restricted to FinancialAdmin and above (task spec: "Payroll schedule config restricted to FinancialAdmin and above")
-  const canManageSchedule = isSuperAdmin() || hasAnyRole([
+  const canManageSchedule = checkPermission('payroll', 'update') && (isSuperAdmin() || hasAnyRole([
     'super_admin', 'superAdmin', 'admin', 'financialAdmin',
-  ]);
+  ]));
 
   const PA_CACHE = { staleTime: 5 * 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false } as const;
 
@@ -868,6 +868,8 @@ const DEDUCTION_PRESETS: LineItem[] = [
 // ── Salary Edit Dialog ────────────────────────────────────────────────────────
 function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; departments: DeptOption[]; onClose: () => void }) {
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canUpdate = checkPermission('payroll', 'update');
   const qc = useQueryClient();
   const existing = emp.salary_config;
   const existingRetainer = emp.retainer;
@@ -971,6 +973,7 @@ function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; dep
   const willSaveSalary = salaryNew || salaryChanged;
 
   const save = async () => {
+    if (!canUpdate) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     if (!profileChanged && !willSaveSalary && !retainerChanged) {
       toast({ title: 'Nothing to save', description: 'No changes detected.' });
       return;
@@ -3131,6 +3134,9 @@ interface PayrollAdvance {
 
 function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; currentUserId: string }) {
   const canExport = usePayrollExportPermission();
+  const { checkPermission } = useAuthorization();
+  const canCreateAdvance = checkPermission('salary_advances', 'create');
+  const canUpdateAdvance = checkPermission('salary_advances', 'update');
   const { toast } = useToast();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -3160,6 +3166,7 @@ function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; c
   const totalOutstanding = outstanding.reduce((s, a) => s + (a.amount - a.recovered_amount), 0);
 
   const saveAdvance = async () => {
+    if (!canCreateAdvance) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     if (!newAdv.user_id || !newAdv.amount) { toast({ title: 'Fill in employee and amount', variant: 'destructive' }); return; }
     setSaving(true);
     const { error } = await supabase.from('payroll_advances').insert({
@@ -3177,6 +3184,7 @@ function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; c
   };
 
   const markRecovered = async (adv: PayrollAdvance, partialAmt?: number) => {
+    if (!canUpdateAdvance) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     const recAmount = partialAmt ?? adv.amount;
     const newRecovered = Math.min(adv.recovered_amount + recAmount, adv.amount);
     const newStatus = newRecovered >= adv.amount ? 'recovered' : 'outstanding';
@@ -3222,7 +3230,7 @@ function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; c
               <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export
             </Button>
           </PayrollExportGate>
-          <Button onClick={() => setShowForm(v => !v)} size="sm" className="h-9 gap-2 bg-[#0F2041] hover:bg-[#1D3461] text-white text-xs">
+            {canCreateAdvance && <Button onClick={() => setShowForm(v => !v)} size="sm" className="h-9 gap-2 bg-[#0F2041] hover:bg-[#1D3461] text-white text-xs">
             <Plus className="h-4 w-4" />{showForm ? 'Cancel' : 'Record Advance'}
           </Button>
         </div>
@@ -3307,13 +3315,13 @@ function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; c
                     <p className="text-sm font-bold text-amber-600">{fmt(balance, adv.currency)} outstanding</p>
                     <p className="text-[11px] text-muted-foreground">of {fmt(adv.amount, adv.currency)}</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  {canUpdateAdvance && <div className="flex items-center gap-2 shrink-0">
                     <Input type="number" placeholder={`Partial (max ${fmt(balance)})`} value={recoveryInputs[ridKey] ?? ''} onChange={e => setRecoveryInputs(p => ({ ...p, [ridKey]: e.target.value }))} className="h-8 w-36 text-xs text-right" />
                     <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                       onClick={() => { const amt = parseFloat(recoveryInputs[ridKey] ?? ''); markRecovered(adv, amt > 0 ? Math.min(amt, balance) : undefined); }}>
                       <CheckCircle className="h-3.5 w-3.5" />Recover
                     </Button>
-                  </div>
+                  </div>}
                 </div>
               );
             })}
@@ -3639,6 +3647,10 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
   const isColVisible = useColumnVisibility('payroll-admin');
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { checkPermission } = useAuthorization();
+  const canCreatePayroll = checkPermission('payroll', 'create');
+  const canApprovePayroll = checkPermission('payroll', 'approve');
+  const canUpdatePayroll = checkPermission('payroll', 'update');
 
   const [monthOffset, setMonthOffset]   = useState(0);
   const [preview, setPreview]           = useState<RunItem[]>([]);
@@ -3818,6 +3830,11 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
   }, [configured, includeTaskRewards, periodStart, periodEnd, periodLabel, toast]);
 
   const saveRun = async (newStatus: 'draft' | 'submitted' | 'approved' | 'locked') => {
+    if (newStatus === 'draft' || newStatus === 'submitted') {
+      if (existingRun ? !canUpdatePayroll : !canCreatePayroll) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
+    } else if (!canApprovePayroll) {
+      toast({ title: 'Not authorized', variant: 'destructive' }); return;
+    }
     if (!preview.length) { toast({ title: 'Compute preview first', variant: 'destructive' }); return; }
     newStatus === 'draft'     ? setSaving(true)    :
     newStatus === 'submitted' ? setSubmitting(true) :
@@ -4590,6 +4607,9 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
   currentUserId: string; runs: PayrollRun[]; employees: EmployeeRow[];
 }) {
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canCreate = checkPermission('payroll', 'create');
+  const canUpdate = checkPermission('payroll', 'update');
   const qc = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [triggering, setTriggering] = useState(false);
@@ -4644,6 +4664,7 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
   const nextDate = schedule.enabled && !schedule.paused ? nextTriggerDate(schedule.day_of_month) : null;
 
   const saveSchedule = async () => {
+    if (!canUpdate) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     const day = parseInt(dayInput);
     if (isNaN(day) || day < 1 || day > 31) {
       toast({ title: 'Enter a valid day of month (1–31)', variant: 'destructive' });
@@ -4661,6 +4682,7 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
   };
 
   const toggleEnabled = async () => {
+    if (!canUpdate) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     const updated = { ...schedule, enabled: !schedule.enabled };
     try {
       await persistSchedule(updated);
@@ -4671,6 +4693,7 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
   };
 
   const togglePaused = async () => {
+    if (!canUpdate) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     const updated = { ...schedule, paused: !schedule.paused };
     try {
       await persistSchedule(updated);
@@ -4681,6 +4704,7 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
   };
 
   const triggerNow = async () => {
+    if (!canCreate) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     setTriggering(true);
     const now = new Date();
     const startStr = format(startOfMonth(now), 'yyyy-MM-dd');
@@ -4838,6 +4862,7 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
               </div>
               <button
                 onClick={toggleEnabled}
+                disabled={!canUpdate}
                 className={cn(
                   'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none',
                   schedule.enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
@@ -4858,6 +4883,7 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
                   </div>
                   <button
                     onClick={togglePaused}
+                    disabled={!canUpdate}
                     className={cn(
                       'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none',
                       schedule.paused ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-600'
@@ -4895,7 +4921,7 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
             )}
 
             <div className="flex items-center gap-2 pt-2 border-t">
-              <Button size="sm" onClick={saveSchedule} disabled={saving} className="gap-1.5 bg-[#0F2041] hover:bg-[#1D3461] text-white" data-testid="btn-save-schedule">
+              <Button size="sm" onClick={saveSchedule} disabled={saving || !canUpdate} className="gap-1.5 bg-[#0F2041] hover:bg-[#1D3461] text-white" data-testid="btn-save-schedule">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                 Save Schedule
               </Button>
@@ -4935,7 +4961,7 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
               )}
             </div>
 
-            <Button onClick={triggerNow} disabled={triggering} className="w-full gap-2 bg-[#0F2041] hover:bg-[#1D3461] text-white" data-testid="btn-trigger-payroll-now">
+            <Button onClick={triggerNow} disabled={triggering || !canCreate} className="w-full gap-2 bg-[#0F2041] hover:bg-[#1D3461] text-white" data-testid="btn-trigger-payroll-now">
               {triggering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
               {triggering ? 'Creating Payroll Draft…' : 'Trigger Payroll Run Now'}
             </Button>

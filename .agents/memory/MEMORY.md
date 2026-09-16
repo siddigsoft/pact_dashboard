@@ -68,3 +68,4 @@
 - [WFP-confirmed enumerator fees](wfp-confirmed-enumerator-fees.md) — Ordinary enumerator wallet credit and fee payment require WFP-confirmed site status; completion alone never pays.
 - [Report export server boundaries](report-export-server-boundaries.md) — Enforce export permission only at true file-producing backend boundaries; shared page-data RPCs must keep read authorization.
 - [MMP full-report scope performance](mmp-full-report-scope-performance.md) — Full-report row predicates must not repeat database-backed authorization checks for every site.
+- [Action permission integrity](action-permission-integrity.md) — Never advertise a Role Management action unless its control and handler enforce it; seed defaults to avoid accidental lockouts.

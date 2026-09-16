@@ -230,11 +230,12 @@ function calcBurnDaysLeft(f: PreFundRow): number | null {
 }
 
 export default function PreFundingOverview() {
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
   const { canViewOrgPreFunds, isFinanceAdmin } = usePreFundOrgAccess();
   const navigate = useNavigate();
   // Finance/admin + Access Control grant: org-wide balance view; others: role baselines
   const canAccess = canViewOrgPreFunds || hasAnyRole(['coordinator', 'supervisor', 'fom', 'dataTeam', 'data_collector', 'employee', 'countryDirector']);
+  const canCreatePreFund = checkPermission('pre_funding', 'create');
   const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
 
   const [funds, setFunds]         = useState<PreFundRow[]>([]);
@@ -652,7 +653,7 @@ export default function PreFundingOverview() {
             <RefreshCw className={cn('h-4 w-4 mr-1.5', refreshing && 'animate-spin')} />
             Refresh
           </Button>
-          {isFinanceAdmin && (
+          {canCreatePreFund && (
           <Button size="sm" onClick={() => navigate('/pre-funding?tab=registry')} data-testid="button-new-fund">
             + New Fund
           </Button>
@@ -821,7 +822,7 @@ export default function PreFundingOverview() {
           <Banknote className="h-10 w-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No pre-funds found</p>
           <p className="text-sm mt-1">Create your first fund in the Fund Registry</p>
-          {isFinanceAdmin && <Button className="mt-4" onClick={() => navigate('/pre-funding?tab=registry')}>+ New Pre-Fund</Button>}
+          {canCreatePreFund && <Button className="mt-4" onClick={() => navigate('/pre-funding?tab=registry')}>+ New Pre-Fund</Button>}
         </div>
       ) : (
         <div className="space-y-4">

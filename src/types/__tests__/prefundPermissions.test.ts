@@ -3,6 +3,18 @@ import { ACTIONS, DEFAULT_ROLE_PERMISSIONS } from '@/types/roles';
 import { MODULE_REGISTRY } from '@/types/moduleRegistry';
 
 describe('Pre-Fund payment permissions', () => {
+  it('preserves intended recruitment, survey, and self-service defaults', () => {
+    const has = (role: keyof typeof DEFAULT_ROLE_PERMISSIONS, resource: string, action: string) =>
+      DEFAULT_ROLE_PERMISSIONS[role].some(p => p.resource === resource && p.action === action);
+    expect(has('Admin', 'hr', 'create')).toBe(true);
+    expect(has('Admin', 'hr', 'approve')).toBe(true);
+    expect(has('Admin', 'surveys', 'status')).toBe(true);
+    expect(has('Field Operation Manager (FOM)', 'surveys', 'status')).toBe(true);
+    expect(has('FinancialAdmin', 'hr', 'create')).toBe(false);
+    expect(has('Supervisor', 'leave', 'create')).toBe(true);
+    expect(has('Coordinator', 'benefits', 'submit')).toBe(true);
+  });
+
   it('keeps payment actions distinct from approval and page access', () => {
     expect(ACTIONS).toEqual(expect.arrayContaining(['mark_paid', 'use_for_payment']));
     expect(DEFAULT_ROLE_PERMISSIONS.Admin).toEqual(expect.arrayContaining([

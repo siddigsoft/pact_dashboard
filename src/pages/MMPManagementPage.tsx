@@ -32,7 +32,7 @@ const FieldOperationManagerPage = () => {
   const [partialLoading, setPartialLoading] = useState(true);
 
   // Delete is restricted to Super Admins only — it is a destructive, irreversible operation.
-  const canDeleteMMP = isSuperAdmin();
+  const canDeleteMMP = isSuperAdmin() || checkPermission('mmp', 'delete');
 
   const allowed = hasAnyRole(['admin', 'ict', 'fom', 'superAdmin']);
 

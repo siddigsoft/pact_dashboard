@@ -110,6 +110,18 @@ export function manifestHasPermission(
   );
 }
 
+/** Compatibility permission for legacy survey-management role codes. */
+export function legacySurveyActionAllowed(
+  manifest: Pick<CurrentUserAccessManifest, 'roles' | 'action_overrides'>,
+  action: string,
+): boolean {
+  if (!['create', 'update', 'delete', 'status'].includes(action)) return false;
+  const legacyRole = (role: string) => role.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!manifest.roles.some(role => ['hubmanager', 'srprogramofficer', 'seniorprogramofficer', 'seniorprogrammeofficer'].includes(legacyRole(role)))) return false;
+  const override = manifest.action_overrides[`surveys:${action}`];
+  return !(override && overrideIsActive(override) && override.is_granted === false);
+}
+
 /** True only for an active user_permission_overrides grant — not role defaults.
  * Used when Access Control intentionally widens scope (e.g. Field Assistant
  * viewing org-wide Cost Submissions like Down Payment Approval). */

@@ -6,7 +6,7 @@ import { ResourceType, ActionType } from '@/types/roles';
 import { normalizeRole } from '@/utils/roleMapping';
 import { useViewAs } from '@/context/ViewAsContext';
 import { useCurrentUserAccessManifest } from '@/hooks/useCurrentUserAccessManifest';
-import { manifestHasExplicitActionGrant, manifestHasPermission } from '@/lib/current-user-access';
+import { legacySurveyActionAllowed, manifestHasExplicitActionGrant, manifestHasPermission } from '@/lib/current-user-access';
 
 export const useAuthorization = () => {
   const { currentUser } = useAppContext();
@@ -115,9 +115,14 @@ export const useAuthorization = () => {
       }
       return false;
     }
-    return currentAccessManifest
-      ? manifestHasPermission(currentAccessManifest, resource, action)
-      : false;
+    if (!currentAccessManifest) return false;
+    // Legacy survey managers predate the role-permission registry. Preserve
+    // their four lifecycle capabilities, but let an active user-level deny
+    // remain authoritative over this compatibility grant.
+    if (resource === 'surveys' && ['create', 'update', 'delete', 'status'].includes(action)) {
+      if (legacySurveyActionAllowed(currentAccessManifest, action)) return true;
+    }
+    return manifestHasPermission(currentAccessManifest, resource, action);
   };
 
   /** Active user override grant only — excludes role-default permissions. */

@@ -144,6 +144,9 @@ export default function PerformanceReviews() {
   const { hasAnyRole, checkPermission } = useAuthorization();
   const canExport = checkPermission('hr_analytics', 'export');
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_admin', 'manager']);
+  const canCreate = isAdmin && checkPermission('hr_analytics', 'create');
+  const canUpdate = checkPermission('hr_analytics', 'update');
+  const canApprove = isAdmin && checkPermission('hr_analytics', 'approve');
 
   // ── Core data ──────────────────────────────────────────────────────────────
   const [reviews, setReviews]   = useState<Review[]>([]);
@@ -316,6 +319,7 @@ export default function PerformanceReviews() {
   }
 
   async function handleSave(submitForReview = false) {
+    if (!canUpdate && !canCreate) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     if (!form.reviewee_id || !form.review_period) return;
     setSaving(true);
     const ratedComps = form.competencies.filter(c => (c.rating ?? 0) > 0);
@@ -384,6 +388,7 @@ export default function PerformanceReviews() {
   }
 
   async function markCompleted(id: string) {
+    if (!canUpdate) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     const rev = reviews.find(r => r.id === id);
 
     // Gate: block completion if self-assessment is required but not yet submitted
@@ -452,6 +457,7 @@ export default function PerformanceReviews() {
   }
 
   async function deleteReview(id: string) {
+    if (!checkPermission('hr_analytics', 'delete')) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     const { error } = await supabase.from('performance_reviews').delete().eq('id', id);
     if (error) { toast({ title: 'Failed to delete', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Review deleted' });
@@ -535,6 +541,7 @@ export default function PerformanceReviews() {
   }
 
   async function approveNomination(id: string, approved: boolean) {
+    if (!canApprove) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     const { error } = await supabase.from('hr_review_peer_nominations').update({ approved }).eq('id', id);
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     if (approved) {

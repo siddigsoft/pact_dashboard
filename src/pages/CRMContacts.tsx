@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 interface Contact {
   id: string;
@@ -37,6 +38,10 @@ const BLANK: Omit<Contact, 'id' | 'created_at' | 'partner_name'> = {
 export default function CRMContacts() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canCreate = checkPermission('crm', 'create');
+  const canUpdate = checkPermission('crm', 'update');
+  const canDelete = checkPermission('crm', 'delete');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +87,10 @@ export default function CRMContacts() {
 
   const save = async () => {
     if (!form.name.trim()) { toast({ title: 'Name is required', variant: 'destructive' }); return; }
+    if (!(editing ? canUpdate : canCreate)) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to change CRM contacts.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...form, partner_id: form.partner_id || null };
@@ -105,6 +114,10 @@ export default function CRMContacts() {
 
   const remove = async (id: string) => {
     if (!confirm('Delete this contact?')) return;
+    if (!canDelete) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to delete CRM contacts.', variant: 'destructive' });
+      return;
+    }
     const { error } = await supabase.from('crm_contacts').delete().eq('id', id);
     if (error) toast({ title: 'Error deleting', variant: 'destructive' });
     else { toast({ title: 'Contact deleted' }); load(); }
@@ -131,9 +144,9 @@ export default function CRMContacts() {
               className="border-white/30 text-white hover:bg-white/10">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </Button>
-            <Button size="sm" onClick={openNew} className="bg-white text-[#0F2041] hover:bg-blue-50">
+            {canCreate && <Button size="sm" onClick={openNew} className="bg-white text-[#0F2041] hover:bg-blue-50">
               <Plus className="h-4 w-4 mr-1" /> Add Contact
-            </Button>
+            </Button>}
           </div>
         </div>
       </div>
@@ -163,7 +176,7 @@ export default function CRMContacts() {
             <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
             <p className="font-medium">{contacts.length === 0 ? 'No contacts yet' : 'No contacts match your search'}</p>
             {contacts.length === 0 && (
-              <Button className="mt-4" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Add first contact</Button>
+              {canCreate && <Button className="mt-4" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Add first contact</Button>}
             )}
           </div>
         ) : (
@@ -185,12 +198,12 @@ export default function CRMContacts() {
                       </div>
                     </div>
                     <div className="flex gap-1 shrink-0">
-                      <button onClick={() => openEdit(c)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                      {canUpdate && <button onClick={() => openEdit(c)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
                         <Edit2 className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => remove(c.id)} className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors">
+                      </button>}
+                      {canDelete && <button onClick={() => remove(c.id)} className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors">
                         <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      </button>}
                     </div>
                   </div>
 

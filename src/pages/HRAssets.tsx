@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { exportMultiSheetExcel } from '@/utils/report-export';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -95,8 +96,14 @@ const isHrAdmin = (role?: string | null) => {
 export default function HRAssets() {
   const { profile, user } = useUser();
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
   const qc = useQueryClient();
   const isAdmin = isHrAdmin(profile?.role);
+  const canCreate = isAdmin && checkPermission('fixed_assets', 'create');
+  const canUpdate = isAdmin && checkPermission('fixed_assets', 'update');
+  const canAssign = checkPermission('fixed_assets', 'assign');
+  const canArchive = checkPermission('fixed_assets', 'archive');
+  const canExport = checkPermission('fixed_assets', 'export');
 
   // Filters
   const [search, setSearch] = useState('');
@@ -207,6 +214,10 @@ export default function HRAssets() {
 
   // ── Save Asset ────────────────────────────────────────────────────────────
   const handleSaveAsset = async () => {
+    if (!(assetDialog?.mode === 'add' ? canCreate : canUpdate)) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to modify assets.', variant: 'destructive' });
+      return;
+    }
     if (!assetForm.name.trim()) { toast({ title: 'Asset name required', variant: 'destructive' }); return; }
     setSaving(true);
     try {
@@ -241,6 +252,10 @@ export default function HRAssets() {
 
   // ── Assign ────────────────────────────────────────────────────────────────
   const handleAssign = async () => {
+    if (!canAssign) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to assign assets.', variant: 'destructive' });
+      return;
+    }
     if (!assignDialog || !assignForm.userId) { toast({ title: 'Select an employee', variant: 'destructive' }); return; }
     setSaving(true);
     try {
@@ -280,6 +295,10 @@ export default function HRAssets() {
 
   // ── Return ────────────────────────────────────────────────────────────────
   const handleReturn = async () => {
+    if (!canArchive) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to return assets.', variant: 'destructive' });
+      return;
+    }
     if (!returnDialog?.assignment_id) return;
     setSaving(true);
     try {
@@ -302,6 +321,10 @@ export default function HRAssets() {
 
   // ── Excel Export (multi-sheet: Assets + Assignment History) ──────────────
   const handleExport = async () => {
+    if (!canExport) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to export assets.', variant: 'destructive' });
+      return;
+    }
     const assetRows = filtered.map(a => ({
       'Asset Name': a.name,
       'Type': ASSET_TYPES.find(t => t.value === a.asset_type)?.label ?? a.asset_type,
@@ -348,6 +371,10 @@ export default function HRAssets() {
 
   // ── Retire ────────────────────────────────────────────────────────────────
   const handleRetire = async (asset: Asset) => {
+    if (!canArchive) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to retire assets.', variant: 'destructive' });
+      return;
+    }
     if (!confirm(`Retire "${asset.name}"? It will no longer appear as available.`)) return;
     const { error } = await supabase.from('hr_assets').update({ status: 'retired', updated_at: new Date().toISOString() }).eq('id', asset.id);
     if (error) toast({ title: 'Retire failed', description: error.message, variant: 'destructive' });
@@ -369,10 +396,10 @@ export default function HRAssets() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5 h-8 text-xs" data-testid="button-export-assets">
+          {canExport && <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5 h-8 text-xs" data-testid="button-export-assets">
             <FileDown className="h-3.5 w-3.5" /> Export Excel
-          </Button>
-          {isAdmin && (
+          </Button>}
+          {canCreate && (
             <Button size="sm" onClick={() => { setAssetForm({ ...BLANK_ASSET }); setAssetDialog({ mode: 'add' }); }} className="gap-1.5 h-8 text-xs" data-testid="button-add-asset">
               <Plus className="h-3.5 w-3.5" /> Add Asset
             </Button>
@@ -445,7 +472,7 @@ export default function HRAssets() {
                 <Package className="h-7 w-7 text-muted-foreground" />
               </div>
               <p className="font-medium text-muted-foreground">No assets found.</p>
-              {isAdmin && <Button className="mt-4" size="sm" onClick={() => { setAssetForm({ ...BLANK_ASSET }); setAssetDialog({ mode: 'add' }); }}><Plus className="h-3.5 w-3.5 mr-1" />Add First Asset</Button>}
+              {canCreate && <Button className="mt-4" size="sm" onClick={() => { setAssetForm({ ...BLANK_ASSET }); setAssetDialog({ mode: 'add' }); }}><Plus className="h-3.5 w-3.5 mr-1" />Add First Asset</Button>}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -458,7 +485,7 @@ export default function HRAssets() {
                     <TableHead>Condition</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Assigned To</TableHead>
-                    {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                    {(canUpdate || canAssign || canArchive) && <TableHead className="text-right">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -499,28 +526,28 @@ export default function HRAssets() {
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                        {isAdmin && (
+                        {(canUpdate || canAssign || canArchive) && (
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
                               <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Edit" onClick={() => { setAssetForm({ asset_type: asset.asset_type, name: asset.name, serial_number: asset.serial_number ?? '', model: asset.model ?? '', purchase_date: asset.purchase_date ?? '', purchase_value: String(asset.purchase_value ?? ''), current_condition: asset.current_condition ?? 'good', status: asset.status, notes: asset.notes ?? '' }); setAssetDialog({ mode: 'edit', asset }); }} data-testid={`button-edit-${asset.id}`}>
                                 <Edit2 className="h-3.5 w-3.5" />
                               </Button>
-                              {asset.status === 'available' && (
+                              {canAssign && asset.status === 'available' && (
                                 <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-blue-600" title="Assign" onClick={() => { setAssignForm({ ...BLANK_ASSIGN }); setAssignDialog(asset); }} data-testid={`button-assign-${asset.id}`}>
                                   <UserCheck className="h-3.5 w-3.5" />
                                 </Button>
                               )}
-                              {asset.status === 'assigned' && (
+                              {canArchive && asset.status === 'assigned' && (
                                 <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-amber-600" title="Mark Returned" onClick={() => { setReturnForm({ ...BLANK_RETURN }); setReturnDialog(asset); }} data-testid={`button-return-${asset.id}`}>
                                   <RotateCcw className="h-3.5 w-3.5" />
                                 </Button>
                               )}
-                              {asset.status !== 'retired' && asset.status !== 'assigned' && (
+                              {canArchive && asset.status !== 'retired' && asset.status !== 'assigned' && (
                                 <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" title="Retire" onClick={() => handleRetire(asset)} data-testid={`button-retire-${asset.id}`}>
                                   <Archive className="h-3.5 w-3.5" />
                                 </Button>
                               )}
-                              {asset.status !== 'maintenance' && asset.status !== 'retired' && asset.status !== 'assigned' && (
+                              {canUpdate && asset.status !== 'maintenance' && asset.status !== 'retired' && asset.status !== 'assigned' && (
                                 <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-amber-600" title="Send for Maintenance" onClick={async () => { await supabase.from('hr_assets').update({ status: 'maintenance', updated_at: new Date().toISOString() }).eq('id', asset.id); invalidate(); }} data-testid={`button-maintenance-${asset.id}`}>
                                   <Wrench className="h-3.5 w-3.5" />
                                 </Button>

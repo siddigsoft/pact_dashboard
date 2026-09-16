@@ -529,6 +529,8 @@ export default function DownPaymentApproval() {
   const canApproveActions = hasWorkflowRole && canApproveDownPayment();
   const canEditActions = isAdmin && checkPermission('down_payments', 'update');
   const canExportActions = checkPermission('down_payments', 'export');
+  const canDeletePayment = checkPermission('down_payments', 'delete');
+  const canCorrectPreFund = isFinanceAdmin && checkPermission('down_payments', 'reconcile');
   const isDownPaymentTabVisible = useCallback(
     (tabId: string) => !isTabBlocked(hubTabSlug('down-payment-approval', tabId)),
     [isTabBlocked],
@@ -663,6 +665,10 @@ export default function DownPaymentApproval() {
   const submitPaymentDelete = useCallback(async () => {
     const payment = paymentDeleteDialog.payment;
     if (!payment || paymentDeleteDialog.reason.trim().length < 5) return;
+    if (!checkPermission('down_payments', 'delete')) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to delete a down-payment payment.', variant: 'destructive' });
+      return;
+    }
     setPaymentDeleteDialog(current => ({ ...current, saving: true }));
     try {
       await deleteLatestSourcePayment(payment.paymentEventId, paymentDeleteDialog.reason.trim());
@@ -674,7 +680,7 @@ export default function DownPaymentApproval() {
       toast({ title: 'Payment deletion failed', description: error?.message ?? 'The payment could not be deleted.', variant: 'destructive' });
       setPaymentDeleteDialog(current => ({ ...current, saving: false }));
     }
-  }, [paymentDeleteDialog, refreshRequests, toast]);
+  }, [checkPermission, paymentDeleteDialog, refreshRequests, toast]);
 
   useEffect(() => {
     if (!canManagePreFundFilters) {
@@ -792,7 +798,7 @@ export default function DownPaymentApproval() {
   }, [partialPayDialog, currentUser, refreshRequests, toast]);
 
   const openPreFundCorrectionDialog = useCallback(async (evidence: PaymentEvidence) => {
-    if (!isFinanceAdmin || !evidence.isCorrectable) return;
+    if (!isFinanceAdmin || !checkPermission('down_payments', 'reconcile') || !evidence.isCorrectable) return;
     setPreFundCorrectionDialog({
       open: true, evidence, replacementFundId: '', reason: '', funds: [], loadingFunds: true, saving: false,
     });
@@ -1454,14 +1460,14 @@ export default function DownPaymentApproval() {
             externalRequests={filteredRequests}
             externalRequestsAreFiltered={true}
             preFundPaymentEvidence={preFundLinksByRequest}
-            canCorrectPreFund={isFinanceAdmin}
+            canCorrectPreFund={canCorrectPreFund}
             onCorrectPreFund={paymentEventId => {
               const evidence = Array.from(preFundLinksByRequest.values())
                 .flat()
                 .find(link => link.paymentEventId === paymentEventId);
               if (evidence) void openPreFundCorrectionDialog(evidence);
             }}
-            canDeletePayment={isAdmin || isFinanceAdmin || isSuperAdmin}
+            canDeletePayment={canDeletePayment}
             canApproveActions={canApproveActions}
             canEditActions={canEditActions}
             canExportActions={canExportActions}
@@ -1484,7 +1490,7 @@ export default function DownPaymentApproval() {
               <CardDescription>Click a row to expand and see individual requests · Breakdown per state / region</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <GroupedSummaryTable rows={byState} groupLabel="State" loading={loading} getProfileName={getProfileName} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={isFinanceAdmin} onCorrectPreFund={openPreFundCorrectionDialog} />
+              <GroupedSummaryTable rows={byState} groupLabel="State" loading={loading} getProfileName={getProfileName} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={canCorrectPreFund} onCorrectPreFund={openPreFundCorrectionDialog} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1500,7 +1506,7 @@ export default function DownPaymentApproval() {
               <CardDescription>Grouped by cooperating partner / activity type · Click a row to expand requests</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <GroupedSummaryTable rows={byProject} groupLabel="Project / Activity" loading={loading} getProfileName={getProfileName} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={isFinanceAdmin} onCorrectPreFund={openPreFundCorrectionDialog} />
+              <GroupedSummaryTable rows={byProject} groupLabel="Project / Activity" loading={loading} getProfileName={getProfileName} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={canCorrectPreFund} onCorrectPreFund={openPreFundCorrectionDialog} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1516,7 +1522,7 @@ export default function DownPaymentApproval() {
               <CardDescription>Grouped by Monthly Monitoring Plan · Click a row to expand requests</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <GroupedSummaryTable rows={byMMP} groupLabel="MMP" loading={loading} getProfileName={getProfileName} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={isFinanceAdmin} onCorrectPreFund={openPreFundCorrectionDialog} />
+              <GroupedSummaryTable rows={byMMP} groupLabel="MMP" loading={loading} getProfileName={getProfileName} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={canCorrectPreFund} onCorrectPreFund={openPreFundCorrectionDialog} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1534,7 +1540,7 @@ export default function DownPaymentApproval() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <AllRequestsTable requests={filteredRequests} getProfileName={getProfileName} loading={loading} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={isFinanceAdmin} onCorrectPreFund={openPreFundCorrectionDialog} />
+              <AllRequestsTable requests={filteredRequests} getProfileName={getProfileName} loading={loading} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={canCorrectPreFund} onCorrectPreFund={openPreFundCorrectionDialog} />
             </CardContent>
           </Card>
         </TabsContent>

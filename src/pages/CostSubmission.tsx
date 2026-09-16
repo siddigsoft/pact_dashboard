@@ -2486,7 +2486,7 @@ const CostSubmission = () => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus === 'paid' || derivedStatus === 'reconciled') return false;
     if (derivedStatus !== 'under_review' && derivedStatus !== 'approved') return false;
-    return isSuperAdmin || isAdmin || hasRecallOverride;
+    return isSuperAdmin || checkPermission('cost_submissions', 'recall') || hasRecallOverride;
   };
 
   /** Returns the tier label (T1/T2/T3/T4) that would be reverted, or null if no revert is possible */
@@ -2501,7 +2501,7 @@ const CostSubmission = () => {
   };
 
   const canRevertSubmission = (oc: OperationalCostSubmission): boolean => {
-    if (!isSuperAdmin && !isAdmin) return false;
+    if (!isSuperAdmin && !checkPermission('cost_submissions', 'revert_tier')) return false;
     return getRevertTierLabel(oc) !== null;
   };
 
@@ -2562,7 +2562,7 @@ const CostSubmission = () => {
     if (derivedStatus !== 'paid') return false;
     // If nobody has been granted the override, reconcile is open to any viewer (legacy)
     // Once at least one override exists the button requires explicit grant
-    return isSuperAdmin || isAdmin || isFinanceAdmin || hasReconcileOverride;
+    return isSuperAdmin || checkPermission('cost_submissions', 'reconcile') || hasReconcileOverride;
   };
 
   // Per-user override checks (stored in user_permission_overrides with resource='cost_submissions')
@@ -2578,6 +2578,7 @@ const CostSubmission = () => {
   const canRevertPaid = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (isCountryDirector) return false;
+    if (!isSuperAdmin && !checkPermission('cost_submissions', 'revert_paid')) return false;
     return derivedStatus === 'paid' && (isSuperAdmin || isAdmin);
   };
 

@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 interface Opportunity {
   id: string;
@@ -60,6 +61,10 @@ function fmtCurrency(v: number) {
 export default function CRMOpportunities() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
+  const { checkPermission } = useAuthorization();
+  const canCreate = checkPermission('crm', 'create');
+  const canUpdate = checkPermission('crm', 'update');
+  const canDelete = checkPermission('crm', 'delete');
   const navigate = useNavigate();
   const { addProject, projects: allProjects } = useProjectContext();
   const [opps, setOpps] = useState<Opportunity[]>([]);
@@ -126,6 +131,10 @@ export default function CRMOpportunities() {
 
   const save = async () => {
     if (!form.title.trim()) { toast({ title: 'Title is required', variant: 'destructive' }); return; }
+    if (!(editing ? canUpdate : canCreate)) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to change CRM opportunities.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...form, partner_id: form.partner_id || null };
@@ -148,6 +157,10 @@ export default function CRMOpportunities() {
   };
 
   const remove = async (id: string) => {
+    if (!canDelete) {
+      toast({ title: 'Not authorized', description: 'You do not have permission to delete CRM opportunities.', variant: 'destructive' });
+      return;
+    }
     if (!confirm('Delete this opportunity?')) return;
     const { error } = await supabase.from('crm_opportunities').delete().eq('id', id);
     if (error) toast({ title: 'Error deleting', variant: 'destructive' });
@@ -260,9 +273,9 @@ export default function CRMOpportunities() {
               className="border-white/30 text-white hover:bg-white/10">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </Button>
-            <Button size="sm" onClick={openNew} className="bg-white text-[#0F2041] hover:bg-blue-50">
+            {canCreate && <Button size="sm" onClick={openNew} className="bg-white text-[#0F2041] hover:bg-blue-50">
               <Plus className="h-4 w-4 mr-1" /> New Opportunity
-            </Button>
+            </Button>}
           </div>
         </div>
 
@@ -318,7 +331,7 @@ export default function CRMOpportunities() {
             <Target className="h-12 w-12 mx-auto mb-3 opacity-30" />
             <p className="font-medium">{opps.length === 0 ? 'No opportunities yet' : 'No opportunities match your search'}</p>
             {opps.length === 0 && (
-              <Button className="mt-4" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Create first opportunity</Button>
+              {canCreate && <Button className="mt-4" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Create first opportunity</Button>}
             )}
           </div>
         ) : viewMode === 'board' ? (
@@ -348,12 +361,12 @@ export default function CRMOpportunities() {
                             <div className="flex items-start justify-between gap-1 mb-2">
                               <p className="font-medium text-sm leading-tight">{o.title}</p>
                               <div className="flex gap-0.5 shrink-0">
-                                <button onClick={() => openEdit(o)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                                {canUpdate && <button onClick={() => openEdit(o)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                                   <Edit2 className="h-3 w-3" />
-                                </button>
-                                <button onClick={() => remove(o.id)} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
+                                </button>}
+                                {canDelete && <button onClick={() => remove(o.id)} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
                                   <Trash2 className="h-3 w-3" />
-                                </button>
+                                </button>}
                               </div>
                             </div>
                             {o.partner_name && (
@@ -452,12 +465,12 @@ export default function CRMOpportunities() {
                           </button>
                         )}
                         <div className="flex gap-1">
-                          <button onClick={() => openEdit(o)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                          {canUpdate && <button onClick={() => openEdit(o)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                             <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button onClick={() => remove(o.id)} className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
+                          </button>}
+                          {canDelete && <button onClick={() => remove(o.id)} className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
                             <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          </button>}
                         </div>
                       </div>
                     </div>
