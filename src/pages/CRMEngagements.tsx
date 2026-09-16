@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 interface Engagement {
   id: string;
@@ -55,6 +56,7 @@ export default function CRMEngagements() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const { checkPermission } = useAuthorization();
+  const { isFilterVisible } = useCurrentUserAccess();
   const canCreate = checkPermission('crm', 'create');
   const canUpdate = checkPermission('crm', 'update');
   const canDelete = checkPermission('crm', 'delete');
@@ -64,6 +66,12 @@ export default function CRMEngagements() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [partnerFilter, setPartnerFilter] = useState('all');
+
+  useEffect(() => {
+    if (!isFilterVisible('crm-engagements.search')) setSearch('');
+    if (!isFilterVisible('crm-engagements.type')) setTypeFilter('all');
+    if (!isFilterVisible('crm-engagements.partner')) setPartnerFilter('all');
+  }, [isFilterVisible]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Engagement | null>(null);
   const [saving, setSaving] = useState(false);
@@ -180,28 +188,34 @@ export default function CRMEngagements() {
       <div className="p-6">
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search engagements..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
-          </div>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-full sm:w-44">
-              <SelectValue placeholder="All types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {ENGAGEMENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.emoji} {t.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={partnerFilter} onValueChange={setPartnerFilter}>
-            <SelectTrigger className="w-full sm:w-52">
-              <SelectValue placeholder="All partners" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Partners</SelectItem>
-              {partners.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {isFilterVisible('crm-engagements.search') && (
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search engagements..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+            </div>
+          )}
+          {isFilterVisible('crm-engagements.type') && (
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {ENGAGEMENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.emoji} {t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {isFilterVisible('crm-engagements.partner') && (
+            <Select value={partnerFilter} onValueChange={setPartnerFilter}>
+              <SelectTrigger className="w-full sm:w-52">
+                <SelectValue placeholder="All partners" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Partners</SelectItem>
+                {partners.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {loading ? (

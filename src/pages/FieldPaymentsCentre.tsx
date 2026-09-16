@@ -19,6 +19,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
@@ -322,6 +323,7 @@ function DataLoadError({ message, onRetry }: { message: string; onRetry: () => v
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function FieldPaymentsCentre() {
+  const { isFilterVisible } = useCurrentUserAccess();
   const { currentUser } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   const { checkPermission } = useAuthorization();
@@ -402,6 +404,20 @@ export default function FieldPaymentsCentre() {
   const [recoveryLoaded, setRecoveryLoaded] = useState(false);
   const [recoveryLoadError, setRecoveryLoadError] = useState<string | null>(null);
   const [recSearch, setRecSearch] = useState('');
+  useEffect(() => {
+    if (!isFilterVisible('field-payments-centre.hub')) setFilterHub('');
+    if (!isFilterVisible('field-payments-centre.state')) setFilterState('');
+    if (!isFilterVisible('field-payments-centre.mmp')) setFilterMmp('');
+    if (!isFilterVisible('field-payments-centre.enumerator')) setFilterEnumerator('');
+    if (!isFilterVisible('field-payments-centre.fees-search')) setFeeSearch('');
+    if (!isFilterVisible('field-payments-centre.fees-status')) setFeeStatusFilter('all');
+    if (!isFilterVisible('field-payments-centre.advances-search')) setAdvSearch('');
+    if (!isFilterVisible('field-payments-centre.advances-status')) setAdvStatusFilter('all');
+    if (!isFilterVisible('field-payments-centre.exceptions-search')) setExcSearch('');
+    if (!isFilterVisible('field-payments-centre.exceptions-decision')) setExcDecisionFilter('all');
+    if (!isFilterVisible('field-payments-centre.exceptions-status')) setExcStatusFilter('all');
+    if (!isFilterVisible('field-payments-centre.recovery-search')) setRecSearch('');
+  }, [isFilterVisible]);
 
   // Load all datasets once so shared summaries and filters never show false
   // zeroes simply because a tab has not been visited yet.
@@ -1706,7 +1722,7 @@ export default function FieldPaymentsCentre() {
         <span className="text-xs font-medium text-muted-foreground">Filter all tabs:</span>
 
         {/* Hub */}
-        <Select value={filterHub || '__all__'} onValueChange={v => {
+         {isFilterVisible('field-payments-centre.hub') && <Select value={filterHub || '__all__'} onValueChange={v => {
           setFilterHub(v === '__all__' ? '' : v);
           setFilterState('');
           setFilterMmp('');
@@ -1719,10 +1735,10 @@ export default function FieldPaymentsCentre() {
             <SelectItem value="__all__">All Hubs</SelectItem>
             {uniqueHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
           </SelectContent>
-        </Select>
+         </Select>}
 
         {/* State */}
-        <Select value={filterState || '__all__'} onValueChange={v => setFilterState(v === '__all__' ? '' : v)}>
+         {isFilterVisible('field-payments-centre.state') && <Select value={filterState || '__all__'} onValueChange={v => setFilterState(v === '__all__' ? '' : v)}>
           <SelectTrigger className="h-8 text-xs w-40">
             <SelectValue placeholder="All States" />
           </SelectTrigger>
@@ -1730,10 +1746,10 @@ export default function FieldPaymentsCentre() {
             <SelectItem value="__all__">All States</SelectItem>
             {uniqueStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
-        </Select>
+         </Select>}
 
         {/* MMP */}
-        <Select value={filterMmp || '__all__'} onValueChange={v => setFilterMmp(v === '__all__' ? '' : v)}>
+         {isFilterVisible('field-payments-centre.mmp') && <Select value={filterMmp || '__all__'} onValueChange={v => setFilterMmp(v === '__all__' ? '' : v)}>
           <SelectTrigger className="h-8 text-xs w-52">
             <SelectValue placeholder="All MMPs" />
           </SelectTrigger>
@@ -1741,10 +1757,10 @@ export default function FieldPaymentsCentre() {
             <SelectItem value="__all__">All MMPs</SelectItem>
             {uniqueMmpOptions.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
           </SelectContent>
-        </Select>
+         </Select>}
 
         {/* Enumerator */}
-        <Select value={filterEnumerator || '__all__'} onValueChange={v => setFilterEnumerator(v === '__all__' ? '' : v)}>
+         {isFilterVisible('field-payments-centre.enumerator') && <Select value={filterEnumerator || '__all__'} onValueChange={v => setFilterEnumerator(v === '__all__' ? '' : v)}>
           <SelectTrigger className="h-8 text-xs w-52">
             <SelectValue placeholder="All Enumerators" />
           </SelectTrigger>
@@ -1752,7 +1768,7 @@ export default function FieldPaymentsCentre() {
             <SelectItem value="__all__">All Enumerators</SelectItem>
             {uniqueEnumerators.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
           </SelectContent>
-        </Select>
+         </Select>}
 
         {activeFilterCount > 0 && (
           <>
@@ -1813,9 +1829,9 @@ export default function FieldPaymentsCentre() {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-48">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input className="pl-8 h-8 text-xs" placeholder="Search site, enumerator, state…" value={feeSearch} onChange={e => setFeeSearch(e.target.value)} />
+              {isFilterVisible('field-payments-centre.fees-search') && <Input className="pl-8 h-8 text-xs" placeholder="Search site, enumerator, state…" value={feeSearch} onChange={e => setFeeSearch(e.target.value)} />}
             </div>
-            <Select value={feeStatusFilter} onValueChange={v => setFeeStatusFilter(v as any)}>
+              {isFilterVisible('field-payments-centre.fees-status') && <Select value={feeStatusFilter} onValueChange={v => setFeeStatusFilter(v as any)}>
               <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
@@ -1823,7 +1839,7 @@ export default function FieldPaymentsCentre() {
                  <SelectItem value="partially_paid">Partially Paid</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
               </SelectContent>
-            </Select>
+              </Select>}
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadFees}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
@@ -1978,9 +1994,9 @@ export default function FieldPaymentsCentre() {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-48">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input className="pl-8 h-8 text-xs" placeholder="Search enumerator, site, MMP…" value={advSearch} onChange={e => setAdvSearch(e.target.value)} />
+              {isFilterVisible('field-payments-centre.advances-search') && <Input className="pl-8 h-8 text-xs" placeholder="Search enumerator, site, MMP…" value={advSearch} onChange={e => setAdvSearch(e.target.value)} />}
             </div>
-            <Select value={advStatusFilter} onValueChange={setAdvStatusFilter}>
+              {isFilterVisible('field-payments-centre.advances-status') && <Select value={advStatusFilter} onValueChange={setAdvStatusFilter}>
               <SelectTrigger className="h-8 text-xs w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
@@ -1990,7 +2006,7 @@ export default function FieldPaymentsCentre() {
                 <SelectItem value="fully_paid">Fully Paid</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
-            </Select>
+              </Select>}
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadAdvances}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
@@ -2091,9 +2107,9 @@ export default function FieldPaymentsCentre() {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-48">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input className="pl-8 h-8 text-xs" placeholder="Search site, enumerator, MMP…" value={excSearch} onChange={e => setExcSearch(e.target.value)} />
+              {isFilterVisible('field-payments-centre.exceptions-search') && <Input className="pl-8 h-8 text-xs" placeholder="Search site, enumerator, MMP…" value={excSearch} onChange={e => setExcSearch(e.target.value)} />}
             </div>
-            <Select value={excDecisionFilter} onValueChange={setExcDecisionFilter}>
+             {isFilterVisible('field-payments-centre.exceptions-decision') && <Select value={excDecisionFilter} onValueChange={setExcDecisionFilter}>
               <SelectTrigger className="h-8 text-xs w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Decisions</SelectItem>
@@ -2106,8 +2122,8 @@ export default function FieldPaymentsCentre() {
                 <SelectItem value="reassign">Reassign</SelectItem>
                 <SelectItem value="reduce">Reduce</SelectItem>
               </SelectContent>
-            </Select>
-            <div className="flex rounded-md border overflow-hidden">
+             </Select>}
+             {isFilterVisible('field-payments-centre.exceptions-status') && <div className="flex rounded-md border overflow-hidden">
               {(['pending', 'all', 'done'] as const).map(s => (
                 <button key={s} type="button"
                   onClick={() => setExcStatusFilter(s)}
@@ -2116,7 +2132,7 @@ export default function FieldPaymentsCentre() {
                   {s === 'pending' ? `Pending (${excStats.pending})` : s === 'done' ? `Done (${excStats.done})` : 'All'}
                 </button>
               ))}
-            </div>
+             </div>}
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadExceptions}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
@@ -2273,7 +2289,7 @@ export default function FieldPaymentsCentre() {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-48">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input className="pl-8 h-8 text-xs" placeholder="Search enumerator, site, MMP…" value={recSearch} onChange={e => setRecSearch(e.target.value)} />
+              {isFilterVisible('field-payments-centre.recovery-search') && <Input className="pl-8 h-8 text-xs" placeholder="Search enumerator, site, MMP…" value={recSearch} onChange={e => setRecSearch(e.target.value)} />}
             </div>
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadRecovery}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh

@@ -1,5 +1,5 @@
 import { exportToExcel } from '@/utils/report-export';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 import {
@@ -11,6 +11,7 @@ import {
 import { useAllProjectFieldTasks, type FieldTaskStatus, type FieldTaskPriority } from '@/hooks/useProjectTasks';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { useUser } from '@/context/user/UserContext';
 import { useDailyTaskDefinitions, type DailyTaskDefinition, type PersonalTaskPriority } from '@/hooks/usePersonalTasks';
@@ -367,6 +368,7 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
 }
 
 function DailyTemplatesPanel() {
+  const { isFilterVisible } = useCurrentUserAccess();
   const qc = useQueryClient();
   const { toast } = useToast();
   const { currentUser } = useUser();
@@ -379,6 +381,13 @@ function DailyTemplatesPanel() {
   const [templateDeptFilter, setTemplateDeptFilter] = useState('all');
   const [templateRecurrenceFilter, setTemplateRecurrenceFilter] = useState('all');
   const [templateTaskTypeFilter, setTemplateTaskTypeFilter] = useState<'project' | 'day_to_day' | 'general' | 'all'>('all');
+  useEffect(() => {
+    if (!isFilterVisible('task-admin.template-search')) setTemplateSearch('');
+    if (!isFilterVisible('task-admin.template-priority')) setTemplatePriorityFilter('all');
+    if (!isFilterVisible('task-admin.template-department')) setTemplateDeptFilter('all');
+    if (!isFilterVisible('task-admin.template-recurrence')) setTemplateRecurrenceFilter('all');
+    if (!isFilterVisible('task-admin.template-type')) setTemplateTaskTypeFilter('all');
+  }, [isFilterVisible]);
 
   const filteredDefinitions = useMemo(() => {
     return definitions.filter(def => {
@@ -468,7 +477,7 @@ function DailyTemplatesPanel() {
 
         {/* Filter bar */}
         <div className="flex flex-wrap gap-2 mb-3">
-          <div className="relative flex-1 min-w-[160px]">
+           {isFilterVisible('task-admin.template-search') && <div className="relative flex-1 min-w-[160px]">
             <input
               type="text"
               placeholder="Search templates…"
@@ -476,8 +485,8 @@ function DailyTemplatesPanel() {
               onChange={e => setTemplateSearch(e.target.value)}
               className="w-full h-8 pl-3 pr-3 text-xs border border-border/70 rounded-lg bg-muted/30 focus:outline-none focus:ring-1 focus:ring-[#1D3461]/40"
             />
-          </div>
-          <Select value={templatePriorityFilter} onValueChange={v => setTemplatePriorityFilter(v as PersonalTaskPriority | 'all')}>
+           </div>}
+           {isFilterVisible('task-admin.template-priority') && <Select value={templatePriorityFilter} onValueChange={v => setTemplatePriorityFilter(v as PersonalTaskPriority | 'all')}>
             <SelectTrigger className="h-8 w-auto min-w-[110px] text-xs border-border/70 bg-muted/30">
               <SelectValue placeholder="Priority" />
             </SelectTrigger>
@@ -488,8 +497,8 @@ function DailyTemplatesPanel() {
               <SelectItem value="high" className="text-xs">High</SelectItem>
               <SelectItem value="critical" className="text-xs">Critical</SelectItem>
             </SelectContent>
-          </Select>
-          <Select value={templateDeptFilter} onValueChange={setTemplateDeptFilter}>
+           </Select>}
+           {isFilterVisible('task-admin.template-department') && <Select value={templateDeptFilter} onValueChange={setTemplateDeptFilter}>
             <SelectTrigger className="h-8 w-auto min-w-[130px] text-xs border-border/70 bg-muted/30">
               <SelectValue placeholder="Department" />
             </SelectTrigger>
@@ -497,8 +506,8 @@ function DailyTemplatesPanel() {
               <SelectItem value="all" className="text-xs">All departments</SelectItem>
               {departments.map(d => <SelectItem key={d.id} value={d.id} className="text-xs">{d.name}</SelectItem>)}
             </SelectContent>
-          </Select>
-          <Select value={templateRecurrenceFilter} onValueChange={setTemplateRecurrenceFilter}>
+           </Select>}
+           {isFilterVisible('task-admin.template-recurrence') && <Select value={templateRecurrenceFilter} onValueChange={setTemplateRecurrenceFilter}>
             <SelectTrigger className="h-8 w-auto min-w-[120px] text-xs border-border/70 bg-muted/30">
               <SelectValue placeholder="Recurrence" />
             </SelectTrigger>
@@ -513,8 +522,8 @@ function DailyTemplatesPanel() {
               <SelectItem value="specific_days" className="text-xs">Specific days</SelectItem>
               <SelectItem value="monthly" className="text-xs">Monthly</SelectItem>
             </SelectContent>
-          </Select>
-          <Select value={templateTaskTypeFilter} onValueChange={v => setTemplateTaskTypeFilter(v as typeof templateTaskTypeFilter)}>
+           </Select>}
+           {isFilterVisible('task-admin.template-type') && <Select value={templateTaskTypeFilter} onValueChange={v => setTemplateTaskTypeFilter(v as typeof templateTaskTypeFilter)}>
             <SelectTrigger className="h-8 w-auto min-w-[120px] text-xs border-border/70 bg-muted/30">
               <SelectValue placeholder="Task Type" />
             </SelectTrigger>
@@ -524,7 +533,7 @@ function DailyTemplatesPanel() {
               <SelectItem value="day_to_day" className="text-xs">Day-to-Day</SelectItem>
               <SelectItem value="general" className="text-xs">General</SelectItem>
             </SelectContent>
-          </Select>
+           </Select>}
           {(templateSearch || templatePriorityFilter !== 'all' || templateDeptFilter !== 'all' || templateRecurrenceFilter !== 'all' || templateTaskTypeFilter !== 'all') && (
             <button
               type="button"

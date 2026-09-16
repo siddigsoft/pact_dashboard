@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { exportMultiSheetExcel } from '@/utils/report-export';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -104,6 +105,7 @@ export default function HRAssets() {
   const canAssign = checkPermission('fixed_assets', 'assign');
   const canArchive = checkPermission('fixed_assets', 'archive');
   const canExport = checkPermission('fixed_assets', 'export');
+  const { isFilterVisible } = useCurrentUserAccess();
 
   // Filters
   const [search, setSearch] = useState('');
@@ -111,6 +113,14 @@ export default function HRAssets() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [deptFilter, setDeptFilter] = useState('all');
+
+  useEffect(() => {
+    if (!isFilterVisible('hr-assets.search')) setSearch('');
+    if (!isFilterVisible('hr-assets.type')) setTypeFilter('all');
+    if (!isFilterVisible('hr-assets.status')) setStatusFilter('all');
+    if (!isFilterVisible('hr-assets.assigned-to')) setAssignedToFilter('all');
+    if (!isFilterVisible('hr-assets.department')) setDeptFilter('all');
+  }, [isFilterVisible]);
 
   // Dialogs
   const [assetDialog, setAssetDialog] = useState<{ mode: 'add' | 'edit'; asset?: Asset } | null>(null);
@@ -182,20 +192,20 @@ export default function HRAssets() {
   const empDeptMap = Object.fromEntries(employees.map(e => [e.id, e.department_id]));
 
   const filtered = assets.filter(a => {
-    if (typeFilter !== 'all' && a.asset_type !== typeFilter) return false;
-    if (statusFilter !== 'all' && a.status !== statusFilter) return false;
-    if (assignedToFilter !== 'all') {
+    if (isFilterVisible('hr-assets.type') && typeFilter !== 'all' && a.asset_type !== typeFilter) return false;
+    if (isFilterVisible('hr-assets.status') && statusFilter !== 'all' && a.status !== statusFilter) return false;
+    if (isFilterVisible('hr-assets.assigned-to') && assignedToFilter !== 'all') {
       if (assignedToFilter === 'unassigned') {
         if (a.assigned_to_id) return false;
       } else {
         if (a.assigned_to_id !== assignedToFilter) return false;
       }
     }
-    if (deptFilter !== 'all') {
+    if (isFilterVisible('hr-assets.department') && deptFilter !== 'all') {
       const assignedDept = a.assigned_to_id ? empDeptMap[a.assigned_to_id] : null;
       if (assignedDept !== deptFilter) return false;
     }
-    if (search) {
+    if (isFilterVisible('hr-assets.search') && search) {
       const q = search.toLowerCase();
       return a.name.toLowerCase().includes(q) ||
         (a.serial_number ?? '').toLowerCase().includes(q) ||
@@ -424,33 +434,33 @@ export default function HRAssets() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[200px]">
+        {isFilterVisible('hr-assets.search') && <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Search by name, serial, employee…" className="pl-8 h-8 text-sm" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-assets" />
-        </div>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
+        </div>}
+        {isFilterVisible('hr-assets.type') && <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-40 h-8 text-xs"><Filter className="h-3 w-3 mr-1" /><SelectValue placeholder="All Types" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
             {ASSET_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
           </SelectContent>
-        </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        </Select>}
+        {isFilterVisible('hr-assets.status') && <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-36 h-8 text-xs"><SelectValue placeholder="All Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             {Object.entries(STATUS_META).map(([v, m]) => <SelectItem key={v} value={v}>{m.label}</SelectItem>)}
           </SelectContent>
-        </Select>
-        <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
+        </Select>}
+        {isFilterVisible('hr-assets.assigned-to') && <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
           <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Assigned To" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Employees</SelectItem>
             <SelectItem value="unassigned">Unassigned</SelectItem>
             {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
           </SelectContent>
-        </Select>
-        {departments.length > 0 && (
+        </Select>}
+        {isFilterVisible('hr-assets.department') && departments.length > 0 && (
           <Select value={deptFilter} onValueChange={setDeptFilter}>
             <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Department" /></SelectTrigger>
             <SelectContent>

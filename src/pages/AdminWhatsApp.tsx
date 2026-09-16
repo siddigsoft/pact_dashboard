@@ -23,6 +23,7 @@ import {
   ArrowDownLeft, Settings, Info, X, Key, Eye, EyeOff, Save, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCurrentUserAccess } from "@/context/CurrentUserAccessContext";
 import { format, isValid } from "date-fns";
 
 const safeFormat = (raw: string | null | undefined, fmt: string, fallback = '—'): string => {
@@ -126,6 +127,7 @@ const TEMPLATE_PREVIEWS = [
 const FOOTER = '\n\n— PACT Command Center\nhttps://app.pactorg.com';
 
 export default function AdminWhatsAppPage() {
+  const { isFilterVisible } = useCurrentUserAccess();
   const navigate = useNavigate();
   const { authReady } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
@@ -140,6 +142,9 @@ export default function AdminWhatsAppPage() {
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('idle');
   const [connectionError, setConnectionError] = useState<{ keyMissing: boolean; detail: string } | null>(null);
   const [logFilter, setLogFilter] = useState<'all' | 'outbound' | 'inbound' | 'failed' | 'skipped'>('all');
+  useEffect(() => {
+    if (!isFilterVisible('admin-whatsapp.log-type')) setLogFilter('all');
+  }, [isFilterVisible]);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('inbox');
@@ -878,7 +883,7 @@ export default function AdminWhatsAppPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex gap-2 flex-wrap">
+             {isFilterVisible('admin-whatsapp.log-type') && <div className="flex gap-2 flex-wrap">
               {([
                 { key: 'all',      label: 'All',     count: logs.length },
                 { key: 'outbound', label: 'Sent',    count: logs.filter(l => l.status === 'sent').length },
@@ -902,7 +907,7 @@ export default function AdminWhatsAppPage() {
                   {f.label} ({f.count})
                 </button>
               ))}
-            </div>
+             </div>}
 
             {loadingLogs ? (
               <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>

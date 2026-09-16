@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, subDays } from 'date-fns';
 import {
@@ -479,6 +480,7 @@ function NewExportDialog({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function FieldDataExports() {
+  const { isFilterVisible } = useCurrentUserAccess();
   const { user } = useUser();
   const { checkPermission } = useAuthorization();
   const canExport = checkPermission('analytics', 'export');
@@ -489,6 +491,10 @@ export default function FieldDataExports() {
   const [showNew, setShowNew]           = useState(false);
   const [searchQ, setSearchQ]           = useState('');
   const [formatFilter, setFormatFilter] = useState('all');
+  useEffect(() => {
+    if (!isFilterVisible('field-data-exports.history-search')) setSearchQ('');
+    if (!isFilterVisible('field-data-exports.format')) setFormatFilter('all');
+  }, [isFilterVisible]);
   const [prefillFormId, setPrefillFormId] = useState<string | undefined>();
   const [prefillOpts, setPrefillOpts]   = useState<Partial<ExportOptions> | undefined>();
 
@@ -724,7 +730,7 @@ export default function FieldDataExports() {
         <div className="space-y-3">
           {/* Filters */}
           <div className="flex flex-wrap gap-2">
-            <div className="relative flex-1 min-w-[200px]">
+             {isFilterVisible('field-data-exports.history-search') && <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
               <Input
                 className="pl-8 text-sm"
@@ -733,8 +739,8 @@ export default function FieldDataExports() {
                 onChange={e => setSearchQ(e.target.value)}
                 data-testid="input-history-search"
               />
-            </div>
-            <Select value={formatFilter} onValueChange={setFormatFilter}>
+             </div>}
+             {isFilterVisible('field-data-exports.format') && <Select value={formatFilter} onValueChange={setFormatFilter}>
               <SelectTrigger className="w-44 text-sm" data-testid="select-format-filter">
                 <Filter className="w-3.5 h-3.5 mr-1.5" />
                 <SelectValue placeholder="All formats" />
@@ -743,7 +749,7 @@ export default function FieldDataExports() {
                 <SelectItem value="all">All Formats</SelectItem>
                 {EXPORT_FORMATS.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
               </SelectContent>
-            </Select>
+             </Select>}
           </div>
 
           {loadingJobs ? (

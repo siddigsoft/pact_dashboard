@@ -21,6 +21,7 @@ import {
 } from '@/lib/effectiveAccess';
 import { expandRelatedPageSlugs, getPageRoutePermissions, resolvePageToggleIntent } from '@/lib/pageAccessLinks';
 import { overrideIsActive, evaluateManifestPageAccess, manifestIsTabBlocked, type CurrentUserAccessManifest } from '@/lib/current-user-access';
+import { nextFilterOverride } from '@/lib/filter-visibility';
 
 // ── Context type ──────────────────────────────────────────────────────────────
 interface SelectedUserAccessValue {
@@ -309,9 +310,13 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
         const { error } = await (supabase as any).from('filter_visibility_config').delete().eq('id', existing.id);
         if (error) throw error;
       } else {
+        const inheritedHidden = target === 'user'
+          ? filterConfigs.some(row => row.role && effectiveRoleNames.includes(row.role) && row.filter_key === filterKey && row.is_hidden)
+          : false;
+        const isHidden = nextFilterOverride(existing, inheritedHidden);
         const { error } = await (supabase as any).from('filter_visibility_config').upsert(target === 'user'
-          ? { user_id: userId, role: null, filter_key: filterKey, is_hidden: true, set_by: currentUser?.id ?? null }
-          : { user_id: null, role: roleName, filter_key: filterKey, is_hidden: true, set_by: currentUser?.id ?? null });
+          ? { user_id: userId, role: null, filter_key: filterKey, is_hidden: isHidden, set_by: currentUser?.id ?? null }
+          : { user_id: null, role: roleName, filter_key: filterKey, is_hidden: isHidden, set_by: currentUser?.id ?? null });
         if (error) throw error;
       }
       await load();

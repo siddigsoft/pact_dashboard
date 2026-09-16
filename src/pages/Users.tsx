@@ -24,6 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useRestrictedAction } from '@/hooks/useRestrictedAction';
 import { PageAccessDenied } from '@/components/access/PageAccessDenied';
 import { toDisplayLabel, VISIBLE_ROLE_CODES, normalizeRole } from '@/utils/roleMapping';
@@ -98,6 +99,7 @@ import { FieldDeviceAssignments } from '@/components/user/FieldDeviceAssignments
 const STATE_ID_TO_NAME = new Map(sudanStates.map(s => [s.id, s.name]));
 
 const Users = () => {
+  const { isFilterVisible } = useCurrentUserAccess();
   const { currentUser, users, approveUser, rejectUser, refreshUsers, sendPasswordRecoveryEmail } = useUser();
   const { roles: allRoles, getUserRolesByUserId } = useRoleManagement();
   const { projects, updateProjectTeam, fetchProjects } = useProjectContext();
@@ -116,6 +118,13 @@ const Users = () => {
   const [hubFilter, setHubFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  useEffect(() => {
+    if (!isFilterVisible('users.search')) setSearchQuery('');
+    if (!isFilterVisible('users.role')) setRoleFilter('all');
+    if (!isFilterVisible('users.classification')) setClassificationFilter('all');
+    if (!isFilterVisible('users.hub')) setHubFilter('all');
+    if (!isFilterVisible('users.state')) setStateFilter('all');
+  }, [isFilterVisible]);
   const [isLoadingApproval, setIsLoadingApproval] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -1388,7 +1397,7 @@ const Users = () => {
 
             {/* Search and Filters */}
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="relative flex-1 min-w-[180px] max-w-[280px]">
+               {isFilterVisible('users.search') && <div className="relative flex-1 min-w-[180px] max-w-[280px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
@@ -1398,8 +1407,8 @@ const Users = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   data-testid="input-search"
                 />
-              </div>
-              <Select value={hubFilter} onValueChange={setHubFilter}>
+               </div>}
+               {isFilterVisible('users.hub') && <Select value={hubFilter} onValueChange={setHubFilter}>
                 <SelectTrigger className="h-9 w-[140px] rounded-lg" data-testid="select-hub">
                   <SelectValue placeholder="All Hubs" />
                 </SelectTrigger>
@@ -1410,8 +1419,8 @@ const Users = () => {
                     <SelectItem key={hub.id} value={hub.id}>{hub.name}</SelectItem>
                   ))}
                 </SelectContent>
-              </Select>
-              <Select value={stateFilter} onValueChange={setStateFilter}>
+               </Select>}
+               {isFilterVisible('users.state') && <Select value={stateFilter} onValueChange={setStateFilter}>
                 <SelectTrigger className="h-9 w-[140px] rounded-lg" data-testid="select-state">
                   <SelectValue placeholder="All States" />
                 </SelectTrigger>
@@ -1422,8 +1431,8 @@ const Users = () => {
                     <SelectItem key={state.id} value={state.id}>{state.name}</SelectItem>
                   ))}
                 </SelectContent>
-              </Select>
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
+               </Select>}
+               {isFilterVisible('users.role') && <Select value={roleFilter} onValueChange={setRoleFilter}>
                 <SelectTrigger className="h-9 w-[140px] rounded-lg" data-testid="select-role">
                   <SelectValue placeholder="All Roles" />
                 </SelectTrigger>
@@ -1433,8 +1442,8 @@ const Users = () => {
                     <SelectItem key={role} value={role}>{role}</SelectItem>
                   ))}
                 </SelectContent>
-              </Select>
-              <Select value={classificationFilter} onValueChange={setClassificationFilter}>
+               </Select>}
+               {isFilterVisible('users.classification') && <Select value={classificationFilter} onValueChange={setClassificationFilter}>
                 <SelectTrigger className="h-9 w-[170px] rounded-lg" data-testid="select-classification">
                   <SelectValue placeholder="All Classifications" />
                 </SelectTrigger>
@@ -1450,7 +1459,7 @@ const Users = () => {
                     </SelectItem>
                   ))}
                 </SelectContent>
-              </Select>
+               </Select>}
               {(searchQuery || roleFilter !== 'all' || classificationFilter !== 'all' || hubFilter !== 'all' || stateFilter !== 'all') && (
                 <Button 
                   variant="ghost" 

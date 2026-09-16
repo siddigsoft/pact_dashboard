@@ -7,6 +7,7 @@ import SimpleFieldTeamMap from '@/components/map/SimpleFieldTeamMap';
 import SiteVisitsSummary from '@/components/field-team/SiteVisitsSummary';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,7 @@ import {
 import { User } from '@/types';
 
 const FieldTeam = () => {
+  const { isFilterVisible } = useCurrentUserAccess();
   const { currentUser, updateUserLocation } = useUser();
   const { siteVisits } = useSiteVisitContext();
   const [activeTab, setActiveTab] = useState('map');
@@ -55,6 +57,11 @@ const FieldTeam = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  useEffect(() => {
+    if (!isFilterVisible('field-team.search')) setSearchTerm('');
+    if (!isFilterVisible('field-team.role')) setRoleFilter('all');
+    if (!isFilterVisible('field-team.status')) setStatusFilter('all');
+  }, [isFilterVisible]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -417,7 +424,7 @@ const FieldTeam = () => {
             </div>
             
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 min-w-[200px]">
+               {isFilterVisible('field-team.search') && <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search team members..."
@@ -426,9 +433,9 @@ const FieldTeam = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   data-testid="input-search-team"
                 />
-              </div>
+               </div>}
               
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
+               {isFilterVisible('field-team.role') && <Select value={roleFilter} onValueChange={setRoleFilter}>
                 <SelectTrigger className="w-[160px]" data-testid="select-role-filter">
                   <Filter className="h-4 w-4 mr-2" />
                   <SelectValue placeholder="Role" />
@@ -438,9 +445,9 @@ const FieldTeam = () => {
                   <SelectItem value="coordinator">Coordinators</SelectItem>
                   <SelectItem value="datacollector">Data Collectors</SelectItem>
                 </SelectContent>
-              </Select>
+               </Select>}
               
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+               {isFilterVisible('field-team.status') && <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[130px]" data-testid="select-status-filter">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
@@ -450,7 +457,7 @@ const FieldTeam = () => {
                   <SelectItem value="busy">Busy</SelectItem>
                   <SelectItem value="offline">Offline</SelectItem>
                 </SelectContent>
-              </Select>
+               </Select>}
             </div>
           </div>
         </CardHeader>

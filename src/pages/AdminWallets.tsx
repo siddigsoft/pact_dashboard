@@ -21,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 const fmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'NGN', currencyDisplay: 'narrowSymbol' }).format((c||0)/100);
@@ -30,11 +31,15 @@ const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 let _walletCache: { rows: any[]; currency: string; ts: number } | null = null;
 
 const AdminWallets: FC = () => {
+  const { isFilterVisible } = useCurrentUserAccess();
   const { checkPermission } = useAuthorization();
   const canExport = checkPermission('wallets', 'export');
   const isColVisible = useColumnVisibility('admin-wallets');
   const [rows, setRows] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  useEffect(() => {
+    if (!isFilterVisible('admin-wallets.search')) setSearch('');
+  }, [isFilterVisible]);
   const [currency, setCurrency] = useState('SDG');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [expandedWallets, setExpandedWallets] = useState<Set<string>>(new Set());
@@ -832,13 +837,13 @@ const AdminWallets: FC = () => {
       <div className="rounded-2xl bg-slate-800 border border-slate-700 px-5 py-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 z-10" />
-          <Input 
+          {isFilterVisible('admin-wallets.search') && <Input
             placeholder="Search by name, email, or user ID..." 
             value={search} 
             onChange={e=>setSearch(e.target.value)}
             className="pl-9 bg-slate-700 border-slate-600 text-white placeholder:text-slate-400 focus:border-teal-500"
             data-testid="input-search-wallets"
-          />
+          />}
         </div>
         <button
           onClick={() => setShowZeroBalance(v => !v)}

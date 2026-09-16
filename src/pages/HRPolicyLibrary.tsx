@@ -1,8 +1,9 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useToast } from '@/hooks/use-toast';
 import { exportMultiSheetExcel } from '@/utils/report-export';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -108,6 +109,7 @@ export default function HRPolicyLibrary() {
   const qc          = useQueryClient();
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const isAdmin     = isSuperAdmin() || hasAnyRole(['admin', 'super_admin', 'superadmin', 'hr_admin', 'ict']);
+  const { isFilterVisible } = useCurrentUserAccess();
 
   // View mode
   const [view, setView] = useState<'library' | 'compliance'>('library');
@@ -133,6 +135,16 @@ export default function HRPolicyLibrary() {
   const [cmpHubFilter, setCmpHubFilter]         = useState('all');
   const [cmpStatusFilter, setCmpStatusFilter]   = useState('all');
   const [expandedRow, setExpandedRow]           = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isFilterVisible('hr-policy-library.search')) setSearch('');
+    if (!isFilterVisible('hr-policy-library.category')) setCatFilter('all');
+    if (!isFilterVisible('hr-policy-library.status')) setStatFilter('all');
+    if (!isFilterVisible('hr-policy-library.compliance-policy')) setCmpPolicyFilter('all');
+    if (!isFilterVisible('hr-policy-library.compliance-department')) setCmpDeptFilter('all');
+    if (!isFilterVisible('hr-policy-library.compliance-hub')) setCmpHubFilter('all');
+    if (!isFilterVisible('hr-policy-library.compliance-status')) setCmpStatusFilter('all');
+  }, [isFilterVisible]);
 
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['hr-policies'] });
@@ -196,9 +208,9 @@ export default function HRPolicyLibrary() {
 
   // ── Library derived state ─────────────────────────────────────────────────────
   const filteredPolicies = policies.filter(p => {
-    if (catFilter !== 'all' && p.category !== catFilter) return false;
-    if (statFilter !== 'all' && p.status !== statFilter) return false;
-    if (search) {
+    if (isFilterVisible('hr-policy-library.category') && catFilter !== 'all' && p.category !== catFilter) return false;
+    if (isFilterVisible('hr-policy-library.status') && statFilter !== 'all' && p.status !== statFilter) return false;
+    if (isFilterVisible('hr-policy-library.search') && search) {
       const q = search.toLowerCase();
       return p.title.toLowerCase().includes(q) || p.category.toLowerCase().includes(q) || p.version.toLowerCase().includes(q);
     }
@@ -234,10 +246,10 @@ export default function HRPolicyLibrary() {
   });
 
   const filteredCompliance = complianceRows.filter(r => {
-    if (cmpPolicyFilter !== 'all' && r.policy.id !== cmpPolicyFilter) return false;
-    if (cmpDeptFilter !== 'all' && r.employee.department_id !== cmpDeptFilter) return false;
-    if (cmpHubFilter !== 'all' && r.employee.hub_id !== cmpHubFilter) return false;
-    if (cmpStatusFilter !== 'all' && r.status !== cmpStatusFilter) return false;
+    if (isFilterVisible('hr-policy-library.compliance-policy') && cmpPolicyFilter !== 'all' && r.policy.id !== cmpPolicyFilter) return false;
+    if (isFilterVisible('hr-policy-library.compliance-department') && cmpDeptFilter !== 'all' && r.employee.department_id !== cmpDeptFilter) return false;
+    if (isFilterVisible('hr-policy-library.compliance-hub') && cmpHubFilter !== 'all' && r.employee.hub_id !== cmpHubFilter) return false;
+    if (isFilterVisible('hr-policy-library.compliance-status') && cmpStatusFilter !== 'all' && r.status !== cmpStatusFilter) return false;
     return true;
   });
 
@@ -476,24 +488,24 @@ export default function HRPolicyLibrary() {
       {view === 'library' && (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2 items-center">
-            <div className="relative flex-1 min-w-[200px]">
+            {isFilterVisible('hr-policy-library.search') && <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input placeholder="Search policies…" className="pl-8 h-8 text-sm" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-policies" />
-            </div>
-            <Select value={catFilter} onValueChange={setCatFilter}>
+            </div>}
+            {isFilterVisible('hr-policy-library.category') && <Select value={catFilter} onValueChange={setCatFilter}>
               <SelectTrigger className="w-36 h-8 text-xs"><Filter className="h-3 w-3 mr-1" /><SelectValue placeholder="Category" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
                 {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
-            </Select>
-            <Select value={statFilter} onValueChange={setStatFilter}>
+            </Select>}
+            {isFilterVisible('hr-policy-library.status') && <Select value={statFilter} onValueChange={setStatFilter}>
               <SelectTrigger className="w-32 h-8 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 {Object.entries(STATUS_META).map(([v, m]) => <SelectItem key={v} value={v}>{m.label}</SelectItem>)}
               </SelectContent>
-            </Select>
+            </Select>}
           </div>
 
           {policiesLoading ? (
@@ -658,28 +670,28 @@ export default function HRPolicyLibrary() {
           <div className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Acknowledgement Detail</p>
             <div className="flex flex-wrap gap-2 items-center">
-              <Select value={cmpPolicyFilter} onValueChange={setCmpPolicyFilter}>
+              {isFilterVisible('hr-policy-library.compliance-policy') && <Select value={cmpPolicyFilter} onValueChange={setCmpPolicyFilter}>
                 <SelectTrigger className="w-52 h-8 text-xs"><SelectValue placeholder="All Policies" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Policies</SelectItem>
                   {publishedPolicies.map(p => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
                 </SelectContent>
-              </Select>
-              <Select value={cmpDeptFilter} onValueChange={setCmpDeptFilter}>
+              </Select>}
+              {isFilterVisible('hr-policy-library.compliance-department') && <Select value={cmpDeptFilter} onValueChange={setCmpDeptFilter}>
                 <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="All Departments" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Departments</SelectItem>
                   {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                 </SelectContent>
-              </Select>
-              <Select value={cmpHubFilter} onValueChange={setCmpHubFilter}>
+              </Select>}
+              {isFilterVisible('hr-policy-library.compliance-hub') && <Select value={cmpHubFilter} onValueChange={setCmpHubFilter}>
                 <SelectTrigger className="w-40 h-8 text-xs"><SelectValue placeholder="All Hubs" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Hubs</SelectItem>
                   {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
                 </SelectContent>
-              </Select>
-              <Select value={cmpStatusFilter} onValueChange={setCmpStatusFilter}>
+              </Select>}
+              {isFilterVisible('hr-policy-library.compliance-status') && <Select value={cmpStatusFilter} onValueChange={setCmpStatusFilter}>
                 <SelectTrigger className="w-32 h-8 text-xs"><SelectValue placeholder="All Status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
@@ -687,7 +699,7 @@ export default function HRPolicyLibrary() {
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="overdue">Overdue</SelectItem>
                 </SelectContent>
-              </Select>
+              </Select>}
               <span className="text-xs text-muted-foreground ml-auto">{filteredCompliance.length} records</span>
             </div>
 

@@ -20,6 +20,7 @@ import {
   Loader2, Search, ExternalLink, TrendingUp, Shield, Activity,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 interface CycleHealthRow {
   id: string;
@@ -48,11 +49,15 @@ const STATUS_BADGE: Record<string, { label: string; class: string }> = {
 };
 
 export default function AdminCycleHealth() {
+  const { isFilterVisible } = useCurrentUserAccess();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [cycles, setCycles] = useState<CycleHealthRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  useEffect(() => {
+    if (!isFilterVisible('admin-cycle-health.search')) setSearch('');
+  }, [isFilterVisible]);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   const load = useCallback(async () => {
@@ -239,7 +244,7 @@ export default function AdminCycleHealth() {
       </div>
 
       {/* Search */}
-      {cycles.length > 3 && (
+       {isFilterVisible('admin-cycle-health.search') && cycles.length > 3 && (
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input

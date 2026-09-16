@@ -20,6 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 interface Opportunity {
   id: string;
@@ -62,6 +63,7 @@ export default function CRMOpportunities() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const { checkPermission } = useAuthorization();
+  const { isFilterVisible } = useCurrentUserAccess();
   const canCreate = checkPermission('crm', 'create');
   const canUpdate = checkPermission('crm', 'update');
   const canDelete = checkPermission('crm', 'delete');
@@ -72,6 +74,11 @@ export default function CRMOpportunities() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('all');
+
+  useEffect(() => {
+    if (!isFilterVisible('crm-opportunities.search')) setSearch('');
+    if (!isFilterVisible('crm-opportunities.stage')) setStageFilter('all');
+  }, [isFilterVisible]);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Opportunity | null>(null);
@@ -299,19 +306,23 @@ export default function CRMOpportunities() {
       <div className="p-6">
         {/* Filters + View Toggle */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search opportunities..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
-          </div>
-          <Select value={stageFilter} onValueChange={setStageFilter}>
-            <SelectTrigger className="w-full sm:w-44">
-              <SelectValue placeholder="All stages" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Stages</SelectItem>
-              {STAGES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+            {isFilterVisible('crm-opportunities.search') && (
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Search opportunities..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+              </div>
+            )}
+            {isFilterVisible('crm-opportunities.stage') && (
+              <Select value={stageFilter} onValueChange={setStageFilter}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder="All stages" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Stages</SelectItem>
+                  {STAGES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           <div className="flex border rounded-lg overflow-hidden">
             <button onClick={() => setViewMode('board')}
               className={`px-3 py-2 text-xs font-medium transition-colors ${viewMode === 'board' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>

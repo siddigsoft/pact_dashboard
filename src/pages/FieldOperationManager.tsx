@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useAppContext } from '@/context/AppContext';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +31,7 @@ import { supabase } from '@/integrations/supabase/client'; // Use your shared cl
 import { useUser } from '@/context/user/UserContext';
 
 const FieldOperationManagerPage = () => {
+  const { isFilterVisible } = useCurrentUserAccess();
   const { roles } = useAppContext();
   const { currentUser } = useUser();
   const navigate = useNavigate();
@@ -43,6 +45,11 @@ const FieldOperationManagerPage = () => {
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [selectedReportHubs, setSelectedReportHubs] = useState<string[]>([]);
+  useEffect(() => {
+    if (!isFilterVisible('field-operation-manager.search')) setSearch('');
+    if (!isFilterVisible('field-operation-manager.month')) { setSelectedMonths([]); setReportPeriod([]); }
+    if (!isFilterVisible('field-operation-manager.hub')) setSelectedReportHubs([]);
+  }, [isFilterVisible]);
   const [selectedReportMMPs, setSelectedReportMMPs] = useState<string[]>([]);
   const [reportPeriod, setReportPeriod] = useState<string[]>([]);
 
@@ -1164,52 +1171,47 @@ const FieldOperationManagerPage = () => {
             </h2>
             {/* Search and Month Filter beside the title */}
             <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto relative">
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search by MMP name, ID, or status..."
-                className="w-full md:w-80 px-4 py-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-white dark:bg-blue-950 text-blue-900 dark:text-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
-              />
-              <div className="relative">
-                <button
-                  type="button"
-                  className="w-full md:w-56 px-3 py-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-white dark:bg-blue-950 text-blue-900 dark:text-blue-100 flex items-center justify-between"
-                  onClick={() => setShowMonthDropdown(v => !v)}
-                >
-                  {selectedMonths.length === 0
-                    ? 'Filter by Month'
-                    : selectedMonths.map(m => m).join(', ')}
-                  <span className="ml-2">{showMonthDropdown ? '▲' : '▼'}</span>
-                </button>
-                {showMonthDropdown && (
-                  <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg shadow-lg">
-                    {availableMonths.length === 0 && (
-                      <div className="px-4 py-2 text-sm text-muted-foreground">No months</div>
-                    )}
-                    {availableMonths.map(month => (
-                      <label
-                        key={month}
-                        className="flex items-center px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedMonths.includes(month)}
-                          onChange={e => {
-                            setSelectedMonths(prev =>
-                              e.target.checked
-                                ? [...prev, month]
-                                : prev.filter(m => m !== month)
-                            );
-                          }}
-                          className="mr-2"
-                        />
-                        <span>{month}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {isFilterVisible('field-operation-manager.search') && (
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search by MMP name, ID, or status..."
+                  className="w-full md:w-80 px-4 py-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-white dark:bg-blue-950 text-blue-900 dark:text-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              )}
+              {isFilterVisible('field-operation-manager.month') && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    className="w-full md:w-56 px-3 py-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-white dark:bg-blue-950 text-blue-900 dark:text-blue-100 flex items-center justify-between"
+                    onClick={() => setShowMonthDropdown(v => !v)}
+                  >
+                    {selectedMonths.length === 0 ? 'Filter by Month' : selectedMonths.join(', ')}
+                    <span className="ml-2">{showMonthDropdown ? '▲' : '▼'}</span>
+                  </button>
+                  {showMonthDropdown && (
+                    <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg shadow-lg">
+                      {availableMonths.length === 0 && (
+                        <div className="px-4 py-2 text-sm text-muted-foreground">No months</div>
+                      )}
+                      {availableMonths.map(month => (
+                        <label key={month} className="flex items-center px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedMonths.includes(month)}
+                            onChange={e => setSelectedMonths(prev =>
+                              e.target.checked ? [...prev, month] : prev.filter(m => m !== month)
+                            )}
+                            className="mr-2"
+                          />
+                          <span>{month}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           {/* Category Tabs */}
@@ -1331,7 +1333,7 @@ const FieldOperationManagerPage = () => {
                 ×
               </button>
               <h3 className="text-xl font-bold mb-4">Generate Report</h3>
-              <div className="mb-4">
+               <div className="mb-4">
                 <label className="block font-semibold mb-1">Period (Months)</label>
                 <MultiSelectDropdown
                   label="Months"
@@ -1340,8 +1342,8 @@ const FieldOperationManagerPage = () => {
                   setSelected={setReportPeriod}
                   allLabel="All Months"
                 />
-              </div>
-              <div className="mb-4">
+               </div>
+               {isFilterVisible('field-operation-manager.hub') && <div className="mb-4">
                 <label className="block font-semibold mb-1">Hubs</label>
                 <MultiSelectDropdown
                   label="Hubs"
@@ -1350,7 +1352,7 @@ const FieldOperationManagerPage = () => {
                   setSelected={setSelectedReportHubs}
                   allLabel="All Hubs"
                 />
-              </div>
+               </div>}
               <div className="mb-4">
                 <label className="block font-semibold mb-1">MMPs</label>
                 <MultiSelectDropdown

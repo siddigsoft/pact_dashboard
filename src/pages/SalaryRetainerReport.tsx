@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface LineItem { name: string; amount: number; type: 'fixed' | 'percent'; }
@@ -83,6 +84,7 @@ interface RawRetainerTx {
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function SalaryRetainerReport() {
   const { isSuperAdmin, hasAnyRole, checkPermission } = useAuthorization();
+  const { isFilterVisible } = useCurrentUserAccess();
   const canExport = checkPermission('payroll', 'export');
   const navigate = useNavigate();
   const isAuthorized = isSuperAdmin() || hasAnyRole([
@@ -103,6 +105,11 @@ export default function SalaryRetainerReport() {
   const [dateRangeMode, setDateRangeMode] = useState<'month' | 'custom'>('month');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  useEffect(() => {
+    if (!isFilterVisible('salary-retainer-report.search')) setSearch('');
+    if (!isFilterVisible('salary-retainer-report.department')) setDeptFilter('all');
+    if (!isFilterVisible('salary-retainer-report.type')) setTypeFilter('all');
+  }, [isFilterVisible]);
 
   const periodStart = dateRangeMode === 'custom' && customStart
     ? new Date(customStart)
@@ -402,9 +409,9 @@ export default function SalaryRetainerReport() {
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or department…" className="pl-9 h-9 text-sm bg-white dark:bg-slate-900" data-testid="input-search" />
+            {isFilterVisible('salary-retainer-report.search') && <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or department…" className="pl-9 h-9 text-sm bg-white dark:bg-slate-900" data-testid="input-search" />}
           </div>
-          <Select value={deptFilter} onValueChange={setDeptFilter}>
+          {isFilterVisible('salary-retainer-report.department') && <Select value={deptFilter} onValueChange={setDeptFilter}>
             <SelectTrigger className="h-9 w-[180px] text-sm bg-white dark:bg-slate-900" data-testid="select-department">
               <Building2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
               <SelectValue placeholder="All Departments" />
@@ -413,8 +420,8 @@ export default function SalaryRetainerReport() {
               <SelectItem value="all">All Departments</SelectItem>
               {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
             </SelectContent>
-          </Select>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
+          </Select>}
+          {isFilterVisible('salary-retainer-report.type') && <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="h-9 w-[150px] text-sm bg-white dark:bg-slate-900" data-testid="select-type">
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
@@ -423,7 +430,7 @@ export default function SalaryRetainerReport() {
               <SelectItem value="salary">Salary Only</SelectItem>
               <SelectItem value="retainer">Retainer Only</SelectItem>
             </SelectContent>
-          </Select>
+          </Select>}
           <Badge variant="outline" className="h-9 px-3 text-xs font-medium bg-white dark:bg-slate-900">{filtered.length} employees</Badge>
         </div>
 

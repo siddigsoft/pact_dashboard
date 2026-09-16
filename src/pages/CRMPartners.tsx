@@ -32,6 +32,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CRMPartner {
@@ -140,6 +141,7 @@ export default function CRMPartners() {
   const { isSuperAdmin, checkPermission } = useAuthorization();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
+  const { isFilterVisible } = useCurrentUserAccess();
 
 
   const roleCanManage = isSuperAdmin || checkPermission('crm', 'create');
@@ -154,6 +156,12 @@ export default function CRMPartners() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+
+  useEffect(() => {
+    if (!isFilterVisible('crm-partners.search')) setSearch('');
+    if (!isFilterVisible('crm-partners.type')) setFilterType('all');
+    if (!isFilterVisible('crm-partners.status')) setFilterStatus('all');
+  }, [isFilterVisible]);
 
   const [selectedPartner, setSelectedPartner] = useState<CRMPartner | null>(null);
   const [engagements, setEngagements] = useState<CRMEngagement[]>([]);
@@ -349,37 +357,43 @@ export default function CRMPartners() {
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search by name, contact, sector..."
-              className="pl-9"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="All types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {PARTNER_TYPES.map(t => (
-                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-              <SelectItem value="prospect">Prospect</SelectItem>
-            </SelectContent>
-          </Select>
+          {isFilterVisible('crm-partners.search') && (
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search by name, contact, sector..."
+                className="pl-9"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+          )}
+          {isFilterVisible('crm-partners.type') && (
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {PARTNER_TYPES.map(t => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {isFilterVisible('crm-partners.status') && (
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="prospect">Prospect</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Button variant="ghost" size="icon" onClick={loadPartners} title="Refresh">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>

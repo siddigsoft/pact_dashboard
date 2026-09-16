@@ -1803,6 +1803,7 @@ function OrgNode({ person, depth = 0, expandAll, childrenOf, navigate }: OrgNode
 
 function OrgChartView() {
   const { checkPermission } = useAuthorization();
+  const { isFilterVisible } = useCurrentUserAccess();
   const canExport = checkPermission('hr', 'export');
   const navigate = useNavigate();
   const [searchQ, setSearchQ] = useState('');
@@ -1810,6 +1811,11 @@ function OrgChartView() {
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState<null | 'png' | 'pdf'>(null);
+
+  useEffect(() => {
+    if (!isFilterVisible('hr-hub.org-chart.department')) setDeptFilter('all');
+    if (!isFilterVisible('hr-hub.org-chart.search')) setSearchQ('');
+  }, [isFilterVisible]);
 
   async function handleExport(kind: 'png' | 'pdf') {
     if (!checkPermission('hr', 'export')) return;
@@ -1882,9 +1888,9 @@ function OrgChartView() {
 
   const visiblePeople = useMemo(() => {
     let list = people;
-    if (deptFilter !== 'all') list = list.filter(p => p.department_name === deptFilter);
+    if (isFilterVisible('hr-hub.org-chart.department') && deptFilter !== 'all') list = list.filter(p => p.department_name === deptFilter);
     return list;
-  }, [people, deptFilter]);
+  }, [people, deptFilter, isFilterVisible]);
 
   const personMap = useMemo(() => {
     const m: Record<string, OrgPersonExtended> = {};
@@ -1905,13 +1911,13 @@ function OrgChartView() {
   const roots = useMemo(() => visiblePeople.filter(p => !p.reports_to || !personMap[p.reports_to]), [visiblePeople, personMap]);
 
   const filteredPeople = useMemo(() => {
-    if (!searchQ.trim()) return null;
+    if (!isFilterVisible('hr-hub.org-chart.search') || !searchQ.trim()) return null;
     const q = searchQ.toLowerCase();
     return visiblePeople.filter(p =>
       (p.full_name ?? '').toLowerCase().includes(q) ||
       (p.department_name ?? '').toLowerCase().includes(q) ||
       (p.role ?? '').toLowerCase().includes(q));
-  }, [visiblePeople, searchQ]);
+  }, [visiblePeople, searchQ, isFilterVisible]);
 
   if (isLoading) return <PageLoader compact />;
 
@@ -1930,7 +1936,7 @@ function OrgChartView() {
         </div>
         <div className="ml-auto flex items-center gap-2 flex-wrap">
           {/* Department filter */}
-          <Select value={deptFilter} onValueChange={setDeptFilter}>
+          {isFilterVisible('hr-hub.org-chart.department') && <Select value={deptFilter} onValueChange={setDeptFilter}>
             <SelectTrigger className="h-8 w-[150px] text-xs bg-white dark:bg-slate-900">
               <Filter className="h-3 w-3 mr-1 text-muted-foreground" />
               <SelectValue placeholder="All departments" />
@@ -1939,13 +1945,13 @@ function OrgChartView() {
               <SelectItem value="all">All departments</SelectItem>
               {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
             </SelectContent>
-          </Select>
+          </Select>}
           {/* Search */}
-          <div className="relative">
+          {isFilterVisible('hr-hub.org-chart.search') && <div className="relative">
             <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
             <Input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search staff…"
               className="h-8 pl-8 text-xs bg-white dark:bg-slate-900 w-44" />
-          </div>
+          </div>}
           {/* Expand/Collapse all */}
           <div className="flex border rounded-lg overflow-hidden">
             <button onClick={() => setExpandAll(true)}  title="Expand all"

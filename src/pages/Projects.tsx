@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useProjectStalledAlert } from '@/hooks/useProjectStalledAlert';
@@ -29,6 +29,7 @@ import ProjectTimelineView from '@/components/project/ProjectTimelineView';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useUser } from '@/context/user/UserContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +54,7 @@ function getInitialView(): ViewMode {
 }
 
 const ProjectsPage = () => {
+  const { isFilterVisible } = useCurrentUserAccess();
   const navigate = useNavigate();
   useProjectStalledAlert();
   const { hasAnyRole, isSuperAdmin, hasExplicitActionGrant, checkPermission } = useAuthorization();
@@ -70,6 +72,12 @@ const ProjectsPage = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPM, setFilterPM] = useState('all');
   const [filterSearch, setFilterSearch] = useState('');
+  useEffect(() => {
+    if (!isFilterVisible('projects.type')) setFilterType('all');
+    if (!isFilterVisible('projects.status')) setFilterStatus('all');
+    if (!isFilterVisible('projects.manager')) setFilterPM('all');
+    if (!isFilterVisible('projects.search')) setFilterSearch('');
+  }, [isFilterVisible]);
 
   const handleViewMode = (mode: ViewMode) => {
     setViewMode(mode);
@@ -319,7 +327,7 @@ const ProjectsPage = () => {
         {/* Shared filter bar for board and timeline */}
         {viewMode !== 'list' && (
           <div className="flex flex-wrap gap-2 px-3 py-2 border-b border-border/60">
-            <div className="relative flex-1 min-w-[160px]">
+             {isFilterVisible('projects.search') && <div className="relative flex-1 min-w-[160px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <Input
                 placeholder="Search projects…"
@@ -328,8 +336,8 @@ const ProjectsPage = () => {
                 className="pl-8 h-8 text-xs"
                 data-testid="input-board-search"
               />
-            </div>
-            <Select value={filterType} onValueChange={setFilterType}>
+             </div>}
+             {isFilterVisible('projects.type') && <Select value={filterType} onValueChange={setFilterType}>
               <SelectTrigger className="h-8 w-[160px] text-xs" data-testid="select-board-type">
                 <SelectValue placeholder="All Types" />
               </SelectTrigger>
@@ -339,8 +347,8 @@ const ProjectsPage = () => {
                   <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                 ))}
               </SelectContent>
-            </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
+             </Select>}
+             {isFilterVisible('projects.status') && <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger className="h-8 w-[140px] text-xs" data-testid="select-board-status">
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
@@ -352,8 +360,8 @@ const ProjectsPage = () => {
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
-            </Select>
-            {pmOptions.length > 0 && (
+             </Select>}
+             {isFilterVisible('projects.manager') && pmOptions.length > 0 && (
               <Select value={filterPM} onValueChange={setFilterPM}>
                 <SelectTrigger className="h-8 w-[160px] text-xs" data-testid="select-board-pm">
                   <SelectValue placeholder="All PMs" />

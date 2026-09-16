@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/toast';
 import { useAppContext } from '@/context/AppContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates, getLocalitiesByState, hubs as defaultHubs, getTotalLocalityCount } from '@/data/sudanStates';
 import { 
@@ -214,6 +215,7 @@ import {
 } from 'lucide-react';
 
 export default function HubOperations() {
+  const { isFilterVisible } = useCurrentUserAccess();
   const { currentUser } = useAppContext();
   const { isSuperAdmin } = useSuperAdmin();
   const { toast } = useToast();
@@ -259,6 +261,15 @@ export default function HubOperations() {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [siteSourceFilter, setSiteSourceFilter] = useState<'all' | 'registry' | 'mmp' | 'with_gps'>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  useEffect(() => {
+    if (!isFilterVisible('hub-operations.search')) setSearchTerm('');
+    if (!isFilterVisible('hub-operations.state')) setFilterState('');
+    if (!isFilterVisible('hub-operations.hub')) setFilterHub('');
+    if (!isFilterVisible('hub-operations.locality')) setFilterLocality('');
+    if (!isFilterVisible('hub-operations.activity')) setFilterActivityType('');
+    if (!isFilterVisible('hub-operations.status')) setFilterStatus('');
+    if (!isFilterVisible('hub-operations.source')) setSiteSourceFilter('all');
+  }, [isFilterVisible]);
   
   const [newHub, setNewHub] = useState({
     name: '',
@@ -1653,7 +1664,7 @@ export default function HubOperations() {
 
           {activeTab === 'sites' && (
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 min-w-[200px]">
+               {isFilterVisible('hub-operations.search') && <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search sites..."
@@ -1662,7 +1673,7 @@ export default function HubOperations() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   data-testid="input-search-sites"
                 />
-              </div>
+               </div>}
               <Button
                 variant={showAdvancedFilters ? "secondary" : "outline"}
                 size="sm"
@@ -1879,7 +1890,7 @@ export default function HubOperations() {
                 )}
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                <div className="space-y-2">
+                 {isFilterVisible('hub-operations.state') && <div className="space-y-2">
                   <Label className="text-sm text-muted-foreground">State</Label>
                   <Select value={filterState || "all"} onValueChange={(val) => { setFilterState(val === "all" ? "" : val); setFilterLocality(''); }}>
                     <SelectTrigger data-testid="select-filter-state">
@@ -1892,8 +1903,8 @@ export default function HubOperations() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
+                 </div>}
+                 {isFilterVisible('hub-operations.locality') && <div className="space-y-2">
                   <Label className="text-sm text-muted-foreground">Locality</Label>
                   <Select 
                     value={filterLocality || "all"} 
@@ -1910,8 +1921,8 @@ export default function HubOperations() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
+                 </div>}
+                 {isFilterVisible('hub-operations.hub') && <div className="space-y-2">
                   <Label className="text-sm text-muted-foreground">Hub</Label>
                   <Select value={filterHub || "all"} onValueChange={(val) => setFilterHub(val === "all" ? "" : val)}>
                     <SelectTrigger data-testid="select-filter-hub">
@@ -1924,8 +1935,8 @@ export default function HubOperations() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
+                 </div>}
+                 {isFilterVisible('hub-operations.activity') && <div className="space-y-2">
                   <Label className="text-sm text-muted-foreground">Activity Type</Label>
                   <Select value={filterActivityType || "all"} onValueChange={(val) => setFilterActivityType(val === "all" ? "" : val)}>
                     <SelectTrigger data-testid="select-filter-activity">
@@ -1938,8 +1949,8 @@ export default function HubOperations() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
+                 </div>}
+                 {isFilterVisible('hub-operations.status') && <div className="space-y-2">
                   <Label className="text-sm text-muted-foreground">Status</Label>
                   <Select value={filterStatus || "all"} onValueChange={(val) => setFilterStatus(val === "all" ? "" : val)}>
                     <SelectTrigger data-testid="select-filter-status">
@@ -1952,8 +1963,8 @@ export default function HubOperations() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
+                 </div>}
+                 {isFilterVisible('hub-operations.source') && <div className="space-y-2">
                   <Label className="text-sm text-muted-foreground">Source</Label>
                   <Select value={siteSourceFilter} onValueChange={(val) => setSiteSourceFilter(val as typeof siteSourceFilter)}>
                     <SelectTrigger data-testid="select-filter-source">
@@ -1966,7 +1977,7 @@ export default function HubOperations() {
                       <SelectItem value="with_gps">With GPS</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
+                 </div>}
               </div>
               {activeFilterCount > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">

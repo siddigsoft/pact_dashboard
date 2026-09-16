@@ -19,6 +19,7 @@ import { exportToExcel } from '@/utils/report-export';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import type { DownPaymentRequest } from '@/types/down-payment';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -73,6 +74,7 @@ export default function DuplicatePaymentsReport() {
   const { requests, loading, refreshRequests } = useDownPayment();
   const { toast } = useToast();
   const { checkPermission } = useAuthorization();
+  const { isFilterVisible } = useCurrentUserAccess();
 
   // ── Filter state ────────────────────────────────────────────────────────────
   const [search,           setSearch]           = useState('');
@@ -83,6 +85,16 @@ export default function DuplicatePaymentsReport() {
   const [monthFilter,      setMonthFilter]      = useState('all');
   const [severityFilter,   setSeverityFilter]   = useState('all');
   const [expandedKeys,     setExpandedKeys]     = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isFilterVisible('duplicate-payments-report.search')) setSearch('');
+    if (!isFilterVisible('duplicate-payments-report.hub')) setHubFilter('all');
+    if (!isFilterVisible('duplicate-payments-report.state')) setStateFilter('all');
+    if (!isFilterVisible('duplicate-payments-report.mmp')) setMmpFilter('all');
+    if (!isFilterVisible('duplicate-payments-report.enumerator')) setEnumeratorFilter('all');
+    if (!isFilterVisible('duplicate-payments-report.month')) setMonthFilter('all');
+    if (!isFilterVisible('duplicate-payments-report.severity')) setSeverityFilter('all');
+  }, [isFilterVisible]);
 
   const toggleExpand = (key: string) =>
     setExpandedKeys(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
@@ -377,15 +389,15 @@ export default function DuplicatePaymentsReport() {
         <div className="flex flex-wrap gap-2 items-center">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
+            {isFilterVisible('duplicate-payments-report.search') && <Input
               placeholder="Search site or MMP name…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-8 h-8 text-sm"
               data-testid="input-duplicate-search"
-            />
+            />}
           </div>
-          <Select value={severityFilter} onValueChange={setSeverityFilter}>
+          {isFilterVisible('duplicate-payments-report.severity') && <Select value={severityFilter} onValueChange={setSeverityFilter}>
             <SelectTrigger className="h-8 w-[175px] text-xs" data-testid="select-severity-filter">
               <SelectValue placeholder="All severities" />
             </SelectTrigger>
@@ -395,7 +407,7 @@ export default function DuplicatePaymentsReport() {
               <SelectItem value="high">Approved duplicates</SelectItem>
               <SelectItem value="medium">Pending only</SelectItem>
             </SelectContent>
-          </Select>
+          </Select>}
           {hasAnyFilter && (
             <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={clearFilters} data-testid="button-clear-filters">
               <X className="h-3 w-3" /> Clear all
@@ -409,7 +421,7 @@ export default function DuplicatePaymentsReport() {
         {/* Row 2: Hub → State → MMP → Enumerator → Month */}
         <div className="flex flex-wrap gap-2 items-center">
           {/* Hub */}
-          <Select value={hubFilter} onValueChange={handleHubChange}>
+          {isFilterVisible('duplicate-payments-report.hub') && <Select value={hubFilter} onValueChange={handleHubChange}>
             <SelectTrigger className="h-8 w-[150px] text-xs" data-testid="select-hub-filter">
               <SelectValue placeholder="All hubs" />
             </SelectTrigger>
@@ -417,10 +429,10 @@ export default function DuplicatePaymentsReport() {
               <SelectItem value="all">All hubs</SelectItem>
               {hubOptions.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
             </SelectContent>
-          </Select>
+          </Select>}
 
           {/* State */}
-          <Select value={stateFilter} onValueChange={handleStateChange} disabled={stateOptions.length === 0}>
+          {isFilterVisible('duplicate-payments-report.state') && <Select value={stateFilter} onValueChange={handleStateChange} disabled={stateOptions.length === 0}>
             <SelectTrigger className="h-8 w-[150px] text-xs" data-testid="select-state-filter">
               <SelectValue placeholder="All states" />
             </SelectTrigger>
@@ -428,10 +440,10 @@ export default function DuplicatePaymentsReport() {
               <SelectItem value="all">All states</SelectItem>
               {stateOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
-          </Select>
+          </Select>}
 
           {/* MMP */}
-          <Select value={mmpFilter} onValueChange={handleMmpChange} disabled={mmpOptions.length === 0}>
+          {isFilterVisible('duplicate-payments-report.mmp') && <Select value={mmpFilter} onValueChange={handleMmpChange} disabled={mmpOptions.length === 0}>
             <SelectTrigger className="h-8 w-[165px] text-xs" data-testid="select-mmp-filter">
               <SelectValue placeholder="All MMPs" />
             </SelectTrigger>
@@ -439,10 +451,10 @@ export default function DuplicatePaymentsReport() {
               <SelectItem value="all">All MMPs</SelectItem>
               {mmpOptions.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
             </SelectContent>
-          </Select>
+          </Select>}
 
           {/* Enumerator */}
-          <Select value={enumeratorFilter} onValueChange={setEnumeratorFilter} disabled={enumeratorOptions.length === 0}>
+          {isFilterVisible('duplicate-payments-report.enumerator') && <Select value={enumeratorFilter} onValueChange={setEnumeratorFilter} disabled={enumeratorOptions.length === 0}>
             <SelectTrigger className="h-8 w-[175px] text-xs" data-testid="select-enumerator-filter">
               <SelectValue placeholder="All enumerators" />
             </SelectTrigger>
@@ -452,10 +464,10 @@ export default function DuplicatePaymentsReport() {
                 <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
               ))}
             </SelectContent>
-          </Select>
+          </Select>}
 
           {/* Month */}
-          <Select value={monthFilter} onValueChange={setMonthFilter}>
+          {isFilterVisible('duplicate-payments-report.month') && <Select value={monthFilter} onValueChange={setMonthFilter}>
             <SelectTrigger className="h-8 w-[145px] text-xs" data-testid="select-month-filter">
               <SelectValue placeholder="All months" />
             </SelectTrigger>
@@ -467,7 +479,7 @@ export default function DuplicatePaymentsReport() {
                 </SelectItem>
               ))}
             </SelectContent>
-          </Select>
+          </Select>}
         </div>
       </div>
 

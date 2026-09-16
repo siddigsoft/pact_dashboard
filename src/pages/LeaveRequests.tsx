@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { useRestrictedAction } from '@/hooks/useRestrictedAction';
 import { PageAccessDenied } from '@/components/access/PageAccessDenied';
@@ -96,6 +97,7 @@ export default function LeaveRequests() {
   const canUpdate = checkPermission('leave', 'update');
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
   const { check: checkLeaveWrite, perms: leavePerms } = useRestrictedAction('leave');
+  const { isFilterVisible } = useCurrentUserAccess();
   const invalidateLeave = useInvalidateLeaveQueries();
 
   const leaveQuery = useLeaveRequestsQuery(currentUser?.id, isAdmin, !!currentUser?.id);
@@ -154,6 +156,11 @@ export default function LeaveRequests() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...BLANK });
 
+  useEffect(() => {
+    if (!isFilterVisible('leave-requests.status')) setStatusFilter('all');
+    if (!isFilterVisible('leave-requests.type')) setTypeFilter('all');
+  }, [isFilterVisible]);
+
   const leaveBalance = useMemo(() => {
     const myApproved = requests.filter(r => r.user_id === currentUser?.id && r.status === 'approved');
     const used: Record<string, number> = {};
@@ -170,10 +177,10 @@ export default function LeaveRequests() {
 
   const filtered = useMemo(() => {
     let res = requests;
-    if (statusFilter !== 'all') res = res.filter(r => r.status === statusFilter);
-    if (typeFilter !== 'all') res = res.filter(r => r.leave_type === typeFilter);
+    if (isFilterVisible('leave-requests.status') && statusFilter !== 'all') res = res.filter(r => r.status === statusFilter);
+    if (isFilterVisible('leave-requests.type') && typeFilter !== 'all') res = res.filter(r => r.leave_type === typeFilter);
     return res;
-  }, [requests, statusFilter, typeFilter]);
+  }, [requests, statusFilter, typeFilter, isFilterVisible]);
 
   function exportLeaveRequests() {
     if (!checkPermission('leave', 'export')) return;
@@ -642,20 +649,20 @@ export default function LeaveRequests() {
 
         {/* Filters + view toggle */}
         <div className="flex flex-col sm:flex-row gap-3 mb-5 items-start sm:items-center">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          {isFilterVisible('leave-requests.status') && <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full sm:w-44"><Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" /><SelectValue placeholder="All statuses" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
               {Object.entries(STATUS_CFG).map(([v, c]) => <SelectItem key={v} value={v}>{c.label}</SelectItem>)}
             </SelectContent>
-          </Select>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
+          </Select>}
+          {isFilterVisible('leave-requests.type') && <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="All leave types" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Types</SelectItem>
               {LEAVE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
             </SelectContent>
-          </Select>
+          </Select>}
           <div className="flex border rounded-lg overflow-hidden ml-auto">
             <button type="button" onClick={() => setView('list')}
               className={cn('px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-colors', view === 'list' ? 'bg-[#0F2041] text-white' : 'bg-background text-muted-foreground hover:bg-muted')}

@@ -5,6 +5,7 @@ import { isSuperAdminRole } from '@/lib/effectiveAccess';
 import { overrideIsActive, manifestIsTabBlocked } from '@/lib/current-user-access';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import { resolveFilterVisibility, type FilterVisibilityConfig } from '@/lib/filter-visibility';
 
 interface CurrentUserAccessValue {
   overrides: Map<string, boolean>;
@@ -60,18 +61,15 @@ export const CurrentUserAccessProvider: FC<{ children: ReactNode }> = ({ childre
   return (
     <CurrentUserAccessContext.Provider value={{
       overrides, isTabBlocked, loading: Boolean(currentUser?.id) && query.isLoading,
-      isFilterVisible: (key: string) => {
-        if (!currentUser) return false;
-        if (isSuperAdminRole(currentUser.role) || manifest?.roles.some(isSuperAdminRole)) return true;
-        const rows = (filterQuery.data ?? []) as Array<{ filter_key: string; is_hidden: boolean; user_id?: string; role?: string }>;
-        if (filterQuery.isError && rows.length === 0) return false;
-        const own = rows.find(row => row.filter_key === key && row.user_id === currentUser.id);
-        if (own) return !own.is_hidden;
-        const roleUnion = new Set([currentUser.role, ...(manifest?.roles ?? [])]);
-        const roleRows = rows.filter(row => row.filter_key === key && row.role && roleUnion.has(row.role));
-        // A role-level hide is conservative when multiple config rows exist.
-        return roleRows.length ? !roleRows.some(row => row.is_hidden) : true;
-      },
+      isFilterVisible: (key: string) => resolveFilterVisibility({
+        key,
+        userId: currentUser?.id,
+        roles: currentUser ? [currentUser.role, ...(manifest?.roles ?? [])] : [],
+        isSuperAdmin: Boolean(currentUser && (isSuperAdminRole(currentUser.role) || manifest?.roles.some(isSuperAdminRole))),
+        rows: filterQuery.data as FilterVisibilityConfig[] | undefined,
+        initialLoading: filterQuery.isLoading && !filterQuery.data,
+        failedWithoutData: filterQuery.isError && !filterQuery.data,
+      }),
       filterLoading: Boolean(currentUser?.id) && filterQuery.isLoading,
       filterError: filterQuery.isError ? 'Filter visibility settings could not be refreshed; filters are conservatively hidden until the last good configuration is available.' : null,
       refresh: async () => { await query.refetch(); await filterQuery.refetch(); },

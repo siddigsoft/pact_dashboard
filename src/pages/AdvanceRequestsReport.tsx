@@ -61,6 +61,7 @@ import { exportToExcel, exportToCSV, exportMultiSheetExcel } from '@/utils/repor
 import { exportOverviewToFormattedExcel, exportAgingToFormattedExcel, exportGroupedToFormattedExcel } from '@/utils/advanceReportExcelUtils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import type { DownPaymentRequest } from '@/types/down-payment';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { notificationDigestService } from '@/services/notification-digest.service';
@@ -86,6 +87,7 @@ function AdvanceRequestsReportContent() {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   const { checkPermission } = useAuthorization();
+  const { isFilterVisible } = useCurrentUserAccess();
   const canExport = checkPermission('down_payments', 'export');
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -98,6 +100,15 @@ function AdvanceRequestsReportContent() {
   const [paymentEvidenceByRequest, setPaymentEvidenceByRequest] = useState<Map<string, PreFundSourcePaymentLink[]>>(new Map());
   const [reconciledFilter, setReconciledFilter] = useState<string>('all');
   const [mmpFilter, setMmpFilter] = useState<string>('all');
+  useEffect(() => {
+    if (!isFilterVisible('advance-requests-report.search')) setSearchTerm('');
+    if (!isFilterVisible('advance-requests-report.status')) setStatusFilter('all');
+    if (!isFilterVisible('advance-requests-report.hub')) setHubFilter('all');
+    if (!isFilterVisible('advance-requests-report.date')) setDateFilter('all');
+    if (!isFilterVisible('advance-requests-report.paid')) setPaidFilter('all');
+    if (!isFilterVisible('advance-requests-report.reconciled')) setReconciledFilter('all');
+    if (!isFilterVisible('advance-requests-report.mmp')) setMmpFilter('all');
+  }, [isFilterVisible]);
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(() => new URLSearchParams(location.search).get('tab') || 'overview');
   useEffect(() => {
@@ -2256,7 +2267,7 @@ function AdvanceRequestsReportContent() {
       )}
 
       <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+        {isFilterVisible('advance-requests-report.search') && <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by site, user, or hub..."
@@ -2265,8 +2276,8 @@ function AdvanceRequestsReportContent() {
             className="pl-9"
             data-testid="input-search-requests"
           />
-        </div>
-        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+        </div>}
+        {isFilterVisible('advance-requests-report.status') && <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -2280,8 +2291,8 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="rejected">Rejected</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
-        </Select>
-        <Select value={hubFilter} onValueChange={(v) => { setHubFilter(v); setCurrentPage(1); }}>
+        </Select>}
+        {isFilterVisible('advance-requests-report.hub') && <Select value={hubFilter} onValueChange={(v) => { setHubFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[180px]" data-testid="select-hub-filter">
             <SelectValue placeholder="Hub" />
           </SelectTrigger>
@@ -2291,8 +2302,8 @@ function AdvanceRequestsReportContent() {
               <SelectItem key={hub.id} value={hub.id}>{hub.name}</SelectItem>
             ))}
           </SelectContent>
-        </Select>
-        <Select value={mmpFilter} onValueChange={(v) => { setMmpFilter(v); setCurrentPage(1); }}>
+        </Select>}
+        {isFilterVisible('advance-requests-report.mmp') && <Select value={mmpFilter} onValueChange={(v) => { setMmpFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[200px]" data-testid="select-mmp-filter">
             <SelectValue placeholder="MMP" />
           </SelectTrigger>
@@ -2302,8 +2313,8 @@ function AdvanceRequestsReportContent() {
               <SelectItem key={mmp} value={mmp}>{mmp}</SelectItem>
             ))}
           </SelectContent>
-        </Select>
-        <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v); setCurrentPage(1); }}>
+        </Select>}
+        {isFilterVisible('advance-requests-report.date') && <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[180px]" data-testid="select-date-filter">
             <SelectValue placeholder="Date Range" />
           </SelectTrigger>
@@ -2313,8 +2324,8 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="lastMonth">Last Month</SelectItem>
             <SelectItem value="last3Months">Last 3 Months</SelectItem>
           </SelectContent>
-        </Select>
-        <Select value={paidFilter} onValueChange={(v) => { setPaidFilter(v); setCurrentPage(1); }}>
+        </Select>}
+        {isFilterVisible('advance-requests-report.paid') && <Select value={paidFilter} onValueChange={(v) => { setPaidFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[150px]" data-testid="select-paid-filter">
             <SelectValue placeholder="Payment Status" />
           </SelectTrigger>
@@ -2323,8 +2334,8 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="paid">Paid</SelectItem>
             <SelectItem value="not_paid">Not Paid</SelectItem>
           </SelectContent>
-        </Select>
-        <Select value={reconciledFilter} onValueChange={(v) => { setReconciledFilter(v); setCurrentPage(1); }}>
+        </Select>}
+        {isFilterVisible('advance-requests-report.reconciled') && <Select value={reconciledFilter} onValueChange={(v) => { setReconciledFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[180px]" data-testid="select-reconciled-filter">
             <SelectValue placeholder="Reconciliation" />
           </SelectTrigger>
@@ -2335,7 +2346,7 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="needs_manual">⚠ Needs Manual Reconciliation</SelectItem>
             <SelectItem value="written_off">Written Off</SelectItem>
           </SelectContent>
-        </Select>
+        </Select>}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

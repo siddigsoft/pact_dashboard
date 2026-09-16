@@ -33,11 +33,13 @@ import {
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 export default function WalletReports() {
   const { withdrawalRequests } = useWallet();
   const { users } = useUser();
   const navigate = useNavigate();
+  const { isFilterVisible } = useCurrentUserAccess();
   const [timeframe, setTimeframe] = useState<'month' | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [walletRows, setWalletRows] = useState<any[]>([]);
@@ -48,6 +50,9 @@ export default function WalletReports() {
   const [totalCount, setTotalCount] = useState(0);
   const [txLoading, setTxLoading] = useState(false);
   const [costSubmissions, setCostSubmissions] = useState<any[]>([]);
+  useEffect(() => {
+    if (!isFilterVisible('wallet-reports.search')) setSearchQuery('');
+  }, [isFilterVisible]);
 
   const currentMonth = useMemo(() => {
     const now = new Date();
@@ -423,7 +428,7 @@ export default function WalletReports() {
                     Balance, earnings, and activity for each user
                   </CardDescription>
                 </div>
-                <div className="relative w-64">
+                {isFilterVisible('wallet-reports.search') && <div className="relative w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search by name or email..."
@@ -432,7 +437,7 @@ export default function WalletReports() {
                     className="pl-9"
                     data-testid="input-search-wallets"
                   />
-                </div>
+                </div>}
               </div>
             </CardHeader>
             <CardContent>

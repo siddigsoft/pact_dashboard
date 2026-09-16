@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConnectedPagesBar } from "@/components/ui/connected-pages-bar";
 import { useNavigate } from "react-router-dom";
@@ -1731,10 +1732,15 @@ type OrgMode = "dept" | "cards" | "compact" | "table" | "reporting" |
   "photo" | "colorcode" | "matrix" | "functional" | "divisional";
 
 function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departments: Department[] }) {
+  const { isFilterVisible } = useCurrentUserAccess();
   const navigate = useNavigate();
   const [mode, setMode] = useState<OrgMode>("dept");
   const [deptFilter, setDeptFilter] = useState<string>("all");
   const [orgSearch, setOrgSearch] = useState("");
+  useEffect(() => {
+    if (!isFilterVisible('departments.department')) setDeptFilter('all');
+    if (!isFilterVisible('departments.search')) setOrgSearch('');
+  }, [isFilterVisible]);
   const [forceExpand, setForceExpand] = useState<boolean | null>(null);
 
   const tree = buildTree(departments);
@@ -1860,7 +1866,7 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
         </Select>
 
         {/* Dept filter — only for modes that support it */}
-        {currentMode.showFilter && (
+        {currentMode.showFilter && isFilterVisible('departments.department') && (
           <Select value={deptFilter} onValueChange={setDeptFilter}>
             <SelectTrigger className="w-44 h-9 text-sm" data-testid="select-orgchart-dept">
               <SelectValue />
@@ -1873,7 +1879,7 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
         )}
 
         {/* Search input */}
-        <div className="relative flex-1 min-w-[160px] max-w-xs">
+        {isFilterVisible('departments.search') && <div className="relative flex-1 min-w-[160px] max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             value={orgSearch}
@@ -1882,7 +1888,7 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
             className="h-9 pl-8 text-sm"
             data-testid="input-org-search"
           />
-        </div>
+        </div>}
 
         {/* Expand / Collapse all — tree modes only */}
         {showExpandControls && (

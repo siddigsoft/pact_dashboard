@@ -5428,8 +5428,8 @@ const CostSubmission = () => {
               <span className="font-semibold">Pre-Fund filter unavailable:</span> {costPreFundLinkError}
             </div>
           )}
-          {isFilterVisible('cost-submission.status') && <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-filter-bar">
-            {([
+          <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-filter-bar">
+            {isFilterVisible('cost-submission.status') && ([
               { key: 'all', label: 'All', labelAr: 'الكل', count: filteredOperationalCosts.length, color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
               { key: 'pending', label: 'Pending', labelAr: 'معلق', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'pending').length, color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
               { key: 'under_review', label: 'In Review', labelAr: 'قيد المراجعة', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'under_review').length, color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' },
@@ -5540,7 +5540,7 @@ const CostSubmission = () => {
               <FileSpreadsheet className="h-4 w-4 mr-1" />
               Excel
             </Button>
-          </div>}
+          </div>
 
           {/* Batch Pay selection bar — shown when ≥1 item is selected, sticky */}
           {(() => {

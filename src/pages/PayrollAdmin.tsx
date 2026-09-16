@@ -26,6 +26,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { CurrentUserClassificationRow, UserClassificationRow, CreditPayrollRunResult } from '@/types/hr-finance-tables';
 import { dispatchNotification } from '@/lib/notify';
 import { useUser } from '@/context/user/UserContext';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -671,19 +672,25 @@ function onboardingScore(emp: EmployeeRow): { score: number; items: { label: str
 
 function SalarySetupTab({ employees, loading, departments }: { employees: EmployeeRow[]; loading: boolean; departments: DeptOption[] }) {
   const isColVisible = useColumnVisibility('payroll-admin');
+  const { isFilterVisible } = useCurrentUserAccess();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'configured' | 'missing' | 'incomplete-onboarding'>('all');
   const [editEmp, setEditEmp] = useState<EmployeeRow | null>(null);
   const [showOnboardingFor, setShowOnboardingFor] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isFilterVisible('payroll-admin.salary-search')) setSearch('');
+    if (!isFilterVisible('payroll-admin.salary-status')) setFilter('all');
+  }, [isFilterVisible]);
+
   const filtered = useMemo(() => {
     let list = employees;
-    if (search) list = list.filter(e => (e.full_name ?? '').toLowerCase().includes(search.toLowerCase()) || (e.department_name ?? '').toLowerCase().includes(search.toLowerCase()));
-    if (filter === 'configured')           list = list.filter(e => e.salary_config);
-    if (filter === 'missing')              list = list.filter(e => !e.salary_config);
-    if (filter === 'incomplete-onboarding') list = list.filter(e => onboardingScore(e).score < 4);
+    if (isFilterVisible('payroll-admin.salary-search') && search) list = list.filter(e => (e.full_name ?? '').toLowerCase().includes(search.toLowerCase()) || (e.department_name ?? '').toLowerCase().includes(search.toLowerCase()));
+    if (isFilterVisible('payroll-admin.salary-status') && filter === 'configured')           list = list.filter(e => e.salary_config);
+    if (isFilterVisible('payroll-admin.salary-status') && filter === 'missing')              list = list.filter(e => !e.salary_config);
+    if (isFilterVisible('payroll-admin.salary-status') && filter === 'incomplete-onboarding') list = list.filter(e => onboardingScore(e).score < 4);
     return list;
-  }, [employees, search, filter]);
+  }, [employees, search, filter, isFilterVisible]);
 
   const incompleteCount = useMemo(() => employees.filter(e => onboardingScore(e).score < 4).length, [employees]);
 
@@ -696,11 +703,11 @@ function SalarySetupTab({ employees, loading, departments }: { employees: Employ
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
+        {isFilterVisible('payroll-admin.salary-search') && <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or department…" className="pl-9 h-9 text-sm bg-white dark:bg-slate-900" />
-        </div>
-        <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
+        </div>}
+        {isFilterVisible('payroll-admin.salary-status') && <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
           <SelectTrigger className="h-9 w-[200px] text-sm bg-white dark:bg-slate-900">
             <SelectValue />
           </SelectTrigger>
@@ -712,7 +719,7 @@ function SalarySetupTab({ employees, loading, departments }: { employees: Employ
               Incomplete onboarding {incompleteCount > 0 ? `(${incompleteCount})` : ''}
             </SelectItem>
           </SelectContent>
-        </Select>
+        </Select>}
         <Badge variant="outline" className="h-9 px-3 text-xs font-medium bg-white dark:bg-slate-900">
           {filtered.length} shown
         </Badge>
