@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { exportToExcel } from '@/utils/report-export';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -949,11 +950,13 @@ async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
 
 export default function PreFundingRegistry() {
   const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const { canViewOrgPreFunds } = usePreFundOrgAccess();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const isSuper = isSuperAdmin();
   const canManage = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  const canAccess = canManage;
+  // Access Control grant unlocks org-wide fund list; create/edit stay canManage.
+  const canAccess = canManage || canViewOrgPreFunds;
 
   // Pre-filter by project when arriving from ProjectCostTab "View / Manage" button
   const [searchParams] = useSearchParams();
@@ -2356,7 +2359,7 @@ export default function PreFundingRegistry() {
               <Download className="h-4 w-4 mr-1.5" />Export
             </Button>
           </ReportExportGate>
-          {canAccess && (
+          {canManage && (
             <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white" onClick={openNew} data-testid="button-new-fund-registry">
               <Plus className="h-4 w-4 mr-1.5" />New Fund
             </Button>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -139,10 +140,10 @@ function kpiCard(title: string, value: string, sub: string, icon: React.ElementT
 export default function PreFundingReport() {
   const { hasAnyRole, checkPermission } = useAuthorization();
   const { currentUser } = useAppContext();
-  const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const { canViewOrgPreFunds, isFinanceAdmin } = usePreFundOrgAccess();
   const isCD = hasAnyRole(['countryDirector']);
-  // Finance admins see all funds; CDs (and other holders) see only their assigned fund(s)
-  const holderUserId = isFinanceAdmin ? null : (currentUser?.id ?? null);
+  // Finance admins + Access Control grants see all funds; holders see assigned fund(s)
+  const holderUserId = canViewOrgPreFunds ? null : (currentUser?.id ?? null);
 
   const [funds, setFunds]           = useState<FundRow[]>([]);
   const [txns, setTxns]             = useState<TxnRow[]>([]);

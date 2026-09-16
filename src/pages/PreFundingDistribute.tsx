@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
@@ -185,8 +186,10 @@ export default function PreFundingDistribute() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
+  const { canViewOrgPreFunds, isFinanceAdmin: isFinanceRole } = usePreFundOrgAccess();
 
-  const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin', 'CountryDirector']);
+  // Country Director keeps distribute-wide list; Access Control grant does too.
+  const isFinanceAdmin = isFinanceRole || hasAnyRole(['CountryDirector']) || canViewOrgPreFunds;
   const isAllocationTopUpAdmin = hasAnyRole([
     'super_admin', 'superAdmin', 'admin', 'administrator',
     'financialAdmin', 'financial_admin', 'finance', 'finance admin',

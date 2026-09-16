@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -230,11 +231,10 @@ function calcBurnDaysLeft(f: PreFundRow): number | null {
 
 export default function PreFundingOverview() {
   const { hasAnyRole } = useAuthorization();
+  const { canViewOrgPreFunds, isFinanceAdmin } = usePreFundOrgAccess();
   const navigate = useNavigate();
-  // Finance/admin: full management; coordinators/supervisors/field staff: read-only balance view
-  const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  // countryDirector gets read-only balance dashboard view (same as field staff — no write actions)
-  const canAccess = isFinanceAdmin || hasAnyRole(['coordinator', 'supervisor', 'fom', 'dataTeam', 'data_collector', 'employee', 'countryDirector']);
+  // Finance/admin + Access Control grant: org-wide balance view; others: role baselines
+  const canAccess = canViewOrgPreFunds || hasAnyRole(['coordinator', 'supervisor', 'fom', 'dataTeam', 'data_collector', 'employee', 'countryDirector']);
   const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
 
   const [funds, setFunds]         = useState<PreFundRow[]>([]);

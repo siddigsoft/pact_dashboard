@@ -71,7 +71,7 @@ describe('related page access families', () => {
     );
   });
 
-  it('maps cost submission, down payment, and projects grants to org-wide read actions', async () => {
+  it('maps cost submission, down payment, projects, and pre-funding grants to org-wide read actions', async () => {
     const { getPageRoutePermissions } = await import('@/lib/pageAccessLinks');
     expect(getPageRoutePermissions(['cost-submission'])).toEqual([
       { resource: 'cost_submissions', action: 'read' },
@@ -81,6 +81,9 @@ describe('related page access families', () => {
     ]);
     expect(getPageRoutePermissions(['projects'])).toEqual([
       { resource: 'projects', action: 'read' },
+    ]);
+    expect(getPageRoutePermissions(['pre-funding'])).toEqual([
+      { resource: 'pre_funding', action: 'read' },
     ]);
     expect(getPageRoutePermissions(['my-projects'])).toEqual([]);
   });

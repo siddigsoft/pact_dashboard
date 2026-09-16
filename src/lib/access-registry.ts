@@ -239,7 +239,8 @@ export const PAGE_DEFS: PageDef[] = [
 
   // ── Pre-Funding ───────────────────────────────────────────────────────────
   { slug:'pre-funding',         label:'Pre-Funding Hub',        path:'/pre-funding',            icon:Banknote, group:'Finance',
-    roles:['superAdmin','admin','financialAdmin','auditor','countryDirector'] },
+    roles:['superAdmin','admin','financialAdmin','auditor','countryDirector'],
+    note:'Grant/remove via Access Control. Explicit pre_funding:read unlocks org-wide fund data; edit/settings stay role-gated in-page.' },
 
   // ── HR & People ───────────────────────────────────────────────────────────
   { slug:'hr-hub',              label:'HR Hub',                 path:'/hr',                     icon:Briefcase, group:'HR & People',

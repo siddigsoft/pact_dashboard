@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Loader2, LayoutDashboard, FolderOpen, GitBranch, RotateCcw, Settings2, Banknote, FileBarChart2, Users, SendHorizonal } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 type PFTab = 'overview' | 'registry' | 'approvals' | 'reconciliation' | 'allocations' | 'settings' | 'report' | 'distribute';
@@ -114,15 +115,17 @@ const STAFF_TABS: PFTab[]    = ['overview', 'allocations', 'distribute', 'report
 
 export default function PreFundingHub() {
   const { hasAnyRole } = useAuthorization();
+  const { canViewOrgPreFunds, isFinanceAdmin } = usePreFundOrgAccess();
   const [params, setParams] = useSearchParams();
   const { isTabBlocked } = useCurrentUserAccess();
 
-  const isFinanceAdmin   = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
   const isCD             = hasAnyRole(['countryDirector']);
   const isApproverRole   = hasAnyRole(['coordinator', 'supervisor', 'fom']);
 
-  const allowedTabs: PFTab[] = isFinanceAdmin
-    ? FINANCE_TABS
+  // Explicit Access Control grant → same data tabs as finance (org-wide lists).
+  // Settings stays finance-role only; write actions inside panels stay role-gated.
+  const allowedTabs: PFTab[] = canViewOrgPreFunds
+    ? (isFinanceAdmin ? FINANCE_TABS : FINANCE_TABS.filter(t => t !== 'settings'))
     : isCD
       ? CD_TABS
       : isApproverRole
@@ -135,7 +138,7 @@ export default function PreFundingHub() {
     tabs: sec.tabs.filter(t =>
       allowedTabs.includes(t.id as PFTab) && !isTabBlocked(`pre-funding:${t.id}`)
     ),
-  })).filter(sec => sec.tabs.length > 0), [isFinanceAdmin, isApproverRole, isTabBlocked]);
+  })).filter(sec => sec.tabs.length > 0), [canViewOrgPreFunds, isApproverRole, isCD, isTabBlocked]);
 
   const rawTab = params.get('tab') ?? '';
   const savedTab = localStorage.getItem(LS_KEY) as PFTab | null;
@@ -181,8 +184,10 @@ export default function PreFundingHub() {
   return (
     <HubLayout
       title="Pre-Funding"
-      subtitle={isFinanceAdmin
-        ? 'Balance Dashboard · Fund Registry · Approvals · Reconciliation · Settings'
+      subtitle={canViewOrgPreFunds
+        ? (isFinanceAdmin
+          ? 'Balance Dashboard · Fund Registry · Approvals · Reconciliation · Settings'
+          : 'Balance Dashboard · Fund Registry · Approvals · Reconciliation · Report')
         : 'Balance Dashboard · Your Allocations'}
       hubIcon={Banknote}
       sections={visibleSections}
@@ -196,9 +201,9 @@ export default function PreFundingHub() {
     >
       <div className="min-h-[calc(100vh-160px)]">
         {tab === 'overview'        && <Suspense fallback={<PanelLoader />}><OverviewPanel /></Suspense>}
-        {tab === 'registry'        && isFinanceAdmin && <Suspense fallback={<PanelLoader />}><RegistryPanel /></Suspense>}
+        {tab === 'registry'        && canViewOrgPreFunds && <Suspense fallback={<PanelLoader />}><RegistryPanel /></Suspense>}
         {tab === 'approvals'       && <Suspense fallback={<PanelLoader />}><ApprovalFlowPanel /></Suspense>}
-        {tab === 'reconciliation'  && (isFinanceAdmin || isCD) && <Suspense fallback={<PanelLoader />}><ReconciliationPanel /></Suspense>}
+        {tab === 'reconciliation'  && (canViewOrgPreFunds || isCD) && <Suspense fallback={<PanelLoader />}><ReconciliationPanel /></Suspense>}
         {tab === 'allocations'     && <Suspense fallback={<PanelLoader />}><AllocationsPanel /></Suspense>}
         {tab === 'settings'        && isFinanceAdmin && <Suspense fallback={<PanelLoader />}><SettingsPanel /></Suspense>}
         {tab === 'report'          && <Suspense fallback={<PanelLoader />}><ReportPanel /></Suspense>}

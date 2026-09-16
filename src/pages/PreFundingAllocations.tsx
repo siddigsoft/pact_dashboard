@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -111,14 +112,10 @@ export default function PreFundingAllocations() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
   const navigate = useNavigate();
-  // Finance/Admin can see all funds and all staff allocations
-  // Fund holders (CD, FOM, etc.) see only allocations within their assigned funds
-  // Other roles see only their own allocation row
-  const isFinanceAdmin       = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  // CD / FOM / etc. are now fund holders with a scoped view — they are NOT
-  // full finance admins, so canManageAllocations is finance-only.
+  const { canViewOrgPreFunds, isFinanceAdmin } = usePreFundOrgAccess();
+  // Fund holders see assigned funds; Access Control grant → org-wide like finance
   const canManageAllocations = isFinanceAdmin;
-  const canAccess            = canManageAllocations || !!currentUser?.id;
+  const canAccess            = canViewOrgPreFunds || !!currentUser?.id;
 
   const [allAllocations, setAll] = useState<AllocRow[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -141,10 +138,10 @@ export default function PreFundingAllocations() {
     setDetailsLoading(true);
     setDetailsReady(false);
     try {
-      // For non-finance-admin users (fund holders: CD, FOM, etc.):
+      // For non-org-wide viewers (fund holders: CD, FOM, etc.):
       // fetch their assigned fund IDs first, then scope allocations to those funds.
       let holderFundIds: string[] | null = null;
-      if (!isFinanceAdmin && currentUser?.id) {
+      if (!canViewOrgPreFunds && currentUser?.id) {
         const { data: holderFunds } = await (supabase as any)
           .from('pre_fund_requests')
           .select('id')
@@ -158,7 +155,7 @@ export default function PreFundingAllocations() {
           .from('pre_fund_allocations')
           .select('id,user_id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,created_at')
           .order('created_at', { ascending: false });
-        if (!isFinanceAdmin) {
+        if (!canViewOrgPreFunds) {
           if (holderFundIds && holderFundIds.length > 0) {
             // Fund holder: see all staff allocations within their assigned funds
             q = q.in('pre_fund_request_id', holderFundIds);
@@ -326,7 +323,7 @@ export default function PreFundingAllocations() {
         setDetailsLoading(false);
       }
     }
-  }, [isFinanceAdmin, currentUser?.id]);
+  }, [canViewOrgPreFunds, currentUser?.id]);
 
   useEffect(() => { load(); }, [load]);
 

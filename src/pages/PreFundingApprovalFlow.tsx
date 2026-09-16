@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
@@ -91,9 +92,8 @@ export default function PreFundingApprovalFlow() {
   const { currentUser } = useAppContext();
   const { users } = useUser();
   const { toast } = useToast();
-  // Finance/admin: full CRUD on approval steps; coordinators/supervisors/fom: view only (approvers)
-  const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  const canAccess = isFinanceAdmin || hasAnyRole(['coordinator', 'supervisor', 'fom']);
+  const { canViewOrgPreFunds, isFinanceAdmin } = usePreFundOrgAccess();
+  const canAccess = canViewOrgPreFunds || hasAnyRole(['coordinator', 'supervisor', 'fom']);
   const isAdmin   = hasAnyRole(['super_admin', 'admin']);
 
   const [funds, setFunds]                 = useState<PreFundSummary[]>([]);

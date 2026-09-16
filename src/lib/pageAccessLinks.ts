@@ -110,6 +110,8 @@ const PAGE_ACTION_GATES: Record<string, RoutePermission> = {
   'cost-submission': { resource: 'cost_submissions', action: 'read' },
   'cost-approval': { resource: 'cost_submissions', action: 'read' },
   'down-payment-approval': { resource: 'down_payments', action: 'read' },
+  // Org-wide Pre-Funding catalogue — Grant/Remove on the hub page stays in sync.
+  'pre-funding': { resource: 'pre_funding', action: 'read' },
   // Org-wide catalogue only — do not attach this gate to my-projects.
   projects: { resource: 'projects', action: 'read' },
 };

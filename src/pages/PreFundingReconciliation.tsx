@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -736,10 +737,11 @@ async function uploadPdfToStorage(blob: Blob, filename: string, fundId: string):
 
 export default function PreFundingReconciliation() {
   const { hasAnyRole } = useAuthorization();
+  const { canViewOrgPreFunds } = usePreFundOrgAccess();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const isCD = hasAnyRole(['countryDirector']);
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']) || isCD;
+  const canAccess = canViewOrgPreFunds || isCD;
   const canManageExceptions = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
   const canRemoveOperationalCostPayment = hasAnyRole(['super_admin', 'admin']);
 
@@ -1011,7 +1013,7 @@ export default function PreFundingReconciliation() {
           .in('status', ['active', 'low_balance', 'closed', 'period_locked'])
           .order('created_at', { ascending: false })
           .order('id');
-        if (isCD && !hasAnyRole(['super_admin', 'admin', 'financialAdmin'])) {
+        if (isCD && !canViewOrgPreFunds) {
           q = (q as any).eq('holder_user_id', currentUser?.id);
         }
         return q;
@@ -1060,7 +1062,7 @@ export default function PreFundingReconciliation() {
       ));
     } catch (e: any) { toast({ title: 'Load failed', description: e.message, variant: 'destructive' }); }
     finally { if (loadVersion === fundLoadVersion.current) setLoading(false); }
-  }, [toast, isCD, hasAnyRole, currentUser?.id]);
+  }, [toast, isCD, canViewOrgPreFunds, currentUser?.id]);
 
   const loadTxns = useCallback(async (fundId: string) => {
     const loadVersion = ++transactionLoadVersion.current;
