@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { ACTIONS, DEFAULT_ROLE_PERMISSIONS } from '@/types/roles';
 import { MODULE_REGISTRY } from '@/types/moduleRegistry';
 
@@ -47,5 +48,17 @@ describe('Pre-Fund payment permissions', () => {
       expect.objectContaining({ key: 'pre_funding:use_for_payment' }),
       expect.objectContaining({ key: 'down_payments:mark_paid', label: 'Make Down Payment Payment' }),
     ]));
+  });
+
+  it('grants Field Assistant payment capabilities without approval authority', () => {
+    const migration = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917150000_field_assistant_payment_permissions.sql`,
+      'utf8',
+    );
+    expect(migration).toContain("'fieldassistant'");
+    expect(migration).toContain("('down_payments', 'mark_paid')");
+    expect(migration).toContain("('cost_submissions', 'mark_paid')");
+    expect(migration).toContain("('pre_funding', 'use_for_payment')");
+    expect(migration).not.toMatch(/\('(?:down_payments|cost_submissions|pre_funding)',\s*'approve'\)/);
   });
 });

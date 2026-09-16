@@ -40,9 +40,8 @@ BEGIN
      OR position('_assert_finance_role' IN v_atomic) > 0 THEN
     RAISE EXCEPTION 'atomic Down Payment RPC did not receive its dedicated gate';
   END IF;
-  -- Existing finance defaults are seeded, while a Field Assistant role is
-  -- never widened by this migration. Custom per-user dual grants remain
-  -- supported through the canonical override/role framework.
+  -- Existing finance defaults and the later Field Assistant payment grant must
+  -- both use the dedicated payment capabilities.
   IF EXISTS (SELECT 1 FROM public.roles WHERE lower(replace(name, ' ', '_')) IN ('admin', 'financialadmin', 'financial_admin') AND is_active) THEN
     IF NOT EXISTS (
       SELECT 1 FROM public.permissions p JOIN public.roles r ON r.id = p.role_id
@@ -50,11 +49,40 @@ BEGIN
         AND p.resource = 'down_payments' AND p.action = 'mark_paid'
     ) THEN RAISE EXCEPTION 'finance defaults are missing down_payments:mark_paid'; END IF;
   END IF;
-  SELECT id INTO v_role_id FROM public.roles
-  WHERE lower(replace(name, ' ', '_')) IN ('field_assistant', 'field assistant') LIMIT 1;
-  IF v_role_id IS NOT NULL AND EXISTS (
-    SELECT 1 FROM public.permissions WHERE role_id = v_role_id AND resource = 'down_payments' AND action = 'mark_paid'
-  ) THEN RAISE EXCEPTION 'Field Assistant received payment by default'; END IF;
+  SELECT id INTO v_role_id
+  FROM public.roles
+  WHERE regexp_replace(lower(name), '[^a-z0-9]+', '', 'g') = 'fieldassistant'
+    AND is_active
+  LIMIT 1;
+  IF v_role_id IS NOT NULL THEN
+    IF EXISTS (
+      SELECT required.resource, required.action
+      FROM (VALUES
+        ('down_payments', 'mark_paid'),
+        ('cost_submissions', 'mark_paid'),
+        ('pre_funding', 'use_for_payment')
+      ) AS required(resource, action)
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM public.permissions p
+        WHERE p.role_id = v_role_id
+          AND p.resource = required.resource
+          AND p.action = required.action
+      )
+    ) THEN
+      RAISE EXCEPTION 'Field Assistant is missing a required payment capability';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM public.permissions p
+      WHERE p.role_id = v_role_id
+        AND p.action = 'approve'
+        AND p.resource IN ('down_payments', 'cost_submissions', 'pre_funding')
+    ) THEN
+      RAISE EXCEPTION 'Field Assistant payment grant must not add approval authority';
+    END IF;
+  END IF;
   IF to_regprocedure('public._assert_pre_fund_payment_access()') IS NULL THEN
     RAISE EXCEPTION 'dedicated Pre-Fund payment assertion is missing';
   END IF;
