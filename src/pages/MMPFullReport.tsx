@@ -14,6 +14,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { withTimeout } from '@/utils/promise-with-timeout';
 
 // ── Status classification ────────────────────────────────────────────────────
 // Only truly terminal statuses count as "Covered/Done":
@@ -89,6 +90,7 @@ const MMPFullReport = () => {
   const [profileMap, setProfileMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   // ── Fetch ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -102,9 +104,13 @@ const MMPFullReport = () => {
       setLoading(true);
       setError(null);
       try {
-        const { data, error: reportError } = await supabase.rpc(
-          'get_mmp_report_payload' as any,
-          { p_mmp_id: mmpId, p_report_kind: 'full_report' } as any
+        const { data, error: reportError } = await withTimeout(
+          supabase.rpc(
+            'get_mmp_report_payload' as any,
+            { p_mmp_id: mmpId, p_report_kind: 'full_report' } as any
+          ),
+          45_000,
+          'The report took too long to load. Please retry. If this continues, the production report migration may still need to be applied.'
         );
         if (reportError) throw reportError;
         const payload = (data || {}) as any;
@@ -117,7 +123,7 @@ const MMPFullReport = () => {
         setLoading(false);
       }
     })();
-  }, [mmpId, canUseFullReport]);
+  }, [mmpId, canUseFullReport, loadAttempt]);
 
   // ── Derived stats ────────────────────────────────────────────────────────
   const { overall, byState, byCoordinator } = useMemo(() => {
@@ -325,7 +331,10 @@ const MMPFullReport = () => {
       <div className="flex flex-col items-center justify-center min-h-screen gap-3">
         <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-destructive font-medium">{error}</p>
-        <Button variant="outline" onClick={() => navigate(mmpId ? `/mmp/${mmpId}` : '/mmp')}>Go Back</Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry</Button>
+          <Button variant="outline" onClick={() => navigate(mmpId ? `/mmp/${mmpId}` : '/mmp')}>Go Back</Button>
+        </div>
       </div>
     );
   }

@@ -15,6 +15,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getDownPaymentBalance, isDownPaymentSettledStatus } from '@/utils/downPaymentBalance';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { withTimeout } from '@/utils/promise-with-timeout';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 //
@@ -160,6 +161,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName, reportKind }: Prop
   const [accessError, setAccessError] = useState('');
   const [financeLoading, setFinanceLoading] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -189,9 +191,13 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName, reportKind }: Prop
 
     (async () => {
       try {
-        const { data, error } = await supabase.rpc(
-          'get_mmp_report_payload' as any,
-          { p_mmp_id: mmpId, p_report_kind: reportKind } as any
+        const { data, error } = await withTimeout(
+          supabase.rpc(
+            'get_mmp_report_payload' as any,
+            { p_mmp_id: mmpId, p_report_kind: reportKind } as any
+          ),
+          45_000,
+          'The report took too long to load. Please retry. If this continues, the production report migration may still need to be applied.'
         );
         if (error) throw error;
 
@@ -211,7 +217,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName, reportKind }: Prop
         setFinanceLoading(false);
       }
     })();
-  }, [open, mmpId, canUseMmpReports, reportKind]);
+  }, [open, mmpId, canUseMmpReports, reportKind, loadAttempt]);
 
   // ── Derived stats ─────────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -1233,9 +1239,17 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName, reportKind }: Prop
           <div className="flex-1 flex flex-col items-center justify-center py-16 gap-3 text-center px-6">
             <ShieldAlert className="h-9 w-9 text-red-500" />
             <div>
-              <p className="text-sm font-semibold text-foreground">Report access denied</p>
+              <p className="text-sm font-semibold text-foreground">Unable to load report</p>
               <p className="text-xs text-muted-foreground mt-1">{accessError}</p>
             </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              Retry
+            </Button>
           </div>
         ) : !stats ? (
           <div className="flex-1 flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
