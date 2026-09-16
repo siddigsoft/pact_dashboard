@@ -59,6 +59,8 @@ interface DownPaymentContextType {
   supervisorApprove: (data: ApproveDownPaymentRequest) => Promise<boolean>;
   supervisorReject: (data: RejectDownPaymentRequest) => Promise<boolean>;
   adminApprove: (data: ApproveDownPaymentRequest) => Promise<boolean>;
+  /** Narrow Role-Management approval path: pending_admin -> approved only. */
+  approvePendingAdminExplicit: (requestId: string) => Promise<boolean>;
   adminReject: (data: RejectDownPaymentRequest) => Promise<boolean>;
   processPayment: (data: ProcessPayment) => Promise<boolean>;
   cancelRequest: (requestId: string) => Promise<boolean>;
@@ -971,6 +973,26 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           variant: 'destructive',
         });
       }
+      return false;
+    }
+  };
+
+  const approvePendingAdminExplicit = async (requestId: string): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({ title: 'Session may have expired', description: session.error || 'Please refresh and try again.', variant: 'destructive' });
+      return false;
+    }
+    try {
+      const { data, error } = await (supabase as any).rpc('safe_approve_down_payment', {
+        p_request_id: requestId,
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'Approval was not applied');
+      await refreshRequests();
+      return true;
+    } catch (error: any) {
+      toastRef.current({ title: 'Approval failed', description: error?.message || 'Approval was not applied.', variant: 'destructive' });
       return false;
     }
   };
@@ -2099,6 +2121,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     supervisorApprove,
     supervisorReject,
     adminApprove,
+    approvePendingAdminExplicit,
     adminReject,
     processPayment,
     cancelRequest,

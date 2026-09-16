@@ -129,6 +129,11 @@ interface DownPaymentApprovalPanelProps {
   onDeletePayment?: (paymentEventId: string) => void;
   /** These are resolved from the user's Down Payment button grants. */
   canApproveActions?: boolean;
+  /** A standalone approve grant may approve only already eligible Tier 2
+   * requests; it must not expose reject, revert, or supervisor override. */
+  canApprovePendingAdminOnly?: boolean;
+  /** Standalone explicit grant mode. Never infer this from userRole. */
+  approvalMode?: 'workflow' | 'explicit_pending_admin' | 'explicit_payment' | 'explicit_combined';
   /** Disbursement is independent from tier approval. */
   canMarkPaid?: boolean;
   canEditActions?: boolean;
@@ -383,13 +388,18 @@ export function DownPaymentApprovalPanel({
   canDeletePayment = false,
   onDeletePayment,
   canApproveActions = true,
+  canApprovePendingAdminOnly = false,
+  approvalMode = 'workflow',
   canMarkPaid = false,
   canEditActions = true,
   canExportActions = true,
 }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
-  const { requests: contextRequests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest, cancelRequest } = useDownPayment();
+  const { requests: contextRequests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, approvePendingAdminExplicit, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest, cancelRequest } = useDownPayment();
+  const isStandaloneExplicit = approvalMode !== 'workflow';
+  const isExplicitApproval = approvalMode === 'explicit_pending_admin' || approvalMode === 'explicit_combined';
+  const hasExplicitPaymentSurface = approvalMode === 'explicit_payment' || approvalMode === 'explicit_combined';
   const { toast } = useToast();
   const requests = externalRequests ?? contextRequests;
 
@@ -408,6 +418,13 @@ export function DownPaymentApprovalPanel({
   const [singlePayPreFunds, setSinglePayPreFunds] = useState<Array<{ id: string; name: string; currency: string; available_balance: number }>>([]);
   const [singlePayPreFundId, setSinglePayPreFundId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('pending');
+  useEffect(() => {
+    const defaultTab = approvalMode === 'explicit_payment' ? 'processing' : 'pending';
+    if (isStandaloneExplicit && activeTab !== defaultTab &&
+        !(approvalMode === 'explicit_combined' && (activeTab === 'pending' || activeTab === 'processing'))) {
+      setActiveTab(defaultTab);
+    }
+  }, [approvalMode, isStandaloneExplicit, activeTab]);
   const [completedSubTab, setCompletedSubTab] = useState<'paid_waiting' | 'confirmed'>('paid_waiting');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
@@ -613,25 +630,39 @@ export function DownPaymentApprovalPanel({
   }, [paymentRequestDialog.bulkRequests, users]);
 
   const pendingRequests = useMemo(() => {
+    if (isExplicitApproval) {
+      return filteredRequests.filter(req => req.status === 'pending_admin');
+    }
+    if (approvalMode === 'explicit_payment') return [];
     if (userRole === 'supervisor') {
       return filteredRequests.filter(req => req.status === 'pending_supervisor');
     }
     return filteredRequests.filter(req => req.status === 'pending_admin');
-  }, [filteredRequests, userRole]);
+  }, [filteredRequests, userRole, approvalMode, isExplicitApproval]);
 
   const approvedRequests = useMemo(() => {
     if (userRole === 'admin') {
       return filteredRequests.filter(req => req.status === 'approved');
     }
     return [];
-  }, [filteredRequests, userRole]);
+  }, [filteredRequests, userRole, hasExplicitPaymentSurface]);
 
   const processingRequests = useMemo(() => {
+    if (hasExplicitPaymentSurface) {
+      return filteredRequests.filter(r => r.status === 'approved' || r.status === 'partially_paid');
+    }
     if (userRole === 'admin') {
       return filteredRequests.filter(req => req.status === 'partially_paid');
     }
     return filteredRequests.filter(req => req.status === 'pending_admin');
-  }, [filteredRequests, userRole]);
+  }, [
+    filteredRequests,
+    userRole,
+    approvalMode,
+    hasExplicitPaymentSurface,
+    isStandaloneExplicit,
+    canMarkPaid,
+  ]);
 
   const completedRequests = useMemo(() => {
     return filteredRequests.filter(req => isDownPaymentSettledStatus(req.status));
@@ -718,7 +749,9 @@ export function DownPaymentApprovalPanel({
     try {
       const useSupervisorPath = userRole === 'supervisor';
 
-    const success = useSupervisorPath
+    const success = isExplicitApproval
+        ? await approvePendingAdminExplicit(selectedRequest.id)
+        : useSupervisorPath
         ? await supervisorApprove({
             requestId: selectedRequest.id,
             approvedBy: currentUser.id,
@@ -768,6 +801,7 @@ export function DownPaymentApprovalPanel({
   };
 
   const handleReject = async () => {
+    if (isExplicitApproval) return;
     if (!selectedRequest || !currentUser || !rejectionReason.trim()) return;
 
     setProcessing(true);
@@ -888,6 +922,7 @@ export function DownPaymentApprovalPanel({
   };
 
   const handleBulkApprove = async (opts?: { notifyStakeholders?: boolean; collectorName?: string }) => {
+    if (isExplicitApproval) return;
     if (!currentUser || selectedIds.size === 0) return;
 
     setProcessing(true);
@@ -911,6 +946,7 @@ export function DownPaymentApprovalPanel({
   };
 
   const handleQuickApproveByCollector = async () => {
+    if (isExplicitApproval) return;
     if (!currentUser || !filters.dataCollectorId) return;
     const collectorReqs = pendingRequests.filter(r => r.requestedBy === filters.dataCollectorId);
     if (collectorReqs.length === 0) return;
@@ -936,6 +972,7 @@ export function DownPaymentApprovalPanel({
   };
 
   const handleRevert = async () => {
+    if (isExplicitApproval) return;
     if (!selectedRequest || !currentUser) return;
 
     setProcessing(true);
@@ -954,6 +991,7 @@ export function DownPaymentApprovalPanel({
   };
 
   const handleBulkRevert = async (targetStatus: 'pending_supervisor' | 'pending_admin' | 'approved', ids?: string[]) => {
+    if (isExplicitApproval) return;
     if (!currentUser) return;
     const revertIds = ids ?? Array.from(selectedIds);
     if (revertIds.length === 0) return;
@@ -973,6 +1011,7 @@ export function DownPaymentApprovalPanel({
 
 
   const handleBulkDelete = async () => {
+    if (isExplicitApproval) return;
     if (!currentUser || selectedIds.size === 0) return;
     setProcessing(true);
     try {
@@ -1025,6 +1064,8 @@ export function DownPaymentApprovalPanel({
   };
 
   const openActionDialog = async (request: DownPaymentRequest, actionType: 'approve' | 'reject' | 'pay' | 'view_audit' | 'revert') => {
+    if (isExplicitApproval && actionType !== 'approve' && actionType !== 'pay') return;
+    if (isExplicitApproval && actionType === 'approve' && request.status !== 'pending_admin') return;
     if (actionType === 'pay' && (
       !canMarkPaid ||
       !['approved', 'partially_paid'].includes(request.status) ||
@@ -1367,6 +1408,7 @@ export function DownPaymentApprovalPanel({
   };
 
   const openEditDialog = (req: DownPaymentRequest) => {
+    if (isExplicitApproval) return;
     setEditDialog({
       open: true,
       request: req,
@@ -1501,6 +1543,7 @@ export function DownPaymentApprovalPanel({
   };
 
   const openPaymentRequestDialog = async (req: DownPaymentRequest) => {
+    if (isExplicitApproval) return;
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
       setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, bulkRequests: [], isBulk: false, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: '', bulkGroupValue: '' }));
@@ -2509,9 +2552,13 @@ export function DownPaymentApprovalPanel({
   _cardCtxRef.current = {
     duplicateSiteNames, requests, resolveUserName, selectedIds, toggleSelection,
     openActionDialog, openPaymentRequestDialog, handleDownloadCertificate, openEditDialog,
-    handleMarkAsPaid, setDeleteConfirm, setSignatureRequest, resendPaymentNotification,
+    handleMarkAsPaid, setDeleteConfirm: (req: DownPaymentRequest | null) => {
+      if (!isStandaloneExplicit) setDeleteConfirm(req);
+    }, setSignatureRequest, resendPaymentNotification,
     isSuperAdmin, markPaidProcessing, userRole, currentUser, cancelRequest,
     preFundPaymentEvidence, canCorrectPreFund, onCorrectPreFund, canDeletePayment, onDeletePayment,
+    isStandaloneExplicit, isExplicitApproval, hasExplicitPaymentSurface, approvalMode,
+    canApproveActions, canApprovePendingAdminOnly, canMarkPaid,
   };
 
   // useMemo([], []) → RequestCard has a STABLE function reference on every render.
@@ -2525,6 +2572,8 @@ export function DownPaymentApprovalPanel({
       handleMarkAsPaid, setDeleteConfirm, setSignatureRequest, resendPaymentNotification,
       isSuperAdmin, markPaidProcessing, userRole, currentUser, cancelRequest,
       preFundPaymentEvidence, canCorrectPreFund, onCorrectPreFund, canDeletePayment, onDeletePayment,
+      isStandaloneExplicit, isExplicitApproval, hasExplicitPaymentSurface, approvalMode,
+      canApproveActions, canApprovePendingAdminOnly, canMarkPaid,
     } = _cardCtxRef.current;
     const [showAuditDetails, setShowAuditDetails] = useState(false);
     const [resending, setResending] = useState(false);
@@ -3190,7 +3239,7 @@ export function DownPaymentApprovalPanel({
               </>
             )}
 
-            {canApproveActions && userRole === 'admin' && request.status === 'pending_admin' && (
+            {canApproveActions && (isExplicitApproval || userRole === 'admin') && request.status === 'pending_admin' && (
               <>
                 <Button
                   size="sm"
@@ -3200,7 +3249,7 @@ export function DownPaymentApprovalPanel({
                   <CheckCircle2 className="h-4 w-4 mr-1" />
                   Approve
                 </Button>
-                <Button
+                {!canApprovePendingAdminOnly && <Button
                   size="sm"
                   variant="destructive"
                   onClick={() => openActionDialog(request, 'reject')}
@@ -3208,8 +3257,8 @@ export function DownPaymentApprovalPanel({
                 >
                   <XCircle className="h-4 w-4 mr-1" />
                   Reject
-                </Button>
-                <Button
+                </Button>}
+                {!canApprovePendingAdminOnly && <Button
                   size="sm"
                   variant="outline"
                   onClick={() => openActionDialog(request, 'revert')}
@@ -3217,11 +3266,11 @@ export function DownPaymentApprovalPanel({
                 >
                   <Undo2 className="h-4 w-4 mr-1" />
                   Revert
-                </Button>
+                </Button>}
               </>
             )}
 
-            {canApproveActions && userRole === 'admin' && request.status === 'pending_supervisor' && (
+            {!isStandaloneExplicit && canApproveActions && userRole === 'admin' && request.status === 'pending_supervisor' && (
               <>
                 <Button
                   size="sm"
@@ -3243,7 +3292,7 @@ export function DownPaymentApprovalPanel({
               </>
             )}
 
-            {canApproveActions && userRole === 'admin' && request.status === 'rejected' && (
+            {!isStandaloneExplicit && canApproveActions && userRole === 'admin' && request.status === 'rejected' && (
               <Button
                 size="sm"
                 variant="outline"
@@ -3255,7 +3304,7 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {canApproveActions && userRole === 'admin' && request.status === 'fully_paid' && (
+            {!isStandaloneExplicit && canApproveActions && userRole === 'admin' && request.status === 'fully_paid' && (
               <Button
                 size="sm"
                 variant="outline"
@@ -3281,7 +3330,7 @@ export function DownPaymentApprovalPanel({
               </>
             )}
 
-            {canApproveActions && userRole === 'admin' && (request.status === 'approved' || request.status === 'partially_paid') && (
+            {!isStandaloneExplicit && canApproveActions && userRole === 'admin' && (request.status === 'approved' || request.status === 'partially_paid') && (
               <>
                 <Button
                   size="sm"
@@ -3295,7 +3344,7 @@ export function DownPaymentApprovalPanel({
               </>
             )}
 
-            {currentUser && request.requestedBy === currentUser.id && 
+            {!isStandaloneExplicit && currentUser && request.requestedBy === currentUser.id &&
               (request.status === 'partially_paid' || request.status === 'fully_paid') && 
               !(request.metadata as any)?.receipt_confirmation?.confirmed && (
               <Button
@@ -3309,14 +3358,14 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {isConfirmed && (
+            {!isStandaloneExplicit && isConfirmed && (
               <Badge variant="default" className="gap-1" data-testid={`badge-receipt-confirmed-${request.id}`}>
                 <CheckCircle2 className="h-3 w-3" />
                 Receipt Confirmed / تم التأكيد
               </Badge>
             )}
 
-            {(userRole === 'admin' || isSuperAdmin) && request.status === 'fully_paid' && isNotReceived && (
+            {!isStandaloneExplicit && (userRole === 'admin' || isSuperAdmin) && request.status === 'fully_paid' && isNotReceived && (
               <Button
                 size="sm"
                 variant="outline"
@@ -3334,7 +3383,7 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {isApprovedOrPaid(request.status) && (
+            {!isStandaloneExplicit && isApprovedOrPaid(request.status) && (
               <Button
                 size="sm"
                 variant="outline"
@@ -3346,7 +3395,7 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {canEditActions && (userRole === 'admin' || isSuperAdmin) && request.status !== 'pending_supervisor' && (
+            {!isStandaloneExplicit && canEditActions && (userRole === 'admin' || isSuperAdmin) && request.status !== 'pending_supervisor' && (
               <Button
                 size="sm"
                 variant="outline"
@@ -3358,7 +3407,7 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {isSuperAdmin && (
+            {!isStandaloneExplicit && isSuperAdmin && (
               <Button
                 size="sm"
                 variant="outline"
@@ -3371,7 +3420,7 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {userRole === 'admin' && isApprovedOrPaid(request.status) && (
+            {!isStandaloneExplicit && userRole === 'admin' && isApprovedOrPaid(request.status) && (
               <Button
                 size="sm"
                 variant="outline"
@@ -3782,7 +3831,7 @@ export function DownPaymentApprovalPanel({
     () => Array.from(selectedIds).sort().join('|'),
     [selectedIds],
   );
-  const renderCardWithCheckbox = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showCheckbox />, [RequestCard]);
+  const renderCardWithCheckbox = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showCheckbox={!isStandaloneExplicit} />, [RequestCard, isStandaloneExplicit]);
   const renderCardPlain = useCallback((r: DownPaymentRequest) => <RequestCard request={r} />, [RequestCard]);
   const renderCardWithConfirmation = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showConfirmationDetails />, [RequestCard]);
   const selectedRequestBalance = selectedRequest
@@ -3834,7 +3883,7 @@ export function DownPaymentApprovalPanel({
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          {canExportActions && <Popover open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
+          {!isStandaloneExplicit && canExportActions && <Popover open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" data-testid="button-export">
                 <Download className="h-4 w-4 mr-1" />
@@ -3857,8 +3906,8 @@ export function DownPaymentApprovalPanel({
               </Button>
             </PopoverContent>
           </Popover>}
-          {canExportActions && <span className="text-xs text-muted-foreground whitespace-nowrap">Bank Statement / كشف مالي:</span>}
-          {canExportActions && <>
+          {!isStandaloneExplicit && canExportActions && <span className="text-xs text-muted-foreground whitespace-nowrap">Bank Statement / كشف مالي:</span>}
+          {!isStandaloneExplicit && canExportActions && <>
           <Button
             variant="outline"
             size="sm"
@@ -3885,13 +3934,21 @@ export function DownPaymentApprovalPanel({
 
       {!hideFiltersBar && showFilters && <FilterPanel />}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className={`grid w-full ${userRole === 'admin' ? 'grid-cols-6' : 'grid-cols-5'} mb-4`}>
-          <TabsTrigger value="pending" data-testid="tab-pending">
+      <Tabs
+        value={isStandaloneExplicit ? activeTab : activeTab}
+        onValueChange={value => {
+          if (!isStandaloneExplicit || (approvalMode === 'explicit_combined' && ['pending', 'processing'].includes(value))) {
+            setActiveTab(value);
+          }
+        }}
+        className="w-full"
+      >
+        <TabsList className={`grid w-full ${isStandaloneExplicit ? (isExplicitApproval && hasExplicitPaymentSurface ? 'grid-cols-2' : 'grid-cols-1') : (userRole === 'admin' ? 'grid-cols-6' : 'grid-cols-5')} mb-4`}>
+          {(!isStandaloneExplicit || isExplicitApproval) && <TabsTrigger value="pending" data-testid="tab-pending">
             Pending
             <Badge variant="secondary" className="ml-2">{pendingRequests.length}</Badge>
-          </TabsTrigger>
-          {userRole === 'admin' && (
+          </TabsTrigger>}
+          {!isStandaloneExplicit && userRole === 'admin' && (
             <TabsTrigger value="approved" data-testid="tab-approved">
               Approved
               {approvedRequests.length > 0
@@ -3900,28 +3957,28 @@ export function DownPaymentApprovalPanel({
               }
             </TabsTrigger>
           )}
-          <TabsTrigger value="processing" data-testid="tab-processing">
+          {(!isStandaloneExplicit || hasExplicitPaymentSurface) && <TabsTrigger value="processing" data-testid="tab-processing">
             Processing
             <Badge variant="secondary" className="ml-2">{processingRequests.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="completed" data-testid="tab-completed">
+          </TabsTrigger>}
+          {!isStandaloneExplicit && <TabsTrigger value="completed" data-testid="tab-completed">
             Completed
             <Badge variant="secondary" className="ml-2">{completedRequests.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="closed" data-testid="tab-closed">
+          </TabsTrigger>}
+          {!isStandaloneExplicit && <TabsTrigger value="closed" data-testid="tab-closed">
             Closed
             {closedRequests.length > 0 && <Badge variant="destructive" className="ml-2">{closedRequests.length}</Badge>}
             {closedRequests.length === 0 && <Badge variant="secondary" className="ml-2">0</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="all" data-testid="tab-all">
+          </TabsTrigger>}
+          {!isStandaloneExplicit && <TabsTrigger value="all" data-testid="tab-all">
             All
             <Badge variant="secondary" className="ml-2">{filteredRequests.length}</Badge>
-          </TabsTrigger>
+          </TabsTrigger>}
         </TabsList>
 
         <TabsContent value="pending">
           <TabFilterBar testIdPrefix="pending" />
-          {selectedIds.size > 0 && pendingRequests.length > 0 && (
+          {!isStandaloneExplicit && selectedIds.size > 0 && pendingRequests.length > 0 && (
             <Card className="mb-4 border-primary">
               <CardContent className="p-3 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
@@ -3974,7 +4031,7 @@ export function DownPaymentApprovalPanel({
             <Card><CardContent className="py-8 text-center text-muted-foreground">No pending requests</CardContent></Card>
           ) : (
             <div>
-              {filters.dataCollectorId && (() => {
+              {!isStandaloneExplicit && filters.dataCollectorId && (() => {
                 const collectorReqs = pendingRequests.filter(r => r.requestedBy === filters.dataCollectorId);
                 const collectorName = allUniqueRequesters.find(e => e.id === filters.dataCollectorId)?.name || 'this collector';
                 const totalAmount = collectorReqs.reduce((s, r) => s + r.requestedAmount, 0);
@@ -4010,11 +4067,11 @@ export function DownPaymentApprovalPanel({
                   </Card>
                 );
               })()}
-              <div className="flex items-center gap-2 mb-2">
+              {!isStandaloneExplicit && <div className="flex items-center gap-2 mb-2">
                 <Button variant="ghost" size="sm" onClick={() => selectAll(pendingRequests)} data-testid="button-select-all">
                   Select All
                 </Button>
-              </div>
+              </div>}
               <VirtualizedRequestList requests={pendingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
             </div>
           )}
@@ -4104,7 +4161,7 @@ export function DownPaymentApprovalPanel({
         </TabsContent>
 
         <TabsContent value="processing">
-          {userRole === 'admin' && approvedForPayment.length > 0 && (
+          {!isStandaloneExplicit && userRole === 'admin' && approvedForPayment.length > 0 && (
             <Card className="mb-4">
               <CardHeader className="p-3 pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -4263,7 +4320,7 @@ export function DownPaymentApprovalPanel({
               </CardContent>
             </Card>
           )}
-          {selectedIds.size > 0 && processingRequests.length > 0 && (() => {
+          {!isStandaloneExplicit && selectedIds.size > 0 && processingRequests.length > 0 && (() => {
             const selectedProcessing = processingRequests.filter(r => selectedIds.has(r.id));
             const approvedCount = selectedProcessing.filter(r => r.status === 'approved').length;
             const payableCount = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid').length;

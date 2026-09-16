@@ -523,10 +523,13 @@ export default function DownPaymentApproval() {
   // grant (or an existing workflow role), so a view-only user cannot approve
   // or pay merely because they can see every request.
   const hasWorkflowRole = isSupervisor || isAdmin;
-  // A grant can hide/show an action for a workflow role. It deliberately does
-  // not promote a read-only role into a financial approver: that needs a
-  // server-side workflow-role assignment, not a browser-side checkbox.
-  const canApproveActions = hasWorkflowRole && canApproveDownPayment();
+  // Approval is an independently grantable capability.  A non-workflow role
+  // with down_payments:approve gets the narrow Tier 2 approval entry point;
+  // it must not be promoted into the supervisor/admin control surface.
+  const canApprovePendingAdminOnly = !hasWorkflowRole && canApproveDownPayment();
+  const canApproveActions = hasWorkflowRole
+    ? canApproveDownPayment()
+    : canApprovePendingAdminOnly;
   const canMarkPaidActions = canMarkDownPaymentPaid();
   const canEditActions = isAdmin && checkPermission('down_payments', 'update');
   const canExportActions = checkPermission('down_payments', 'export');
@@ -1116,6 +1119,8 @@ export default function DownPaymentApproval() {
     });
   }, [siteCoverageData, filters, covMmpFilter, covHubFilter, covStateFilter, covDcFilter, covStatusFilter]);
 
+  // Standalone approval grants always use the eligible Tier 2 queue, without
+  // exposing the account to the admin tier selector or other admin controls.
   const approvalRole = selectedTier === 'tier1' ? 'supervisor' : 'admin';
   const partialBalance = partialPayDialog.req ? getDownPaymentBalance(partialPayDialog.req) : null;
 
@@ -1478,7 +1483,9 @@ export default function DownPaymentApproval() {
           <Alert className={selectedTier === 'tier1' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : ''}>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              {selectedTier === 'tier1' ? (
+              {canApprovePendingAdminOnly ? (
+                <><strong>Tier 2 - Granted Approval:</strong> Review and approve eligible requests already awaiting Admin processing. Payment remains available only with the separate payment and pre-funding grants.</>
+              ) : selectedTier === 'tier1' ? (
                 <><strong>Tier 1 - Supervisor Approval Flow:</strong> Review down-payment requests from data collectors and coordinators. Approved requests will be forwarded to Tier 2 (Admin) for final processing and payment.</>
               ) : (
                 <><strong>Tier 2 - Admin Processing Flow:</strong> Process requests that have been approved by supervisors. You can approve, reject, or process payments directly to the requester's wallet.</>
@@ -1502,6 +1509,10 @@ export default function DownPaymentApproval() {
             }}
             canDeletePayment={canDeletePayment}
             canApproveActions={canApproveActions}
+            canApprovePendingAdminOnly={canApprovePendingAdminOnly}
+            approvalMode={canApprovePendingAdminOnly
+              ? (canMarkPaidActions ? 'explicit_combined' : 'explicit_pending_admin')
+              : (canMarkPaidActions && !hasWorkflowRole ? 'explicit_payment' : 'workflow')}
             canMarkPaid={canMarkPaidActions}
             canEditActions={canEditActions}
             canExportActions={canExportActions}
