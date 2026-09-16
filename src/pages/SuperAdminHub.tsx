@@ -198,7 +198,9 @@ export default function SuperAdminHub() {
   const activeTab: SATab = (visibleAllTabs.find(t => t.id === rawTab) ? rawTab : _defaultSA) as SATab;
 
   const activeTabDef = ALL_TABS.find(t => t.id === activeTab) ?? ALL_TABS[0];
-  const activeSection = visibleSections.find(s => s.id === activeTabDef.sectionId) ?? visibleSections[0] ?? SECTIONS[0];
+  // Never fall back to the unfiltered SECTIONS catalog — that showed clickable
+  // tabs that could not become the active panel when every tab was filtered out.
+  const activeSection = visibleSections.find(s => s.id === activeTabDef.sectionId) ?? visibleSections[0] ?? null;
 
   const setTab = (tab: SATab) => {
     localStorage.setItem('hub_last_tab_super_admin', tab);
@@ -207,7 +209,7 @@ export default function SuperAdminHub() {
     setParams(next, { replace: true });
   };
 
-  const Panel = PanelMap[activeTab];
+  const Panel = activeTab in PanelMap ? PanelMap[activeTab] : null;
 
   return (
     <HubLayout
@@ -215,17 +217,24 @@ export default function SuperAdminHub() {
       subtitle="Monitoring · Access · Email · Mobile · Data"
       hubIcon={ShieldCheck}
       sections={visibleSections}
-      activeSectionId={activeSection.id}
+      activeSectionId={activeSection?.id ?? null}
       activeTabId={activeTab}
-      activeTabDescription={activeTabDef.description}
+      activeTabDescription={activeSection ? activeTabDef.description : null}
       quickLinks={['dashboard', 'admin', 'my-tasks']}
       tourSlug="super-admin-hub"
       onSectionClick={id => setTab(id as SATab)}
       onTabClick={id => setTab(id as SATab)}
     >
-      <Suspense fallback={<Spinner />}>
-        <Panel />
-      </Suspense>
+      {!activeSection || !Panel ? (
+        <div className="flex flex-col items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
+          <ShieldCheck className="h-8 w-8 opacity-40" />
+          <p>No Super Admin Hub pages are available for your access profile.</p>
+        </div>
+      ) : (
+        <Suspense fallback={<Spinner />}>
+          <Panel />
+        </Suspense>
+      )}
     </HubLayout>
   );
 }

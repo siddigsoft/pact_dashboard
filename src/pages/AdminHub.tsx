@@ -112,7 +112,9 @@ export default function AdminHub() {
   const activeTab: AdminTab = (visibleAllTabs.find(t => t.id === rawTab) ? rawTab : _defaultAdm) as AdminTab;
 
   const activeTabDef = ALL_TABS.find(t => t.id === activeTab) ?? ALL_TABS[0];
-  const activeSection = visibleSections.find(s => s.id === activeTabDef.sectionId) ?? visibleSections[0] ?? SECTIONS[0];
+  // Never fall back to the unfiltered SECTIONS catalog. That made blocked/loading
+  // hubs show clickable tabs that could not become the active panel.
+  const activeSection = visibleSections.find(s => s.id === activeTabDef.sectionId) ?? visibleSections[0] ?? null;
 
   const setTab = (tab: AdminTab) => {
     localStorage.setItem('hub_last_tab_admin', tab);
@@ -121,7 +123,7 @@ export default function AdminHub() {
     setParams(next, { replace: true });
   };
 
-  const Panel = PanelMap[activeTab];
+  const Panel = activeTab in PanelMap ? PanelMap[activeTab] : null;
 
   const [dropOpen, setDropOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -134,7 +136,7 @@ export default function AdminHub() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  useEffect(() => { setDropOpen(false); }, [activeSection.id]);
+  useEffect(() => { setDropOpen(false); }, [activeSection?.id]);
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -150,9 +152,13 @@ export default function AdminHub() {
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
-              style={{ background: activeSection.color, boxShadow: `0 0 16px ${activeSection.color}55` }}
+              style={{ background: activeSection?.color ?? '#3b82f6', boxShadow: `0 0 16px ${(activeSection?.color ?? '#3b82f6')}55` }}
             >
-              <activeSection.icon className="h-4.5 w-4.5 text-white" style={{ width: 18, height: 18 }} />
+              {activeSection ? (
+                <activeSection.icon className="h-4.5 w-4.5 text-white" style={{ width: 18, height: 18 }} />
+              ) : (
+                <Users className="h-4.5 w-4.5 text-white" style={{ width: 18, height: 18 }} />
+              )}
             </div>
             <div className="min-w-0">
               <h1 className="text-[17px] font-bold text-white tracking-tight leading-tight">
@@ -165,14 +171,15 @@ export default function AdminHub() {
                     <span
                       className={cn(
                         'transition-colors',
-                        activeSection.id === s.id ? 'font-semibold' : 'opacity-60'
+                        activeSection?.id === s.id ? 'font-semibold' : 'opacity-60'
                       )}
-                      style={activeSection.id === s.id ? { color: s.color } : {}}
+                      style={activeSection?.id === s.id ? { color: s.color } : {}}
                     >
                       {s.label}
                     </span>
                   </span>
                 ))}
+                {visibleSections.length === 0 && <span className="opacity-60">No accessible sections</span>}
               </div>
             </div>
           </div>
@@ -184,7 +191,7 @@ export default function AdminHub() {
         {/* ── Level 2: Section tabs ── */}
         <div className="px-5 pt-3 flex items-end gap-1.5">
           {visibleSections.map(s => {
-            const isActive = activeSection.id === s.id;
+            const isActive = activeSection?.id === s.id;
             return (
               <button
                 key={s.id}
@@ -228,6 +235,7 @@ export default function AdminHub() {
         </div>
 
         {/* ── Level 3: Sub-tab dropdown ── */}
+        {activeSection && (
         <div
           className="relative px-4 py-2 border-t flex items-center gap-3"
           style={{ borderColor: `${activeSection.color}30`, backgroundColor: `${activeSection.color}0a` }}
@@ -280,6 +288,7 @@ export default function AdminHub() {
                   return (
                     <button
                       key={tab.id}
+                      type="button"
                       onClick={() => { setTab(tab.id); setDropOpen(false); }}
                       className={cn(
                         'flex items-start gap-2 px-3 py-2.5 rounded-lg text-left transition-all duration-100',
@@ -296,9 +305,11 @@ export default function AdminHub() {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* ── Description strip ── */}
+      {activeSection && (
       <div
         className="flex items-start gap-3 px-5 py-2.5 border-b border-l-[3px]"
         style={{
@@ -315,12 +326,20 @@ export default function AdminHub() {
           {activeTabDef.description}
         </p>
       </div>
+      )}
 
       {/* ── Page content ── */}
       <div className="flex-1">
-        <Suspense fallback={<Spinner />}>
-          <Panel />
-        </Suspense>
+        {!activeSection || !Panel ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
+            <Shield className="h-8 w-8 opacity-40" />
+            <p>No Administration Hub pages are available for your access profile.</p>
+          </div>
+        ) : (
+          <Suspense fallback={<Spinner />}>
+            <Panel />
+          </Suspense>
+        )}
       </div>
     </div>
   );

@@ -56,7 +56,7 @@ const ALL_PAGES: QuickLink[] = [
   {
     id: "departments",
     label: "Departments",
-    url: "/admin?tab=departments",
+    url: "/admin-hub?tab=departments",
     icon: Building2,
     color: "#0F2041",
     light: "#E8ECF3",
@@ -73,7 +73,7 @@ const ALL_PAGES: QuickLink[] = [
   {
     id: "users",
     label: "User Management",
-    url: "/admin?tab=users",
+    url: "/admin-hub?tab=users",
     icon: Users,
     color: "#2563EB",
     light: "#DBEAFE",
@@ -82,7 +82,7 @@ const ALL_PAGES: QuickLink[] = [
   {
     id: "role-management",
     label: "Role Management",
-    url: "/admin?tab=role-management",
+    url: "/admin-hub?tab=role-management",
     icon: ShieldCheck,
     color: "#7C3AED",
     light: "#EDE9FE",
@@ -91,7 +91,7 @@ const ALL_PAGES: QuickLink[] = [
   {
     id: "settings",
     label: "Settings",
-    url: "/admin?tab=settings",
+    url: "/admin-hub?tab=settings",
     icon: Settings,
     color: "#4b5563",
     light: "#F3F4F6",
@@ -165,7 +165,7 @@ const ALL_PAGES: QuickLink[] = [
   {
     id: "admin",
     label: "Admin Hub",
-    url: "/admin",
+    url: "/admin-hub",
     icon: Settings,
     color: "#4b5563",
     light: "#F3F4F6",

@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type FC, type ReactNode } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useCurrentUserAccessManifest } from '@/hooks/useCurrentUserAccessManifest';
+import { isSuperAdminRole } from '@/lib/effectiveAccess';
 import { overrideIsActive, manifestIsTabBlocked } from '@/lib/current-user-access';
 
 interface CurrentUserAccessValue {
@@ -26,7 +27,16 @@ export const CurrentUserAccessProvider: FC<{ children: ReactNode }> = ({ childre
       .map(([slug, override]) => [slug, override.is_blocked]),
   ), [manifest]);
   const isTabBlocked = (slug: string) => {
-    if (!currentUser || !manifest || query.isError) return true;
+    if (!currentUser) return true;
+    // Profile SA pointer unlocks hub chrome even when canonical role rows lag.
+    if (isSuperAdminRole(currentUser.role)) return false;
+    if (manifest?.roles.some(isSuperAdminRole)) return false;
+    // While the manifest is still loading, do not collapse hub chrome. Hiding
+    // every tab and falling back to an unfiltered section makes clicks appear
+    // to do nothing (URL changes, panel stays on the default). Route guards
+    // and RLS still protect the panel content.
+    if (query.isLoading) return false;
+    if (!manifest || query.isError) return true;
     return manifestIsTabBlocked(manifest, slug);
   };
   return (
