@@ -282,8 +282,10 @@ export const useAuthorization = () => {
 
   const canMarkCostPaid = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('cost_submissions', 'approve') &&
-           hasAnyRole(['admin', 'financialAdmin', 'FinancialAdmin']);
+    // Payment is a separate financial capability. Do not fall back to role
+    // names here: an explicit block in the access manifest must win.
+    return checkPermission('cost_submissions', 'mark_paid') &&
+           checkPermission('pre_funding', 'use_for_payment');
   };
 
   const canExportCostSubmissions = (): boolean => {

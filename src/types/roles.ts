@@ -170,7 +170,10 @@ export type ActionType =
   // without changing access to the others.
   | 'full_report'
   | 'state_report'
-  | 'hub_report';
+  | 'hub_report'
+  // Financial button permissions are separate from page/resource CRUD.
+  | 'mark_paid'
+  | 'use_for_payment';
 
 export const RESOURCES: ResourceType[] = [
   'users', 'roles', 'permissions', 'settings', 'system', 'super_admins', 'audit_logs',
@@ -188,6 +191,7 @@ export const ACTIONS: ActionType[] = [
   'create', 'read', 'update', 'delete', 'approve',
   'assign', 'archive', 'restore', 'override', 'submit', 'export',
   'full_report', 'state_report', 'hub_report',
+  'mark_paid', 'use_for_payment',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -216,6 +220,8 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   approve: 'Approve', assign: 'Assign', archive: 'Archive', restore: 'Restore',
   override: 'Override', submit: 'Submit', export: 'Export',
   full_report: 'Full MMP Report', state_report: 'State MMP Report', hub_report: 'Hub MMP Report',
+  mark_paid: 'Mark Cost Submission Paid',
+  use_for_payment: 'Use Pre-Fund for Payment',
 };
 
 const allActionsFor = (resource: ResourceType): { resource: ResourceType; action: ActionType }[] =>
@@ -279,9 +285,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'down_payments', action: 'update' }, { resource: 'down_payments', action: 'approve' },
     { resource: 'cost_submissions', action: 'create' }, { resource: 'cost_submissions', action: 'read' },
     { resource: 'cost_submissions', action: 'update' }, { resource: 'cost_submissions', action: 'approve' },
+    { resource: 'cost_submissions', action: 'mark_paid' },
     { resource: 'cost_submissions', action: 'delete' }, { resource: 'cost_submissions', action: 'export' },
     { resource: 'pre_funding', action: 'read' }, { resource: 'pre_funding', action: 'create' },
     { resource: 'pre_funding', action: 'approve' }, { resource: 'pre_funding', action: 'export' },
+    { resource: 'pre_funding', action: 'use_for_payment' },
     { resource: 'procurement', action: 'read' }, { resource: 'procurement', action: 'approve' },
     { resource: 'procurement', action: 'export' },
     { resource: 'fixed_assets', action: 'read' }, { resource: 'fixed_assets', action: 'export' },
@@ -472,6 +480,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'finances', action: 'read' }, { resource: 'finances', action: 'update' },
     { resource: 'finances', action: 'approve' }, { resource: 'finances', action: 'export' },
     { resource: 'cost_submissions', action: 'read' }, { resource: 'cost_submissions', action: 'approve' },
+    { resource: 'cost_submissions', action: 'mark_paid' },
     { resource: 'cost_submissions', action: 'export' },
     { resource: 'wallets', action: 'read' }, { resource: 'wallets', action: 'update' },
     { resource: 'wallets', action: 'approve' }, { resource: 'wallets', action: 'export' },
@@ -481,6 +490,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'down_payments', action: 'export' },
     { resource: 'pre_funding', action: 'read' }, { resource: 'pre_funding', action: 'create' },
     { resource: 'pre_funding', action: 'approve' }, { resource: 'pre_funding', action: 'export' },
+    { resource: 'pre_funding', action: 'use_for_payment' },
     { resource: 'procurement', action: 'read' }, { resource: 'procurement', action: 'create' },
     { resource: 'procurement', action: 'update' }, { resource: 'procurement', action: 'approve' },
     { resource: 'procurement', action: 'export' },

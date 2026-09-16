@@ -1,0 +1,136 @@
+-- Regression coverage for 20260916160000_prefund_payment_permissions.sql.
+--
+-- This is intentionally disposable: all assertions run in one transaction and
+-- no fixture rows are required. It validates the deployed function definitions
+-- and the preserved legacy function name, which catches partial migration
+-- application without requiring a production-like fund fixture.
+BEGIN;
+
+DO $$
+DECLARE
+  v_auth text;
+  v_shared text;
+  v_wrapper text;
+  v_reconciled text;
+  v_legacy text;
+  v_constraint text;
+  v_selector text;
+  v_guard text;
+BEGIN
+  IF to_regprocedure('public._assert_pre_fund_payment_access()') IS NULL THEN
+    RAISE EXCEPTION 'dedicated Pre-Fund payment assertion is missing';
+  END IF;
+  IF to_regprocedure('public.record_required_pre_fund_payment_rpc(text,uuid,uuid,numeric,text,date,uuid,text,text,text)') IS NULL THEN
+    RAISE EXCEPTION 'public payment RPC is missing';
+  END IF;
+  IF to_regprocedure('public.record_required_pre_fund_payment_legacy_rpc(text,uuid,uuid,numeric,text,date,uuid,text,text,text)') IS NULL THEN
+    RAISE EXCEPTION 'legacy payment RPC rename was not applied';
+  END IF;
+  -- The migration's guarded rename is what makes re-application safe: both
+  -- the preserved implementation and the new public wrapper are present.
+
+  SELECT pg_get_functiondef(
+    'public._assert_pre_fund_payment_access()'::regprocedure
+  ) INTO v_auth;
+  IF position('is_super_admin' IN lower(v_auth)) = 0
+     OR position('assert_resource_permission(''cost_submissions'', ''mark_paid'')' IN v_auth) = 0
+     OR position('assert_resource_permission(''pre_funding'', ''use_for_payment'')' IN v_auth) = 0
+     OR position('is_super_admin' IN lower(v_auth))
+        > position('assert_resource_permission' IN lower(v_auth)) THEN
+    RAISE EXCEPTION 'payment assertion must check Super Admin first and require both dedicated actions';
+  END IF;
+
+  SELECT pg_get_functiondef(
+    'public._record_shared_cost_submission_payment(uuid,uuid,numeric,text,date,uuid,text,text,text)'::regprocedure
+  ) INTO v_shared;
+  FOREACH v_auth IN ARRAY ARRAY[
+    'FOR UPDATE',
+    'approved',
+    'partially_paid',
+    'currency',
+    'available_balance',
+    '_assert_pre_fund_payment_access',
+    'p_user_id'
+  ] LOOP
+    IF position(lower(v_auth) IN lower(v_shared)) = 0 THEN
+      RAISE EXCEPTION 'shared payment function is missing required guard: %', v_auth;
+    END IF;
+  END LOOP;
+  IF position('NULL, p_receipt_url' IN v_shared) = 0
+     AND position('null, p_receipt_url' IN lower(v_shared)) = 0 THEN
+    RAISE EXCEPTION 'shared OCS linkage must pass NULL personal-allocation identity';
+  END IF;
+  IF position('_assert_pre_fund_payment_access' IN v_shared)
+       > position('SELECT * INTO v_source' IN v_shared)
+     OR position('idempotent' IN lower(v_shared))
+       > position('SELECT * INTO v_source' IN v_shared)
+     OR position('idempotency_key' IN lower(v_shared)) = 0
+     OR position('source_table' IN lower(v_shared)) = 0
+     OR position('source_id' IN lower(v_shared)) = 0
+     OR position('pre_fund_request_id' IN lower(v_shared)) = 0 THEN
+    RAISE EXCEPTION 'OCS idempotency must authorize and validate event identity before mutable source checks';
+  END IF;
+
+  SELECT pg_get_functiondef(
+    'public.record_required_pre_fund_payment_rpc(text,uuid,uuid,numeric,text,date,uuid,text,text,text)'::regprocedure
+  ) INTO v_wrapper;
+  IF position('_record_shared_cost_submission_payment' IN v_wrapper) = 0
+     OR position('record_required_pre_fund_payment_legacy_rpc' IN v_wrapper) = 0 THEN
+    RAISE EXCEPTION 'public wrapper does not preserve shared OCS and legacy branches';
+  END IF;
+
+  SELECT pg_get_functiondef(
+    'public.record_reconciled_required_pre_fund_payment_rpc(text,uuid,uuid,numeric,text,date,uuid,text,text,text)'::regprocedure
+  ) INTO v_reconciled;
+  IF position('_record_shared_cost_submission_payment' IN v_reconciled) = 0
+     OR position('_record_shared_cost_submission_payment' IN v_reconciled)
+          > position('_assert_finance_role' IN v_reconciled)
+     OR position('down_payment_requests' IN v_reconciled) = 0
+     OR position('pre_fund_source_total_reconciled' IN v_reconciled) = 0 THEN
+    RAISE EXCEPTION 'reconciled RPC does not dispatch OCS first while preserving Down-Payment reconciliation';
+  END IF;
+
+  SELECT pg_get_functiondef(
+    'public.record_required_pre_fund_payment_legacy_rpc(text,uuid,uuid,numeric,text,date,uuid,text,text,text)'::regprocedure
+  ) INTO v_legacy;
+  IF position('link_payment_atomically_rpc' IN v_legacy) = 0 THEN
+    RAISE EXCEPTION 'legacy renamed implementation is not retained';
+  END IF;
+
+  SELECT pg_get_constraintdef(oid)
+  INTO v_constraint
+  FROM pg_constraint
+  WHERE conrelid = 'public.permissions'::regclass
+    AND conname = 'permissions_action_check';
+  IF v_constraint IS NULL
+     OR position('mark_paid' IN v_constraint) = 0
+     OR position('use_for_payment' IN v_constraint) = 0 THEN
+    RAISE EXCEPTION 'permission action constraint does not include dedicated payment actions';
+  END IF;
+
+  IF to_regprocedure('public.get_payment_eligible_pre_funds(text)') IS NULL THEN
+    RAISE EXCEPTION 'narrow payment fund selector RPC is missing';
+  END IF;
+  SELECT pg_get_functiondef(
+    'public.get_payment_eligible_pre_funds(text)'::regprocedure
+  ) INTO v_selector;
+  IF position('mark_paid' IN lower(v_selector)) = 0
+     OR position('use_for_payment' IN lower(v_selector)) = 0
+     OR position('available_balance' IN lower(v_selector)) = 0
+     OR position('active' IN lower(v_selector)) = 0
+     OR position('low_balance' IN lower(v_selector)) = 0 THEN
+    RAISE EXCEPTION 'selector RPC is missing dual authorization or fund filters';
+  END IF;
+
+  SELECT pg_get_functiondef(
+    'public.guard_finance_resource_transition()'::regprocedure
+  ) INTO v_guard;
+  IF position('app.pre_fund_payment_rpc' IN lower(v_guard)) = 0
+     OR position('operational_cost_submissions' IN lower(v_guard)) = 0
+     OR position('assert_resource_permission(resource, ''approve'')' IN v_guard) = 0
+     OR position('assert_resource_permission(''pre_funding'', ''update'')' IN v_guard) = 0 THEN
+    RAISE EXCEPTION 'finance transition guard does not preserve direct/Down-Payment checks and OCS bypass';
+  END IF;
+END $$;
+
+ROLLBACK;

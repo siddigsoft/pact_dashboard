@@ -257,7 +257,7 @@ const CostSubmission = () => {
    }, [mmpFiles]);
   
   // Role checks — canonical camelCase codes via useAuthorization hook
-  const { hasAnyRole, isSuperAdmin: isSuperAdminFn, checkPermission, hasExplicitActionGrant } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin: isSuperAdminFn, checkPermission, hasExplicitActionGrant, canMarkCostPaid: canMarkCostPaidByPermission } = useAuthorization();
   const isAdmin           = hasAnyRole(['admin']);
   const isSupervisor      = hasAnyRole(['supervisor']);
   const isFOM             = hasAnyRole(['fom']);
@@ -786,9 +786,10 @@ const CostSubmission = () => {
     }>;
     preFundsLoading: boolean;
     preFundsError: string | null;
+    preFundsEmptyReason: 'no_currency_fund' | 'no_available_balance' | null;
     payAmountStr: string;
     paymentEventKey?: string;
-  }>({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: false, preFundsError: null, payAmountStr: '' });
+  }>({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: false, preFundsError: null, preFundsEmptyReason: null, payAmountStr: '' });
 
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
   const [batchCostPayDialog, setBatchCostPayDialog] = useState<{
@@ -2553,9 +2554,7 @@ const CostSubmission = () => {
   const canMarkAsPaid = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus !== 'approved' && derivedStatus !== 'partially_paid') return false;
-    // Country Directors are never allowed to mark paid — financial admin action only
-    if (isCountryDirector) return false;
-    return isSuperAdmin || isAdmin || isFinanceAdmin || hasMarkPaidOverride;
+    return canMarkCostPaidByPermission();
   };
 
   const canReconcile = (oc: OperationalCostSubmission): boolean => {
@@ -2568,7 +2567,6 @@ const CostSubmission = () => {
 
   // Per-user override checks (stored in user_permission_overrides with resource='cost_submissions')
   const cs = (a: string) => checkPermission('cost_submissions' as any, a as any);
-  const hasMarkPaidOverride     = cs('mark_paid');
   const hasSendToFinanceOverride = cs('send_to_finance');
   const hasReconcileOverride    = cs('reconcile');
   const hasRecallOverride       = cs('recall');
@@ -2625,12 +2623,20 @@ const CostSubmission = () => {
   };
 
   const openMarkAsPaidDialog = (oc: OperationalCostSubmission) => {
+    if (!canMarkCostPaidByPermission()) {
+      toast({
+        title: 'Payment access denied / لا صلاحية للدفع',
+        description: 'Your role is not authorized to mark Cost Submissions paid or use shared Pre-Funds.',
+        variant: 'destructive',
+      });
+      return;
+    }
     // Open dialog immediately — pre-fund list loads in the background while the user attaches a receipt
     const alreadyPaidCents = oc.amount_paid_cents ?? 0;
     const remainingCents = oc.amount_cents - alreadyPaidCents;
     const remainingAmount = (remainingCents / 100).toFixed(2);
     setMarkAsPaidDialog({
-      open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: true, preFundsError: null, payAmountStr: remainingAmount,
+      open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: true, preFundsError: null, preFundsEmptyReason: null, payAmountStr: remainingAmount,
       paymentEventKey: `source-payment:operational_cost_submissions:${oc.id}:${crypto.randomUUID()}`,
     });
     // Async: load pre-funds and update dialog state once available
@@ -2643,17 +2649,11 @@ const CostSubmission = () => {
       }> = [];
       try {
         const { data: pfData, error: fundsError } = await supabase
-          .from('pre_fund_requests' as any)
-          .select('id, name, currency, available_balance')
-          .in('status', ['active', 'low_balance'])
-          .eq('currency', oc.currency)
-          .order('name');
+          .rpc('get_payment_eligible_pre_funds', { p_currency: oc.currency });
         if (fundsError) throw fundsError;
 
         const fundRows = (pfData ?? []) as any[];
-        preFunds = fundRows
-          .filter(fund => Number(fund.available_balance ?? 0) > 0)
-          .map(fund => ({
+        preFunds = fundRows.map(fund => ({
             id: fund.id,
             name: fund.name,
             currency: fund.currency,
@@ -2662,13 +2662,16 @@ const CostSubmission = () => {
       } catch (error: any) {
         const message = error?.message || 'Unable to load eligible Pre-Funds.';
         setMarkAsPaidDialog(prev => (prev.open && prev.submission?.id === oc.id)
-          ? { ...prev, preFundsLoading: false, preFundsError: message }
+          ? { ...prev, preFundsLoading: false, preFundsError: message, preFundsEmptyReason: null }
           : prev);
         return;
       }
       // Only update if this dialog is still open for the same submission
+      const emptyReason = preFunds.length === 0
+        ? (fundRows.length === 0 ? 'no_currency_fund' : 'no_available_balance')
+        : null;
       setMarkAsPaidDialog(prev => (prev.open && prev.submission?.id === oc.id)
-        ? { ...prev, preFunds, preFundsLoading: false, preFundsError: null }
+        ? { ...prev, preFunds, preFundsLoading: false, preFundsError: null, preFundsEmptyReason: emptyReason }
         : prev);
     })();
   };
@@ -2821,7 +2824,7 @@ const CostSubmission = () => {
           isFullPayment ? 'تم صرف مطالبة التكلفة ✅' : 'تم استلام دفعة جزئية 💰',
         );
         markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-        setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: false, preFundsError: null, payAmountStr: '' });
+        setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: false, preFundsError: null, preFundsEmptyReason: null, payAmountStr: '' });
         fetchOperationalCosts();
       }
     } catch (err: any) {
@@ -2861,26 +2864,17 @@ const CostSubmission = () => {
     (async () => {
       let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
       try {
-        let allowedFundIds: string[] | null = null;
-        if (!isSuperAdmin) {
-          const { data: allocData } = await supabase
-            .from('pre_fund_allocations' as any)
-            .select('pre_fund_request_id')
-            .eq('user_id', currentUser?.id);
-          allowedFundIds = ((allocData ?? []) as any[]).map((a: any) => a.pre_fund_request_id).filter(Boolean);
-        }
-        if (isSuperAdmin || (allowedFundIds && allowedFundIds.length > 0)) {
-          let q = supabase
-            .from('pre_fund_requests' as any)
-            .select('id, name, currency, available_balance')
-            .in('status', ['active', 'low_balance'])
-            .order('name');
-          if (!isSuperAdmin && allowedFundIds) q = (q as any).in('id', allowedFundIds);
-          const { data: pfData } = await q;
-          preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
-            id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
-          }));
-        }
+        // Pre-Funds are shared programme funds. Personal allocations are
+        // attribution/reporting data and must not filter payment choices.
+        const currencies = [...new Set(normalizedEligible.map(s => s.currency).filter(Boolean))];
+        const results = await Promise.all(currencies.map(currency =>
+          supabase.rpc('get_payment_eligible_pre_funds', { p_currency: currency })
+        ));
+        const rpcError = results.find(result => result.error)?.error;
+        if (rpcError) throw rpcError;
+        preFunds = results.flatMap(result => ((result.data ?? []) as any[]).map((f: any) => ({
+          id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
+        })));
       } catch (_) {}
       // Only update if the dialog is still open
       setBatchCostPayDialog(prev => prev.open ? { ...prev, preFunds } : prev);
@@ -2900,6 +2894,14 @@ const CostSubmission = () => {
   const handleConfirmBatchCostPay = async () => {
     const { submissions: subs, proofFiles, notes, preFundId, payMode, payPercent, customInputType, payCustomAmountStr } = batchCostPayDialog;
     if (!currentUser?.id || subs.length === 0) return;
+    if (!canMarkCostPaidByPermission()) {
+      toast({
+        title: 'Payment access denied / لا صلاحية للدفع',
+        description: 'Your role is not authorized to mark Cost Submissions paid or use shared Pre-Funds.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (!proofFiles.length) {
       toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach at least one receipt that covers all selected payments.", variant: "destructive" });
       return;
@@ -12415,7 +12417,7 @@ const CostSubmission = () => {
         onOpenChange={(open) => {
           if (!open && !markAsPaidDialog.uploading) {
             markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFundsLoading: false, preFundsError: null, payAmountStr: '' });
+            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFundsLoading: false, preFundsError: null, preFundsEmptyReason: null, payAmountStr: '' });
           }
         }}
       >
@@ -12679,7 +12681,9 @@ const CostSubmission = () => {
               )}
               {!markAsPaidDialog.preFundsLoading && !markAsPaidDialog.preFundsError && markAsPaidDialog.preFunds.length === 0 && (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                  No active Pre-Fund with an available balance matches this submission’s currency.
+                  {markAsPaidDialog.preFundsEmptyReason === 'no_available_balance'
+                    ? `Active ${markAsPaidDialog.submission.currency} Pre-Funds exist, but none has enough available balance for this payment.`
+                    : `No active Pre-Fund matches this submission’s currency (${markAsPaidDialog.submission.currency}).`}
                 </p>
               )}
 
@@ -12707,7 +12711,7 @@ const CostSubmission = () => {
               variant="outline"
               onClick={() => {
                 markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-                setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: false, preFundsError: null, payAmountStr: '' });
+                setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: false, preFundsError: null, preFundsEmptyReason: null, payAmountStr: '' });
               }}
               disabled={markAsPaidDialog.uploading}
               data-testid="button-cancel-mark-paid"
