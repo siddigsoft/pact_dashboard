@@ -419,26 +419,21 @@ export async function reclaimFromCoordinator(opts: {
       if (advFetchErr) {
         console.warn('[MMP Reclaim] Could not fetch open advances to cancel:', advFetchErr.message);
       } else if (openAdvances && openAdvances.length > 0) {
-        const advanceIds = openAdvances.map((a: any) => a.id);
-
-        // Cancel each advance individually so we can safely merge the metadata note
-        // without overwriting existing fields (a bulk .update() would replace the whole jsonb).
-        await Promise.all(
-          (openAdvances as any[]).map(async (adv: any) => {
-            const mergedMeta = {
-              ...(adv.metadata ?? {}),
-              auto_cancelled_reason: `Auto-cancelled: site reclaimed on ${now}. Reason: ${reasonCategory} — ${reason}`,
-              reclaimed_by: currentUserId,
-            };
-            const { error: cancelErr } = await supabase
-              .from('down_payment_requests')
-              .update({ status: 'cancelled', updated_at: now, metadata: mergedMeta })
-              .eq('id', adv.id);
-            if (cancelErr) {
-              console.warn(`[MMP Reclaim] Failed to cancel advance ${adv.id}:`, cancelErr.message);
-            }
-          })
+        const { data: cancellation, error: cancelErr } = await supabase.rpc(
+          'cancel_reclaimed_site_down_payments',
+          {
+            p_site_entry_ids: forwardedEntryIds,
+            p_reason: `${reasonCategory}: ${reason}`,
+          },
         );
+        if (cancelErr) throw cancelErr;
+
+        const cancelledIds = new Set<string>((cancellation?.cancelled_ids ?? []) as string[]);
+        const cancelledAdvances = (openAdvances as any[]).filter(adv => cancelledIds.has(adv.id));
+        if (cancelledAdvances.length === 0) {
+          console.info('[MMP Reclaim] No open advances remained to cancel.');
+        } else {
+          const advanceIds = cancelledAdvances.map((a: any) => a.id);
 
         console.log(
           `[MMP Reclaim] Auto-cancelled ${advanceIds.length} open advance(s) for reclaimed sites:`,
@@ -448,7 +443,7 @@ export async function reclaimFromCoordinator(opts: {
         // ── Notify finance / admin / supervisors about the auto-cancelled advances ──
         try {
           // Build a human-readable list of voided advances
-          const advanceLines = (openAdvances as any[]).map((a: any) => {
+          const advanceLines = cancelledAdvances.map((a: any) => {
             const amount = a.requested_amount
               ? `SDG ${Number(a.requested_amount).toLocaleString()}`
               : '';
@@ -535,6 +530,7 @@ export async function reclaimFromCoordinator(opts: {
         } catch (notifErr) {
           // Non-fatal — never let notification errors block the reclaim
           console.warn('[MMP Reclaim] Failed to send advance-cancellation notifications:', notifErr);
+        }
         }
         // ────────────────────────────────────────────────────────────────────────
       }
