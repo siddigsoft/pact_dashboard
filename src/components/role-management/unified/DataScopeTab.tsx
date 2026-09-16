@@ -42,7 +42,7 @@ const SUDAN_STATES = [
 export function DataScopeTab({ userId, userRole, isSelectedSuperAdmin }: TabProps) {
   const {
     loading: dataLoading, savingKey, dataScopeRows, scopePreview, scopePreviewError,
-    upsertDataScope, replaceCostSubmissionPolicy, removeDataScope,
+    upsertDataScope, replaceCostSubmissionPolicy, removeDataScope, effectiveRoleNames,
   } = useSelectedUserAccess();
   const [resource, setResource] = useState<DataScopeResource>('operational_cost_submissions');
   const [hubOptions, setHubOptions] = useState<ScopeOption[]>([]);
@@ -61,6 +61,7 @@ export function DataScopeTab({ userId, userRole, isSelectedSuperAdmin }: TabProp
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [showLegacyAdd, setShowLegacyAdd] = useState(false);
   const [legacyTarget, setLegacyTarget] = useState<'user' | 'role'>('user');
+  const [selectedRoleDefault, setSelectedRoleDefault] = useState(userRole);
   const [legacyScopeType, setLegacyScopeType] = useState<ScopeType>('hub');
   const [legacyValue, setLegacyValue] = useState('');
   const [addingLegacy, setAddingLegacy] = useState(false);
@@ -92,22 +93,26 @@ export function DataScopeTab({ userId, userRole, isSelectedSuperAdmin }: TabProp
   }, []);
 
   const userRows = dataScopeRows.filter(row => row.user_id === userId);
-  const roleRows = dataScopeRows.filter(row => row.role === userRole && !row.user_id);
+  const roleRows = dataScopeRows.filter(row => row.role === selectedRoleDefault && !row.user_id);
   const costRows = dataScopeRows.filter(row => row.resource === 'operational_cost_submissions');
   const legacyRows = dataScopeRows.filter(row => !row.resource || row.resource === 'legacy');
   const costUserRows = costRows.filter(row => row.user_id === userId);
-  const costRoleRows = costRows.filter(row => row.role === userRole && !row.user_id);
+  const costRoleRows = costRows.filter(row => row.role === selectedRoleDefault && !row.user_id);
   const effectiveCostRows = costUserRows.length > 0 ? costUserRows : costRoleRows;
 
   // The SQL contract stores one policy row with complete JSON selector arrays.
   // Rehydrate the draft whenever the target changes (or the provider refreshes).
+  useEffect(() => {
+    if (!effectiveRoleNames.includes(selectedRoleDefault)) setSelectedRoleDefault(effectiveRoleNames[0] ?? userRole);
+  }, [effectiveRoleNames, selectedRoleDefault, userRole]);
+
   useEffect(() => {
     const row = target === 'user' ? costUserRows[0] : costRoleRows[0];
     setPolicyMode(row?.mode ?? 'role_default');
     setDraftIncludes(row?.include_values ?? []);
     setDraftExcludes(row?.exclude_values ?? []);
     setSelectedValues([]);
-  }, [target, userId, userRole, costUserRows[0]?.id, costRoleRows[0]?.id]);
+  }, [target, userId, selectedRoleDefault, costUserRows[0]?.id, costRoleRows[0]?.id]);
 
   const valueOptions = scopeType === 'hub' ? hubOptions
     : scopeType === 'project' ? projectOptions
@@ -159,6 +164,7 @@ export function DataScopeTab({ userId, userRole, isSelectedSuperAdmin }: TabProp
         policyMode,
         selectorsEnabled ? draftIncludes : [],
         selectorsEnabled ? draftExcludes : [],
+        selectedRoleDefault,
       );
     } finally {
       setSavingPolicy(false);
@@ -169,7 +175,7 @@ export function DataScopeTab({ userId, userRole, isSelectedSuperAdmin }: TabProp
     if (!legacyValue) return;
     setAddingLegacy(true);
     const label = legacyValueOptions.find(option => option.value === legacyValue)?.label ?? legacyValue;
-    await upsertDataScope(legacyScopeType, legacyValue, label, legacyTarget);
+    await upsertDataScope(legacyScopeType, legacyValue, label, legacyTarget, selectedRoleDefault);
     setLegacyValue('');
     setAddingLegacy(false);
     setShowLegacyAdd(false);
@@ -224,7 +230,7 @@ export function DataScopeTab({ userId, userRole, isSelectedSuperAdmin }: TabProp
                   <label htmlFor="scope-target" className="text-[10px] text-muted-foreground mb-1 block">Applies to</label>
                   <Select value={target} onValueChange={value => setTarget(value as 'user' | 'role')}>
                     <SelectTrigger id="scope-target" className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="user" className="text-xs">User override</SelectItem><SelectItem value="role" className="text-xs">Role default ({userRole})</SelectItem></SelectContent>
+                    <SelectContent><SelectItem value="user" className="text-xs">User override</SelectItem><SelectItem value="role" className="text-xs">Role default</SelectItem></SelectContent>
                   </Select>
                 </div>
                 <div>
@@ -235,6 +241,17 @@ export function DataScopeTab({ userId, userRole, isSelectedSuperAdmin }: TabProp
                   </Select>
                 </div>
               </div>
+              {target === 'role' && (
+                <div>
+                  <label htmlFor="scope-role-default" className="text-[10px] text-muted-foreground mb-1 block">Role default to edit</label>
+                  <Select value={selectedRoleDefault} onValueChange={setSelectedRoleDefault}>
+                    <SelectTrigger id="scope-role-default" className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {effectiveRoleNames.map(role => <SelectItem key={role} value={role} className="text-xs">{role}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <p className="text-[10px] text-muted-foreground">{selectedMode?.description}</p>
 
               {(policyMode === 'selected' || policyMode === 'country') && (

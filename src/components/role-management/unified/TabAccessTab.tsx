@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Layers, Shield, AlertTriangle, Loader2, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HUB_TAB_REGISTRY, hubTabSlug } from '@/lib/hub-tab-defs';
-import { PAGE_DEFS, hasDefaultAccess } from '@/pages/PageAccessControl';
 import { useSelectedUserAccess } from '@/context/role-management/SelectedUserAccessContext';
 import { TabProps, AccessEffect } from './types';
 
@@ -18,7 +17,7 @@ const EFF_CONFIG: Record<AccessEffect, { label: string; dot: string; rowCls: str
   'role-no':  { label: 'No Access',   dot: 'bg-slate-300',   rowCls: 'opacity-45',                                                            btnLabel: 'Show Tab',   btnCls: 'text-emerald-600 border-emerald-200 hover:bg-emerald-50' },
 };
 
-export function TabAccessTab({ userRole, isSelectedSuperAdmin }: TabProps) {
+export function TabAccessTab({ isSelectedSuperAdmin }: TabProps) {
   const { loading, savingKey, effectivePage, togglePage, pageOvMap } = useSelectedUserAccess();
   const [selectedHub, setSelectedHub] = useState(HUB_TAB_REGISTRY[0]?.hubSlug ?? '');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['all']));
@@ -26,12 +25,8 @@ export function TabAccessTab({ userRole, isSelectedSuperAdmin }: TabProps) {
   const hub = useMemo(() => HUB_TAB_REGISTRY.find(h => h.hubSlug === selectedHub) ?? HUB_TAB_REGISTRY[0], [selectedHub]);
 
   // Check if the parent hub page itself is accessible to this user
-  const hubPageDef = PAGE_DEFS.find(p => p.slug === hub?.hubSlug);
-  const hubPageOv = pageOvMap[hub?.hubSlug ?? ''];
-  const hubPageBlocked = hubPageOv?.is_blocked === true;
-  const hubPageGranted = hubPageOv && !hubPageOv.is_blocked;
-  const hubPageByRole = hubPageDef ? hasDefaultAccess(hubPageDef, userRole) : false;
-  const hubPageAccessible = !hubPageBlocked && (hubPageGranted || hubPageByRole);
+  const hubPageEffect = effectivePage(hub?.hubSlug ?? '');
+  const hubPageAccessible = hubPageEffect === 'superadmin' || hubPageEffect === 'granted' || hubPageEffect === 'role-yes';
 
   // Count overrides for display
   const overrideCount = useMemo(() => {

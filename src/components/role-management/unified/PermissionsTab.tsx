@@ -308,11 +308,16 @@ export function PermissionsTab({
   section = 'all',
   actionFilter = 'all',
 }: TabProps & { section?: PermissionsSection; actionFilter?: ActionFilter }) {
-  const { loading, savingKey, effectiveAction, explainAction, toggleAction, columnConfigs, upsertColumnVisibility, removeColumnVisibility } = useSelectedUserAccess();
+  const { loading, savingKey, effectiveAction, explainAction, toggleAction, columnConfigs, upsertColumnVisibility, removeColumnVisibility, effectiveRoleNames } = useSelectedUserAccess();
   const [activeSection, setActiveSection] = useState<'actions' | 'columns' | 'grants'>('actions');
   const [moduleSearch, setModuleSearch] = useState('');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [selectedPage, setSelectedPage] = useState(COLUMN_REGISTRY[0]?.pageSlug ?? '');
+  const [selectedRoleDefault, setSelectedRoleDefault] = useState(userRole);
+
+  useEffect(() => {
+    if (!effectiveRoleNames.includes(selectedRoleDefault)) setSelectedRoleDefault(effectiveRoleNames[0] ?? userRole);
+  }, [effectiveRoleNames, selectedRoleDefault, userRole]);
 
   function toggleModule(m: string) {
     setExpandedModules(prev => { const n = new Set(prev); n.has(m) ? n.delete(m) : n.add(m); return n; });
@@ -390,8 +395,8 @@ export function PermissionsTab({
     [columnConfigs, userId],
   );
   const roleColMap = useMemo(() =>
-    Object.fromEntries(columnConfigs.filter(c => c.role === userRole).map(c => [`${c.page_slug}:${c.column_key}`, c])),
-    [columnConfigs, userRole],
+    Object.fromEntries(columnConfigs.filter(c => c.role === selectedRoleDefault).map(c => [`${c.page_slug}:${c.column_key}`, c])),
+    [columnConfigs, selectedRoleDefault],
   );
 
   if (isSelectedSuperAdmin) {
@@ -560,13 +565,19 @@ export function PermissionsTab({
               <p className="text-[10px] text-muted-foreground">
                 Eye = visible · Slash = hidden · Blue = role rule · Purple = user override
               </p>
+              <Select value={selectedRoleDefault} onValueChange={setSelectedRoleDefault}>
+                <SelectTrigger className="h-7 w-44 text-xs" aria-label="Role default to edit"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {effectiveRoleNames.map(role => <SelectItem key={role} value={role} className="text-xs">{toDisplayLabel(role)}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex-1 overflow-auto">
               <div className="min-w-[34rem]">
               <div className="px-5 py-1.5 border-b bg-muted/20 grid grid-cols-[1fr_auto_auto] gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                 <span>Column</span>
-                <span className="w-28 text-center">Role Default<br/><span className="font-normal text-[9px] normal-case">Applies to all {userRole}s</span></span>
+                <span className="w-28 text-center">Role Default<br/><span className="font-normal text-[9px] normal-case">Applies to all {toDisplayLabel(selectedRoleDefault)} users</span></span>
                 <span className="w-28 text-center">User Override<br/><span className="font-normal text-[9px] normal-case">Only this user</span></span>
               </div>
               {pageDef?.columns.map(col => {
@@ -609,13 +620,13 @@ export function PermissionsTab({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <button disabled={roleSaving}
-                                onClick={() => upsertColumnVisibility(selectedPage, col.key, true, 'role')}
+                                onClick={() => upsertColumnVisibility(selectedPage, col.key, true, 'role', selectedRoleDefault)}
                                 className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 border rounded text-red-600 border-red-200 hover:bg-red-50 disabled:opacity-40">
                                 {roleSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
                                 Hide
                               </button>
                             </TooltipTrigger>
-                            <TooltipContent className="text-xs">Hide for all {userRole}s</TooltipContent>
+                            <TooltipContent className="text-xs">Hide for all {toDisplayLabel(selectedRoleDefault)} users</TooltipContent>
                           </Tooltip>
                         </div>
                       )}
