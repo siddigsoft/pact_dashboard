@@ -61,4 +61,25 @@ describe('Pre-Fund payment permissions', () => {
     expect(migration).toContain("('pre_funding', 'use_for_payment')");
     expect(migration).not.toMatch(/\('(?:down_payments|cost_submissions|pre_funding)',\s*'approve'\)/);
   });
+
+  it('keeps both Down Payment batch actions behind the Field Assistant payment grants', () => {
+    const authorization = readFileSync(
+      `${process.cwd()}/src/hooks/use-authorization.ts`,
+      'utf8',
+    );
+    const approvalPanel = readFileSync(
+      `${process.cwd()}/src/components/downPayment/DownPaymentApprovalPanel.tsx`,
+      'utf8',
+    );
+
+    expect(authorization).toMatch(
+      /canMarkDownPaymentPaid[\s\S]*checkPermission\('down_payments', 'mark_paid'\)[\s\S]*checkPermission\('pre_funding', 'use_for_payment'\)/,
+    );
+    expect(approvalPanel).toMatch(
+      /canMarkPaid && selectedApproved\.length > 1[\s\S]*data-testid="button-approved-batch-pay"/,
+    );
+    expect(approvalPanel).toMatch(
+      /canMarkPaid && payableCount > 1[\s\S]*data-testid="button-batch-pay"/,
+    );
+  });
 });
