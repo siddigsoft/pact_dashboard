@@ -61,6 +61,13 @@ describe('related page access families', () => {
     expect(resolvePageToggleIntent('superadmin')).toBe('noop');
   });
 
+  it('collects the action gate that keeps MMP looking permanently granted', async () => {
+    const { getPageRoutePermissions, expandRelatedPageSlugs: expand } = await import('@/lib/pageAccessLinks');
+    expect(getPageRoutePermissions(expand('mmp'))).toEqual(
+      expect.arrayContaining([{ resource: 'mmp', action: 'read' }]),
+    );
+  });
+
   it('only links slugs that exist in PAGE_DEFS', () => {
     const registered = new Set(PAGE_DEFS.map((p) => p.slug));
     for (const [primary, related] of Object.entries(PAGE_RELATED)) {

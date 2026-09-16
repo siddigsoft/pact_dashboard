@@ -10,6 +10,7 @@
 import type { AccessEffect } from '@/lib/effectiveAccess';
 import { PAGE_DEFS } from '@/lib/access-registry';
 import { PAGE_ACCESS_REDIRECTS } from '@/lib/pageAccessRedirects';
+import { resolveRoutePermission, type RoutePermission } from '@/lib/page-roles';
 
 /** Manual product families that are not expressed as App redirects. */
 const MANUAL_RELATED: Record<string, readonly string[]> = {
@@ -93,6 +94,28 @@ export function resolvePageToggleIntent(effect: AccessEffect): PageToggleIntent 
   if (effect === 'granted' || effect === 'blocked') return 'clear';
   if (effect === 'role-yes') return 'block';
   return 'grant';
+}
+
+/**
+ * Action-protected pages (e.g. MMP) can appear "Granted" solely because of a
+ * user_permission_overrides row. Page Remove Grant must clear those too, or
+ * the UI looks like it refused the click.
+ */
+export function getPageRoutePermissions(slugs: readonly string[]): RoutePermission[] {
+  const seen = new Set<string>();
+  const permissions: RoutePermission[] = [];
+  for (const slug of slugs) {
+    const page = PAGE_DEFS.find(candidate => candidate.slug === slug);
+    if (!page) continue;
+    const url = new URL(page.path, 'https://access.local');
+    const permission = resolveRoutePermission(url.pathname, url.search, url.hash);
+    if (!permission) continue;
+    const key = `${permission.resource}:${permission.action}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    permissions.push(permission);
+  }
+  return permissions;
 }
 
 export function relatedPageLabels(slugs: string[], labelFor: (slug: string) => string): string {

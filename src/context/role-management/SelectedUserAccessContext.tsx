@@ -19,7 +19,7 @@ import {
   resolveActionEffect,
   unionRoleNames,
 } from '@/lib/effectiveAccess';
-import { expandRelatedPageSlugs, resolvePageToggleIntent } from '@/lib/pageAccessLinks';
+import { expandRelatedPageSlugs, getPageRoutePermissions, resolvePageToggleIntent } from '@/lib/pageAccessLinks';
 import { overrideIsActive, evaluateManifestPageAccess, manifestIsTabBlocked, type CurrentUserAccessManifest } from '@/lib/current-user-access';
 
 // ── Context type ──────────────────────────────────────────────────────────────
@@ -323,6 +323,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       return;
     }
     const targets = expandRelatedPageSlugs(slug);
+    const routePermissions = getPageRoutePermissions(targets);
     try {
       if (intent === 'clear') {
         const { error } = await supabase
@@ -331,6 +332,17 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
           .eq('user_id', userId)
           .in('page_slug', targets);
         if (error) throw error;
+        // Action-gated pages (MMP, etc.) stay "Granted" until the admitting
+        // user_permission_overrides row is removed too.
+        for (const permission of routePermissions) {
+          const { error: actionError } = await supabase
+            .from('user_permission_overrides')
+            .delete()
+            .eq('user_id', userId)
+            .eq('resource', permission.resource)
+            .eq('action', permission.action);
+          if (actionError) throw actionError;
+        }
         toast({
           title: 'Override removed',
           description: targets.length > 1
@@ -352,6 +364,25 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
           .from('page_access_overrides')
           .upsert(rows, { onConflict: 'user_id,page_slug' });
         if (error) throw error;
+        if (intent === 'grant') {
+          for (const permission of routePermissions) {
+            const { error: actionError } = await supabase.from('user_permission_overrides').upsert(
+              {
+                user_id: userId,
+                resource: permission.resource,
+                action: permission.action,
+                is_granted: true,
+                reason: null,
+                expires_at: null,
+                granted_by: currentUser?.id ?? null,
+                approved_by: currentUser?.id ?? null,
+                approved_at: new Date().toISOString(),
+              },
+              { onConflict: 'user_id,resource,action' },
+            );
+            if (actionError) throw actionError;
+          }
+        }
         toast({
           title: intent === 'block' ? 'Blocked' : 'Granted',
           description: targets.length > 1
