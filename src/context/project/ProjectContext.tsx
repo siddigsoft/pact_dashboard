@@ -14,7 +14,7 @@ import { dispatchNotification } from '@/lib/notify';
 import { logAuditEvent } from '@/utils/audit-logger';
 import { provisionProjectChat, syncProjectChatParticipants } from '@/hooks/use-project-chat';
 import { useIsDataScopeActive } from '@/context/DataScopeContext';
-import { useCurrentUserAccessManifest } from '@/hooks/useCurrentUserAccessManifest';
+import { useAccessManifestForUserId } from '@/hooks/useCurrentUserAccessManifest';
 import { manifestHasExplicitActionGrant } from '@/lib/current-user-access';
 
 interface ProjectContextProps {
@@ -106,9 +106,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const { currentUser, roles: userRoles } = useUser();
   const projectScopeActive = useIsDataScopeActive('project');
-  // ProjectProvider sits above RoleManagement; read the access manifest directly
-  // so Access Control projects:read grants unlock the org-wide catalogue.
-  const { data: accessManifest } = useCurrentUserAccessManifest(!!currentUser?.id);
+  // ProjectProvider sits above AppContext; use the userId-based hook so we do
+  // not call useAppContext. Access Control projects:read unlocks org-wide list.
+  const { data: accessManifest } = useAccessManifestForUserId(currentUser?.id, !!currentUser?.id);
 
   const projectsQuery = useProjectsQuery(!!currentUser && projectScopeActive);
   const allProjects = projectsQuery.data ?? [];

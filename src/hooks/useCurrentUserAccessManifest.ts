@@ -17,13 +17,12 @@ const EMPTY_MANIFEST: CurrentUserAccessManifest = {
 };
 
 /**
- * Fetches the signed-in user's access inputs in one server-derived response.
- * This deliberately has no user-id argument: callers cannot inspect another
- * user's roles or exceptions by changing a browser parameter.
+ * Shared access-manifest query. Pass the signed-in user's id (e.g. from
+ * useUser) so providers that sit above AppContext can still read grants.
+ * The RPC always returns the authenticated session's context — userId is only
+ * for cache keys and identity mismatch checks.
  */
-export function useCurrentUserAccessManifest(enabled: boolean) {
-  const { currentUser } = useAppContext();
-  const userId = currentUser?.id;
+export function useAccessManifestForUserId(userId: string | undefined, enabled: boolean) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ['current-user-access-manifest', userId],
@@ -67,4 +66,14 @@ export function useCurrentUserAccessManifest(enabled: boolean) {
   // Disabled preview observers must not expose the real user's cached grants.
   // A failed refresh also cannot silently keep rendering stale capabilities.
   return { ...query, data: enabled && !query.isError ? query.data : undefined };
+}
+
+/**
+ * Fetches the signed-in user's access inputs in one server-derived response.
+ * Requires AppContext (CompositeContextProvider). Prefer
+ * useAccessManifestForUserId when calling from providers above AppContext.
+ */
+export function useCurrentUserAccessManifest(enabled: boolean) {
+  const { currentUser } = useAppContext();
+  return useAccessManifestForUserId(currentUser?.id, enabled);
 }
