@@ -133,7 +133,7 @@
   import { useQuery } from "@tanstack/react-query";
   import { useNavBadgeCountsContext } from "@/context/NavBadgeCountsContext";
   import { getChangelogUnreadCount } from "@/lib/changelog-utils";
-  import { PAGE_DEFS } from "@/pages/PageAccessControl";
+  import { PAGE_DEFS, getPageDefinition, getPageNavigationGroup } from "@/pages/PageAccessControl";
   import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from "@/types/user-preferences";
   import { normalizeRole } from "@/utils/roleMapping";
   import { getMmpDisplayLabel } from "@/lib/mmp-display";
@@ -240,24 +240,6 @@
     CheckSquare,
     FolderOpen,
     Compass
-  };
-
-  /** Maps PAGE_DEFS group label â†’ AppSidebar MenuGroup id */
-  const PAGEDEF_GROUP_TO_SIDEBAR: Record<string, string> = {
-    'My Workspace':          'workspace-parent',
-    'Communication':         'comms-parent',
-    'Programme Management':  'programme-parent',
-    'Field Operations':      'fieldops-parent',
-    'Coordination':          'coordination-parent',
-    'Finance':               'finance-parent',
-    'HR & People':           'hr-parent',
-    'Surveys':               'surveys-parent',
-    'Analytics & Reports':   'analytics-parent',
-    'Accounting':            'accounting-parent',
-    'Administration':        'admin-parent',
-    'Super Admin':           'superadmin-parent',
-    'Audit & Security':      'admin-parent',
-    'CRM':                   'crm-parent',
   };
 
   interface FavoriteItem {
@@ -1209,13 +1191,14 @@
         }));
 
         for (const [slug, configuredRoles] of Object.entries(sidebarRoleConfigs)) {
-          const pageDef = PAGE_DEFS.find(page => page.slug === slug);
+          const pageDef = getPageDefinition(slug);
           if (!pageDef || !isAllowedPage(slug, pageDef.path)) continue;
           if (isSMTUser && !isSmtAllowedUrl(pageDef.path)) continue;
           const alreadyExists = groups.some(group => group.items.some(item => item.url === pageDef.path));
           if (!alreadyExists) {
-            const sidebarGroupId = PAGEDEF_GROUP_TO_SIDEBAR[pageDef.group] ?? 'admin';
-            getOrCreateGroup(sidebarGroupId, pageDef.group, 99).items.push({
+            const navigationGroup = getPageNavigationGroup(pageDef.group);
+            if (!navigationGroup) continue;
+            getOrCreateGroup(navigationGroup.id, navigationGroup.label, navigationGroup.order).items.push({
               id: pageDef.slug,
               title: pageDef.label,
               url: pageDef.path,
@@ -1228,7 +1211,7 @@
 
       if (Object.keys(pageOverrideMap).length > 0) {
         for (const [slug, isBlocked] of Object.entries(pageOverrideMap)) {
-          const pageDef = PAGE_DEFS.find(p => p.slug === slug);
+          const pageDef = getPageDefinition(slug);
           if (!pageDef) continue;
           // SMT: never inject pages outside the project allowlist
           if (isSMTUser && !isBlocked && !isSmtAllowedUrl(pageDef.path)) continue;
@@ -1238,10 +1221,11 @@
             groups.forEach(g => { g.items = g.items.filter(item => item.url !== pageDef.path); });
           } else {
             // Ensure this item exists in its group (add if missing)
-            const sidebarGroupId = PAGEDEF_GROUP_TO_SIDEBAR[pageDef.group] ?? 'admin';
+            const navigationGroup = getPageNavigationGroup(pageDef.group);
+            if (!navigationGroup) continue;
             const alreadyExists = groups.some(g => g.items.some(item => item.url === pageDef.path));
             if (!alreadyExists) {
-              const group = getOrCreateGroup(sidebarGroupId, pageDef.group, 99);
+              const group = getOrCreateGroup(navigationGroup.id, navigationGroup.label, navigationGroup.order);
               group.items.push({
                 id: pageDef.slug,
                 title: pageDef.label,

@@ -32,7 +32,7 @@ import { useRoleManagement } from '@/context/role-management/RoleManagementConte
 //  superAdmin | admin | ict | fom | financialAdmin | auditor | supervisor
 //  coordinator | dataCollector | dataTeam | reviewer | projectManager | countryDirector
 
-interface PageDef {
+export interface PageDef {
   slug: string;
   label: string;
   path: string;
@@ -442,6 +442,80 @@ export const PAGE_GROUPS = [
   'Coordination', 'Finance', 'Accounting', 'HR & People', 'CRM', 'Analytics',
   'Surveys', 'Administration', 'Super Admin', 'Audit & Security',
 ];
+
+/**
+ * Presentation metadata for navigation targets.  This deliberately lives next
+ * to PAGE_DEFS: a page's access group must not need a second, divergent map in
+ * the sidebar before it can be surfaced for an explicit grant.
+ */
+export const PAGE_NAVIGATION_GROUPS: Record<string, { id: string; label: string; order: number }> = {
+  'My Workspace': { id: 'workspace-parent', label: 'My Workspace', order: 1 },
+  'Communication': { id: 'comms-parent', label: 'Communication', order: 3 },
+  'Programme Management': { id: 'programme-parent', label: 'Programme Management', order: 2 },
+  'Field Operations': { id: 'fieldops-parent', label: 'Field Operations', order: 4 },
+  'Coordination': { id: 'coordination-parent', label: 'Coordination', order: 5 },
+  'Finance': { id: 'finance-parent', label: 'Finance', order: 6 },
+  'Accounting': { id: 'accounting-parent', label: 'Accounting', order: 7 },
+  'HR & People': { id: 'hr-parent', label: 'HR & People', order: 8 },
+  'CRM': { id: 'crm-parent', label: 'CRM', order: 9 },
+  'Analytics': { id: 'analytics-parent', label: 'Analytics', order: 10 },
+  'Surveys': { id: 'surveys-parent', label: 'Surveys', order: 11 },
+  'Administration': { id: 'admin-parent', label: 'Administration', order: 12 },
+  'Super Admin': { id: 'superadmin-parent', label: 'Super Admin', order: 13 },
+  // Audit pages remain inside the administrative shell until the sidebar gets
+  // its own audit parent; keeping that decision here prevents a hidden fallback.
+  'Audit & Security': { id: 'admin-parent', label: 'Audit & Security', order: 14 },
+};
+
+export function getPageDefinition(slug: string): PageDef | undefined {
+  return PAGE_DEFS.find(page => page.slug === slug);
+}
+
+export function getPageNavigationGroup(group: string) {
+  return PAGE_NAVIGATION_GROUPS[group];
+}
+
+export interface PageRegistryIssue {
+  type: 'duplicate_slug' | 'duplicate_target' | 'missing_navigation_group';
+  value: string;
+  slugs: string[];
+}
+
+function normalizedPageTarget(path: string): string {
+  const [pathname, query = ''] = path.split('?', 2);
+  if (!query) return pathname;
+  const params = [...new URLSearchParams(query).entries()]
+    .sort(([leftKey, leftValue], [rightKey, rightValue]) =>
+      leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue),
+    );
+  return `${pathname}?${new URLSearchParams(params).toString()}`;
+}
+
+/**
+ * Registry validation is pure so it can run in CI without rendering the page.
+ * It catches the two ambiguous states that previously degraded silently:
+ * duplicate slugs and semantically identical query-string navigation targets.
+ */
+export function getPageRegistryIssues(definitions: readonly PageDef[] = PAGE_DEFS): PageRegistryIssue[] {
+  const issues: PageRegistryIssue[] = [];
+  const collectDuplicates = (values: Array<{ key: string; slug: string }>, type: PageRegistryIssue['type']) => {
+    const grouped = new Map<string, string[]>();
+    for (const { key, slug } of values) grouped.set(key, [...(grouped.get(key) ?? []), slug]);
+    for (const [value, slugs] of grouped) {
+      if (slugs.length > 1) issues.push({ type, value, slugs });
+    }
+  };
+
+  collectDuplicates(definitions.map(page => ({ key: page.slug, slug: page.slug })), 'duplicate_slug');
+  collectDuplicates(definitions.map(page => ({ key: normalizedPageTarget(page.path), slug: page.slug })), 'duplicate_target');
+
+  for (const page of definitions) {
+    if (!PAGE_NAVIGATION_GROUPS[page.group]) {
+      issues.push({ type: 'missing_navigation_group', value: page.group, slugs: [page.slug] });
+    }
+  }
+  return issues;
+}
 
 export const PAGE_ROLE_ALL_OPTIONS = [
   'all', 'superAdmin', 'admin', 'ict', 'fom', 'financialAdmin', 'auditor',

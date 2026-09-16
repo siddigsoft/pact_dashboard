@@ -17,7 +17,7 @@ import {
   resolveRoutePermission,
   resolveSlug,
 } from '@/lib/page-roles';
-import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { getPageRegistryIssues, PAGE_DEFS } from '@/pages/PageAccessControl';
 import {
   getReportPermission,
   REPORTS_DIRECTORY_PATHS,
@@ -47,6 +47,10 @@ describe('page access registry integrity', () => {
   it('keeps page slugs unique', () => {
     const slugs = PAGE_DEFS.map(page => page.slug);
     expect(new Set(slugs).size).toBe(slugs.length);
+  });
+
+  it('keeps every access target and navigation group unambiguous', () => {
+    expect(getPageRegistryIssues()).toEqual([]);
   });
 
   it('resolves query-tab page definitions without falling back to the hub', () => {
