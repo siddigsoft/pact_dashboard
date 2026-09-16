@@ -82,4 +82,41 @@ describe('current user access manifest evaluator', () => {
       'read',
     )).toBe(false);
   });
+
+  it('uses an active action grant for both the direct route and button check', () => {
+    const context = manifest({
+      action_overrides: {
+        'subscriptions:read': { is_granted: true, expires_at: '2099-01-01T00:00:00.000Z' },
+      },
+    });
+
+    expect(evaluateManifestPageAccess(
+      context,
+      'finance-subscriptions',
+      { resource: 'subscriptions', action: 'read' },
+    )).toMatchObject({ allowed: true, source: 'action_override' });
+    expect(manifestHasPermission(context, 'subscriptions', 'read')).toBe(true);
+  });
+
+  it('does not use an expired action grant when no role permission exists', () => {
+    const context = manifest({
+      action_overrides: {
+        'subscriptions:read': { is_granted: true, expires_at: '2000-01-01T00:00:00.000Z' },
+      },
+    });
+
+    expect(evaluateManifestPageAccess(
+      context,
+      'finance-subscriptions',
+      { resource: 'subscriptions', action: 'read' },
+    )).toMatchObject({ allowed: false, source: 'role_baseline' });
+    expect(manifestHasPermission(context, 'subscriptions', 'read')).toBe(false);
+  });
+
+  it('allows a page override for an ordinary page even when no role baseline exists', () => {
+    expect(evaluateManifestPageAccess(
+      manifest({ page_overrides: { 'finance-subscriptions': { is_blocked: false } } }),
+      'finance-subscriptions',
+    )).toMatchObject({ allowed: true, source: 'page_override' });
+  });
 });

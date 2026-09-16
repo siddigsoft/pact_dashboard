@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Search, Globe, Layers, Key, Database, Shield, User, ChevronRight, BarChart3, Columns3 } from 'lucide-react';
+import { Search, Globe, Layers, Key, Database, Shield, User, ChevronRight, BarChart3, Columns3, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
 import { SelectedUserAccessProvider } from '@/context/role-management/SelectedUserAccessContext';
@@ -17,6 +17,7 @@ import { PageAccessTab }   from './unified/PageAccessTab';
 import { TabAccessTab }    from './unified/TabAccessTab';
 import { PermissionsTab }  from './unified/PermissionsTab';
 import { DataScopeTab }    from './unified/DataScopeTab';
+import { AccessAuditTab }  from './unified/AccessAuditTab';
 
 // ── Role display helpers ────────────────────────────────────────────────────
 const ROLE_LABEL: Record<string, string> = {
@@ -47,7 +48,7 @@ function getInitials(name?: string | null, email?: string): string {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type UAMUser = { id: string; name?: string | null; email: string; role: string };
-type TabKey = 'overview' | 'pages' | 'tabs' | 'buttons' | 'reports' | 'columns' | 'scope' | 'overrides';
+type TabKey = 'overview' | 'pages' | 'tabs' | 'buttons' | 'reports' | 'columns' | 'scope' | 'overrides' | 'audit';
 
 // ── Component ──────────────────────────────────────────────────────────────
 export function UnifiedAccessManager({ containerClassName }: { containerClassName?: string } = {}) {
@@ -162,6 +163,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
                   { key: 'columns',      icon: Columns3, label: 'Columns' },
                   { key: 'scope',        icon: Database, label: 'Data Scope' },
                   { key: 'overrides',    icon: Shield, label: 'Overrides' },
+                  { key: 'audit',        icon: FileText, label: 'Access Audit' },
                 ] as const).map(({ key, icon: Icon, label }) => (
                   <TabsTrigger key={key} value={key}
                     className="h-9 shrink-0 rounded-none text-xs border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent gap-1.5">
@@ -196,6 +198,9 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
                   </TabsContent>
                   <TabsContent value="overrides" className="flex-1 overflow-hidden m-0">
                     <PermissionsTab {...tabProps} section="grants" />
+                  </TabsContent>
+                  <TabsContent value="audit" className="flex-1 overflow-hidden m-0">
+                    <AccessAuditTab {...tabProps} />
                   </TabsContent>
                 </>
               )}
