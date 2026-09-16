@@ -244,4 +244,38 @@ describe('current user access manifest evaluator', () => {
       'finance-subscriptions',
     )).toMatchObject({ allowed: true, source: 'role_baseline' });
   });
+
+  it('lets My Projects open membership project detail without org-wide Projects', () => {
+    const context = manifest({
+      roles: ['Field Assistant'],
+      page_role_configs: {},
+      page_overrides: { 'my-projects': { is_blocked: false } },
+    });
+    expect(evaluateManifestRouteAccess(
+      context,
+      '/projects/660399f4-80a2-4642-8f66-9f1f245775e6',
+    )).toBe(true);
+    expect(evaluateManifestRouteAccess(
+      context,
+      '/projects/660399f4-80a2-4642-8f66-9f1f245775e6',
+      '?tab=field_tasks',
+    )).toBe(true);
+    // Org catalogue and edit still require Projects
+    expect(evaluateManifestRouteAccess(context, '/projects')).toBe(false);
+    expect(evaluateManifestRouteAccess(
+      context,
+      '/projects/660399f4-80a2-4642-8f66-9f1f245775e6/edit',
+    )).toBe(false);
+  });
+
+  it('does not open project detail from My Projects when that page is blocked', () => {
+    const context = manifest({
+      roles: ['Field Assistant'],
+      page_overrides: { 'my-projects': { is_blocked: true } },
+    });
+    expect(evaluateManifestRouteAccess(
+      context,
+      '/projects/660399f4-80a2-4642-8f66-9f1f245775e6',
+    )).toBe(false);
+  });
 });

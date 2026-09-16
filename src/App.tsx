@@ -268,7 +268,7 @@ import {
   getPageLabel,
   type RoutePermission,
 } from './lib/page-roles';
-import { evaluateManifestPageAccess } from './lib/current-user-access';
+import { evaluateManifestRouteAccess } from './lib/current-user-access';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 import SessionManager from './components/layout/SessionManager';
@@ -448,8 +448,13 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
     if (isManifestError || !currentAccessManifest) {
       return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
     }
-    const decision = evaluateManifestPageAccess(currentAccessManifest, slug, routePermission);
-    return decision.allowed
+    const allowed = evaluateManifestRouteAccess(
+      currentAccessManifest,
+      location.pathname,
+      location.search,
+      location.hash,
+    );
+    return allowed
       ? <>{children}</>
       : <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
   }

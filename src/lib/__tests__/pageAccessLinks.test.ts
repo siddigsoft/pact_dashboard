@@ -38,6 +38,10 @@ describe('related page access families', () => {
     expect(expandRelatedPageSlugs('projects')).toEqual(['projects']);
   });
 
+  it('still resolves membership detail URLs to the projects slug', () => {
+    expect(resolveSlug('/projects/660399f4-80a2-4642-8f66-9f1f245775e6')).toBe('projects');
+  });
+
   it('links Approval Dashboard with the Super Admin hub tab it redirects to', () => {
     expect(resolveSlug('/approval-dashboard')).toBe('approval-dashboard');
     expect(resolveSlug('/super-admin-hub?tab=approval-dashboard')).toBe('sa-approval-dashboard');

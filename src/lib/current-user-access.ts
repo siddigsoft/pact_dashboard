@@ -1,4 +1,4 @@
-import { canSeePage, resolveRouteAccessTarget, type RoutePermission } from '@/lib/page-roles';
+import { canSeePage, isProjectMembershipDetailPath, resolveRouteAccessTarget, type RoutePermission } from '@/lib/page-roles';
 import { isSuperAdminRole } from '@/lib/effectiveAccess';
 import { ACCESS_TARGET_REGISTRY, getAccessTargetDependencies } from '@/lib/access-target-registry';
 import { PAGE_DEFS, type PageDef } from '@/lib/access-registry';
@@ -123,10 +123,26 @@ export function manifestHasExplicitActionGrant(
 }
 
 /** The shared direct-URL and sidebar decision includes registered query tabs.
- * Unknown protected destinations are denied rather than admitted by a menu. */
+ * Unknown protected destinations are denied rather than admitted by a menu.
+ *
+ * Project membership detail (/projects/:id) is reachable with either org-wide
+ * Projects or My Projects — so members can open their own project without the
+ * org catalogue grant. Edit/create/team routes still require Projects. */
 export function evaluateManifestRouteAccess(manifest: CurrentUserAccessManifest, pathname: string, search = '', hash = ''): boolean {
   const target = resolveRouteAccessTarget(pathname, search, hash);
-  if (!target || !evaluateManifestPageAccess(manifest, target.slug, target.routePermission).allowed) return false;
+  if (!target) return false;
+
+  let allowed = evaluateManifestPageAccess(manifest, target.slug, target.routePermission).allowed;
+  if (
+    !allowed &&
+    target.slug === 'projects' &&
+    isProjectMembershipDetailPath(pathname) &&
+    evaluateManifestPageAccess(manifest, 'my-projects').allowed
+  ) {
+    allowed = true;
+  }
+  if (!allowed) return false;
+
   const tabId = new URLSearchParams(search).get('tab');
   if (!tabId) return true;
   const hub = ACCESS_TARGET_REGISTRY.find(candidate => candidate.page.path === pathname);

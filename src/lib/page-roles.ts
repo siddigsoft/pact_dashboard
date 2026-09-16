@@ -291,6 +291,17 @@ export function resolveSlug(pathname: string): string | null {
 }
 
 /**
+ * True for /projects/:id (membership detail), including query tabs.
+ * False for the org catalogue (/projects), create, edit, team, and activity routes.
+ */
+export function isProjectMembershipDetailPath(pathname: string): boolean {
+  const cleanPath = splitLocation(pathname).pathname.replace(/\/$/, '') || '/';
+  const match = cleanPath.match(/^\/projects\/([^/]+)$/);
+  if (!match) return false;
+  return !['create', 'analytics'].includes(match[1]);
+}
+
+/**
  * The single registry-derived description of a protected navigation target.
  *
  * Consumers should use this rather than resolving the page slug and the

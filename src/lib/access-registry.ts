@@ -42,7 +42,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'my-tasks',            label:'My Tasks',               path:'/my-tasks',               icon:CheckSquare, group:'My Workspace',
     roles:['all', 'SMT'] },
   { slug:'my-projects',         label:'My Projects',            path:'/my-projects',            icon:FolderOpen, group:'My Workspace',
-    roles:['all', 'SMT'], note:'Personal membership list only. Independent from org-wide Projects.' },
+    roles:['all', 'SMT'], note:'Personal membership list. Opening /projects/:id for a project you belong to is included; org-wide Projects catalogue is separate.' },
   { slug:'notification-preferences', label:'Notification Preferences', path:'/notification-preferences', icon:Bell, group:'My Workspace',
     roles:['all'] },
   { slug:'notification-history',label:'Notification History',   path:'/notification-history',   icon:History, group:'My Workspace',

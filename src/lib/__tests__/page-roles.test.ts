@@ -13,6 +13,7 @@ import {
   canSeeRoutePermission,
   canSeePageWithOverrides,
   canSeePageWithOverridesResult,
+  isProjectMembershipDetailPath,
   resolveResourcePermissionOverride,
   resolveRouteAccessTarget,
   resolveRoutePermission,
@@ -57,6 +58,15 @@ describe('page access registry integrity', () => {
   it('resolves query-tab page definitions without falling back to the hub', () => {
     expect(resolveSlug('/finance-hub?tab=subscriptions')).toBe('finance-subscriptions');
     expect(resolveSlug('/accounting?tab=bank-recon')).toBe('accounting-bank-recon');
+  });
+
+  it('recognizes membership project detail paths without admitting catalogue or edit', () => {
+    expect(isProjectMembershipDetailPath('/projects/660399f4-80a2-4642-8f66-9f1f245775e6')).toBe(true);
+    expect(isProjectMembershipDetailPath('/projects/660399f4-80a2-4642-8f66-9f1f245775e6/')).toBe(true);
+    expect(isProjectMembershipDetailPath('/projects')).toBe(false);
+    expect(isProjectMembershipDetailPath('/projects/create')).toBe(false);
+    expect(isProjectMembershipDetailPath('/projects/660399f4-80a2-4642-8f66-9f1f245775e6/edit')).toBe(false);
+    expect(isProjectMembershipDetailPath('/projects/660399f4-80a2-4642-8f66-9f1f245775e6/team')).toBe(false);
   });
 
   it('resolves query-tab definitions when query parameters are reordered', () => {
