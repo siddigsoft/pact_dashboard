@@ -129,6 +129,8 @@ interface DownPaymentApprovalPanelProps {
   onDeletePayment?: (paymentEventId: string) => void;
   /** These are resolved from the user's Down Payment button grants. */
   canApproveActions?: boolean;
+  /** Disbursement is independent from tier approval. */
+  canMarkPaid?: boolean;
   canEditActions?: boolean;
   canExportActions?: boolean;
 }
@@ -381,6 +383,7 @@ export function DownPaymentApprovalPanel({
   canDeletePayment = false,
   onDeletePayment,
   canApproveActions = true,
+  canMarkPaid = false,
   canEditActions = true,
   canExportActions = true,
 }: DownPaymentApprovalPanelProps) {
@@ -813,6 +816,13 @@ export function DownPaymentApprovalPanel({
 
   const handleProcessPayment = async () => {
     if (!selectedRequest || !currentUser) return;
+    const currentBalance = getDownPaymentBalance(selectedRequest);
+    if (!canMarkPaid ||
+      !['approved', 'partially_paid'].includes(selectedRequest.status) ||
+      currentBalance.remaining <= 0) {
+      toast({ title: 'Payment unavailable / الدفع غير متاح', description: 'Only approved requests with a positive remaining balance can be paid.', variant: 'destructive' });
+      return;
+    }
 
     if (paymentAmount <= 0) {
       toast({ title: 'Invalid Amount / مبلغ غير صالح', description: 'Please enter a payment amount greater than zero.', variant: 'destructive' });
@@ -849,6 +859,13 @@ export function DownPaymentApprovalPanel({
         receiptUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
       }
 
+      const writeBalance = getDownPaymentBalance(selectedRequest);
+      if (!canMarkPaid ||
+        !['approved', 'partially_paid'].includes(selectedRequest.status) ||
+        writeBalance.remaining <= 0 || paymentAmount > writeBalance.remaining) {
+        toast({ title: 'Payment unavailable / الدفع غير متاح', description: 'The request changed before payment could be recorded.', variant: 'destructive' });
+        return;
+      }
       const { recordRequiredPreFundPayment, createRequiredPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
       await recordRequiredPreFundPayment({
         sourceTable: 'down_payment_requests',
@@ -1008,6 +1025,11 @@ export function DownPaymentApprovalPanel({
   };
 
   const openActionDialog = async (request: DownPaymentRequest, actionType: 'approve' | 'reject' | 'pay' | 'view_audit' | 'revert') => {
+    if (actionType === 'pay' && (
+      !canMarkPaid ||
+      !['approved', 'partially_paid'].includes(request.status) ||
+      getDownPaymentBalance(request).remaining <= 0
+    )) return;
     setSelectedRequest(request);
     setAction(actionType);
     if (actionType === 'pay') {
@@ -1925,7 +1947,11 @@ export function DownPaymentApprovalPanel({
   };
 
   const handleOpenBatchPay = async (reqs: DownPaymentRequest[]) => {
-    const eligible = reqs.filter(r => r.status === 'approved' || r.status === 'partially_paid');
+    if (!canMarkPaid) return;
+    const eligible = reqs.filter(r =>
+      (r.status === 'approved' || r.status === 'partially_paid') &&
+      getDownPaymentBalance(r).remaining > 0
+    );
     if (eligible.length === 0) return;
     const { data: pfData } = await supabase
       .from('pre_fund_requests' as any)
@@ -1998,7 +2024,8 @@ export function DownPaymentApprovalPanel({
 
   const handleConfirmBatchPay = async () => {
     const { requests: reqs, proofFiles, notes, partialPercent, preFundId } = batchPayDialog;
-    if (!currentUser?.id || reqs.length === 0) return;
+    if (!canMarkPaid || !currentUser?.id || reqs.length === 0 ||
+      reqs.some(r => !['approved', 'partially_paid'].includes(r.status) || getDownPaymentBalance(r).remaining <= 0)) return;
     if (proofFiles.length === 0) {
       toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach at least one receipt before confirming.", variant: "destructive" });
       return;
@@ -3240,7 +3267,7 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {canApproveActions && userRole === 'admin' && (request.status === 'approved' || request.status === 'partially_paid') && (
+            {canMarkPaid && (request.status === 'approved' || request.status === 'partially_paid') && getDownPaymentBalance(request).remaining > 0 && (
               <>
                 <Button
                   size="sm"
@@ -3251,6 +3278,11 @@ export function DownPaymentApprovalPanel({
                   <DollarSign className="h-4 w-4 mr-1" />
                   Process Payment
                 </Button>
+              </>
+            )}
+
+            {canApproveActions && userRole === 'admin' && (request.status === 'approved' || request.status === 'partially_paid') && (
+              <>
                 <Button
                   size="sm"
                   variant="outline"
@@ -3351,7 +3383,7 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
 
-            {userRole === 'admin' && request.status === 'approved' && (
+            {canMarkPaid && request.status === 'approved' && getDownPaymentBalance(request).remaining > 0 && (
               <Button
                 size="sm"
                 variant="default"
@@ -4012,12 +4044,12 @@ export function DownPaymentApprovalPanel({
                     }} disabled={processing} data-testid="button-approved-request-payment">
                       <Mail className="h-4 w-4 mr-1" /> Request Payment ({selectedApproved.length})
                     </Button>
-                    <Button size="sm" variant="default" onClick={() => {
+                    {canMarkPaid && <Button size="sm" variant="default" onClick={() => {
                       if (selectedApproved.length > 0) openActionDialog(selectedApproved[0], 'pay');
                     }} disabled={processing} data-testid="button-approved-process-payment">
                       <DollarSign className="h-4 w-4 mr-1" /> Process Payment
-                    </Button>
-                    {selectedApproved.length > 1 && (
+                    </Button>}
+                    {canMarkPaid && selectedApproved.length > 1 && (
                       <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleOpenBatchPay(selectedApproved)} disabled={processing} data-testid="button-approved-batch-pay">
                         <Wallet className="h-4 w-4 mr-1" /> Batch Pay ({selectedApproved.length})
                       </Button>
@@ -4260,7 +4292,7 @@ export function DownPaymentApprovalPanel({
                     <Mail className="h-4 w-4 mr-1" />
                     Request Payment ({approvedCount})
                   </Button>
-                  <Button size="sm" variant="default" onClick={() => {
+                  {canMarkPaid && <Button size="sm" variant="default" onClick={() => {
                     const selected = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid');
                     if (selected.length > 0) {
                       openActionDialog(selected[0], 'pay');
@@ -4268,9 +4300,9 @@ export function DownPaymentApprovalPanel({
                   }} disabled={payableCount === 0 || processing} data-testid="button-selected-process-payment">
                     <DollarSign className="h-4 w-4 mr-1" />
                     Process Payment
-                  </Button>
+                  </Button>}
 
-                  {payableCount > 1 && (
+                  {canMarkPaid && payableCount > 1 && (
                     <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
                       const selected = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid');
                       handleOpenBatchPay(selected);

@@ -509,7 +509,7 @@ export default function DownPaymentApproval() {
   const { isSuperAdmin } = useSuperAdmin();
   const { requests, loading, refreshRequests } = useDownPayment();
   const { toast } = useToast();
-  const { canApproveDownPayment, checkPermission } = useAuthorization();
+  const { canApproveDownPayment, canMarkDownPaymentPaid, checkPermission } = useAuthorization();
   const { isTabBlocked } = useCurrentUserAccess();
 
   const userRole = currentUser?.role?.toLowerCase();
@@ -527,6 +527,7 @@ export default function DownPaymentApproval() {
   // not promote a read-only role into a financial approver: that needs a
   // server-side workflow-role assignment, not a browser-side checkbox.
   const canApproveActions = hasWorkflowRole && canApproveDownPayment();
+  const canMarkPaidActions = canMarkDownPaymentPaid();
   const canEditActions = isAdmin && checkPermission('down_payments', 'update');
   const canExportActions = checkPermission('down_payments', 'export');
   const canDeletePayment = checkPermission('down_payments', 'delete');
@@ -729,6 +730,12 @@ export default function DownPaymentApproval() {
   }, [requests]);
 
   const openPreFundPaymentDialog = useCallback(async (req: DownPaymentRequest, amount: number) => {
+    if (!canMarkDownPaymentPaid() ||
+      !['approved', 'partially_paid'].includes(req.status) ||
+      getDownPaymentBalance(req).remaining <= 0) {
+      toast({ title: 'Payment unavailable', description: 'Only approved requests with a positive remaining balance can be paid.', variant: 'destructive' });
+      return;
+    }
     setPartialPayDialog({
       open: true, req, partialAmount: amount.toFixed(2), saving: false, preFundId: '', preFunds: [],
       paymentEventKey: createRequiredPreFundPaymentEventKey('down_payment_requests', req.id),
@@ -741,19 +748,36 @@ export default function DownPaymentApproval() {
     } catch (error: any) {
       toast({ title: 'Could not load Pre-Funds', description: error.message, variant: 'destructive' });
     }
-  }, [toast]);
+  }, [canMarkDownPaymentPaid, toast]);
 
   const handleMarkFullyPaid = useCallback((req: DownPaymentRequest) => {
+    if (!canMarkDownPaymentPaid() ||
+      !['approved', 'partially_paid'].includes(req.status)) {
+      toast({ title: 'Payment unavailable', description: 'This request is not eligible for payment.', variant: 'destructive' });
+      return;
+    }
     const remaining = getDownPaymentBalance(req).remaining;
+    if (remaining <= 0) {
+      toast({ title: 'Payment unavailable', description: 'This request has no remaining balance.', variant: 'destructive' });
+      return;
+    }
     void openPreFundPaymentDialog(req, remaining);
-  }, [openPreFundPaymentDialog]);
+  }, [canMarkDownPaymentPaid, openPreFundPaymentDialog, toast]);
 
   // ── Partial payment: deduct only what was actually paid now ───────────────
   const handleConfirmPartialPay = useCallback(async () => {
     const { req } = partialPayDialog;
     if (!req || !currentUser?.id) return;
+    if (!canMarkDownPaymentPaid() || !['approved', 'partially_paid'].includes(req.status)) {
+      toast({ title: 'Payment unavailable', description: 'This request is not eligible for payment.', variant: 'destructive' });
+      return;
+    }
     const partialAmt = parseFloat(partialPayDialog.partialAmount);
     const remainingAmount = getDownPaymentBalance(req).remaining;
+    if (remainingAmount <= 0) {
+      toast({ title: 'Payment unavailable', description: 'This request has no remaining balance.', variant: 'destructive' });
+      return;
+    }
     if (isNaN(partialAmt) || partialAmt <= 0) {
       toast({ title: 'Invalid amount', description: 'Please enter a positive number.', variant: 'destructive' });
       return;
@@ -768,6 +792,15 @@ export default function DownPaymentApproval() {
     }
     setPartialPayDialog(p => ({ ...p, saving: true }));
     try {
+      // Re-read the current request snapshot immediately before the write so a
+      // status/balance change while the dialog was open fails closed.
+      const currentReq = requests.find(candidate => candidate.id === req.id) ?? req;
+      const currentRemaining = getDownPaymentBalance(currentReq).remaining;
+      if (!canMarkDownPaymentPaid() ||
+        !['approved', 'partially_paid'].includes(currentReq.status) ||
+        currentRemaining <= 0 || partialAmt > currentRemaining) {
+        throw new Error('The request is no longer eligible for this payment.');
+      }
       const now = new Date().toISOString();
       const { recordRequiredPreFundPayment } = await import('@/utils/preFundLinkage');
       let receiptUrl = req.paymentProofUrl ?? null;
@@ -795,7 +828,7 @@ export default function DownPaymentApproval() {
     } finally {
       setPartialPayDialog(p => ({ ...p, saving: false }));
     }
-  }, [partialPayDialog, currentUser, refreshRequests, toast]);
+  }, [partialPayDialog, currentUser, requests, canMarkDownPaymentPaid, refreshRequests, toast]);
 
   const openPreFundCorrectionDialog = useCallback(async (evidence: PaymentEvidence) => {
     if (!isFinanceAdmin || !checkPermission('down_payments', 'reconcile') || !evidence.isCorrectable) return;
@@ -1469,6 +1502,7 @@ export default function DownPaymentApproval() {
             }}
             canDeletePayment={canDeletePayment}
             canApproveActions={canApproveActions}
+            canMarkPaid={canMarkPaidActions}
             canEditActions={canEditActions}
             canExportActions={canExportActions}
             onDeletePayment={paymentEventId => {
@@ -1660,7 +1694,7 @@ export default function DownPaymentApproval() {
                     })()}
                   </TableCell>
                   <TableCell>
-                    {req.status === 'approved' && isAdmin && (
+                    {req.status === 'approved' && canMarkPaidActions && getDownPaymentBalance(req).remaining > 0 && (
                       <div className="flex items-center gap-1">
                         <Button
                           size="sm"
@@ -1684,7 +1718,7 @@ export default function DownPaymentApproval() {
                         </Button>
                       </div>
                     )}
-                    {req.status === 'partially_paid' && isAdmin && (
+                    {req.status === 'partially_paid' && canMarkPaidActions && getDownPaymentBalance(req).remaining > 0 && (
                       <Button
                         size="sm"
                         variant="outline"

@@ -25,6 +25,17 @@ describe('Pre-Fund payment permissions', () => {
       { resource: 'cost_submissions', action: 'mark_paid' },
       { resource: 'pre_funding', action: 'use_for_payment' },
     ]));
+    expect(DEFAULT_ROLE_PERMISSIONS.Admin).toEqual(expect.arrayContaining([
+      { resource: 'down_payments', action: 'mark_paid' },
+      { resource: 'pre_funding', action: 'use_for_payment' },
+    ]));
+    expect(DEFAULT_ROLE_PERMISSIONS.FinancialAdmin).toEqual(expect.arrayContaining([
+      { resource: 'down_payments', action: 'mark_paid' },
+      { resource: 'pre_funding', action: 'use_for_payment' },
+    ]));
+    expect(DEFAULT_ROLE_PERMISSIONS['Field Operation Manager (FOM)']).not.toEqual(expect.arrayContaining([
+      { resource: 'down_payments', action: 'mark_paid' },
+    ]));
   });
 
   it('exposes both capabilities in unified Buttons & Actions registry', () => {
@@ -34,6 +45,7 @@ describe('Pre-Fund payment permissions', () => {
     expect(actions).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'cost_submissions:mark_paid' }),
       expect.objectContaining({ key: 'pre_funding:use_for_payment' }),
+      expect.objectContaining({ key: 'down_payments:mark_paid', label: 'Make Down Payment Payment' }),
     ]));
   });
 });

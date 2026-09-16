@@ -444,6 +444,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'down_payments:submit', label: 'Submit Down Payment', description: 'Create a new down payment request', resource: 'down_payments', action: 'submit' },
           { key: 'down_payments:create', label: 'Admin-Create Down Payment', description: 'Create a down payment on behalf of another', resource: 'down_payments', action: 'create', isAdminOnly: true },
           { key: 'down_payments:approve', label: 'Approve / Batch Pay', description: 'Approve or batch-process payments', resource: 'down_payments', action: 'approve' },
+          { key: 'down_payments:mark_paid', label: 'Make Down Payment Payment', description: 'Record an approved down payment disbursement from an eligible Pre-Fund', resource: 'down_payments', action: 'mark_paid' },
           { key: 'down_payments:update', label: 'Edit Down Payment', description: 'Modify a pending request', resource: 'down_payments', action: 'update' },
           { key: 'down_payments:delete', label: 'Delete Down Payment', description: 'Delete an eligible down payment record', resource: 'down_payments', action: 'delete', isDestructive: true },
           { key: 'down_payments:reconcile', label: 'Reconcile Down Payment', description: 'Reconcile an advance against receipts', resource: 'down_payments', action: 'reconcile' },
@@ -595,6 +596,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         actions: [
           { key: 'down_payments:read',   label: 'View Down Payment Queue',   description: 'See pending advance requests',            resource: 'down_payments', action: 'read' },
           { key: 'down_payments:approve', label: 'Approve / Reject Advance', description: 'Approve or decline a down payment',       resource: 'down_payments', action: 'approve' },
+          { key: 'down_payments:mark_paid', label: 'Make Down Payment Payment', description: 'Record payment for an approved advance', resource: 'down_payments', action: 'mark_paid' },
           { key: 'down_payments:update', label: 'Edit Advance Amount',       description: 'Adjust the amount before approval',       resource: 'down_payments', action: 'update' },
           { key: 'down_payments:export', label: 'Export Approval Queue',     description: 'Download advance approval data',          resource: 'down_payments', action: 'export' },
         ],

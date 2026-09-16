@@ -16,7 +16,45 @@ DECLARE
   v_constraint text;
   v_selector text;
   v_guard text;
+  v_down text;
+  v_atomic text;
+  v_role_id uuid;
 BEGIN
+  IF to_regprocedure('public._assert_down_payment_payment_access()') IS NULL THEN
+    RAISE EXCEPTION 'dedicated Down Payment payment assertion is missing';
+  END IF;
+  SELECT pg_get_functiondef('public._assert_down_payment_payment_access()'::regprocedure) INTO v_down;
+  FOREACH v_auth IN ARRAY ARRAY[
+    'assert_resource_permission(''down_payments'', ''mark_paid'')',
+    'assert_resource_permission(''pre_funding'', ''use_for_payment'')',
+    'app.down_payment_payment_authorized'
+  ] LOOP
+    IF position(v_auth IN v_down) = 0 THEN
+      RAISE EXCEPTION 'Down Payment assertion is missing: %', v_auth;
+    END IF;
+  END LOOP;
+  SELECT pg_get_functiondef(
+    'public.record_down_payment_with_wallet_rpc(uuid,uuid,numeric,text,text,text,text,integer)'::regprocedure
+  ) INTO v_atomic;
+  IF position('_assert_down_payment_payment_access' IN v_atomic) = 0
+     OR position('_assert_finance_role' IN v_atomic) > 0 THEN
+    RAISE EXCEPTION 'atomic Down Payment RPC did not receive its dedicated gate';
+  END IF;
+  -- Existing finance defaults are seeded, while a Field Assistant role is
+  -- never widened by this migration. Custom per-user dual grants remain
+  -- supported through the canonical override/role framework.
+  IF EXISTS (SELECT 1 FROM public.roles WHERE lower(replace(name, ' ', '_')) IN ('admin', 'financialadmin', 'financial_admin') AND is_active) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.permissions p JOIN public.roles r ON r.id = p.role_id
+      WHERE r.is_active AND lower(replace(r.name, ' ', '_')) IN ('admin', 'financialadmin', 'financial_admin')
+        AND p.resource = 'down_payments' AND p.action = 'mark_paid'
+    ) THEN RAISE EXCEPTION 'finance defaults are missing down_payments:mark_paid'; END IF;
+  END IF;
+  SELECT id INTO v_role_id FROM public.roles
+  WHERE lower(replace(name, ' ', '_')) IN ('field_assistant', 'field assistant') LIMIT 1;
+  IF v_role_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.permissions WHERE role_id = v_role_id AND resource = 'down_payments' AND action = 'mark_paid'
+  ) THEN RAISE EXCEPTION 'Field Assistant received payment by default'; END IF;
   IF to_regprocedure('public._assert_pre_fund_payment_access()') IS NULL THEN
     RAISE EXCEPTION 'dedicated Pre-Fund payment assertion is missing';
   END IF;

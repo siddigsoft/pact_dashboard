@@ -313,6 +313,13 @@ export const useAuthorization = () => {
     return checkPermission('down_payments', 'approve');
   };
 
+  /** Recording a disbursement is deliberately separate from tier approval. */
+  const canMarkDownPaymentPaid = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('down_payments', 'mark_paid') &&
+           checkPermission('pre_funding', 'use_for_payment');
+  };
+
   // ── HR / Payroll / Leave ────────────────────────────────────────────────
   const canManageHR = (): boolean => {
     if (isSuperAdmin()) return true;
@@ -543,6 +550,7 @@ export const useAuthorization = () => {
     canExportCostSubmissions,
     canSubmitDownPayment,
     canApproveDownPayment,
+    canMarkDownPaymentPaid,
     canManageAccounting,
     canWriteAccounting,
     canManagePreFunding,
