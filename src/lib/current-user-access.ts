@@ -52,6 +52,13 @@ export function evaluateManifestPageAccess(
 
   const pageOverride = manifest.page_overrides[slug];
   if (pageOverride) {
+    // A page grant makes the page visible; it must not manufacture a resource
+    // action for a route that is explicitly action-protected. An explicit page
+    // block still wins when no action grant/permission above has granted the
+    // direct route.
+    if (routePermission && !pageOverride.is_blocked) {
+      return { allowed: roleBaseline, source: 'role_baseline' };
+    }
     return { allowed: !pageOverride.is_blocked, source: 'page_override' };
   }
 

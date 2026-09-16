@@ -53,4 +53,33 @@ describe('current user access manifest evaluator', () => {
     )).toMatchObject({ allowed: false, source: 'action_override' });
     expect(manifestHasPermission(context, 'subscriptions', 'read')).toBe(false);
   });
+
+  it('ignores an expired action override and returns to the role permission', () => {
+    const context = manifest({
+      role_permissions: [{ resource: 'subscriptions', action: 'read' }],
+      action_overrides: {
+        'subscriptions:read': { is_granted: false, expires_at: '2000-01-01T00:00:00.000Z' },
+      },
+    });
+
+    expect(evaluateManifestPageAccess(
+      context,
+      'finance-subscriptions',
+      { resource: 'subscriptions', action: 'read' },
+    )).toMatchObject({ allowed: true, source: 'role_permission' });
+    expect(manifestHasPermission(context, 'subscriptions', 'read')).toBe(true);
+  });
+
+  it('does not let a page grant manufacture an unrelated protected action', () => {
+    expect(evaluateManifestPageAccess(
+      manifest({ page_overrides: { 'finance-subscriptions': { is_blocked: false } } }),
+      'finance-subscriptions',
+      { resource: 'subscriptions', action: 'read' },
+    )).toMatchObject({ allowed: false, source: 'role_baseline' });
+    expect(manifestHasPermission(
+      manifest({ page_overrides: { 'finance-subscriptions': { is_blocked: false } } }),
+      'subscriptions',
+      'read',
+    )).toBe(false);
+  });
 });
