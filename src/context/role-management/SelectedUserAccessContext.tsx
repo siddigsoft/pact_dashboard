@@ -3,7 +3,7 @@
  * Provides all access data for the currently-selected user in the Unified Access Manager.
  * All 5 tab components read from this single shared load — no duplicate DB calls.
  */
-import { createContext, useContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
@@ -11,7 +11,7 @@ import { PAGE_DEFS } from '@/lib/access-registry';
 import { resolveRoutePermission } from '@/lib/page-roles';
 
 import {
-  AccessEffect, AccessDecisionTrace, PageOverride, PermissionOverride, ColumnVisibilityRow, DataScopeRow,
+  AccessEffect, AccessDecisionTrace, PageOverride, PermissionOverride, ColumnVisibilityRow, FilterVisibilityRow, DataScopeRow,
   DataScopePolicyMode, DataScopeSelector, ScopePreview,
 } from '@/components/role-management/unified/types';
 import {
@@ -25,10 +25,13 @@ import { overrideIsActive, evaluateManifestPageAccess, manifestIsTabBlocked, typ
 // ── Context type ──────────────────────────────────────────────────────────────
 interface SelectedUserAccessValue {
   loading: boolean;
+  loadError: string | null;
+  hasLoaded: boolean;
   savingKey: string | null;
   pageOverrides: PageOverride[];
   permOverrides: PermissionOverride[];
   columnConfigs: ColumnVisibilityRow[];
+  filterConfigs: FilterVisibilityRow[];
   dataScopeRows: DataScopeRow[];
   /** The primary profile role plus every canonical role assignment. */
   effectiveRoleNames: string[];
@@ -46,6 +49,9 @@ interface SelectedUserAccessValue {
   removeOverride: (kind: 'page' | 'action', id: string) => Promise<boolean>;
   upsertColumnVisibility: (pageSlug: string, columnKey: string, isHidden: boolean, target: 'user' | 'role', roleName?: string) => Promise<void>;
   removeColumnVisibility: (id: string) => Promise<void>;
+  effectiveFilter: (filterKey: string) => AccessEffect;
+  explainFilter: (filterKey: string) => AccessDecisionTrace;
+  toggleFilter: (filterKey: string, target?: 'user' | 'role', roleName?: string) => Promise<void>;
   upsertDataScope: (
     scopeType: DataScopeRow['scope_type'],
     scopeValue: string,
@@ -64,6 +70,23 @@ interface SelectedUserAccessValue {
 
 const SelectedUserAccessContext = createContext<SelectedUserAccessValue | null>(null);
 
+// Parallel load stages share a bounded budget; they must not stack multiple
+// long waits during an initial render.
+const ACCESS_LOAD_TIMEOUT_MS = 7_000;
+const ACCESS_LOAD_ERROR = 'Access data could not be loaded. Check your connection and try again.';
+
+/** A timed promise cannot cancel Supabase's request, so callers must also guard
+ * the result with a request sequence before writing it into state. */
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs = ACCESS_LOAD_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = globalThis.setTimeout(() => reject(new Error('Access data request timed out.')), timeoutMs);
+    Promise.resolve(promise).then(
+      value => { globalThis.clearTimeout(timer); resolve(value); },
+      error => { globalThis.clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
 // ── Provider ──────────────────────────────────────────────────────────────────
 interface Props {
   userId: string;
@@ -76,10 +99,16 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   const { toast } = useToast();
 
   const [loading, setLoading]             = useState(true);
+  const [loadError, setLoadError]         = useState<string | null>(null);
+  const [hasLoaded, setHasLoaded]         = useState(false);
+  const hasLoadedRef = useRef(false);
+  const loadSequence = useRef(0);
+  const mounted = useRef(true);
   const [savingKey, setSavingKey]         = useState<string | null>(null);
   const [pageOverrides, setPageOverrides] = useState<PageOverride[]>([]);
   const [permOverrides, setPermOverrides] = useState<PermissionOverride[]>([]);
   const [columnConfigs, setColumnConfigs] = useState<ColumnVisibilityRow[]>([]);
+  const [filterConfigs, setFilterConfigs] = useState<FilterVisibilityRow[]>([]);
   const [dataScopeRows, setDataScopeRows] = useState<DataScopeRow[]>([]);
   const [effectiveRoleNames, setEffectiveRoleNames] = useState<string[]>([]);
   const [rolePermissionKeys, setRolePermissionKeys] = useState<Set<string>>(new Set());
@@ -107,102 +136,96 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       || message.includes('schema cache') || message.includes('row-level security');
   }
 
+  useEffect(() => () => { mounted.current = false; }, []);
+
   const load = useCallback(async () => {
     if (!userId) return;
-    setLoading(true);
+    const sequence = ++loadSequence.current;
+    const isCurrent = () => mounted.current && sequence === loadSequence.current;
+    const deadline = Date.now() + 14_000;
+    const bounded = <T,>(promise: PromiseLike<T>) =>
+      withTimeout(promise, Math.max(1, deadline - Date.now()));
+    // Keep the last good view usable while a manual refresh is in flight.
+    setLoading(!hasLoadedRef.current);
+    setLoadError(null);
     try {
-      const [pageRes, permRes, roleConfigRes, permissionRes, userRolesRes] = await Promise.all([
-        supabase.from('page_access_overrides').select('*').eq('user_id', userId),
-        supabase.from('user_permission_overrides').select('*').eq('user_id', userId),
-        supabase.from('page_role_configs').select('page_slug, roles'),
-        supabase.rpc('get_user_permissions', { user_uuid: userId }),
-        supabase
+      const [pageRes, permRes, roleConfigRes, permissionRes, userRolesRes] = await bounded(Promise.all([
+        bounded(supabase.from('page_access_overrides').select('*').eq('user_id', userId)),
+        bounded(supabase.from('user_permission_overrides').select('*').eq('user_id', userId)),
+        bounded(supabase.from('page_role_configs').select('page_slug, roles')),
+        bounded(supabase.rpc('get_user_permissions', { user_uuid: userId })),
+        bounded(supabase
           .from('canonical_user_role_assignments')
           .select('role_id, roles!inner(name, is_active)')
-          .eq('user_id', userId),
-      ]);
-      setPageOverrides(pageRes.data ?? []);
-      setPermOverrides(permRes.data ?? []);
-      setAccessNow(Date.now());
-
-      if (userRolesRes.error) {
-        console.error('[SelectedUserAccess] canonical role assignments load error:', userRolesRes.error);
-      }
+          .eq('user_id', userId)),
+      ]));
+      const firstError = [pageRes, permRes, roleConfigRes, permissionRes, userRolesRes].find(result => result.error)?.error;
+      if (firstError) throw firstError;
       const assignedRows = userRolesRes.data ?? [];
       const customRoleNames = assignedRows
         .filter((row: any) => row.roles?.is_active === true)
         .map((row: any) => row.roles?.name)
         .filter((name: string | null): name is string => Boolean(name));
-      const roleNames = unionRoleNames(null, customRoleNames);
-      setEffectiveRoleNames(roleNames);
+      // Resolve exactly like runtime access: the profile's primary role is
+      // always included, then active canonical assignments are added.
+      const roleNames = unionRoleNames(userRole, customRoleNames);
       const roleIds = assignedRows.filter((row: any) => row.roles?.is_active === true).map((row: any) => row.role_id);
+      let nextRoleTabBlocks: Record<string, boolean> = {};
       if (roleIds.length) {
-        const { data: tabRows, error: tabError } = await (supabase as any).from('role_tab_configs').select('role_id, page_slug, is_blocked').in('role_id', roleIds);
-        if (tabError) {
-          console.error('[SelectedUserAccess] role tab load failed:', tabError);
-          setRoleTabBlocks({});
-        } else {
-          const slugs = new Set<string>((tabRows ?? []).map((row: any) => row.page_slug));
-          setRoleTabBlocks(Object.fromEntries([...slugs].map(slug => [slug, roleIds.every(id => (tabRows ?? []).some((row: any) => row.role_id === id && row.page_slug === slug && row.is_blocked))])));
-        }
-      } else { setRoleTabBlocks({}); }
+        const { data: tabRows, error: tabError } = await bounded((supabase as any).from('role_tab_configs').select('role_id, page_slug, is_blocked').in('role_id', roleIds));
+        if (!isCurrent()) return;
+        if (tabError) throw tabError;
+        const slugs = new Set<string>((tabRows ?? []).map((row: any) => row.page_slug));
+        nextRoleTabBlocks = Object.fromEntries([...slugs].map(slug => [slug, roleIds.every(id => (tabRows ?? []).some((row: any) => row.role_id === id && row.page_slug === slug && row.is_blocked))]));
+      }
 
       // A user may hold several canonical roles. Load defaults for every one so
       // the editor never silently treats a custom role as if it did not exist.
-      const [userColumnsRes, roleColumnsRes, userScopesRes, roleScopesRes] = await Promise.all([
-        supabase.from('column_visibility_config').select('*').eq('user_id', userId),
-        supabase.from('column_visibility_config').select('*').in('role', roleNames),
-        supabase.from('data_scope_config').select('*').eq('user_id', userId),
-        supabase.from('data_scope_config').select('*').in('role', roleNames),
-      ]);
-      const colRes = roleColumnsRes.error ? roleColumnsRes : userColumnsRes.error ? userColumnsRes : null;
-      const scopeRes = roleScopesRes.error ? roleScopesRes : userScopesRes.error ? userScopesRes : null;
-
-      // Surface RLS / table-missing errors rather than silently returning [].
-      // Column and scope configs failing means saved rules won't be applied —
-      // warn the admin so they know to run the RLS migration.
-      if (colRes?.error) {
-        const isRls = colRes.error.message?.includes('row-level security') || (colRes.error as any).code === '42501';
-        console.error('[SelectedUserAccess] column_visibility_config load error:', colRes.error);
-        if (isRls || isMigrationError(colRes.error)) {
-          toast({
-            title: 'Column visibility rules unavailable',
-            description: 'Database access policy not yet applied. Run the access_config_tables_rls migration in Supabase Studio.',
-            variant: 'destructive',
-          });
-        }
-      }
-      if (scopeRes?.error) {
-        const isRls = scopeRes.error.message?.includes('row-level security') || (scopeRes.error as any).code === '42501';
-        console.error('[SelectedUserAccess] data_scope_config load error:', scopeRes.error);
-        if (isRls || isMigrationError(scopeRes.error)) {
-          toast({
-            title: 'Data scope rules unavailable',
-            description: 'Database access policy not yet applied. Run the access_config_tables_rls migration in Supabase Studio.',
-            variant: 'destructive',
-          });
-        }
-      }
-
-      setColumnConfigs([...(userColumnsRes.data ?? []), ...(roleColumnsRes.data ?? [])]);
-      setDataScopeRows([...(userScopesRes.data ?? []), ...(roleScopesRes.data ?? [])]);
-
-      if (roleConfigRes.error) {
-        console.error('[SelectedUserAccess] page_role_configs load error:', roleConfigRes.error);
-      }
-      setPageRoleConfigs(Object.fromEntries(
+      const [userColumnsRes, roleColumnsRes, userFiltersRes, roleFiltersRes, userScopesRes, roleScopesRes] = await bounded(Promise.all([
+        bounded(supabase.from('column_visibility_config').select('*').eq('user_id', userId)),
+        bounded(supabase.from('column_visibility_config').select('*').in('role', roleNames)),
+        bounded((supabase as any).from('filter_visibility_config').select('*').eq('user_id', userId)),
+        bounded((supabase as any).from('filter_visibility_config').select('*').in('role', roleNames)),
+        bounded(supabase.from('data_scope_config').select('*').eq('user_id', userId)),
+        bounded(supabase.from('data_scope_config').select('*').in('role', roleNames)),
+      ]));
+      if (!isCurrent()) return;
+      const configError = [userColumnsRes, roleColumnsRes, userFiltersRes, roleFiltersRes, userScopesRes, roleScopesRes].find(result => result.error)?.error;
+      if (configError) throw configError;
+      const nextPageRoleConfigs = Object.fromEntries(
         (roleConfigRes.data ?? []).map((row: any) => [row.page_slug, row.roles ?? []]),
-      ));
-
-      if (permissionRes.error) {
-        console.error('[SelectedUserAccess] get_user_permissions error:', permissionRes.error);
-      }
-      setRolePermissionKeys(new Set(
+      );
+      const nextRolePermissionKeys = new Set(
         (permissionRes.data ?? []).map((permission: any) => `${permission.resource}:${permission.action}`),
-      ));
+      );
+      const nextColumnConfigs = [...(userColumnsRes.data ?? []), ...(roleColumnsRes.data ?? [])];
+      const nextFilterConfigs = [...(userFiltersRes.data ?? []), ...(roleFiltersRes.data ?? [])];
+      const nextDataScopeRows = [...(userScopesRes.data ?? []), ...(roleScopesRes.data ?? [])];
+      // Commit the complete snapshot together. No access slice is changed
+      // until every required stage has succeeded and this request is current.
+      if (!isCurrent()) return;
+      setPageOverrides(pageRes.data ?? []);
+      setPermOverrides(permRes.data ?? []);
+      setEffectiveRoleNames(roleNames);
+      setRoleTabBlocks(nextRoleTabBlocks);
+      setColumnConfigs(nextColumnConfigs);
+      setFilterConfigs(nextFilterConfigs);
+      setDataScopeRows(nextDataScopeRows);
+      setPageRoleConfigs(nextPageRoleConfigs);
+      setRolePermissionKeys(nextRolePermissionKeys);
+      setAccessNow(Date.now());
+      setHasLoaded(true);
+      hasLoadedRef.current = true;
 
+    } catch (error: any) {
+      if (!isCurrent()) return;
+      console.error('[SelectedUserAccess] load failed:', {
+        userIdPresent: Boolean(userId),
+        reason: error?.name === 'AbortError' ? 'aborted' : error?.message?.includes('timed out') ? 'timeout' : 'query_error',
+      });
+      setLoadError(ACCESS_LOAD_ERROR);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }, [userId, userRole, toast]);
 
@@ -221,6 +244,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       .map(o => [`${o.resource}:${o.action}`, o.is_granted as boolean])),
     [permOverrides, accessNow],
   );
+  const filterUserMap = useMemo(() => Object.fromEntries(filterConfigs.filter(row => row.user_id === userId).map(row => [row.filter_key, row])), [filterConfigs, userId]);
 
   // ── Effective helpers (see src/lib/effectiveAccess.ts for precedence) ──
   const selectedManifest: CurrentUserAccessManifest = {
@@ -258,6 +282,41 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       explicitGrant: explicit,
       roleAllows,
     });
+  }
+  function effectiveFilter(filterKey: string): AccessEffect {
+    if (effectiveRoleNames.some(isSuperAdminRole)) return 'superadmin';
+    const user = filterUserMap[filterKey];
+    if (user) return user.is_hidden ? 'blocked' : 'granted';
+    const roleRows = filterConfigs.filter(row => row.role && effectiveRoleNames.includes(row.role) && row.filter_key === filterKey);
+    if (roleRows.some(row => row.is_hidden)) return 'blocked';
+    if (roleRows.length) return 'role-yes';
+    return 'role-yes';
+  }
+  function explainFilter(filterKey: string): AccessDecisionTrace {
+    const effect = effectiveFilter(filterKey);
+    if (effect === 'superadmin') return { effect, source: 'super_admin', summary: 'Super Admin bypass keeps this filter visible.' };
+    if (filterUserMap[filterKey]) return { effect, source: 'user_override', summary: effect === 'blocked' ? 'Explicit user block hides this filter.' : 'Explicit user grant shows this filter.' };
+    if (filterConfigs.some(row => row.role && effectiveRoleNames.includes(row.role) && row.filter_key === filterKey))
+      return { effect, source: 'role_default', summary: effect === 'blocked' ? 'Role default hides this filter.' : 'Role default shows this filter.' };
+    return { effect, source: 'role_default', summary: 'Registry default shows this filter.' };
+  }
+  async function toggleFilter(filterKey: string, target: 'user' | 'role' = 'user', roleName = userRole) {
+    if (effectiveRoleNames.some(isSuperAdminRole)) return;
+    setSavingKey(`filter:${target}:${filterKey}`);
+    try {
+      const existing = filterConfigs.find(row => (target === 'user' ? row.user_id === userId : row.role === roleName) && row.filter_key === filterKey);
+      if (existing) {
+        const { error } = await (supabase as any).from('filter_visibility_config').delete().eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from('filter_visibility_config').upsert(target === 'user'
+          ? { user_id: userId, role: null, filter_key: filterKey, is_hidden: true, set_by: currentUser?.id ?? null }
+          : { user_id: null, role: roleName, filter_key: filterKey, is_hidden: true, set_by: currentUser?.id ?? null });
+        if (error) throw error;
+      }
+      await load();
+    } catch (e: any) { toast({ title: 'Unable to save filter visibility', description: e.message, variant: 'destructive' }); }
+    finally { setSavingKey(null); }
   }
 
   function explainPage(slug: string): AccessDecisionTrace {
@@ -605,10 +664,10 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   }
 
   const value: SelectedUserAccessValue = {
-    loading, savingKey,
-    pageOverrides, permOverrides, columnConfigs, dataScopeRows, scopePreview, scopePreviewError, effectiveRoleNames,
+    loading, loadError, hasLoaded, savingKey,
+    pageOverrides, permOverrides, columnConfigs, filterConfigs, dataScopeRows, scopePreview, scopePreviewError, effectiveRoleNames,
     pageOvMap, permOvMap,
-    effectivePage, effectiveAction, explainPage, explainAction,
+    effectivePage, effectiveAction, explainPage, explainAction, effectiveFilter, explainFilter, toggleFilter,
     togglePage, toggleAction, updateOverrideMetadata, removeOverride,
     upsertColumnVisibility, removeColumnVisibility,
     upsertDataScope, replaceCostSubmissionPolicy, removeDataScope,

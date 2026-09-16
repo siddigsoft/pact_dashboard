@@ -3,16 +3,21 @@ import { useAppContext } from '@/context/AppContext';
 import { useCurrentUserAccessManifest } from '@/hooks/useCurrentUserAccessManifest';
 import { isSuperAdminRole } from '@/lib/effectiveAccess';
 import { overrideIsActive, manifestIsTabBlocked } from '@/lib/current-user-access';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 
 interface CurrentUserAccessValue {
   overrides: Map<string, boolean>;
   isTabBlocked: (slug: string) => boolean;
   refresh: () => Promise<void>;
   loading: boolean;
+  isFilterVisible: (key: string) => boolean;
+  filterLoading: boolean;
+  filterError: string | null;
 }
 
 const CurrentUserAccessContext = createContext<CurrentUserAccessValue>({
-  overrides: new Map(), isTabBlocked: () => true,
+  overrides: new Map(), isTabBlocked: () => true, isFilterVisible: () => false, filterLoading: true, filterError: null,
   refresh: async () => {}, loading: true,
 });
 
@@ -20,6 +25,19 @@ const CurrentUserAccessContext = createContext<CurrentUserAccessValue>({
 export const CurrentUserAccessProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const { currentUser } = useAppContext();
   const query = useCurrentUserAccessManifest(Boolean(currentUser?.id));
+  // One shared config load for the whole application. Filter controls consume
+  // this cache; they must never issue one query per control.
+  const filterQuery = useQuery({
+    queryKey: ['current-user-filter-visibility', currentUser?.id],
+    enabled: Boolean(currentUser?.id),
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from('filter_visibility_config')
+        .select('filter_key,is_hidden,user_id,role');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
   const manifest = query.data?.user_id === currentUser?.id ? query.data : undefined;
   const overrides = useMemo(() => new Map(
     Object.entries(manifest?.page_overrides ?? {})
@@ -42,7 +60,21 @@ export const CurrentUserAccessProvider: FC<{ children: ReactNode }> = ({ childre
   return (
     <CurrentUserAccessContext.Provider value={{
       overrides, isTabBlocked, loading: Boolean(currentUser?.id) && query.isLoading,
-      refresh: async () => { await query.refetch(); },
+      isFilterVisible: (key: string) => {
+        if (!currentUser) return false;
+        if (isSuperAdminRole(currentUser.role) || manifest?.roles.some(isSuperAdminRole)) return true;
+        const rows = (filterQuery.data ?? []) as Array<{ filter_key: string; is_hidden: boolean; user_id?: string; role?: string }>;
+        if (filterQuery.isError && rows.length === 0) return false;
+        const own = rows.find(row => row.filter_key === key && row.user_id === currentUser.id);
+        if (own) return !own.is_hidden;
+        const roleUnion = new Set([currentUser.role, ...(manifest?.roles ?? [])]);
+        const roleRows = rows.filter(row => row.filter_key === key && row.role && roleUnion.has(row.role));
+        // A role-level hide is conservative when multiple config rows exist.
+        return roleRows.length ? !roleRows.some(row => row.is_hidden) : true;
+      },
+      filterLoading: Boolean(currentUser?.id) && filterQuery.isLoading,
+      filterError: filterQuery.isError ? 'Filter visibility settings could not be refreshed; filters are conservatively hidden until the last good configuration is available.' : null,
+      refresh: async () => { await query.refetch(); await filterQuery.refetch(); },
     }}>
       {children}
     </CurrentUserAccessContext.Provider>

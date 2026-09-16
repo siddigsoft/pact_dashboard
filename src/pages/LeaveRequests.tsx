@@ -773,10 +773,10 @@ export default function LeaveRequests() {
           <div className="flex flex-col items-center py-16 text-muted-foreground">
             <CalendarOff className="h-12 w-12 mb-3 opacity-30" />
             <p className="font-medium">{requests.length === 0 ? 'No leave requests yet' : 'No requests match your filters'}</p>
-            {requests.length === 0 && (
-              {canCreate && <Button className="mt-4" onClick={() => setDialogOpen(true)}>
+            {requests.length === 0 && canCreate && (
+              <Button className="mt-4" onClick={() => setDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-1" />Submit first request
-              </Button>}
+              </Button>
             )}
           </div>
         ) : (

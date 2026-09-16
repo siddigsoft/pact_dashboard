@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Filter, X, FileText, MapPin, Tag, Building2, LayoutGrid, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
+import { useEffect } from 'react';
 
 export interface MmpOption {
   id: string;
@@ -61,6 +63,13 @@ export function MmpFilterBar({
   className,
   title = 'Filter Sites by MMP',
 }: MmpFilterBarProps) {
+  const { isFilterVisible } = useCurrentUserAccess();
+  const visible = (key: string) => isFilterVisible(`mmp-management.${key}`);
+  useEffect(() => { if (!visible('mmp') && mmpFilter !== 'all') onMmpFilterChange('all'); }, [mmpFilter, isFilterVisible]);
+  useEffect(() => { if (!visible('status') && statusFilter !== 'all') onStatusFilterChange?.('all'); }, [statusFilter, isFilterVisible]);
+  useEffect(() => { if (!visible('hub') && hubFilter !== 'all') onHubFilterChange?.('all'); }, [hubFilter, isFilterVisible]);
+  useEffect(() => { if (!visible('state') && stateFilter !== 'all') { onStateFilterChange?.('all'); onLocalityFilterChange?.('all'); } }, [stateFilter, isFilterVisible]);
+  useEffect(() => { if (!visible('locality') && localityFilter !== 'all') onLocalityFilterChange?.('all'); }, [localityFilter, isFilterVisible]);
   const activeFilters = [
     mmpFilter !== 'all',
     statusFilter !== 'all',
@@ -119,7 +128,7 @@ export function MmpFilterBar({
           {/* MMP selector */}
           <div className="flex items-center gap-1.5">
             <FileText className="h-3.5 w-3.5 text-[#4A90E2] flex-shrink-0" />
-            <Select value={mmpFilter} onValueChange={onMmpFilterChange}>
+            {visible('mmp') && <Select value={mmpFilter} onValueChange={onMmpFilterChange}>
               <SelectTrigger
                 className="h-8 text-xs bg-[#F8FAFF] border-[#EDF2F7] focus:border-[#4A90E2] focus:ring-1 focus:ring-[#4A90E2]/30 w-[220px] rounded-lg"
                 data-testid="select-mmp-filter"
@@ -136,11 +145,11 @@ export function MmpFilterBar({
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+            </Select>}
           </div>
 
           {/* Status filter */}
-          {statusOptions && statusOptions.length > 0 && onStatusFilterChange && (
+          {visible('status') && statusOptions && statusOptions.length > 0 && onStatusFilterChange && (
             <div className="flex items-center gap-1.5">
               <Tag className="h-3.5 w-3.5 text-[#4A90E2] flex-shrink-0" />
               <Select value={statusFilter} onValueChange={onStatusFilterChange}>
@@ -161,7 +170,7 @@ export function MmpFilterBar({
           )}
 
           {/* Hub filter */}
-          {hubOptions && hubOptions.length > 0 && onHubFilterChange && (
+          {visible('hub') && hubOptions && hubOptions.length > 0 && onHubFilterChange && (
             <div className="flex items-center gap-1.5">
               <Building2 className="h-3.5 w-3.5 text-[#4A90E2] flex-shrink-0" />
               <Select value={hubFilter} onValueChange={onHubFilterChange}>
@@ -182,7 +191,7 @@ export function MmpFilterBar({
           )}
 
           {/* State filter */}
-          {stateOptions && stateOptions.length > 0 && onStateFilterChange && (
+          {visible('state') && stateOptions && stateOptions.length > 0 && onStateFilterChange && (
             <div className="flex items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5 text-[#4A90E2] flex-shrink-0" />
               <Select value={stateFilter} onValueChange={onStateFilterChange}>
@@ -203,7 +212,7 @@ export function MmpFilterBar({
           )}
 
           {/* Locality filter */}
-          {localityOptions !== undefined && onLocalityFilterChange && (
+          {visible('locality') && localityOptions !== undefined && onLocalityFilterChange && (
             <div className="flex items-center gap-1.5">
               <LayoutGrid className="h-3.5 w-3.5 text-[#4A90E2] flex-shrink-0" />
               <Select

@@ -70,3 +70,4 @@
 - [MMP full-report scope performance](mmp-full-report-scope-performance.md) — Full-report row predicates must not repeat database-backed authorization checks for every site.
 - [Action permission integrity](action-permission-integrity.md) — Never advertise a Role Management action unless its control and handler enforce it; seed defaults to avoid accidental lockouts.
 - [Down Payment payment authorization](down-payment-payment-authorization.md) — Paying an approved advance requires mark_paid plus Pre-Fund use; approval alone never authorizes disbursement.
+- [Filter visibility controls](filter-visibility-controls.md) — Hidden optional filters must reset to neutral; visibility never replaces Data Scope, RLS, or export authorization.

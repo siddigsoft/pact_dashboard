@@ -210,8 +210,10 @@ export default function CRMEngagements() {
           <div className="text-center py-16 text-muted-foreground">
             <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-30" />
             <p className="font-medium">{engagements.length === 0 ? 'No engagements logged yet' : 'No engagements match your search'}</p>
-            {engagements.length === 0 && (
-              {canCreate && <Button className="mt-4" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Log first engagement</Button>}
+            {engagements.length === 0 && canCreate && (
+              <Button className="mt-4" onClick={openNew}>
+                <Plus className="h-4 w-4 mr-1" /> Log first engagement
+              </Button>
             )}
           </div>
         ) : (

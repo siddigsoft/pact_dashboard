@@ -3230,9 +3230,11 @@ function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; c
               <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export
             </Button>
           </PayrollExportGate>
-            {canCreateAdvance && <Button onClick={() => setShowForm(v => !v)} size="sm" className="h-9 gap-2 bg-[#0F2041] hover:bg-[#1D3461] text-white text-xs">
-            <Plus className="h-4 w-4" />{showForm ? 'Cancel' : 'Record Advance'}
-          </Button>
+          {canCreateAdvance && (
+            <Button onClick={() => setShowForm(v => !v)} size="sm" className="h-9 gap-2 bg-[#0F2041] hover:bg-[#1D3461] text-white text-xs">
+              <Plus className="h-4 w-4" />{showForm ? 'Cancel' : 'Record Advance'}
+            </Button>
+          )}
         </div>
       </div>
 

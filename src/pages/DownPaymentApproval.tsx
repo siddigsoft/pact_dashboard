@@ -510,7 +510,7 @@ export default function DownPaymentApproval() {
   const { requests, loading, refreshRequests } = useDownPayment();
   const { toast } = useToast();
   const { canApproveDownPayment, canMarkDownPaymentPaid, checkPermission } = useAuthorization();
-  const { isTabBlocked } = useCurrentUserAccess();
+  const { isTabBlocked, isFilterVisible } = useCurrentUserAccess();
 
   const userRole = currentUser?.role?.toLowerCase();
   const normalizedRole = userRole?.replace(/[\s_-]/g, '') ?? '';
@@ -567,6 +567,20 @@ export default function DownPaymentApproval() {
     projectId: urlProjectId,
   }));
   const [showFilters, setShowFilters] = useState(true);
+  useEffect(() => {
+    setFilters(current => {
+      const next = { ...current };
+      const clear = (key: string, field: keyof DownPaymentFilter) => {
+        if (!isFilterVisible(`down-payment-approval.${key}`)) delete (next as any)[field];
+      };
+      ['search', 'hub', 'state', 'locality', 'user', 'mmp', 'pre-fund', 'date', 'status', 'site', 'amount']
+        .forEach(key => clear(key, ({ search: 'searchTerm', hub: 'hubId', state: 'stateName', locality: 'localityName', user: 'dataCollectorId', mmp: 'mmpName', 'pre-fund': 'preFundId', date: 'dateFrom', status: 'status', site: 'siteName', amount: 'amountMin' } as any)[key]));
+      if (!isFilterVisible('down-payment-approval.date')) delete (next as any).dateTo;
+      if (!isFilterVisible('down-payment-approval.amount')) delete (next as any).amountMax;
+      if (!isFilterVisible('down-payment-approval.state') || !isFilterVisible('down-payment-approval.locality')) delete (next as any).localityName;
+      return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+    });
+  }, [isFilterVisible]);
 
   // ── Duplicate active-advance detection ────────────────────────────────────
   // Find sites that have more than one active (non-cancelled/rejected/deleted)
@@ -1300,7 +1314,7 @@ export default function DownPaymentApproval() {
                 )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
+                {isFilterVisible('down-payment-approval.search') && <div>
                   <Label className="text-xs">Search</Label>
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1312,8 +1326,8 @@ export default function DownPaymentApproval() {
                       data-testid="input-page-filter-search"
                     />
                   </div>
-                </div>
-                <div>
+                </div>}
+                {isFilterVisible('down-payment-approval.hub') && <div>
                   <Label className="text-xs">Hub</Label>
                   <Select value={filters.hubId || 'all'} onValueChange={v => setFilters(f => ({ ...f, hubId: v === 'all' ? undefined : v, stateName: undefined, localityName: undefined }))}>
                     <SelectTrigger data-testid="select-page-filter-hub"><SelectValue placeholder="All Hubs" /></SelectTrigger>
@@ -1322,8 +1336,8 @@ export default function DownPaymentApproval() {
                       {uniqueHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                </div>
-                <div>
+                </div>}
+                {isFilterVisible('down-payment-approval.state') && <div>
                   <Label className="text-xs">State</Label>
                   <Select value={filters.stateName || 'all'} onValueChange={v => setFilters(f => ({ ...f, stateName: v === 'all' ? undefined : v, localityName: undefined }))}>
                     <SelectTrigger data-testid="select-page-filter-state"><SelectValue placeholder="All States" /></SelectTrigger>
@@ -1332,8 +1346,8 @@ export default function DownPaymentApproval() {
                       {uniqueStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                </div>
-                <div>
+                </div>}
+                {isFilterVisible('down-payment-approval.locality') && <div>
                   <Label className="text-xs">Locality</Label>
                   <Select value={filters.localityName || 'all'} onValueChange={v => setFilters(f => ({ ...f, localityName: v === 'all' ? undefined : v }))}>
                     <SelectTrigger data-testid="select-page-filter-locality"><SelectValue placeholder="All Localities" /></SelectTrigger>
@@ -1342,7 +1356,8 @@ export default function DownPaymentApproval() {
                       {uniqueLocalities.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                </div>
+                </div>}
+                {isFilterVisible('down-payment-approval.user') && <div>
                 <div>
                   <Label className="text-xs">Data Collector</Label>
                   <Select value={filters.dataCollectorId || 'all'} onValueChange={v => setFilters(f => ({ ...f, dataCollectorId: v === 'all' ? undefined : v }))}>
@@ -1353,7 +1368,8 @@ export default function DownPaymentApproval() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                </div>}
+                {isFilterVisible('down-payment-approval.mmp') && <div>
                   <Label className="text-xs">MMP</Label>
                   <Select value={filters.mmpName || 'all'} onValueChange={v => setFilters(f => ({ ...f, mmpName: v === 'all' ? undefined : v }))}>
                     <SelectTrigger data-testid="select-page-filter-mmp"><SelectValue placeholder="All MMPs" /></SelectTrigger>
@@ -1362,8 +1378,8 @@ export default function DownPaymentApproval() {
                       {uniqueMmps.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                </div>
-                {canManagePreFundFilters && (
+                </div>}
+                {isFilterVisible('down-payment-approval.pre-fund') && canManagePreFundFilters && (
                   <div>
                     <Label className="text-xs">Paid from Pre-Fund</Label>
                     <Select value={filters.preFundId || 'all'} onValueChange={v => setFilters(f => ({ ...f, preFundId: v === 'all' ? undefined : v }))}>
@@ -1384,15 +1400,19 @@ export default function DownPaymentApproval() {
                     </Select>
                   </div>
                 )}
-                <div>
-                  <Label className="text-xs">Date From</Label>
-                  <Input type="date" value={filters.dateFrom || ''} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value || undefined }))} data-testid="input-page-filter-date-from" />
-                </div>
-                <div>
-                  <Label className="text-xs">Date To</Label>
-                  <Input type="date" value={filters.dateTo || ''} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value || undefined }))} data-testid="input-page-filter-date-to" />
-                </div>
-                <div>
+                {isFilterVisible('down-payment-approval.date') && (
+                  <div className="contents">
+                    <div>
+                      <Label className="text-xs">Date From</Label>
+                      <Input type="date" value={filters.dateFrom || ''} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value || undefined }))} data-testid="input-page-filter-date-from" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Date To</Label>
+                      <Input type="date" value={filters.dateTo || ''} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value || undefined }))} data-testid="input-page-filter-date-to" />
+                    </div>
+                  </div>
+                )}
+                {isFilterVisible('down-payment-approval.status') && <div>
                   <Label className="text-xs">Status</Label>
                   <Select
                     value={(filters.status && filters.status.length === 1) ? filters.status[0] : 'all'}
@@ -1410,7 +1430,7 @@ export default function DownPaymentApproval() {
                       <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
+                </div>}
               </div>
             </CardContent>
           </Card>

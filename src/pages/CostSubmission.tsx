@@ -72,6 +72,7 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
 import { dispatchNotification } from '@/lib/notify';
 import { getStatesInHub, normalizeHubId, hubs, getStateName } from '@/data/sudanStates';
 import { getHubAccessInfo, isStateInAnyHub, getAdditionalSupervisorHubIds } from '@/utils/hubAccessControl';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 const MGMT_ROLES = [
   'fom', 'field_operation_manager', 'Field Operation Manager (FOM)',
@@ -244,6 +245,7 @@ const CostSubmission = () => {
    const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
    const { mmpFiles } = useMMP();
    const { toast } = useToast();
+   const { isFilterVisible } = useCurrentUserAccess();
 
    // Build MMP lookup map: mmp_file_id -> mmp name
    const mmpNameMap = useMemo(() => {
@@ -902,6 +904,17 @@ const CostSubmission = () => {
     return next;
   });
   const [costSearch, setCostSearch] = useState('');
+  useEffect(() => {
+    if (!isFilterVisible('cost-submission.status')) setStatusFilter('all');
+    if (!isFilterVisible('cost-submission.mmp')) setMmpFilter('all');
+    if (!isFilterVisible('cost-submission.user')) setUserFilter('all');
+    if (!isFilterVisible('cost-submission.state')) setStateFilter('all');
+    if (!isFilterVisible('cost-submission.pre-fund')) setCostPreFundFilter('all');
+    if (!isFilterVisible('cost-submission.tier')) setTierFilter('all');
+    if (!isFilterVisible('cost-submission.search')) setCostSearch('');
+    if (!isFilterVisible('cost-submission.date')) { setOcDateFrom(''); setOcDateTo(''); }
+    if (!isFilterVisible('cost-submission.amount')) { setOcAmtMin(''); setOcAmtMax(''); }
+  }, [isFilterVisible]);
   // Inverted logic: stores which categories are COLLAPSED. Empty set = all expanded.
   // This correctly handles any category key, including custom/unknown ones.
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
@@ -5285,7 +5298,7 @@ const CostSubmission = () => {
           {/* Filter row: MMP / Submitter / State */}
           <div className="flex items-center gap-2 flex-wrap mb-1" data-testid="mmp-filter-bar">
             {/* MMP filter */}
-            {mmpOptions.length > 0 && !cycleContextMmpId && (
+            {isFilterVisible('cost-submission.mmp') && mmpOptions.length > 0 && !cycleContextMmpId && (
               <Select value={mmpFilter} onValueChange={v => { setMmpFilter(v); setUserFilter('all'); setStateFilter('all'); }} data-testid="select-mmp-filter">
                 <SelectTrigger className="h-8 text-xs w-[200px]" data-testid="trigger-mmp-filter">
                   <SelectValue placeholder="All MMPs" />
@@ -5300,7 +5313,7 @@ const CostSubmission = () => {
             )}
 
             {/* Submitter filter */}
-            {(isAdminOrSuperUser || isSuperAdmin || isSupervisor || isFOM || isCountryDirector) && userOptions.length > 1 && (
+            {isFilterVisible('cost-submission.user') && (isAdminOrSuperUser || isSuperAdmin || isSupervisor || isFOM || isCountryDirector) && userOptions.length > 1 && (
               <Select value={userFilter} onValueChange={setUserFilter} data-testid="select-user-filter">
                 <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="trigger-user-filter">
                   <SelectValue placeholder="All Submitters" />
@@ -5315,7 +5328,7 @@ const CostSubmission = () => {
             )}
 
             {/* State filter */}
-            {(isAdminOrSuperUser || isSuperAdmin) && stateOptions.length > 1 && (
+            {isFilterVisible('cost-submission.state') && (isAdminOrSuperUser || isSuperAdmin) && stateOptions.length > 1 && (
               <Select value={stateFilter} onValueChange={setStateFilter} data-testid="select-state-filter">
                 <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="trigger-state-filter">
                   <SelectValue placeholder="All States" />
@@ -5329,7 +5342,7 @@ const CostSubmission = () => {
               </Select>
             )}
 
-            {canManagePreFundFilters && (
+            {isFilterVisible('cost-submission.pre-fund') && canManagePreFundFilters && (
               <Select value={costPreFundFilter} onValueChange={setCostPreFundFilter} data-testid="select-cost-pre-fund-filter">
                 <SelectTrigger className="h-8 text-xs w-[210px]">
                   <SelectValue placeholder="Paid from Pre-Fund" />
@@ -5348,7 +5361,7 @@ const CostSubmission = () => {
             )}
 
             {/* Approval-tier filter — Super Admin only */}
-            {isSuperAdmin && (
+            {isFilterVisible('cost-submission.tier') && isSuperAdmin && (
               <Select value={tierFilter} onValueChange={v => setTierFilter(v as typeof tierFilter)} data-testid="select-tier-filter">
                 <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="trigger-tier-filter">
                   <SelectValue placeholder="All Tiers" />
@@ -5415,7 +5428,7 @@ const CostSubmission = () => {
               <span className="font-semibold">Pre-Fund filter unavailable:</span> {costPreFundLinkError}
             </div>
           )}
-          <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-filter-bar">
+          {isFilterVisible('cost-submission.status') && <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-filter-bar">
             {([
               { key: 'all', label: 'All', labelAr: 'الكل', count: filteredOperationalCosts.length, color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
               { key: 'pending', label: 'Pending', labelAr: 'معلق', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'pending').length, color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
@@ -5527,7 +5540,7 @@ const CostSubmission = () => {
               <FileSpreadsheet className="h-4 w-4 mr-1" />
               Excel
             </Button>
-          </div>
+          </div>}
 
           {/* Batch Pay selection bar — shown when ≥1 item is selected, sticky */}
           {(() => {
@@ -5845,7 +5858,7 @@ const CostSubmission = () => {
                       </div>
                     </div>
                   )}
-                  <div className="relative">
+                  {isFilterVisible('cost-submission.search') && <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
                       placeholder="Search by description, vendor, reference, category..."
@@ -5859,7 +5872,7 @@ const CostSubmission = () => {
                         <X className="h-4 w-4" />
                       </button>
                     )}
-                  </div>
+                  </div>}
                   {/* Sort · Advanced filters · Remind All · Spend Chart · Save Filter */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
@@ -5937,31 +5950,45 @@ const CostSubmission = () => {
                       <span className="text-[10px] text-muted-foreground shrink-0">Pinned:</span>
                       {savedFilters.map((f, fi) => (
                         <div key={fi} className="inline-flex items-center rounded-full border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 text-[10px] font-medium text-violet-700 dark:text-violet-400 overflow-hidden">
-                          <button className="px-2 py-0.5" onClick={() => { setCostSearch(f.search); setOcDateFrom(f.dateFrom); setOcDateTo(f.dateTo); setOcAmtMin(f.amtMin); setOcAmtMax(f.amtMax); }} data-testid={`button-apply-saved-filter-${fi}`}>{f.label}</button>
+                          <button className="px-2 py-0.5" onClick={() => {
+                            setCostSearch(isFilterVisible('cost-submission.search') ? f.search : '');
+                            setOcDateFrom(isFilterVisible('cost-submission.date') ? f.dateFrom : '');
+                            setOcDateTo(isFilterVisible('cost-submission.date') ? f.dateTo : '');
+                            setOcAmtMin(isFilterVisible('cost-submission.amount') ? f.amtMin : '');
+                            setOcAmtMax(isFilterVisible('cost-submission.amount') ? f.amtMax : '');
+                          }} data-testid={`button-apply-saved-filter-${fi}`}>{f.label}</button>
                           <button className="px-1.5 border-l border-violet-200 dark:border-violet-700 hover:text-red-500" onClick={() => { const u = savedFilters.filter((_, i) => i !== fi); setSavedFilters(u); localStorage.setItem('oc_saved_filters', JSON.stringify(u)); }} data-testid={`button-remove-saved-filter-${fi}`}><X className="h-2.5 w-2.5" /></button>
                         </div>
                       ))}
                     </div>
                   )}
                   {/* Advanced date/amount filter panel */}
-                  {showAdvFilters && (
+                  {showAdvFilters && (isFilterVisible('cost-submission.date') || isFilterVisible('cost-submission.amount')) && (
                     <div className="rounded-lg border bg-muted/30 p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground mb-1 block">Date from</label>
-                        <Input type="date" value={ocDateFrom} onChange={e => setOcDateFrom(e.target.value)} className="h-7 text-xs" data-testid="input-date-from" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground mb-1 block">Date to</label>
-                        <Input type="date" value={ocDateTo} onChange={e => setOcDateTo(e.target.value)} className="h-7 text-xs" data-testid="input-date-to" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground mb-1 block">Min amount</label>
-                        <Input type="number" placeholder="0" value={ocAmtMin} onChange={e => setOcAmtMin(e.target.value)} className="h-7 text-xs" data-testid="input-amt-min" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground mb-1 block">Max amount</label>
-                        <Input type="number" placeholder="∞" value={ocAmtMax} onChange={e => setOcAmtMax(e.target.value)} className="h-7 text-xs" data-testid="input-amt-max" />
-                      </div>
+                      {isFilterVisible('cost-submission.date') && (
+                        <div className="contents">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground mb-1 block">Date from</label>
+                            <Input type="date" value={ocDateFrom} onChange={e => setOcDateFrom(e.target.value)} className="h-7 text-xs" data-testid="input-date-from" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground mb-1 block">Date to</label>
+                            <Input type="date" value={ocDateTo} onChange={e => setOcDateTo(e.target.value)} className="h-7 text-xs" data-testid="input-date-to" />
+                          </div>
+                        </div>
+                      )}
+                      {isFilterVisible('cost-submission.amount') && (
+                        <div className="contents">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground mb-1 block">Min amount</label>
+                            <Input type="number" placeholder="0" value={ocAmtMin} onChange={e => setOcAmtMin(e.target.value)} className="h-7 text-xs" data-testid="input-amt-min" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground mb-1 block">Max amount</label>
+                            <Input type="number" placeholder="∞" value={ocAmtMax} onChange={e => setOcAmtMax(e.target.value)} className="h-7 text-xs" data-testid="input-amt-max" />
+                          </div>
+                        </div>
+                      )}
                       {(ocDateFrom || ocDateTo || ocAmtMin || ocAmtMax) && (
                         <button className="col-span-full text-[11px] text-muted-foreground hover:text-foreground text-left" onClick={() => { setOcDateFrom(''); setOcDateTo(''); setOcAmtMin(''); setOcAmtMax(''); }} data-testid="button-clear-adv-filters">✕ Clear all filters</button>
                       )}

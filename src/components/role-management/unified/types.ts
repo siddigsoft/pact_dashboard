@@ -58,6 +58,17 @@ export interface ColumnVisibilityRow {
   created_at: string;
 }
 
+export interface FilterVisibilityRow {
+  id: string;
+  user_id?: string | null;
+  role?: string | null;
+  filter_key: string;
+  is_hidden: boolean;
+  set_by?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface DataScopeRow {
   id: string;
   user_id?: string | null;

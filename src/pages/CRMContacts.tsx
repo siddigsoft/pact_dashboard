@@ -175,8 +175,10 @@ export default function CRMContacts() {
           <div className="text-center py-16 text-muted-foreground">
             <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
             <p className="font-medium">{contacts.length === 0 ? 'No contacts yet' : 'No contacts match your search'}</p>
-            {contacts.length === 0 && (
-              {canCreate && <Button className="mt-4" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Add first contact</Button>}
+            {contacts.length === 0 && canCreate && (
+              <Button className="mt-4" onClick={openNew}>
+                <Plus className="h-4 w-4 mr-1" /> Add first contact
+              </Button>
             )}
           </div>
         ) : (

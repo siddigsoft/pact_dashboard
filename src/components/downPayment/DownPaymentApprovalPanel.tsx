@@ -90,6 +90,7 @@ import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertifi
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { useToast } from '@/hooks/use-toast';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { voidUnpaidDownPaymentRequest } from '@/utils/downPaymentVoid';
 import { Mail, Wallet, Upload, ImageIcon } from 'lucide-react';
 import { PaymentHistoryPanel } from '@/components/financial/PaymentHistoryPanel';
@@ -401,6 +402,7 @@ export function DownPaymentApprovalPanel({
   const isExplicitApproval = approvalMode === 'explicit_pending_admin' || approvalMode === 'explicit_combined';
   const hasExplicitPaymentSurface = approvalMode === 'explicit_payment' || approvalMode === 'explicit_combined';
   const { toast } = useToast();
+  const { isFilterVisible } = useCurrentUserAccess();
   const requests = externalRequests ?? contextRequests;
 
 
@@ -436,6 +438,32 @@ export function DownPaymentApprovalPanel({
   const [revertTarget, setRevertTarget] = useState<'pending_supervisor' | 'pending_admin' | 'approved'>('pending_supervisor');
 
   const [filters, setFilters] = useState<DownPaymentFilter>({});
+  // Visibility is presentation-only. Clearing hidden values prevents a stale
+  // selection from continuing to narrow the already-authorized request set.
+  useEffect(() => {
+    const keys: Array<[string, keyof DownPaymentFilter]> = [
+      ['search', 'searchTerm'], ['status', 'status'], ['hub', 'hubId'],
+      ['state', 'stateName'], ['locality', 'localityName'], ['mmp', 'mmpName'],
+      ['site', 'siteName'], ['date', 'dateFrom'], ['user', 'dataCollectorId'],
+      ['pre-fund', 'preFundId'], ['amount', 'amountMin'],
+    ];
+    setFilters(current => {
+      const next = { ...current } as DownPaymentFilter;
+      let changed = false;
+      keys.forEach(([key, field]) => {
+        if (!isFilterVisible(`down-payment-approval.${key}`) && next[field] !== undefined) {
+          delete (next as any)[field]; changed = true;
+        }
+        if (key === 'date' && !isFilterVisible('down-payment-approval.date') && (next as any).dateTo !== undefined) {
+          delete (next as any).dateTo; changed = true;
+        }
+        if (key === 'amount' && !isFilterVisible('down-payment-approval.amount') && (next as any).amountMax !== undefined) {
+          delete (next as any).amountMax; changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+  }, [isFilterVisible]);
 
   const [paymentRequestDialog, setPaymentRequestDialog] = useState<{
     open: boolean;
@@ -2534,14 +2562,14 @@ export function DownPaymentApprovalPanel({
           <span className="text-muted-foreground/40 text-xs">|</span>
         </>
       )}
-      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Status:</span>
+      {isFilterVisible('down-payment-approval.status') && <><span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Status:</span>
       <Select value={(filters.status && filters.status.length === 1) ? filters.status[0] : 'all'} onValueChange={v => setFilters(f => ({ ...f, status: v === 'all' ? undefined : [v as DownPaymentStatus] }))}>
         <SelectTrigger className="h-8 w-[180px] text-xs" data-testid={`select-${testIdPrefix}-status`}><SelectValue placeholder="All Statuses" /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Statuses</SelectItem>
           {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
         </SelectContent>
-      </Select>
+      </Select></>}
       {filters.status && filters.status.length > 0 && (
         <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setFilters(f => ({ ...f, status: undefined }))}><X className="h-3 w-3 mr-1" />Clear</Button>
       )}
@@ -3684,7 +3712,7 @@ export function DownPaymentApprovalPanel({
           </Button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
+          {isFilterVisible('down-payment-approval.search') && <div>
             <Label className="text-xs">Search</Label>
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -3696,8 +3724,8 @@ export function DownPaymentApprovalPanel({
                 data-testid="input-filter-search"
               />
             </div>
-          </div>
-          <div>
+          </div>}
+          {isFilterVisible('down-payment-approval.hub') && <div>
             <Label className="text-xs">Hub</Label>
             <Select
               value={filters.hubId || 'all'}
@@ -3713,8 +3741,8 @@ export function DownPaymentApprovalPanel({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div>
+          </div>}
+          {isFilterVisible('down-payment-approval.state') && <div>
             <Label className="text-xs">State</Label>
             <Select
               value={filters.stateName || 'all'}
@@ -3730,8 +3758,8 @@ export function DownPaymentApprovalPanel({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div>
+          </div>}
+          {isFilterVisible('down-payment-approval.locality') && <div>
             <Label className="text-xs">Locality</Label>
             <Select
               value={filters.localityName || 'all'}
@@ -3747,8 +3775,8 @@ export function DownPaymentApprovalPanel({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div>
+          </div>}
+          {isFilterVisible('down-payment-approval.user') && <div>
             <Label className="text-xs">Data Collector</Label>
             <Select
               value={filters.dataCollectorId || 'all'}
@@ -3764,8 +3792,8 @@ export function DownPaymentApprovalPanel({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div>
+          </div>}
+          {isFilterVisible('down-payment-approval.mmp') && <div>
             <Label className="text-xs">MMP</Label>
             <Select
               value={filters.mmpName || 'all'}
@@ -3781,8 +3809,8 @@ export function DownPaymentApprovalPanel({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div>
+          </div>}
+          {isFilterVisible('down-payment-approval.date') && <div className="contents">
             <Label className="text-xs">Date From</Label>
             <Input
               type="date"
@@ -3790,8 +3818,6 @@ export function DownPaymentApprovalPanel({
               onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value || undefined }))}
               data-testid="input-filter-date-from"
             />
-          </div>
-          <div>
             <Label className="text-xs">Date To</Label>
             <Input
               type="date"
@@ -3799,8 +3825,8 @@ export function DownPaymentApprovalPanel({
               onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value || undefined }))}
               data-testid="input-filter-date-to"
             />
-          </div>
-          <div>
+          </div>}
+          {isFilterVisible('down-payment-approval.amount') && <div className="contents">
             <Label className="text-xs">Min Amount (SDG)</Label>
             <Input
               type="number"
@@ -3809,8 +3835,6 @@ export function DownPaymentApprovalPanel({
               onChange={e => setFilters(f => ({ ...f, amountMin: e.target.value ? parseFloat(e.target.value) : undefined }))}
               data-testid="input-filter-amount-min"
             />
-          </div>
-          <div>
             <Label className="text-xs">Max Amount (SDG)</Label>
             <Input
               type="number"
@@ -3819,7 +3843,7 @@ export function DownPaymentApprovalPanel({
               onChange={e => setFilters(f => ({ ...f, amountMax: e.target.value ? parseFloat(e.target.value) : undefined }))}
               data-testid="input-filter-amount-max"
             />
-          </div>
+          </div>}
         </div>
       </CardContent>
     </Card>
@@ -4071,7 +4095,7 @@ export function DownPaymentApprovalPanel({
                 <Button variant="ghost" size="sm" onClick={() => selectAll(pendingRequests)} data-testid="button-select-all">
                   Select All
                 </Button>
-              </div>}
+          </div>}
               <VirtualizedRequestList requests={pendingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
             </div>
           )}
@@ -4257,7 +4281,7 @@ export function DownPaymentApprovalPanel({
                       })}
                     </SelectContent>
                   </Select>
-                  <Select
+                  {isFilterVisible('down-payment-approval.site') && <Select
                     value={filters.siteName || 'all'}
                     onValueChange={(val) => {
                       setFilters(f => ({ ...f, siteName: val === 'all' ? undefined : val }));
@@ -4273,7 +4297,7 @@ export function DownPaymentApprovalPanel({
                         return count > 0 ? <SelectItem key={s} value={s!}>{s} ({count})</SelectItem> : null;
                       })}
                     </SelectContent>
-                  </Select>
+                  </Select>}
                   <Button
                     size="sm"
                     variant="ghost"

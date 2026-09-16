@@ -27,11 +27,11 @@ jobs:
         with:
           version: latest
 
-      # Start the full local Supabase stack (Postgres + Auth + Storage).
-      # This gives us the complete schema environment — including auth.users,
-      # storage, and all Supabase extensions — that the migrations depend on.
-      - name: Start local Supabase stack
-        run: supabase start --ignore-health-check
+      # The FK check needs the local database schema, but not the Storage API or
+      # image proxy containers. Excluding them also avoids transient/broken
+      # Storage image tags published by `supabase/setup-cli@latest`.
+      - name: Start local Supabase database
+        run: supabase start --ignore-health-check --exclude storage-api,imgproxy
 
       # Apply every file in supabase/migrations/ in timestamp order,
       # including any new migration added in this PR.

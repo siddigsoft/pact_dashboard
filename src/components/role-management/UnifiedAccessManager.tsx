@@ -9,16 +9,18 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Search, Globe, Layers, Key, Database, Shield, User, ChevronRight, BarChart3, Columns3, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Search, Globe, Layers, Key, Database, Shield, User, ChevronRight, BarChart3, Columns3, FileText, AlertTriangle, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
-import { SelectedUserAccessProvider } from '@/context/role-management/SelectedUserAccessContext';
+import { SelectedUserAccessProvider, useSelectedUserAccess } from '@/context/role-management/SelectedUserAccessContext';
 import { OverviewTab }     from './unified/OverviewTab';
 import { PageAccessTab }   from './unified/PageAccessTab';
 import { TabAccessTab }    from './unified/TabAccessTab';
 import { PermissionsTab }  from './unified/PermissionsTab';
 import { DataScopeTab }    from './unified/DataScopeTab';
 import { AccessAuditTab }  from './unified/AccessAuditTab';
+import { FilterControlsTab } from './unified/FilterControlsTab';
 
 // ── Role display helpers ────────────────────────────────────────────────────
 const ROLE_LABEL: Record<string, string> = {
@@ -49,7 +51,7 @@ function getInitials(name?: string | null, email?: string): string {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type UAMUser = { id: string; name?: string | null; email: string; role: string };
-type TabKey = 'overview' | 'pages' | 'tabs' | 'buttons' | 'reports' | 'columns' | 'scope' | 'overrides' | 'audit';
+type TabKey = 'overview' | 'pages' | 'tabs' | 'buttons' | 'reports' | 'columns' | 'filters' | 'scope' | 'overrides' | 'audit';
 
 // ── Component ──────────────────────────────────────────────────────────────
 export function UnifiedAccessManager({ containerClassName }: { containerClassName?: string } = {}) {
@@ -86,9 +88,18 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
 
   useEffect(() => {
     if (requestedUser && filteredUsers.some(user => user.id === requestedUser)) setSelectedId(requestedUser);
-    else if (requestedPage && filteredUsers.length) setSelectedId(previous => previous ?? filteredUsers[0].id);
+    // A stale/deleted accessUser must not leave the workspace with an
+    // invisible selection (and therefore an apparently endless skeleton).
+    // Keep valid embedded selections, otherwise choose the first eligible user.
+    else if (filteredUsers.length) {
+      setSelectedId(previous => previous && filteredUsers.some(user => user.id === previous)
+        ? previous
+        : filteredUsers[0].id);
+    } else {
+      setSelectedId(null);
+    }
     if (requestedPage) setActiveTab('pages');
-  }, [requestedUser, requestedPage, users]);
+  }, [requestedUser, requestedPage, filteredUsers]);
 
   const selectedUser = useMemo<UAMUser | null>(
     () => (selectedId ? ((users as UAMUser[]).find(u => u.id === selectedId) ?? null) : null),
@@ -155,6 +166,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
         <EmptyState />
       ) : (
         <SelectedUserAccessProvider key={selectedUser.id} userId={selectedUser.id} userRole={selectedUser.role}>
+          <AccessLoadGate>
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* User header */}
             <UserHeader user={selectedUser} isSA={isSA} />
@@ -171,6 +183,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
                   { key: 'buttons',      icon: Key,    label: 'Buttons & Actions' },
                   { key: 'reports',      icon: BarChart3, label: 'Reports' },
                   { key: 'columns',      icon: Columns3, label: 'Columns' },
+                  { key: 'filters',      icon: SlidersHorizontal, label: 'Filter Controls' },
                   { key: 'scope',        icon: Database, label: 'Data Scope' },
                   { key: 'overrides',    icon: Shield, label: 'Overrides' },
                   { key: 'audit',        icon: FileText, label: 'Access Audit' },
@@ -203,6 +216,9 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
                   <TabsContent value="columns" className="flex-1 overflow-hidden m-0">
                     <PermissionsTab {...tabProps} section="columns" />
                   </TabsContent>
+                  <TabsContent value="filters" className="flex-1 overflow-hidden m-0">
+                    <FilterControlsTab {...tabProps} />
+                  </TabsContent>
                   <TabsContent value="scope" className="flex-1 overflow-hidden m-0">
                     <DataScopeTab {...tabProps} />
                   </TabsContent>
@@ -216,6 +232,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
               )}
             </Tabs>
           </div>
+          </AccessLoadGate>
         </SelectedUserAccessProvider>
       )}
     </div>
@@ -303,5 +320,39 @@ function EmptyState() {
         <p className="text-xs opacity-70 mt-1">Choose a user from the left panel to manage their page access, tab visibility, action permissions, and data scope.</p>
       </div>
     </div>
+  );
+}
+
+function AccessLoadGate({ children }: { children: ReactNode }) {
+  const { loadError, loading, hasLoaded, refresh } = useSelectedUserAccess();
+
+  if (loadError && !loading && !hasLoaded) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+        <div role="alert" className="max-w-md rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center">
+          <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-destructive" />
+          <h2 className="text-sm font-semibold">Access data is unavailable</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            We could not load this user&apos;s access settings. Your existing settings were preserved. Try again or return to the user list.
+          </p>
+          <Button type="button" size="sm" className="mt-4 gap-1.5" onClick={() => void refresh()}>
+            <RefreshCw className="h-3.5 w-3.5" /> Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <>
+      {loadError && hasLoaded && (
+        <div role="alert" className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-300/50 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+          <span>Refresh failed. Showing the last successfully loaded access settings.</span>
+          <Button type="button" variant="outline" size="sm" className="h-7 gap-1" onClick={() => void refresh()}>
+            <RefreshCw className="h-3 w-3" /> Retry
+          </Button>
+        </div>
+      )}
+      {children}
+    </>
   );
 }
