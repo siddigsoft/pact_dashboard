@@ -375,9 +375,9 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
 
   const fetchUserRoles = async (userId?: string): Promise<void> => {
     try {
-      let query = supabase
-        .from('user_roles')
-        .select('id, user_id, role, role_id, assigned_by, assigned_at, created_at');
+      let query = (supabase as any)
+        .from('canonical_user_role_assignments')
+        .select('id, user_id, role_id, assigned_by, assigned_at, created_at, roles(name)');
       if (userId) query = query.eq('user_id', userId);
 
       const { data, error } = await query;
@@ -387,8 +387,8 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
         const mapped: UserRole[] = data.map((r: any) => ({
           id: r.id,
           user_id: r.user_id,
-          role: r.role as AppRole,
-          role_id: r.role_id || undefined,
+          role: (r.roles?.name || 'unknown') as AppRole,
+          role_id: r.role_id,
           assigned_by: r.assigned_by || undefined,
           assigned_at: r.assigned_at || undefined,
           created_at: r.created_at,
@@ -396,12 +396,12 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
 
         if (!userId) {
           setUserRoles(mapped);
-          console.log(`RoleManagement: fetched ${mapped.length} user_roles`);
+          console.log(`RoleManagement: fetched ${mapped.length} canonical role assignments`);
         } else {
           setUserRoles(prev => {
             const others = prev.filter(ur => ur.user_id !== userId);
             const combined = [...others, ...mapped];
-            console.log(`RoleManagement: fetched ${mapped.length} user_roles for ${userId}`);
+            console.log(`RoleManagement: fetched ${mapped.length} canonical role assignments for ${userId}`);
             return combined;
           });
         }
@@ -495,11 +495,11 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   // Keep in sync with changes coming from other parts of the app (e.g., Users page)
   useEffect(() => {
     const channel = supabase
-      .channel('rm_user_roles_changes')
+        .channel('rm_canonical_role_assignments_changes')
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
-        table: 'user_roles',
+          table: 'canonical_user_role_assignments',
       }, (payload: any) => {
         fetchUserRoles().catch(() => {});
         const uid = payload?.new?.user_id || payload?.old?.user_id;
