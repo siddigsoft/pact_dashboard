@@ -379,12 +379,10 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin'], note:'Live URL for Approval Dashboard. Linked with Finance Approval Dashboard — grants cascade together.' },
 
   // Permissions & Audit section
-  { slug:'sa-permissions-mgmt', label:'User Permissions (SA)',  path:'/super-admin-hub?tab=permissions', icon:Lock, group:'Super Admin',
-    roles:['superAdmin'] },
+  { slug:'sa-permissions-mgmt', label:'User Access (SA)',       path:'/super-admin-hub?tab=user-access', icon:Lock, group:'Super Admin',
+    roles:['superAdmin'], note:'Canonical Users workspace. Legacy Screen Permissions and Page Grants URLs redirect here.' },
   { slug:'sa-audit-logs',       label:'System Audit Logs (SA)', path:'/super-admin-hub?tab=audit-logs', icon:ScrollText, group:'Super Admin',
     roles:['superAdmin','admin'] },
-  { slug:'sa-page-grants',      label:'Page Grants',            path:'/super-admin-hub?tab=page-grants', icon:Users, group:'Super Admin',
-    roles:['superAdmin'] },
   { slug:'sa-button-registry',  label:'Button Registry',        path:'/super-admin-hub?tab=button-registry', icon:LayoutList, group:'Super Admin',
     roles:['superAdmin'] },
 

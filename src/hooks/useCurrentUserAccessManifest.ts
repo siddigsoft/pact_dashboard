@@ -64,5 +64,7 @@ export function useCurrentUserAccessManifest(enabled: boolean) {
     return () => clearTimeout(timeout);
   }, [enabled, userId, query.data, queryClient]);
 
-  return query;
+  // Disabled preview observers must not expose the real user's cached grants.
+  // A failed refresh also cannot silently keep rendering stale capabilities.
+  return { ...query, data: enabled && !query.isError ? query.data : undefined };
 }

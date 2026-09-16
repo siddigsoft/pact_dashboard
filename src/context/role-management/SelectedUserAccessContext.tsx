@@ -7,7 +7,8 @@ import { createContext, useContext, useCallback, useEffect, useMemo, useState, t
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
-import { PAGE_DEFS, hasDefaultAccess } from '@/lib/access-registry';
+import { PAGE_DEFS } from '@/lib/access-registry';
+import { resolveRoutePermission } from '@/lib/page-roles';
 
 import {
   AccessEffect, AccessDecisionTrace, PageOverride, PermissionOverride, ColumnVisibilityRow, DataScopeRow,
@@ -16,11 +17,10 @@ import {
 import {
   isSuperAdminRole,
   resolveActionEffect,
-  resolvePageEffect,
   unionRoleNames,
 } from '@/lib/effectiveAccess';
 import { expandRelatedPageSlugs, resolvePageToggleIntent } from '@/lib/pageAccessLinks';
-import { overrideIsActive } from '@/lib/current-user-access';
+import { overrideIsActive, evaluateManifestPageAccess, manifestIsTabBlocked, type CurrentUserAccessManifest } from '@/lib/current-user-access';
 
 // ── Context type ──────────────────────────────────────────────────────────────
 interface SelectedUserAccessValue {
@@ -75,13 +75,13 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   const { currentUser } = useAppContext();
   const { toast } = useToast();
 
-  const [loading, setLoading]             = useState(false);
+  const [loading, setLoading]             = useState(true);
   const [savingKey, setSavingKey]         = useState<string | null>(null);
   const [pageOverrides, setPageOverrides] = useState<PageOverride[]>([]);
   const [permOverrides, setPermOverrides] = useState<PermissionOverride[]>([]);
   const [columnConfigs, setColumnConfigs] = useState<ColumnVisibilityRow[]>([]);
   const [dataScopeRows, setDataScopeRows] = useState<DataScopeRow[]>([]);
-  const [effectiveRoleNames, setEffectiveRoleNames] = useState<string[]>([userRole]);
+  const [effectiveRoleNames, setEffectiveRoleNames] = useState<string[]>([]);
   const [rolePermissionKeys, setRolePermissionKeys] = useState<Set<string>>(new Set());
   const [pageRoleConfigs, setPageRoleConfigs] = useState<Record<string, string[]>>({});
   const [roleTabBlocks, setRoleTabBlocks] = useState<Record<string, boolean>>({});
@@ -223,26 +223,32 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   );
 
   // ── Effective helpers (see src/lib/effectiveAccess.ts for precedence) ──
-  function effectivePage(slug: string): AccessEffect {
-    const ov = pageOvMap[slug];
-    if (slug.includes(':') && !ov) {
-      // Hub tab slugs without an override default to visible.
-      return resolvePageEffect({
-        isSuperAdmin: effectiveRoleNames.some(isSuperAdminRole),
-        override: null,
-        roleAllows: effectiveRoleNames.length > 0 && roleTabBlocks[slug] !== true,
-      });
-    }
-    const def = PAGE_DEFS.find(p => p.slug === slug);
-    const configuredRoles = pageRoleConfigs[slug];
-    const roleAllows = !!(def && effectiveRoleNames.some(role => hasDefaultAccess(def, role, configuredRoles)));
-    return resolvePageEffect({
-      isSuperAdmin: effectiveRoleNames.some(isSuperAdminRole),
-      override: ov ?? null,
-      roleAllows,
-    });
-  }
+  const selectedManifest: CurrentUserAccessManifest = {
+    user_id: userId,
+    roles: effectiveRoleNames,
+    page_role_configs: pageRoleConfigs,
+    role_tab_blocks: roleTabBlocks,
+    page_overrides: pageOvMap,
+    action_overrides: Object.fromEntries(permOverrides.filter(row => overrideIsActive(row, accessNow)).map(row => [`${row.resource}:${row.action}`, row])),
+    role_permissions: [...rolePermissionKeys].map(key => { const [resource, action] = key.split(':'); return { resource, action }; }),
+    generated_at: '',
+  };
 
+  function effectivePage(slug: string): AccessEffect {
+    if (effectiveRoleNames.some(isSuperAdminRole)) return 'superadmin';
+    if (slug.includes(':')) {
+      const blocked = manifestIsTabBlocked(selectedManifest, slug);
+      const own = pageOvMap[slug];
+      if (blocked) return own?.is_blocked ? 'blocked' : 'role-no';
+      return own ? 'granted' : 'role-yes';
+    }
+    const page = PAGE_DEFS.find(item => item.slug === slug);
+    const url = page ? new URL(page.path, 'https://access.local') : null;
+    const permission = url ? resolveRoutePermission(url.pathname, url.search, url.hash) : null;
+    const decision = evaluateManifestPageAccess(selectedManifest, slug, permission);
+    if (decision.source === 'page_override' || decision.source === 'action_override') return decision.allowed ? 'granted' : 'blocked';
+    return decision.allowed ? 'role-yes' : 'role-no';
+  }
   function effectiveAction(resource: string, action: string): AccessEffect {
     const key = `${resource}:${action}`;
     const explicit = key in permOvMap ? permOvMap[key] : null;
@@ -260,7 +266,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     if (effect === 'superadmin') {
       return { effect, source: 'super_admin', summary: 'Super Admin bypass grants access.' };
     }
-    if (override) {
+    if (override && ((effect === 'granted' && !override.is_blocked) || (effect === 'blocked' && override.is_blocked))) {
       return {
         effect,
         source: 'user_override',
@@ -271,8 +277,11 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     }
     return {
       effect,
-      source: 'role_default',
-      summary: effect === 'role-yes'
+      source: effect === 'granted' || effect === 'blocked' ? 'user_override' : 'role_default',
+      summary: effect === 'granted' ? 'Allowed by an explicit required action grant.'
+        : effect === 'blocked' ? 'Denied by a page dependency, read restriction or required action override.'
+        : override && effect === 'role-no' ? 'This page exception cannot grant the required action or open a denied parent page.'
+        : effect === 'role-yes'
         ? `Allowed by role default (${effectiveRoleNames.join(', ')}).`
         : `No assigned role grants this page (${effectiveRoleNames.join(', ')}).`,
     };
@@ -307,7 +316,8 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   async function togglePage(slug: string) {
     setSavingKey(`page-family:${expandRelatedPageSlugs(slug).slice().sort().join('|')}`);
     const eff = effectivePage(slug);
-    const intent = resolvePageToggleIntent(eff);
+    const own = pageOvMap[slug];
+    const intent = resolvePageToggleIntent(own ? own.is_blocked ? 'blocked' : 'granted' : eff === 'blocked' ? 'role-no' : eff);
     if (intent === 'noop') {
       setSavingKey(null);
       return;
@@ -586,3 +596,4 @@ export function useSelectedUserAccess(): SelectedUserAccessValue {
   if (!ctx) throw new Error('useSelectedUserAccess must be inside SelectedUserAccessProvider');
   return ctx;
 }
+

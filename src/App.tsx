@@ -120,7 +120,6 @@ const Departments = lazy(() => import('./pages/Departments'));
 const TaskAdmin = lazy(() => import('./pages/TaskAdmin'));
 const AdminProjectFlowStages = lazy(() => import('./pages/AdminProjectFlowStages'));
 const TransactionScanner = lazy(() => import('./pages/TransactionScanner'));
-const PermissionsManagement = lazy(() => import('./pages/PermissionsManagement'));
 const RolePerspectiveViewer = lazy(() => import('./pages/RolePerspectiveViewer'));
 const CostPredictions = lazy(() => import('./pages/CostPredictions'));
 const ExchangeRates = lazy(() => import('./pages/ExchangeRates'));
@@ -436,13 +435,9 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
     location.hash,
   );
 
-  // This guard only enforces routes declared in PAGE_DEFS. Public routes are
-  // intentionally outside this route tree, while every registered target is
-  // evaluated from the manifest and fails closed if that manifest is absent.
-  // Unregistered protected routes retain AuthGuard until they are added to the
-  // access registry; denying them here would break those legacy routes before
-  // they have a configuration surface.
-  if (!target) return <>{children}</>;
+  // Public routes sit outside this tree. Protected routes need a registered
+  // target; a missing definition must not become an authorization exemption.
+  if (!target) return <PageAccessDenied reason="role" />;
   const { slug, routePermission } = target;
 
   // Normal navigation is evaluated exclusively from the server-derived
@@ -464,9 +459,6 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   // issue an evaluated manifest for an impersonated target.
   const guardRoles = Array.from(new Set([
     viewAs.role,
-    ...(Array.isArray((currentUser as any)?.additionalRoles)
-      ? (currentUser as any).additionalRoles.map((assignment: any) => assignment?.role ?? assignment?.name ?? assignment?.roleName)
-      : []),
   ].filter((roleName): roleName is string => Boolean(roleName))));
   const roleAllowed = routePermission
     ? checkPermission(routePermission.resource, routePermission.action) ||

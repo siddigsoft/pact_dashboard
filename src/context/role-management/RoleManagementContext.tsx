@@ -223,10 +223,10 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     if (!session.success) return false;
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from('roles')
-        .delete()
-        .eq('id', roleId);
+      const { error } = await (supabase as any).rpc('delete_role_access', {
+        p_role_id: roleId,
+        p_reason: 'Deleted from Role Management',
+      });
       if (error) throw error;
 
       toast({ title: 'Role deleted', description: 'Role removed successfully.' });
@@ -416,7 +416,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     };
   }, [refreshUserPermissions]);
 
-  // When any role's permissions change (via SecurityPanel Grant/Revoke), refresh the
+  // When any role's permissions change (via role lifecycle / access workspace), refresh the
   // current user's permission cache so their action buttons update immediately without
   // requiring a page reload. All connected clients receive this event independently,
   // so every online user in the affected role gets the update in real-time.
@@ -428,7 +428,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
         schema: 'public',
         table: 'permissions',
       }, async () => {
-        // Refresh roles so SecurityPanel UI is consistent
+        // Refresh roles so Access Control Workspace UI is consistent
         fetchRoles().catch(() => {});
         // Refresh the current user's permission cache so checkPermission() sees the change
         try {

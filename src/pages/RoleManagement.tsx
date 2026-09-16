@@ -12,7 +12,6 @@ import { CreateRoleDialog } from '@/components/role-management/CreateRoleDialog'
 import { EditRoleDialog } from '@/components/role-management/EditRoleDialog';
 import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignment';
 import { PermissionTester } from '@/components/role-management/PermissionTester';
-import { SecurityPanel } from '@/components/role-management/SecurityPanel';
 import { UnifiedAccessManager } from '@/components/role-management/UnifiedAccessManager';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest } from '@/types/roles';

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, ShieldCheck, Activity, HeartPulse, ClipboardCheck,
   Lock, ScrollText, Mail, Eye, Smartphone, PenTool, PhoneCall,
-  RefreshCw, ScanLine, Database, Info, Users, LayoutGrid, Shield, KeyRound,
+  RefreshCw, ScanLine, Database, Info, LayoutGrid, Shield, KeyRound,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,6 @@ const MobileCallSchedPanel    = lazy(() => import('./MobileCallScheduling'));
 const MobileDocSyncPanel      = lazy(() => import('./MobileDocumentSync'));
 const TransactionScannerPanel = lazy(() => import('./TransactionScanner'));
 const DataManagementPanel     = lazy(() => import('../components/superAdmin/SuperAdminDataManagement').then(m => ({ default: m.SuperAdminDataManagement })));
-const PageGrantsPanel         = lazy(() => import('../components/superAdmin/SuperAdminPageAccessPanel').then(m => ({ default: m.SuperAdminPageAccessPanel })));
 const ButtonRegistryPanel     = lazy(() => import('../components/superAdmin/SuperAdminButtonRegistry').then(m => ({ default: m.SuperAdminButtonRegistry })));
 const RolesPanel              = lazy(() => import('./RoleManagement'));
 const UserAccessPanel         = lazy(() => import('../components/superAdmin/InlineAccessManager'));
@@ -31,7 +30,7 @@ const UserAccessPanel         = lazy(() => import('../components/superAdmin/Inli
 type SASection = 'monitoring' | 'permissions' | 'email' | 'mobile' | 'data';
 type SATab =
   | 'super-admin' | 'system-monitoring' | 'cycle-health' | 'approval-dashboard'
-  | 'roles' | 'user-access' | 'audit-logs' | 'page-grants' | 'button-registry'
+  | 'roles' | 'user-access' | 'audit-logs' | 'button-registry'
   | 'email-tracking' | 'email-management' | 'email-preview'
   | 'mobile-help-articles' | 'mobile-signatures' | 'mobile-call-scheduling' | 'mobile-document-sync'
   | 'transaction-scanner' | 'data-management';
@@ -73,10 +72,6 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'user-access', label: 'Users', icon: KeyRound,
         description: 'Per-user exceptions — page access, hub-tab visibility, action overrides, column visibility, and data scope rules.',
-      },
-      {
-        id: 'page-grants', label: 'Pages', icon: Users,
-        description: 'Page and hub-tab grants — override Super Admin Hub tab visibility per user.',
       },
       {
         id: 'button-registry', label: 'Actions', icon: LayoutGrid,
@@ -164,7 +159,6 @@ const PanelMap: Record<SATab, React.LazyExoticComponent<any>> = {
   'mobile-document-sync': MobileDocSyncPanel,
   'transaction-scanner': TransactionScannerPanel,
   'data-management': DataManagementPanel,
-  'page-grants': PageGrantsPanel,
   'button-registry': ButtonRegistryPanel,
 };
 
@@ -177,8 +171,12 @@ const Spinner = () => (
 export default function SuperAdminHub() {
   const [params, setParams] = useSearchParams();
   const rawTabParam = params.get('tab');
-  // Legacy Screen Permissions tab → Users (typed overrides).
-  const rawTab = (rawTabParam === 'permissions' ? 'user-access' : rawTabParam) as SATab | null;
+  // Legacy Screen Permissions / Page Grants tabs → Users (typed overrides).
+  const rawTab = (
+    rawTabParam === 'permissions' || rawTabParam === 'page-grants'
+      ? 'user-access'
+      : rawTabParam
+  ) as SATab | null;
   const _savedSA = localStorage.getItem('hub_last_tab_super_admin') as SATab | null;
 
   const { isTabBlocked } = useCurrentUserAccess();

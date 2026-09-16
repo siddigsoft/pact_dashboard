@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   evaluateManifestPageAccess,
+  evaluateManifestRouteAccess,
+  getManifestNavigationPages,
   manifestHasPermission,
   manifestIsTabBlocked,
   overrideIsActive,
@@ -19,6 +21,25 @@ const manifest = (overrides: Partial<CurrentUserAccessManifest> = {}): CurrentUs
 });
 
 describe('current user access manifest evaluator', () => {
+  it('uses the same denial for direct URLs and pinned or favorite navigation candidates', () => {
+    const context = manifest({ roles: ['Admin'], page_overrides: { reports: { is_blocked: true } },
+      action_overrides: { 'reports:read': { is_granted: true } } });
+    const preferences = { pinned: ['/reports'], favorite: ['/reports'] };
+    expect(evaluateManifestRouteAccess(context, '/reports')).toBe(false);
+    const allowed = getManifestNavigationPages(context);
+    expect(allowed.some(page => page.slug === 'reports')).toBe(false);
+    expect(preferences.pinned.filter(path => allowed.some(page => page.path === path))).toEqual([]);
+    expect(preferences.favorite.filter(path => allowed.some(page => page.path === path))).toEqual([]);
+    expect(evaluateManifestRouteAccess(context, '/undeclared')).toBe(false);
+  });
+
+  it('uses canonical accounting parent IDs for legacy stored tab overrides', () => {
+    const context = manifest({ roles: ['Admin'], page_overrides: {
+      'accounting-hub': { is_blocked: true }, 'accounting:coa': { is_blocked: false },
+    } });
+    expect(manifestIsTabBlocked(context, 'accounting:coa')).toBe(true);
+  });
+
   it('expires overrides at the timestamp and ignores invalid expiry values', () => {
     const instant = Date.parse('2026-09-16T12:00:00Z');
     expect(overrideIsActive({ expires_at: '2026-09-16T12:00:00Z' }, instant)).toBe(false);
@@ -38,7 +59,7 @@ describe('current user access manifest evaluator', () => {
 
   it('fails closed without a manifest and applies role tab blocks after active user overrides', () => {
     expect(manifestIsTabBlocked(undefined, 'admin-hub:users')).toBe(true);
-    const context = manifest({ role_tab_blocks: { 'admin-hub:users': true } });
+    const context = manifest({ page_role_configs: { 'admin-hub': ['Procurement Lead'] }, role_tab_blocks: { 'admin-hub:users': true } });
     expect(manifestIsTabBlocked(context, 'admin-hub:users')).toBe(true);
     context.page_overrides['admin-hub:users'] = { is_blocked: false };
     expect(manifestIsTabBlocked(context, 'admin-hub:users')).toBe(false);
@@ -82,6 +103,55 @@ describe('current user access manifest evaluator', () => {
       { resource: 'subscriptions', action: 'read' },
     )).toMatchObject({ allowed: false, source: 'action_override' });
     expect(manifestHasPermission(context, 'subscriptions', 'read')).toBe(false);
+  });
+
+  it('unions primary and custom additive role pages and persisted actions', () => {
+    const context = manifest({
+      roles: ['dataCollector', 'Procurement Lead'],
+      page_role_configs: { 'finance-subscriptions': ['Procurement Lead'] },
+      role_permissions: [{ resource: 'subscriptions', action: 'read' }],
+    });
+    expect(evaluateManifestPageAccess(context, 'dashboard').allowed).toBe(true);
+    expect(evaluateManifestPageAccess(context, 'finance-subscriptions', { resource: 'subscriptions', action: 'read' }).allowed).toBe(true);
+    context.roles = ['dataCollector'];
+    context.role_permissions = [];
+    expect(evaluateManifestPageAccess(context, 'finance-subscriptions').allowed).toBe(false);
+  });
+
+  it('never restores revoked persisted actions from a built-in Admin label', () => {
+    const context = manifest({ roles: ['Admin'] });
+    expect(evaluateManifestPageAccess(context, 'reports', { resource: 'reports', action: 'read' }).allowed).toBe(false);
+    expect(manifestHasPermission(context, 'reports', 'read')).toBe(false);
+  });
+
+  it('treats granular read denial as page denial before any action grant', () => {
+    const context = manifest({
+      page_overrides: { 'finance-subscriptions': { is_blocked: false, notes: '{"r":false,"w":true}' } },
+      action_overrides: { 'subscriptions:read': { is_granted: true } },
+    });
+    expect(evaluateManifestPageAccess(context, 'finance-subscriptions').allowed).toBe(false);
+    expect(evaluateManifestPageAccess(context, 'finance-subscriptions', { resource: 'subscriptions', action: 'read' }).allowed).toBe(false);
+  });
+
+  it.each([true, false])('a parent denial closes a child page and tab despite child grants (blocked=%s)', blocked => {
+    const context = manifest({
+      page_role_configs: { 'finance-hub': ['Procurement Lead'] },
+      page_overrides: {
+        'finance-hub': { is_blocked: blocked, notes: blocked ? null : '{"r":false}' },
+        'finance-subscriptions': { is_blocked: false },
+        'finance-hub:subscriptions': { is_blocked: false },
+      },
+      action_overrides: { 'subscriptions:read': { is_granted: true } },
+    });
+    expect(evaluateManifestPageAccess(context, 'finance-subscriptions', { resource: 'subscriptions', action: 'read' }).allowed).toBe(false);
+    expect(manifestIsTabBlocked(context, 'finance-hub:subscriptions')).toBe(true);
+  });
+
+  it('a child tab grant cannot mount a parent hub denied by the role baseline', () => {
+    const context = manifest({ page_overrides: { 'admin-hub:users': { is_blocked: false } } });
+    expect(manifestIsTabBlocked(context, 'admin-hub:users')).toBe(true);
+    context.page_overrides['admin-hub'] = { is_blocked: false };
+    expect(manifestIsTabBlocked(context, 'admin-hub:users')).toBe(false);
   });
 
   it('ignores an expired action override and returns to the role permission', () => {

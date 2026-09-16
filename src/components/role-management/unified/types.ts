@@ -15,6 +15,7 @@ export interface PageOverride {
   user_id: string;
   page_slug: string;
   is_blocked: boolean;
+  notes?: string | null;
   granted_by?: string | null;
   /** Why this access decision differs from the role default. */
   reason?: string | null;

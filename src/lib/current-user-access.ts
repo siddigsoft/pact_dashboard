@@ -1,5 +1,8 @@
-import { canSeePage, type RoutePermission } from '@/lib/page-roles';
+import { canSeePage, resolveRouteAccessTarget, type RoutePermission } from '@/lib/page-roles';
 import { isSuperAdminRole } from '@/lib/effectiveAccess';
+import { ACCESS_TARGET_REGISTRY, getAccessTargetDependencies } from '@/lib/access-target-registry';
+import { PAGE_DEFS, type PageDef } from '@/lib/access-registry';
+import { PAGE_ACCESS_REDIRECTS } from '@/lib/pageAccessRedirects';
 
 export interface CurrentUserAccessManifest {
   user_id: string;
@@ -22,11 +25,25 @@ export function overrideIsActive(override: { expires_at?: string | null }, now =
   return !override.expires_at || new Date(override.expires_at).getTime() > now;
 }
 
+/** Read restrictions in typed page notes are a page denial, not merely a
+ * hidden editor button. Invalid notes cannot manufacture a read denial. */
+export function manifestPageHasExplicitDenial(manifest: CurrentUserAccessManifest, slug: string): boolean {
+  const override = manifest.page_overrides[slug];
+  if (!override || !overrideIsActive(override)) return false;
+  if (override.is_blocked) return true;
+  try {
+    return !!override.notes && JSON.parse(override.notes)?.r === false;
+  } catch {
+    return false;
+  }
+}
+
 export function manifestIsTabBlocked(manifest: CurrentUserAccessManifest | undefined, slug: string): boolean {
   if (!manifest) return true;
   if (manifest.roles.some(isSuperAdminRole)) return false;
+  if (getAccessTargetDependencies(slug).some(parent => !evaluateManifestPageAccess(manifest, parent).allowed)) return true;
   const override = manifest.page_overrides[slug];
-  if (override && overrideIsActive(override)) return override.is_blocked;
+  if (override && overrideIsActive(override)) return manifestPageHasExplicitDenial(manifest, slug);
   return !manifest.roles.length || manifest.role_tab_blocks?.[slug] === true;
 }
 
@@ -47,7 +64,8 @@ export function evaluateManifestPageAccess(
     : manifest.roles.some(role => canSeePage(slug, role, configuredRoles));
 
   const pageOverride = manifest.page_overrides[slug];
-  if (pageOverride && overrideIsActive(pageOverride) && pageOverride.is_blocked) {
+  if (manifestPageHasExplicitDenial(manifest, slug) ||
+    getAccessTargetDependencies(slug).some(parent => manifestPageHasExplicitDenial(manifest, parent))) {
     return { allowed: false, source: 'page_override' };
   }
 
@@ -90,4 +108,32 @@ export function manifestHasPermission(
   return manifest.role_permissions.some(permission =>
     permission.resource === resource && permission.action === action,
   );
+}
+
+/** The shared direct-URL and sidebar decision includes registered query tabs.
+ * Unknown protected destinations are denied rather than admitted by a menu. */
+export function evaluateManifestRouteAccess(manifest: CurrentUserAccessManifest, pathname: string, search = '', hash = ''): boolean {
+  const target = resolveRouteAccessTarget(pathname, search, hash);
+  if (!target || !evaluateManifestPageAccess(manifest, target.slug, target.routePermission).allowed) return false;
+  const tabId = new URLSearchParams(search).get('tab');
+  if (!tabId) return true;
+  const hub = ACCESS_TARGET_REGISTRY.find(candidate => candidate.page.path === pathname);
+  const tab = hub?.tabs.find(candidate => candidate.tabId === tabId);
+  return !tab || !manifestIsTabBlocked(manifest, tab.slug);
+}
+
+/** Registry-driven navigation for a signed-in user. Personal preferences can
+ * only remove or reorder these pages; they cannot create an access grant. */
+export function getManifestNavigationPages(manifest: CurrentUserAccessManifest): PageDef[] {
+  const destinations = new Set<string>();
+  return PAGE_DEFS.flatMap(page => {
+    // Evaluate the registry slug first so a redirected destination cannot
+    // re-admit a page that is explicitly blocked on its canonical identity.
+    if (!evaluateManifestPageAccess(manifest, page.slug).allowed) return [];
+    const path = PAGE_ACCESS_REDIRECTS.find(redirect => redirect.fromPath === page.path)?.toPath ?? page.path;
+    const url = new URL(path, 'https://access.invalid');
+    if (destinations.has(path) || !evaluateManifestRouteAccess(manifest, url.pathname, url.search, url.hash)) return [];
+    destinations.add(path);
+    return [{ ...page, path }];
+  });
 }

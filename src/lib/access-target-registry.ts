@@ -54,6 +54,15 @@ export const ACCESS_TARGET_REGISTRY: AccessTargetDefinition[] = PAGE_DEFS.map(pa
   };
 });
 
+/** Page and tab dependencies share canonical page slugs even where stored
+ * tab keys retain a legacy hub alias such as accounting. */
+export function getAccessTargetDependencies(slug: string): string[] {
+  const page = ACCESS_TARGET_REGISTRY.find(target => target.page.slug === slug);
+  if (page) return page.dependencies;
+  const hub = ACCESS_TARGET_REGISTRY.find(target => target.tabs.some(tab => tab.slug === slug));
+  return hub ? [hub.page.slug] : [];
+}
+
 export function getAccessTargetRegistryIssues(): string[] {
   const issues: string[] = [];
   const pageSlugs = new Set(PAGE_DEFS.map(page => page.slug));

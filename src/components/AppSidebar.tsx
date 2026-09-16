@@ -139,7 +139,7 @@
   import { getMmpDisplayLabel } from "@/lib/mmp-display";
   import { useViewAs } from "@/context/ViewAsContext";
   import { useCurrentUserAccessManifest } from "@/hooks/useCurrentUserAccessManifest";
-  import { evaluateManifestPageAccess, manifestHasPermission } from "@/lib/current-user-access";
+  import { evaluateManifestPageAccess, manifestHasPermission, getManifestNavigationPages } from "@/lib/current-user-access";
   import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
   import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
   import { CSS } from '@dnd-kit/utilities';
@@ -1126,6 +1126,26 @@
     // reference every render, making menuGroups and the useEffect(menuGroups)
     // fire on every render, creating a continuous sidebar flicker.
     const menuGroups = useMemo(() => {
+      // Signed-in navigation has one registry/evaluator. Workflow role checks
+      // below are retained solely for the separate administrator preview.
+      if (!viewAs && !isSuperAdmin) {
+        if (!currentAccessManifest) return [];
+        const groups: MenuGroup[] = [];
+        for (const page of getManifestNavigationPages(currentAccessManifest)) {
+          if (menuPrefs.hiddenItems.includes(page.path)) continue;
+          const navigation = getPageNavigationGroup(page.group);
+          if (!navigation) continue;
+          let group = groups.find(candidate => candidate.id === navigation.id);
+          if (!group) {
+            group = { id: navigation.id, label: navigation.label, order: navigation.order, items: [] };
+            groups.push(group);
+          }
+          group.items.push({ id: page.slug, title: page.label, url: page.path, icon: page.icon,
+            priority: group.items.length + 1, isPinned: menuPrefs.pinnedItems.includes(page.path) });
+        }
+        return groups.sort((left, right) => left.order - right.order);
+      }
+
       const effectiveRole = viewAs ? viewAs.role : sidebarRoles[0];
       const smtCandidates = [
         ...sidebarRoles,
