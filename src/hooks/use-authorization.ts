@@ -5,6 +5,8 @@ import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { ResourceType, ActionType } from '@/types/roles';
 import { normalizeRole } from '@/utils/roleMapping';
 import { useViewAs } from '@/context/ViewAsContext';
+import { useCurrentUserAccessManifest } from '@/hooks/useCurrentUserAccessManifest';
+import { manifestHasPermission } from '@/lib/current-user-access';
 
 export const useAuthorization = () => {
   const { currentUser } = useAppContext();
@@ -31,6 +33,13 @@ export const useAuthorization = () => {
     viewAsModeRaw = null;
     viewAsUserIdRaw = null;
   }
+
+  // The signed-in user's permissions and multi-role union come from one
+  // server-derived source. View As deliberately remains a preview path; it
+  // must not impersonate the target user's authenticated access context.
+  const { data: currentAccessManifest } = useCurrentUserAccessManifest(
+    !!currentUser?.id && !viewAsRoleRaw,
+  );
 
   // Everything below is memoized so every returned function keeps a stable
   // identity between renders. Without this, `hasAnyRole` etc. get a new
@@ -107,7 +116,9 @@ export const useAuthorization = () => {
       }
       return false;
     }
-    return hasPermission(currentUser.id, resource, action);
+    return currentAccessManifest
+      ? manifestHasPermission(currentAccessManifest, resource, action)
+      : hasPermission(currentUser.id, resource, action);
   };
 
   /**
@@ -126,7 +137,7 @@ export const useAuthorization = () => {
     const additionalRoleStrings = Array.isArray(currentUser.additionalRoles)
       ? currentUser.additionalRoles.map((r: any) => r?.role).filter(Boolean)
       : [];
-    const userRoles = [
+    const userRoles = currentAccessManifest?.roles.length ? currentAccessManifest.roles : [
       currentUser.role,
       ...(Array.isArray(currentUser.roles) ? currentUser.roles : []),
       ...additionalRoleStrings,
@@ -145,7 +156,7 @@ export const useAuthorization = () => {
     const additionalRoleStrings = Array.isArray(currentUser.additionalRoles)
       ? currentUser.additionalRoles.map((r: any) => r?.role).filter(Boolean)
       : [];
-    const userRoles = [
+    const userRoles = currentAccessManifest?.roles.length ? currentAccessManifest.roles : [
       currentUser.role,
       ...(Array.isArray(currentUser.roles) ? currentUser.roles : []),
       ...additionalRoleStrings,
@@ -623,5 +634,5 @@ export const useAuthorization = () => {
     // Never use for DB writes — those should always record the real user's role.
     effectiveRole: (viewAsRole ?? currentUser?.role ?? null) as string | null,
   };
-  }, [currentUser, hasPermission, getUserPermissions, isSuperAdminUser, viewAsRoleRaw, viewAsModeRaw, viewAsUserIdRaw]);
+  }, [currentUser, hasPermission, getUserPermissions, isSuperAdminUser, viewAsRoleRaw, viewAsModeRaw, viewAsUserIdRaw, currentAccessManifest]);
 };
