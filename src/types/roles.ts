@@ -53,7 +53,14 @@ export interface RoleWithPermissions extends Role {
   permissions: Permission[];
 }
 
-export interface CreateRoleRequest {
+export interface RoleBaselineAccess {
+  /** Role-specific tab restrictions; omitted tabs inherit hub access. */
+  tab_rules?: Array<{ page_slug: string; is_blocked: boolean }>;
+  column_rules?: Array<{ page_slug: string; column_key: string; is_hidden: boolean }>;
+  cost_scope?: { mode: 'role_default' | 'none' | 'own' | 'assigned' | 'selected' | 'country' | 'organization'; include_values: Array<{ type: string; value: string; label: string }>; exclude_values: Array<{ type: string; value: string; label: string }> };
+}
+
+export interface CreateRoleRequest extends RoleBaselineAccess {
   name: string;
   display_name: string;
   description?: string;
@@ -77,7 +84,8 @@ export interface UpsertRoleAccessResult {
   set_as_primary: boolean;
 }
 
-export interface UpdateRoleRequest {
+export interface UpdateRoleRequest extends RoleBaselineAccess {
+  page_slugs?: string[];
   display_name?: string;
   description?: string;
   is_active?: boolean;

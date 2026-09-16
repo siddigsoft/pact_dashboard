@@ -120,7 +120,6 @@ const Departments = lazy(() => import('./pages/Departments'));
 const TaskAdmin = lazy(() => import('./pages/TaskAdmin'));
 const AdminProjectFlowStages = lazy(() => import('./pages/AdminProjectFlowStages'));
 const TransactionScanner = lazy(() => import('./pages/TransactionScanner'));
-const PermissionsManagement = lazy(() => import('./pages/PermissionsManagement'));
 const RolePerspectiveViewer = lazy(() => import('./pages/RolePerspectiveViewer'));
 const CostPredictions = lazy(() => import('./pages/CostPredictions'));
 const ExchangeRates = lazy(() => import('./pages/ExchangeRates'));
@@ -265,8 +264,7 @@ import {
   canSeePage,
   canSeePageWithOverridesResult,
   canSeeRoutePermission,
-  resolveRoutePermission,
-  resolveSlug,
+  resolveRouteAccessTarget,
   getPageLabel,
   type RoutePermission,
 } from './lib/page-roles';
@@ -320,7 +318,7 @@ const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
   // the outer guard has confirmed it.  The outer guard still owns explicit
   // blocks and remains pending until that lookup completes.
   const isActionGuardedReport = Boolean(
-    resolveRoutePermission(location.pathname, location.search, location.hash)
+    resolveRouteAccessTarget(location.pathname, location.search, location.hash)?.routePermission
   );
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin'])
     || hasPreFundingRead
@@ -431,17 +429,16 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   // SuperAdmin bypasses all page-level checks
   if (viewingAsSuperAdmin) return <>{children}</>;
 
-  const slug = resolveSlug(`${location.pathname}${location.search}${location.hash}`)
-    ?? resolveSlug(location.pathname);
-
-  // Unknown path (no slug in PAGE_DEFS) → fail-open so new routes work
-  if (!slug) return <>{children}</>;
-
-  const routePermission = resolveRoutePermission(
+  const target = resolveRouteAccessTarget(
     location.pathname,
     location.search,
     location.hash,
   );
+
+  // Public routes sit outside this tree. Protected routes need a registered
+  // target; a missing definition must not become an authorization exemption.
+  if (!target) return <PageAccessDenied reason="role" />;
+  const { slug, routePermission } = target;
 
   // Normal navigation is evaluated exclusively from the server-derived
   // manifest. Do not silently fall back to profile roles or browser-side
@@ -462,9 +459,6 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   // issue an evaluated manifest for an impersonated target.
   const guardRoles = Array.from(new Set([
     viewAs.role,
-    ...(Array.isArray((currentUser as any)?.additionalRoles)
-      ? (currentUser as any).additionalRoles.map((assignment: any) => assignment?.role ?? assignment?.name ?? assignment?.roleName)
-      : []),
   ].filter((roleName): roleName is string => Boolean(roleName))));
   const roleAllowed = routePermission
     ? checkPermission(routePermission.resource, routePermission.action) ||
@@ -868,7 +862,7 @@ const AppRoutes = () => {
       </Route>
 
       {/* WorkspaceHub — full-screen, no main sidebar */}
-      <Route path="/workspace" element={<AuthGuard><WorkspaceHub /></AuthGuard>} />
+      <Route path="/workspace" element={<AuthGuard><PageRouteGuard><WorkspaceHub /></PageRouteGuard></AuthGuard>} />
 
       {/* Redirects */}
       <Route path="/mmp/view/:id" element={<MmpViewRedirect />} />

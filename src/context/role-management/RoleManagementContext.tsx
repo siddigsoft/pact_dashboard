@@ -55,7 +55,6 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   const { toast } = useToast();
   const [permissionsCache, setPermissionsCache] = useState<Record<string, Pick<Permission, 'resource' | 'action' | 'conditions'>[]>>({});
   const [overridesCache, setOverridesCache] = useState<Record<string, { resource: string; action: string; is_granted: boolean; expires_at: string | null }[]>>({});
-  const [profileRolesCache, setProfileRolesCache] = useState<Record<string, string>>({});
 
   const fetchRoles = useCallback(async () => {
     setIsLoading(true);
@@ -89,43 +88,10 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     }
   }, []);
 
-  const normalizeRoleStatic = (r: string): AppRole | null => {
-    const map: Record<string, AppRole> = {
-      superadmin: 'SuperAdmin', super_admin: 'SuperAdmin', 'super admin': 'SuperAdmin',
-      admin: 'Admin',
-      countrydirector: 'CountryDirector', country_director: 'CountryDirector', 'country director': 'CountryDirector',
-      seniormanagement: 'SeniorManagement', senior_management: 'SeniorManagement', 'senior management': 'SeniorManagement',
-      'field operation manager (fom)': 'Field Operation Manager (FOM)', fom: 'Field Operation Manager (FOM)',
-      financialadmin: 'FinancialAdmin', financial_admin: 'FinancialAdmin',
-      ict: 'ICT',
-      projectmanager: 'ProjectManager', project_manager: 'ProjectManager',
-      senioroperationslead: 'SeniorOperationsLead', senior_operations_lead: 'SeniorOperationsLead', 'senior operations lead': 'SeniorOperationsLead',
-      supervisor: 'Supervisor',
-      coordinator: 'Coordinator',
-      datateam: 'DataTeam', data_team: 'DataTeam', 'data team': 'DataTeam',
-      datacollector: 'DataCollector', data_collector: 'DataCollector', 'data collector': 'DataCollector',
-      reviewer: 'Reviewer',
-      auditor: 'Auditor',
-    };
-    return map[r.toLowerCase()] ?? (DEFAULT_ROLE_PERMISSIONS[r as AppRole] ? (r as AppRole) : null);
-  };
-
   const refreshUserPermissions = useCallback(async (userId: string): Promise<Permission[]> => {
     try {
       const { data, error } = await supabase.rpc('get_user_permissions', { user_uuid: userId });
       if (error) throw error;
-
-      // Fetch the user's primary profile role so hasPermission can also use DEFAULT_ROLE_PERMISSIONS for it
-      try {
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', userId)
-          .single();
-        if (prof?.role) {
-          setProfileRolesCache(prev => ({ ...prev, [userId]: prof.role }));
-        }
-      } catch { /* profile fetch is best-effort */ }
 
       setPermissionsCache(prev => ({ ...prev, [userId]: (data || []) as any }));
 
@@ -167,6 +133,9 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
             conditions: (p as { conditions?: unknown }).conditions ?? null,
           })),
           page_slugs: roleData.page_slugs ?? [],
+          tab_rules: roleData.tab_rules ?? [],
+          column_rules: roleData.column_rules ?? [],
+          ...(roleData.cost_scope ? { cost_scope: roleData.cost_scope } : {}),
           assign_user_ids: roleData.assign_user_ids ?? [],
           set_as_primary: roleData.set_as_primary ?? true,
           reason: roleData.reason ?? 'Role saved via Role Management wizard',
@@ -204,76 +173,37 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     if (!session.success) return false;
     setIsLoading(true);
     try {
-      const updates: any = {};
-      if (roleData.display_name !== undefined) updates.display_name = roleData.display_name;
-      if (roleData.description !== undefined) updates.description = roleData.description;
-      if (roleData.is_active !== undefined) updates.is_active = roleData.is_active;
-
-      if (Object.keys(updates).length > 0) {
-        const { error: roleError } = await supabase
-          .from('roles')
-          .update(updates)
-          .eq('id', roleId);
-        if (roleError) {
-          throw roleError;
-        }
+      const existingRole = roles.find((role) => role.id === roleId);
+      if (!existingRole) {
+        throw new Error('Role is not loaded. Refresh roles and try again.');
       }
 
-      // Ensure desiredPermissions always includes a `conditions` property
-      const desiredPermissions = roleData.permissions?.map(p => ({ ...p, conditions: (p as any).conditions ?? null }));
-
-      if (desiredPermissions) {
-        const { data: existing, error: existingErr } = await supabase
-          .from('permissions')
-          .select('id, resource, action')
-          .eq('role_id', roleId);
-        if (existingErr) {
-          throw existingErr;
-        }
-
-        const existingArr = (existing || []) as { id: string; resource: string; action: string }[];
-        
-        const desiredSet = new Set(desiredPermissions.map(p => `${p.resource}:${p.action}`));
-        const existingSet = new Set(existingArr.map(p => `${p.resource}:${p.action}`));
-
-        // Delete permissions that are no longer desired
-        const toDeleteIds = existingArr
-          .filter((p) => !desiredSet.has(`${p.resource}:${p.action}`))
-          .map((p) => p.id);
-        
-        if (toDeleteIds.length > 0) {
-          const { error: delErr } = await supabase
-            .from('permissions')
-            .delete()
-            .in('id', toDeleteIds);
-          if (delErr) {
-            throw delErr;
-          }
-        }
-
-        // Insert only missing desired permissions to avoid requiring ON CONFLICT
-        const toInsert = desiredPermissions
-          .filter(p => !existingSet.has(`${p.resource}:${p.action}`))
-          .map(p => ({
-            role_id: roleId,
-            resource: p.resource,
-            action: p.action,
-            conditions: p.conditions ?? null,
-          }));
-        
-        if (toInsert.length > 0) {
-          const { error: insErr } = await supabase
-            .from('permissions')
-            .insert(toInsert);
-          if (insErr) {
-            throw insErr;
-          }
-        }
-      }
+      // The server replaces the role and its permission set in one transaction.
+      // This avoids the previous partial-save window between separate role,
+      // permission-delete, and permission-insert browser requests.
+      const { error } = await supabase.rpc('upsert_role_access', {
+        payload: {
+          role_id: roleId,
+          name: existingRole.name,
+          display_name: roleData.display_name ?? existingRole.display_name,
+          description: roleData.description ?? existingRole.description ?? '',
+          is_active: roleData.is_active ?? existingRole.is_active,
+          permissions: (roleData.permissions ?? existingRole.permissions ?? []).map((permission) => ({
+            resource: permission.resource,
+            action: permission.action,
+            conditions: (permission as { conditions?: unknown }).conditions ?? null,
+          })),
+          ...(roleData.page_slugs ? { page_slugs: roleData.page_slugs } : {}),
+          ...(roleData.tab_rules ? { tab_rules: roleData.tab_rules } : {}),
+          ...(roleData.column_rules ? { column_rules: roleData.column_rules } : {}),
+          ...(roleData.cost_scope ? { cost_scope: roleData.cost_scope } : {}),
+          reason: 'Role updated from Role Management',
+        },
+      });
+      if (error) throw error;
 
       toast({ title: 'Role updated', description: 'Role was updated successfully.' });
-      // Refresh roles in background to avoid blocking the dialog close
-      fetchRoles().catch(() => {});
+      await fetchRoles();
       return true;
     } catch (error: any) {
       console.error('Error updating role:', error);
@@ -293,10 +223,10 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     if (!session.success) return false;
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from('roles')
-        .delete()
-        .eq('id', roleId);
+      const { error } = await (supabase as any).rpc('delete_role_access', {
+        p_role_id: roleId,
+        p_reason: 'Deleted from Role Management',
+      });
       if (error) throw error;
 
       toast({ title: 'Role deleted', description: 'Role removed successfully.' });
@@ -418,14 +348,6 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     const hasSuperAdminPerm = perms?.some(p => p.resource === 'system' && p.action === 'override');
     if (hasSuperAdminPerm) return true;
 
-    // Also check if their role string indicates SuperAdmin (covers the case where
-    // the DB permissions table hasn't been seeded yet)
-    const uRoles = userRoles.filter(ur => ur.user_id === userId);
-    const isSuperAdminByRole = uRoles.some(ur =>
-      ['SuperAdmin', 'super_admin', 'superAdmin', 'Super Admin'].includes(ur.role as string)
-    );
-    if (isSuperAdminByRole) return true;
-
     // ── 2. Per-user overrides win over role defaults ──────────────────────────
     const overrides = overridesCache[userId];
     if (overrides && overrides.length > 0) {
@@ -438,28 +360,8 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
       return perms.some(p => p.resource === resource && p.action === action);
     }
 
-    // ── 4. Fallback to DEFAULT_ROLE_PERMISSIONS ───────────────────────────────
-    // Check user_roles table entries
-    const fromUserRoles = uRoles.some(ur => {
-      const normalized = normalizeRoleStatic(ur.role as string);
-      if (!normalized) return false;
-      return (DEFAULT_ROLE_PERMISSIONS[normalized] || []).some(
-        p => p.resource === resource && p.action === action
-      );
-    });
-    if (fromUserRoles) return true;
-
-    // ── 5. Also check the user's primary profile role ─────────────────────────
-    // This covers users whose profile.role differs from user_roles (e.g. role='admin'
-    // in profiles but only 'dataCollector' in user_roles).
-    const profileRole = profileRolesCache[userId];
-    if (profileRole) {
-      const normalizedProfile = normalizeRoleStatic(profileRole);
-      if (normalizedProfile && (DEFAULT_ROLE_PERMISSIONS[normalizedProfile] || []).some(
-        p => p.resource === resource && p.action === action
-      )) return true;
-    }
-
+    // An empty server permission set is authoritative; never restore revoked
+    // permissions from static presets or a free-text profile role.
     return false;
   };
 
@@ -514,7 +416,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     };
   }, [refreshUserPermissions]);
 
-  // When any role's permissions change (via SecurityPanel Grant/Revoke), refresh the
+  // When any role's permissions change (via role lifecycle / access workspace), refresh the
   // current user's permission cache so their action buttons update immediately without
   // requiring a page reload. All connected clients receive this event independently,
   // so every online user in the affected role gets the update in real-time.
@@ -526,7 +428,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
         schema: 'public',
         table: 'permissions',
       }, async () => {
-        // Refresh roles so SecurityPanel UI is consistent
+        // Refresh roles so Access Control Workspace UI is consistent
         fetchRoles().catch(() => {});
         // Refresh the current user's permission cache so checkPermission() sees the change
         try {

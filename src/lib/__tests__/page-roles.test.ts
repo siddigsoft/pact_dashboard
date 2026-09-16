@@ -14,6 +14,7 @@ import {
   canSeePageWithOverrides,
   canSeePageWithOverridesResult,
   resolveResourcePermissionOverride,
+  resolveRouteAccessTarget,
   resolveRoutePermission,
   resolveSlug,
 } from '@/lib/page-roles';
@@ -61,6 +62,21 @@ describe('page access registry integrity', () => {
   it('resolves query-tab definitions when query parameters are reordered', () => {
     expect(resolveSlug('/finance-hub?source=sidebar&tab=subscriptions')).toBe('finance-subscriptions');
     expect(resolveSlug('/accounting?view=summary&tab=bank-recon')).toBe('accounting-bank-recon');
+  });
+
+  it('uses one registry target for page and action-protected routes', () => {
+    expect(resolveRouteAccessTarget('/finance-hub', '?tab=wallet-reports')).toEqual({
+      slug: 'finance-hub',
+      routePermission: { resource: 'wallets', action: 'read' },
+    });
+    expect(resolveRouteAccessTarget('/mmp/abc123/full-report')).toEqual({
+      slug: 'mmp-full-report',
+      routePermission: { resource: 'mmp', action: 'export' },
+    });
+  });
+
+  it('does not create a protected access target for an unregistered path', () => {
+    expect(resolveRouteAccessTarget('/not-a-registered-page')).toBeNull();
   });
 
   it('grants a custom role only when that role is explicitly configured', () => {

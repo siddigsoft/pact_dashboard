@@ -7,7 +7,9 @@
  *  • By Page  — pick any page and see ALL users, their status, R/W/C/D controls,
  *               plus role-default editing via the page_role_configs table.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { evaluateManifestPageAccess, overrideIsActive, type CurrentUserAccessManifest } from '@/lib/current-user-access';
+import { resolveRoutePermission } from '@/lib/page-roles';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
@@ -137,6 +139,7 @@ interface Profile { id: string; full_name: string | null; role: string | null; }
 interface ByPageOverride {
   id: string; page_slug: string; user_id: string; is_blocked: boolean;
   level?: string | null; notes?: string | null; granted_by?: string | null;
+  reason?: string | null; expires_at?: string | null; approved_by?: string | null; approved_at?: string | null;
 }
 
 // ── CS action labels for inline display ──────────────────────────────────────
@@ -292,9 +295,10 @@ function ByPageUserRow({
 // ── Main tab ──────────────────────────────────────────────────────────────────
 interface PageAccessTabProps extends TabProps {
   onTabChange: (tab: string) => void;
+  initialPageSlug?: string;
 }
 
-export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, userId }: PageAccessTabProps) {
+export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, userId, initialPageSlug }: PageAccessTabProps) {
   const { currentUser } = useAppContext();
   const { roles: managedRoles } = useRoleManagement();
   const { toast } = useToast();
@@ -311,7 +315,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
   } = useSelectedUserAccess();
 
   // ── Mode ──────────────────────────────────────────────────────────────────
-  const [viewMode, setViewMode] = useState<'user' | 'page'>('user');
+  const [viewMode, setViewMode] = useState<'user' | 'page'>(initialPageSlug ? 'page' : 'user');
 
   // ── By-User state ─────────────────────────────────────────────────────────
   const [search,        setSearch]        = useState('');
@@ -320,7 +324,17 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
   const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
 
   // ── By-Page state ─────────────────────────────────────────────────────────
-  const [selectedPage,      setSelectedPage]      = useState(PAGE_DEFS[0]);
+  const [selectedPage,      setSelectedPage]      = useState(PAGE_DEFS.find(page => page.slug === initialPageSlug) ?? PAGE_DEFS[0]);
+  const [previewNow, setPreviewNow] = useState(Date.now());
+  useEffect(() => {
+    if (viewMode !== 'page') return;
+    const timer = setInterval(() => setPreviewNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [viewMode]);
+  useEffect(() => {
+    const page = PAGE_DEFS.find(item => item.slug === initialPageSlug);
+    if (page) { setSelectedPage(page); setViewMode('page'); }
+  }, [initialPageSlug]);
   const [pageSearch,        setPageSearch]        = useState('');
   const [byPageUserSearch,  setByPageUserSearch]  = useState('');
   const [byPageStatusFilter,setByPageStatusFilter]= useState<ByPageStatusFilter>('all');
@@ -350,6 +364,21 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
     enabled: viewMode === 'page',
   });
 
+  const { data: accessBaselines } = useQuery({
+    queryKey: ['bp-canonical-access-baselines'],
+    enabled: viewMode === 'page',
+    staleTime: 15_000,
+    queryFn: async () => {
+      const [assignments, overrides] = await Promise.all([
+        (supabase as any).from('canonical_user_role_assignments').select('user_id, roles!inner(name, is_active, permissions(resource, action))'),
+        supabase.from('user_permission_overrides').select('*'),
+      ]);
+      if (assignments.error) throw assignments.error;
+      if (overrides.error) throw overrides.error;
+      return { assignments: assignments.data ?? [], overrides: overrides.data ?? [] };
+    },
+  });
+
   const { data: roleConfigs = {}, refetch: refetchRoleConfigs } = useQuery<Record<string, string[]>>({
     queryKey: ['bp-role-configs'],
     queryFn: async () => {
@@ -366,15 +395,32 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
   const overrideByPageSlug = useMemo(() => {
     const m: Record<string, Record<string, ByPageOverride>> = {};
     allOverrides.forEach(o => {
+      if (!overrideIsActive(o, previewNow)) return;
       if (!m[o.page_slug]) m[o.page_slug] = {};
       m[o.page_slug][o.user_id] = o;
     });
     return m;
-  }, [allOverrides]);
+  }, [allOverrides, previewNow]);
 
   const effectiveRoles = roleConfigs[selectedPage.slug] ?? selectedPage.roles;
   const pageOverrideMap = overrideByPageSlug[selectedPage.slug] ?? {};
-  const nonSuperProfiles = useMemo(() => profiles.filter(p => getRoleCode(p.role) !== 'superAdmin'), [profiles]);
+  const nonSuperProfiles = profiles.filter(p => !(accessBaselines?.assignments ?? []).some((row: any) => row.user_id === p.id && row.roles?.is_active && getRoleCode(row.roles.name) === 'superAdmin'));
+  function getByPageStatus(profile: Profile, baselineOnly = false): AccessStatus {
+    if (!accessBaselines) return 'denied';
+    const assigned = accessBaselines.assignments.filter((row: any) => row.user_id === profile.id && row.roles?.is_active);
+    const manifest: CurrentUserAccessManifest = {
+      user_id: profile.id,
+      roles: assigned.map((row: any) => row.roles.name),
+      role_permissions: assigned.flatMap((row: any) => row.roles.permissions ?? []),
+      page_role_configs: roleConfigs,
+      page_overrides: baselineOnly ? {} : Object.fromEntries(allOverrides.filter(row => row.user_id === profile.id && overrideIsActive(row, previewNow)).map(row => [row.page_slug, row])),
+      action_overrides: baselineOnly ? {} : Object.fromEntries(accessBaselines.overrides.filter((row: any) => row.user_id === profile.id && overrideIsActive(row, previewNow)).map((row: any) => [`${row.resource}:${row.action}`, row])),
+      generated_at: '',
+    };
+    const url = new URL(selectedPage.path, 'https://access.local');
+    const decision = evaluateManifestPageAccess(manifest, selectedPage.slug, resolveRoutePermission(url.pathname, url.search, url.hash));
+    return decision.source === 'page_override' || decision.source === 'action_override' ? decision.allowed ? 'granted' : 'blocked' : decision.allowed ? 'role' : 'denied';
+  }
 
   const filteredByPageUsers = useMemo(() => {
     const q = byPageUserSearch.toLowerCase();
@@ -382,19 +428,18 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
       .filter(p => {
         if (q && !(p.full_name ?? '').toLowerCase().includes(q) && !roleLabel(p.role).toLowerCase().includes(q)) return false;
         if (byPageStatusFilter !== 'all') {
-          if (getAccessStatus(selectedPage, p, pageOverrideMap, effectiveRoles) !== byPageStatusFilter) return false;
+          if (getByPageStatus(p) !== byPageStatusFilter) return false;
         }
         return true;
       })
       .sort((a, b) =>
-        STATUS_ORDER[getAccessStatus(selectedPage, a, pageOverrideMap, effectiveRoles)] -
-        STATUS_ORDER[getAccessStatus(selectedPage, b, pageOverrideMap, effectiveRoles)]
+        STATUS_ORDER[getByPageStatus(a)] - STATUS_ORDER[getByPageStatus(b)]
       );
   }, [nonSuperProfiles, byPageUserSearch, byPageStatusFilter, selectedPage, pageOverrideMap, effectiveRoles]);
 
   const byPageCounts = useMemo(() => {
     const c = { blocked: 0, granted: 0, role: 0, denied: 0 };
-    nonSuperProfiles.forEach(p => c[getAccessStatus(selectedPage, p, pageOverrideMap, effectiveRoles)]++);
+    nonSuperProfiles.forEach(p => c[getByPageStatus(p)]++);
     return c;
   }, [nonSuperProfiles, selectedPage, pageOverrideMap, effectiveRoles]);
 
@@ -427,7 +472,11 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
         is_blocked: isBlocked,
         level,
         notes,
+        reason: null,
+        expires_at: null,
         granted_by: currentUser?.id,
+        approved_by: currentUser?.id,
+        approved_at: new Date().toISOString(),
       }));
       const { error } = await supabase
         .from('page_access_overrides')
@@ -802,9 +851,9 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
                 )}
                 <div className="space-y-1.5 max-w-2xl">
                   {filteredByPageUsers.map(profile => {
-                    const status = getAccessStatus(selectedPage, profile, pageOverrideMap, effectiveRoles);
+                    const status = getByPageStatus(profile);
                     const ov = pageOverrideMap[profile.id];
-                    const hasRole = hasDefaultAccess(selectedPage, profile.role, effectiveRoles);
+                    const hasRole = getByPageStatus(profile, true) === 'role';
                     const saving = savingByPageId === profile.id;
                     return (
                       <ByPageUserRow

@@ -56,6 +56,19 @@ function describeEvent(event: AuditEvent) {
   return event.entity_id;
 }
 
+function describeOverrideMetadata(event: AuditEvent) {
+  const state = event.after_state ?? event.before_state ?? {};
+  const reason = typeof state.reason === 'string' && state.reason.trim() ? state.reason.trim() : null;
+  const expiresAt = typeof state.expires_at === 'string' && state.expires_at ? state.expires_at : null;
+  const approvedAt = typeof state.approved_at === 'string' && state.approved_at ? state.approved_at : null;
+  if (!reason && !expiresAt && !approvedAt) return null;
+  const parts: string[] = [];
+  if (reason) parts.push(`Reason: ${reason}`);
+  if (expiresAt) parts.push(`Expires: ${formatEventTime(expiresAt)}`);
+  if (approvedAt) parts.push(`Approved: ${formatEventTime(approvedAt)}`);
+  return parts.join(' · ');
+}
+
 /** Read-only history for changes that affect the selected user's access. */
 export function AccessAuditTab({ userId, userName }: TabProps) {
   const [events, setEvents] = useState<AuditEvent[]>([]);
@@ -136,6 +149,11 @@ export function AccessAuditTab({ userId, userName }: TabProps) {
                   <span className="flex items-center gap-1"><UserRound className="h-3 w-3" />{event.actor_name}{event.actor_role ? ` · ${event.actor_role}` : ''}</span>
                   <time dateTime={event.created_at}>{formatEventTime(event.created_at)}</time>
                 </div>
+                {describeOverrideMetadata(event) && (
+                  <p className="mt-2 rounded bg-muted/60 px-2 py-1 text-[10px] leading-relaxed text-muted-foreground">
+                    {describeOverrideMetadata(event)}
+                  </p>
+                )}
               </li>
             ))}
           </ol>

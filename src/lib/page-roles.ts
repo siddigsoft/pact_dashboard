@@ -10,8 +10,9 @@
  * for the current user it wins. That table is consulted by the page-access
  * modal at runtime; we mirror its semantics here for the visibility gate.
  */
-import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { PAGE_DEFS } from '@/lib/access-registry';
 import { supabase } from '@/integrations/supabase/client';
+import { PAGE_ACCESS_REDIRECTS } from '@/lib/pageAccessRedirects';
 import { MODULE_REGISTRY } from '@/types/moduleRegistry';
 import { DEFAULT_ROLE_PERMISSIONS } from '@/types/roles';
 import type { ActionType, ResourceType } from '@/types/roles';
@@ -269,6 +270,14 @@ export function resolveSlug(pathname: string): string | null {
   if (registered) return registered;
 
   const cleanPath = splitLocation(pathname).pathname;
+  const redirect = PAGE_ACCESS_REDIRECTS.find(candidate => candidate.fromPath === cleanPath);
+  if (redirect) {
+    const destination = resolveRegisteredLocation(redirect.toPath)
+      ?? resolveRegisteredLocation(redirect.toPath.split(/[?#]/, 1)[0]);
+    if (destination) return destination;
+  }
+  if (/^\/tasks\/[^/]+\/?$/.test(cleanPath)) return 'my-tasks';
+  if (/^\/admin\/wallets\/[^/]+\/?$/.test(cleanPath)) return resolveRegisteredLocation('/finance-hub?tab=admin-wallets');
   // The report has a dynamic MMP id between its parent path and fixed suffix.
   // It must use its own permission instead of inheriting the broader /mmp page.
   if (/^\/mmp\/[^/]+\/full-report\/?$/.test(cleanPath)) return 'mmp-full-report';
@@ -279,6 +288,33 @@ export function resolveSlug(pathname: string): string | null {
     if (PATH_TO_SLUG[candidate]) return PATH_TO_SLUG[candidate];
   }
   return null;
+}
+
+/**
+ * The single registry-derived description of a protected navigation target.
+ *
+ * Consumers should use this rather than resolving the page slug and the
+ * action-specific requirement separately.  Returning `null` is deliberate:
+ * callers can keep explicitly public routes outside the protected route tree,
+ * while a route inside that tree can choose a clear fail-closed response.
+ */
+export interface RouteAccessTarget {
+  slug: string;
+  routePermission: RoutePermission | null;
+}
+
+export function resolveRouteAccessTarget(
+  pathname: string,
+  search = '',
+  hash = '',
+): RouteAccessTarget | null {
+  const slug = resolveSlug(`${pathname}${search}${hash}`) ?? resolveSlug(pathname);
+  if (!slug) return null;
+
+  return {
+    slug,
+    routePermission: resolveRoutePermission(pathname, search, hash),
+  };
 }
 
 /** URL-based variant of canSeePage. Fail-closed: an unknown path returns

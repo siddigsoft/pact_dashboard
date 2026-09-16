@@ -115,10 +115,8 @@ export const HUB_TAB_REGISTRY: HubDef[] = [
         sectionLabel: 'Permissions & Audit',
         tabs: [
           { tabId: 'roles',           label: 'Roles',            description: 'Manage system and custom roles, assign users, and configure permissions.' },
-          { tabId: 'user-access',     label: 'User Access',      description: 'Per-user control of page access, hub tabs, action permissions, and data scope.' },
-          { tabId: 'permissions',     label: 'Screen Permissions', description: 'Fine-grained screen-level permission matrix — read/write/open/create/delete per user.' },
+          { tabId: 'user-access',     label: 'User Access',      description: 'Canonical per-user control of page access, hub tabs, action permissions, and data scope.' },
           { tabId: 'audit-logs',      label: 'Audit Logs',       description: 'Immutable record of all system actions.' },
-          { tabId: 'page-grants',     label: 'Page Grants',      description: 'Grant or restrict access to Super Admin Hub tabs per user.' },
           { tabId: 'button-registry', label: 'Button Registry',  description: 'Full button and permission map across the entire platform.' },
         ],
       },

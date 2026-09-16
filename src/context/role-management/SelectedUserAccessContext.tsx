@@ -7,8 +7,9 @@ import { createContext, useContext, useCallback, useEffect, useMemo, useState, t
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
-import { PAGE_DEFS, hasDefaultAccess } from '@/pages/PageAccessControl';
-import { DEFAULT_ROLE_PERMISSIONS, AppRole, ResourceType, ActionType } from '@/types/roles';
+import { PAGE_DEFS } from '@/lib/access-registry';
+import { resolveRoutePermission } from '@/lib/page-roles';
+
 import {
   AccessEffect, AccessDecisionTrace, PageOverride, PermissionOverride, ColumnVisibilityRow, DataScopeRow,
   DataScopePolicyMode, DataScopeSelector, ScopePreview,
@@ -16,26 +17,10 @@ import {
 import {
   isSuperAdminRole,
   resolveActionEffect,
-  resolvePageEffect,
   unionRoleNames,
 } from '@/lib/effectiveAccess';
 import { expandRelatedPageSlugs, resolvePageToggleIntent } from '@/lib/pageAccessLinks';
-
-// ── Role→AppRole mapping ──────────────────────────────────────────────────────
-const ROLE_CODE_TO_APP_ROLE: Record<string, AppRole> = {
-  superAdmin: 'SuperAdmin', admin: 'Admin', countryDirector: 'CountryDirector',
-  ict: 'ICT', fom: 'Field Operation Manager (FOM)', financialAdmin: 'FinancialAdmin',
-  projectManager: 'ProjectManager', seniorOperationsLead: 'SeniorOperationsLead',
-  supervisor: 'Supervisor', coordinator: 'Coordinator', dataTeam: 'DataTeam',
-  dataCollector: 'DataCollector', reviewer: 'Reviewer', auditor: 'Auditor',
-};
-
-function roleHasAction(roleCode: string, resource: ResourceType, action: ActionType): boolean {
-  if (roleCode === 'superAdmin') return true;
-  const appRole = ROLE_CODE_TO_APP_ROLE[roleCode];
-  if (!appRole) return false;
-  return (DEFAULT_ROLE_PERMISSIONS[appRole] ?? []).some(p => p.resource === resource && p.action === action);
-}
+import { overrideIsActive, evaluateManifestPageAccess, manifestIsTabBlocked, type CurrentUserAccessManifest } from '@/lib/current-user-access';
 
 // ── Context type ──────────────────────────────────────────────────────────────
 interface SelectedUserAccessValue {
@@ -57,6 +42,8 @@ interface SelectedUserAccessValue {
   explainAction: (resource: string, action: string) => AccessDecisionTrace;
   togglePage: (slug: string) => Promise<void>;
   toggleAction: (resource: string, action: string) => Promise<void>;
+  updateOverrideMetadata: (kind: 'page' | 'action', id: string, reason: string, expiresAt: string | null) => Promise<boolean>;
+  removeOverride: (kind: 'page' | 'action', id: string) => Promise<boolean>;
   upsertColumnVisibility: (pageSlug: string, columnKey: string, isHidden: boolean, target: 'user' | 'role', roleName?: string) => Promise<void>;
   removeColumnVisibility: (id: string) => Promise<void>;
   upsertDataScope: (
@@ -88,17 +75,30 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   const { currentUser } = useAppContext();
   const { toast } = useToast();
 
-  const [loading, setLoading]             = useState(false);
+  const [loading, setLoading]             = useState(true);
   const [savingKey, setSavingKey]         = useState<string | null>(null);
   const [pageOverrides, setPageOverrides] = useState<PageOverride[]>([]);
   const [permOverrides, setPermOverrides] = useState<PermissionOverride[]>([]);
   const [columnConfigs, setColumnConfigs] = useState<ColumnVisibilityRow[]>([]);
   const [dataScopeRows, setDataScopeRows] = useState<DataScopeRow[]>([]);
-  const [effectiveRoleNames, setEffectiveRoleNames] = useState<string[]>([userRole]);
+  const [effectiveRoleNames, setEffectiveRoleNames] = useState<string[]>([]);
   const [rolePermissionKeys, setRolePermissionKeys] = useState<Set<string>>(new Set());
   const [pageRoleConfigs, setPageRoleConfigs] = useState<Record<string, string[]>>({});
+  const [roleTabBlocks, setRoleTabBlocks] = useState<Record<string, boolean>>({});
   const [scopePreview, setScopePreview] = useState<ScopePreview | null>(null);
   const [scopePreviewError, setScopePreviewError] = useState<string | null>(null);
+  const [accessNow, setAccessNow] = useState(Date.now());
+
+  // Re-evaluate open editor decisions when a saved override expires.
+  useEffect(() => {
+    const expiry = [...pageOverrides, ...permOverrides]
+      .map(row => new Date(row.expires_at ?? '').getTime())
+      .filter(value => Number.isFinite(value) && value > Date.now())
+      .sort((a, b) => a - b)[0];
+    if (!expiry) return;
+    const timer = window.setTimeout(() => setAccessNow(Date.now()), Math.min(expiry - Date.now() + 1, 2_147_483_647));
+    return () => window.clearTimeout(timer);
+  }, [pageOverrides, permOverrides, accessNow]);
 
   function isMigrationError(error: any): boolean {
     const message = String(error?.message ?? error ?? '').toLowerCase();
@@ -118,21 +118,34 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
         supabase.rpc('get_user_permissions', { user_uuid: userId }),
         supabase
           .from('canonical_user_role_assignments')
-          .select('role_id, roles(name)')
+          .select('role_id, roles!inner(name, is_active)')
           .eq('user_id', userId),
       ]);
       setPageOverrides(pageRes.data ?? []);
       setPermOverrides(permRes.data ?? []);
+      setAccessNow(Date.now());
 
       if (userRolesRes.error) {
         console.error('[SelectedUserAccess] canonical role assignments load error:', userRolesRes.error);
       }
       const assignedRows = userRolesRes.data ?? [];
       const customRoleNames = assignedRows
+        .filter((row: any) => row.roles?.is_active === true)
         .map((row: any) => row.roles?.name)
         .filter((name: string | null): name is string => Boolean(name));
-      const roleNames = unionRoleNames(userRole, customRoleNames);
+      const roleNames = unionRoleNames(null, customRoleNames);
       setEffectiveRoleNames(roleNames);
+      const roleIds = assignedRows.filter((row: any) => row.roles?.is_active === true).map((row: any) => row.role_id);
+      if (roleIds.length) {
+        const { data: tabRows, error: tabError } = await (supabase as any).from('role_tab_configs').select('role_id, page_slug, is_blocked').in('role_id', roleIds);
+        if (tabError) {
+          console.error('[SelectedUserAccess] role tab load failed:', tabError);
+          setRoleTabBlocks({});
+        } else {
+          const slugs = new Set<string>((tabRows ?? []).map((row: any) => row.page_slug));
+          setRoleTabBlocks(Object.fromEntries([...slugs].map(slug => [slug, roleIds.every(id => (tabRows ?? []).some((row: any) => row.role_id === id && row.page_slug === slug && row.is_blocked))])));
+        }
+      } else { setRoleTabBlocks({}); }
 
       // A user may hold several canonical roles. Load defaults for every one so
       // the editor never silently treats a custom role as if it did not exist.
@@ -197,40 +210,49 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
 
   // ── Derived maps ─────────────────────────────────────────────────────────
   const pageOvMap = useMemo(
-    () => Object.fromEntries(pageOverrides.map(o => [o.page_slug, o])),
-    [pageOverrides],
+    () => Object.fromEntries(pageOverrides
+      .filter(o => overrideIsActive(o, accessNow))
+      .map(o => [o.page_slug, o])),
+    [pageOverrides, accessNow],
   );
   const permOvMap = useMemo(
-    () => Object.fromEntries(permOverrides.map(o => [`${o.resource}:${o.action}`, o.is_granted as boolean])),
-    [permOverrides],
+    () => Object.fromEntries(permOverrides
+      .filter(o => overrideIsActive(o, accessNow))
+      .map(o => [`${o.resource}:${o.action}`, o.is_granted as boolean])),
+    [permOverrides, accessNow],
   );
 
   // ── Effective helpers (see src/lib/effectiveAccess.ts for precedence) ──
-  function effectivePage(slug: string): AccessEffect {
-    const ov = pageOvMap[slug];
-    if (slug.includes(':') && !ov) {
-      // Hub tab slugs without an override default to visible.
-      return resolvePageEffect({
-        isSuperAdmin: effectiveRoleNames.some(isSuperAdminRole),
-        override: null,
-        roleAllows: true,
-      });
-    }
-    const def = PAGE_DEFS.find(p => p.slug === slug);
-    const configuredRoles = pageRoleConfigs[slug];
-    const roleAllows = !!(def && effectiveRoleNames.some(role => hasDefaultAccess(def, role, configuredRoles)));
-    return resolvePageEffect({
-      isSuperAdmin: effectiveRoleNames.some(isSuperAdminRole),
-      override: ov ?? null,
-      roleAllows,
-    });
-  }
+  const selectedManifest: CurrentUserAccessManifest = {
+    user_id: userId,
+    roles: effectiveRoleNames,
+    page_role_configs: pageRoleConfigs,
+    role_tab_blocks: roleTabBlocks,
+    page_overrides: pageOvMap,
+    action_overrides: Object.fromEntries(permOverrides.filter(row => overrideIsActive(row, accessNow)).map(row => [`${row.resource}:${row.action}`, row])),
+    role_permissions: [...rolePermissionKeys].map(key => { const [resource, action] = key.split(':'); return { resource, action }; }),
+    generated_at: '',
+  };
 
+  function effectivePage(slug: string): AccessEffect {
+    if (effectiveRoleNames.some(isSuperAdminRole)) return 'superadmin';
+    if (slug.includes(':')) {
+      const blocked = manifestIsTabBlocked(selectedManifest, slug);
+      const own = pageOvMap[slug];
+      if (blocked) return own?.is_blocked ? 'blocked' : 'role-no';
+      return own ? 'granted' : 'role-yes';
+    }
+    const page = PAGE_DEFS.find(item => item.slug === slug);
+    const url = page ? new URL(page.path, 'https://access.local') : null;
+    const permission = url ? resolveRoutePermission(url.pathname, url.search, url.hash) : null;
+    const decision = evaluateManifestPageAccess(selectedManifest, slug, permission);
+    if (decision.source === 'page_override' || decision.source === 'action_override') return decision.allowed ? 'granted' : 'blocked';
+    return decision.allowed ? 'role-yes' : 'role-no';
+  }
   function effectiveAction(resource: string, action: string): AccessEffect {
     const key = `${resource}:${action}`;
     const explicit = key in permOvMap ? permOvMap[key] : null;
-    const roleAllows = rolePermissionKeys.has(key)
-      || effectiveRoleNames.some(role => roleHasAction(role, resource as ResourceType, action as ActionType));
+    const roleAllows = rolePermissionKeys.has(key);
     return resolveActionEffect({
       isSuperAdmin: effectiveRoleNames.some(isSuperAdminRole),
       explicitGrant: explicit,
@@ -244,19 +266,22 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     if (effect === 'superadmin') {
       return { effect, source: 'super_admin', summary: 'Super Admin bypass grants access.' };
     }
-    if (override) {
+    if (override && ((effect === 'granted' && !override.is_blocked) || (effect === 'blocked' && override.is_blocked))) {
       return {
         effect,
         source: 'user_override',
-        summary: override.is_blocked
+        summary: `${override.is_blocked
           ? 'Explicit user page block overrides all role defaults.'
-          : 'Explicit user page grant overrides the role default.',
+          : 'Explicit user page grant overrides the role default.'}${override.reason ? ` Reason: ${override.reason}` : ''}${override.expires_at ? ` Expires ${new Date(override.expires_at).toLocaleString()}.` : ''}`,
       };
     }
     return {
       effect,
-      source: 'role_default',
-      summary: effect === 'role-yes'
+      source: effect === 'granted' || effect === 'blocked' ? 'user_override' : 'role_default',
+      summary: effect === 'granted' ? 'Allowed by an explicit required action grant.'
+        : effect === 'blocked' ? 'Denied by a page dependency, read restriction or required action override.'
+        : override && effect === 'role-no' ? 'This page exception cannot grant the required action or open a denied parent page.'
+        : effect === 'role-yes'
         ? `Allowed by role default (${effectiveRoleNames.join(', ')}).`
         : `No assigned role grants this page (${effectiveRoleNames.join(', ')}).`,
     };
@@ -264,7 +289,8 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
 
   function explainAction(resource: string, action: string): AccessDecisionTrace {
     const effect = effectiveAction(resource, action);
-    const override = permOverrides.find(item => item.resource === resource && item.action === action);
+    const override = permOverrides.find(item => item.resource === resource && item.action === action
+      && (!item.expires_at || new Date(item.expires_at).getTime() > Date.now()));
     if (effect === 'superadmin') {
       return { effect, source: 'super_admin', summary: 'Super Admin bypass grants this action.' };
     }
@@ -272,9 +298,9 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       return {
         effect,
         source: 'user_override',
-        summary: override.is_granted
+        summary: `${override.is_granted
           ? 'Explicit user action grant overrides the role default.'
-          : 'Explicit user action block overrides all role defaults.',
+          : 'Explicit user action block overrides all role defaults.'}${override.reason ? ` Reason: ${override.reason}` : ''}${override.expires_at ? ` Expires ${new Date(override.expires_at).toLocaleString()}.` : ''}`,
       };
     }
     return {
@@ -290,7 +316,8 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   async function togglePage(slug: string) {
     setSavingKey(`page-family:${expandRelatedPageSlugs(slug).slice().sort().join('|')}`);
     const eff = effectivePage(slug);
-    const intent = resolvePageToggleIntent(eff);
+    const own = pageOvMap[slug];
+    const intent = resolvePageToggleIntent(own ? own.is_blocked ? 'blocked' : 'granted' : eff === 'blocked' ? 'role-no' : eff);
     if (intent === 'noop') {
       setSavingKey(null);
       return;
@@ -315,7 +342,11 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
           user_id: userId,
           page_slug,
           is_blocked: intent === 'block',
+          reason: null,
+          expires_at: null,
           granted_by: currentUser?.id ?? null,
+          approved_by: currentUser?.id ?? null,
+          approved_at: new Date().toISOString(),
         }));
         const { error } = await supabase
           .from('page_access_overrides')
@@ -353,14 +384,14 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
         toast({ title: 'Override removed', description: 'Restored to role default.' });
       } else if (eff === 'role-yes') {
         const { error } = await supabase.from('user_permission_overrides').upsert(
-          { user_id: userId, resource, action, is_granted: false },
+          { user_id: userId, resource, action, is_granted: false, reason: null, expires_at: null, granted_by: currentUser?.id ?? null, approved_by: currentUser?.id ?? null, approved_at: new Date().toISOString() },
           { onConflict: 'user_id,resource,action' },
         );
         if (error) throw error;
         toast({ title: 'Permission blocked', description: `${action} on ${resource} removed.` });
       } else {
         const { error } = await supabase.from('user_permission_overrides').upsert(
-          { user_id: userId, resource, action, is_granted: true },
+          { user_id: userId, resource, action, is_granted: true, reason: null, expires_at: null, granted_by: currentUser?.id ?? null, approved_by: currentUser?.id ?? null, approved_at: new Date().toISOString() },
           { onConflict: 'user_id,resource,action' },
         );
         if (error) throw error;
@@ -375,6 +406,44 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   }
 
   // ── Column visibility ────────────────────────────────────────────────────
+  async function updateOverrideMetadata(kind: 'page' | 'action', id: string, reason: string, expiresAt: string | null): Promise<boolean> {
+    setSavingKey(`metadata:${kind}:${id}`);
+    try {
+      if (effectiveRoleNames.some(isSuperAdminRole)) throw new Error('Super Admin access cannot be overridden.');
+      if (expiresAt && (!Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= Date.now())) {
+        throw new Error('Choose a future expiry or clear it for a permanent override.');
+      }
+      const { data, error } = await supabase.from(kind === 'page' ? 'page_access_overrides' : 'user_permission_overrides')
+        .update({ reason: reason.trim() || null, expires_at: expiresAt })
+        .eq('id', id).eq('user_id', userId).select('id');
+      if (error) throw error;
+      if (!data?.length) throw new Error('Override could not be updated. Refresh and confirm your access.');
+      await load();
+      toast({ title: 'Override details saved' });
+      return true;
+    } catch (error: any) {
+      toast({ title: 'Unable to save override', description: error.message, variant: 'destructive' });
+      return false;
+    } finally { setSavingKey(null); }
+  }
+
+  async function removeOverride(kind: 'page' | 'action', id: string): Promise<boolean> {
+    setSavingKey(`metadata:${kind}:${id}`);
+    try {
+      if (effectiveRoleNames.some(isSuperAdminRole)) throw new Error('Super Admin access cannot be overridden.');
+      const { data, error } = await supabase.from(kind === 'page' ? 'page_access_overrides' : 'user_permission_overrides')
+        .delete().eq('id', id).eq('user_id', userId).select('id');
+      if (error) throw error;
+      if (!data?.length) throw new Error('Override could not be removed. Refresh and confirm your access.');
+      await load();
+      toast({ title: 'Override removed', description: 'Role default restored.' });
+      return true;
+    } catch (error: any) {
+      toast({ title: 'Unable to remove override', description: error.message, variant: 'destructive' });
+      return false;
+    } finally { setSavingKey(null); }
+  }
+
   async function upsertColumnVisibility(
     pageSlug: string, columnKey: string, isHidden: boolean, target: 'user' | 'role', roleName = userRole,
   ) {
@@ -509,7 +578,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     pageOverrides, permOverrides, columnConfigs, dataScopeRows, scopePreview, scopePreviewError, effectiveRoleNames,
     pageOvMap, permOvMap,
     effectivePage, effectiveAction, explainPage, explainAction,
-    togglePage, toggleAction,
+    togglePage, toggleAction, updateOverrideMetadata, removeOverride,
     upsertColumnVisibility, removeColumnVisibility,
     upsertDataScope, replaceCostSubmissionPolicy, removeDataScope,
     refresh: load,
@@ -527,3 +596,4 @@ export function useSelectedUserAccess(): SelectedUserAccessValue {
   if (!ctx) throw new Error('useSelectedUserAccess must be inside SelectedUserAccessProvider');
   return ctx;
 }
+

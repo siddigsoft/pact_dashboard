@@ -4,6 +4,7 @@
  * permissions, column visibility, and data scope.
  */
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -53,11 +54,14 @@ type TabKey = 'overview' | 'pages' | 'tabs' | 'buttons' | 'reports' | 'columns' 
 // ── Component ──────────────────────────────────────────────────────────────
 export function UnifiedAccessManager({ containerClassName }: { containerClassName?: string } = {}) {
   const { users } = useAppContext();
+  const [searchParams] = useSearchParams();
+  const requestedUser = searchParams.get('accessUser');
+  const requestedPage = searchParams.get('accessPage');
 
   const [search, setSearch]         = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeTab, setActiveTab]   = useState<TabKey>('overview');
+  const [selectedId, setSelectedId] = useState<string | null>(requestedUser);
+  const [activeTab, setActiveTab]   = useState<TabKey>(requestedPage ? 'pages' : 'overview');
 
   // Distinct roles in the user list (exclude superAdmin — can't be overridden)
   const allRoles = useMemo(() => {
@@ -79,6 +83,12 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
       return true;
     });
   }, [users, search, roleFilter]);
+
+  useEffect(() => {
+    if (requestedUser && filteredUsers.some(user => user.id === requestedUser)) setSelectedId(requestedUser);
+    else if (requestedPage && filteredUsers.length) setSelectedId(previous => previous ?? filteredUsers[0].id);
+    if (requestedPage) setActiveTab('pages');
+  }, [requestedUser, requestedPage, users]);
 
   const selectedUser = useMemo<UAMUser | null>(
     () => (selectedId ? ((users as UAMUser[]).find(u => u.id === selectedId) ?? null) : null),
@@ -144,7 +154,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
       {!selectedUser ? (
         <EmptyState />
       ) : (
-        <SelectedUserAccessProvider userId={selectedUser.id} userRole={selectedUser.role}>
+        <SelectedUserAccessProvider key={selectedUser.id} userId={selectedUser.id} userRole={selectedUser.role}>
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* User header */}
             <UserHeader user={selectedUser} isSA={isSA} />
@@ -179,7 +189,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
                     <OverviewTab {...tabProps} onTabChange={t => setActiveTab((t === 'permissions' ? 'buttons' : t) as TabKey)} />
                   </TabsContent>
                   <TabsContent value="pages" className="flex-1 overflow-hidden m-0">
-                    <PageAccessTab {...tabProps} onTabChange={t => setActiveTab((t === 'permissions' ? 'buttons' : t) as TabKey)} />
+                    <PageAccessTab {...tabProps} initialPageSlug={requestedPage ?? undefined} onTabChange={t => setActiveTab((t === 'permissions' ? 'buttons' : t) as TabKey)} />
                   </TabsContent>
                   <TabsContent value="tabs" className="flex-1 overflow-hidden m-0">
                     <TabAccessTab {...tabProps} />

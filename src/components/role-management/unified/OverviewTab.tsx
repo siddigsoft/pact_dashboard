@@ -11,6 +11,8 @@ import { PAGE_DEFS, hasDefaultAccess } from '@/pages/PageAccessControl';
 import { useSelectedUserAccess } from '@/context/role-management/SelectedUserAccessContext';
 import { TabProps } from './types';
 import { isHubTabSlug } from '@/lib/hub-tab-defs';
+import { OverrideDetailsPanel } from './OverrideDetailsPanel';
+import { overrideIsActive } from '@/lib/current-user-access';
 
 interface OverviewTabProps extends TabProps {
   onTabChange: (tab: string) => void;
@@ -38,15 +40,12 @@ export function OverviewTab({ userId, userRole, userName, isSelectedSuperAdmin, 
   const kpis = useMemo(() => {
     // Pages accessible = role-yes + explicitly granted
     const accessiblePages = PAGE_DEFS.filter(p => {
-      const ov = pageOvMap[p.slug];
-      if (ov?.is_blocked) return false;
-      if (ov && !ov.is_blocked) return true;
-      return hasDefaultAccess(p, userRole);
+      return ['superadmin', 'granted', 'role-yes'].includes(effectivePage(p.slug));
     });
 
-    const pageBlocks = pageOverrides.filter(o => !isHubTabSlug(o.page_slug) && o.is_blocked);
-    const pageGrants = pageOverrides.filter(o => !isHubTabSlug(o.page_slug) && !o.is_blocked);
-    const tabOverrides = pageOverrides.filter(o => isHubTabSlug(o.page_slug));
+    const pageBlocks = pageOverrides.filter(o => overrideIsActive(o) && !isHubTabSlug(o.page_slug) && o.is_blocked);
+    const pageGrants = pageOverrides.filter(o => overrideIsActive(o) && !isHubTabSlug(o.page_slug) && !o.is_blocked);
+    const tabOverrides = pageOverrides.filter(o => overrideIsActive(o) && isHubTabSlug(o.page_slug));
     const columnRules = columnConfigs.filter(c => c.user_id === userId);
     const roleColumnRules = columnConfigs.filter(c => c.role === userRole);
     const userScopeRules = dataScopeRows.filter(d => d.user_id === userId);
@@ -58,11 +57,11 @@ export function OverviewTab({ userId, userRole, userName, isSelectedSuperAdmin, 
       pageBlocks: pageBlocks.length,
       pageGrants: pageGrants.length,
       tabOverrides: tabOverrides.length,
-      actionOverrides: permOverrides.length,
+      actionOverrides: permOverrides.filter(o => overrideIsActive(o)).length,
       columnRules: columnRules.length + roleColumnRules.length,
       scopeRules: userScopeRules.length + roleScopeRules.length,
     };
-  }, [pageOverrides, permOverrides, columnConfigs, dataScopeRows, pageOvMap, userRole, userId]);
+  }, [pageOverrides, permOverrides, columnConfigs, dataScopeRows, pageOvMap, userRole, userId, effectivePage]);
 
   const recentPageChanges = useMemo(() => {
     return [...pageOverrides]
@@ -203,6 +202,8 @@ export function OverviewTab({ userId, userRole, userName, isSelectedSuperAdmin, 
           </CardContent>
         </Card>
       </div>
+
+      <OverrideDetailsPanel disabled={isSelectedSuperAdmin} />
 
       {/* Quick actions */}
       <div>

@@ -13,7 +13,7 @@
  */
 
 import { MODULE_REGISTRY } from '@/types/moduleRegistry';
-import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { PAGE_DEFS } from '@/lib/access-registry';
 
 // ── Exclusions ────────────────────────────────────────────────────────────────
 

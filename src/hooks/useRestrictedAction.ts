@@ -39,8 +39,6 @@ export function useRestrictedAction(pageSlug: string, skip = false) {
       return false;
     }
 
-    // No override row at all → role-based access applies → allow
-    if (!perms.hasOverride) return true;
 
     const allowed =
       action === 'write'  ? perms.canWrite  :

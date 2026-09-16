@@ -132,6 +132,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   const [stats, setStats] = useState<SuperAdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [superAdminUserId, setSuperAdminUserId] = useState<string | null>(null);
   const superAdminScopeActive = useIsDataScopeActive('superAdmin');
 
   const normalizedUserRole = (currentUser?.role || '').toLowerCase().replace(/[\s_-]/g, '');
@@ -261,56 +262,33 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       setLoading(false);
     }
     if (currentUser) {
-      // Optimistically set isSuperAdmin from profile.role so the sidebar
-      // never flickers from non-admin → admin during the async DB check.
-      if (isLikelySuperAdminRole) {
-        setIsSuperAdmin(true);
-      }
+      let cancelled = false;
+      // A role label and an email match are not privileged membership. Clear
+      // the previous account's bypass before checking the authenticated ID.
+      setIsSuperAdmin(false);
+      setSuperAdminUserId(null);
       // Check super admin status from super_admins table first
-      checkSuperAdminStatus(currentUser.id).then(async (isSuper) => {
-        if (isSuper) {
-          setIsSuperAdmin(true);
-        } else {
-          // Fallback: Also check if user's role is 'superAdmin' in their profile
-          // This handles cases where profile ID doesn't match auth ID
-          const userRole = currentUser.role?.toLowerCase();
-          if (userRole === 'superadmin' || userRole === 'super_admin') {
-            setIsSuperAdmin(true);
-            // Try to find and use their super_admin entry by email lookup
-            try {
-              const { data: profileByEmail } = await supabase
-                .from('profiles')
-                .select('id')
-                .eq('email', currentUser.email)
-                .single();
-              
-              if (profileByEmail) {
-                const { data: saEntry } = await supabase
-                  .from('super_admins')
-                  .select('*')
-                  .eq('user_id', profileByEmail.id)
-                  .eq('is_active', true)
-                  .maybeSingle();
-                
-                if (saEntry) {
-                  console.log('[SuperAdmin] Found super admin entry via email lookup');
-                  setIsSuperAdmin(true);
-                }
-              }
-            } catch (e) {
-              console.log('[SuperAdmin] Email lookup fallback error:', e);
-            }
-          } else {
-            setIsSuperAdmin(false);
-          }
+      checkSuperAdminStatus(currentUser.id).then((isSuper) => {
+        if (!cancelled) {
+          setIsSuperAdmin(isSuper);
+          setSuperAdminUserId(isSuper ? currentUser.id : null);
         }
       });
-      if (superAdminScopeActive) {
-        refreshSuperAdmins();
-        refreshDeletionLogs();
-      }
+      return () => { cancelled = true; };
     }
-  }, [currentUser, superAdminScopeActive, checkSuperAdminStatus, refreshSuperAdmins, refreshDeletionLogs]);
+    setIsSuperAdmin(false);
+  }, [currentUser?.id, checkSuperAdminStatus]);
+
+  useEffect(() => {
+    if (!superAdminScopeActive) {
+      setLoading(false);
+      return;
+    }
+    if (currentUser) {
+      void refreshSuperAdmins();
+      void refreshDeletionLogs();
+    }
+  }, [currentUser?.id, superAdminScopeActive, refreshSuperAdmins, refreshDeletionLogs]);
 
   useRealtimeTable('super_admins', refreshSuperAdmins, {
     enabled: superAdminScopeActive && !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole || isSuperAdmin),
@@ -1362,7 +1340,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     deletionLogs,
     stats,
     loading,
-    isSuperAdmin,
+    isSuperAdmin: isSuperAdmin && superAdminUserId === currentUser?.id,
     canAddSuperAdmin: stats?.canAddMore ?? false,
     refreshSuperAdmins,
     refreshDeletionLogs,
