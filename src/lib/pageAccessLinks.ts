@@ -8,7 +8,7 @@
  */
 
 import type { AccessEffect } from '@/lib/effectiveAccess';
-import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { PAGE_DEFS } from '@/lib/access-registry';
 import { PAGE_ACCESS_REDIRECTS } from '@/lib/pageAccessRedirects';
 
 /** Manual product families that are not expressed as App redirects. */

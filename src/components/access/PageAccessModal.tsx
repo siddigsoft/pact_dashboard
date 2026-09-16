@@ -116,9 +116,9 @@ export function PageAccessModal({ open, onClose, pageSlug }: PageAccessModalProp
       const level: 'view' | 'manage' = (perms.w || perms.c || perms.d) ? 'manage' : 'view';
       const notes = isBlocked ? null : JSON.stringify(perms);
       if (existingId) {
-        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, level, notes, granted_by: currentUser?.id }).eq('id', existingId);
+        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, level, notes, granted_by: currentUser?.id, approved_by: currentUser?.id, approved_at: new Date().toISOString() }).eq('id', existingId);
       } else {
-        await supabase.from('page_access_overrides').insert({ page_slug: pageSlug, user_id: userId, is_blocked: isBlocked, level, notes, granted_by: currentUser?.id });
+        await supabase.from('page_access_overrides').insert({ page_slug: pageSlug, user_id: userId, is_blocked: isBlocked, level, notes, granted_by: currentUser?.id, approved_by: currentUser?.id, approved_at: new Date().toISOString() });
       }
       const name = profiles.find(p => p.id === userId)?.full_name ?? 'User';
       const permStr = isBlocked ? 'Blocked' :

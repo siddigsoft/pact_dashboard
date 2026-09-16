@@ -1,80 +1,40 @@
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
-import { normalizeRole } from '@/utils/roleMapping';
-import {
-  DENIED_PERMS,
-  FULL_PERMS,
-  resolveTypedPagePermissions,
-  type GranularPerms,
-} from '@/lib/pagePermissionsResolve';
+import { useCurrentUserAccessManifest } from '@/hooks/useCurrentUserAccessManifest';
+import { evaluateManifestPageAccess, manifestHasPermission } from '@/lib/current-user-access';
+import { getRegisteredPageActions } from '@/lib/access-target-registry';
+import { normalizeRoleCode } from '@/lib/page-roles';
+import { DENIED_PERMS, FULL_PERMS, resolveTypedPagePermissions, type GranularPerms } from '@/lib/pagePermissionsResolve';
 
-/**
- * Full granular page permission result.
- *
- * Authoritative resolution (Phase 2):
- *   1. Super-admin bypass — always full access.
- *   2. page_access_overrides row (notes JSON: {"r","w","c","d"}, or is_blocked).
- *   3. Otherwise role defaults (hasOverride=false).
- *
- * Legacy user_screen_permissions is not consulted at runtime.
- */
 export type PagePermissions = GranularPerms & { isLoading: boolean };
 
-/**
- * Returns granular R/W/C/D permissions for the current user on a given page.
- *
- * @param pageSlug - Page slug from PAGE_DEFS (e.g. 'surveys', 'accounting-coa')
- * @param skip     - Pass true to skip all DB checks and return full access.
- *                   Only use this for explicit super-admin bypasses in legacy callers.
- */
-export function usePagePermissions(pageSlug: string, skip = false): PagePermissions {
+/** Resolves from shared signed-in inputs. Legacy skip cannot bypass denials. */
+export function usePagePermissions(pageSlug: string, _skip = false): PagePermissions {
   const { currentUser } = useAppContext();
-  const isSuperAdminUser = normalizeRole(currentUser?.role ?? '') === 'superAdmin';
-  const shouldSkip = skip || isSuperAdminUser;
-
-  const { data, isLoading, isError, isFetching } = useQuery({
-    queryKey: ['page-permissions', currentUser?.id, pageSlug],
-    queryFn: async () => {
-      if (!currentUser?.id) return null;
-      const overrideRes = await supabase
-        .from('page_access_overrides')
-        .select('is_blocked, level, notes')
-        .eq('page_slug', pageSlug)
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
-      if (overrideRes.error && overrideRes.error.code !== 'PGRST116') {
-        throw overrideRes.error;
-      }
-      return { pageOverride: overrideRes.data ?? null };
-    },
-    enabled: !!currentUser?.id && !shouldSkip,
-    staleTime: 60_000,
-    retry: 1,
-    networkMode: 'online',
-  });
-
-  if (isSuperAdminUser || skip) return { ...FULL_PERMS, isLoading: false };
-
-  if (isError) return { ...DENIED_PERMS, isLoading: false };
-
-  if (!data) return { ...DENIED_PERMS, isLoading: (isLoading || isFetching) && !shouldSkip };
-
+  const query = useCurrentUserAccessManifest(!!currentUser?.id);
+  const manifest = query.data;
+  if (!manifest || manifest.user_id !== currentUser?.id || query.isError) {
+    return { ...DENIED_PERMS, isLoading: !!currentUser?.id && query.isPending };
+  }
+  if (manifest.roles.some(role => normalizeRoleCode(role) === 'superAdmin')) {
+    return { ...FULL_PERMS, isLoading: false };
+  }
+  const allowed = evaluateManifestPageAccess(manifest, pageSlug).allowed;
+  const override = manifest.page_overrides[pageSlug];
+  const activeOverride = override && (!override.expires_at || new Date(override.expires_at).getTime() > Date.now());
+  const typed = resolveTypedPagePermissions({ pageOverride: activeOverride ? override : null, isSuperAdmin: false });
+  const actions = getRegisteredPageActions(pageSlug);
+  const hasAction = (action: string) => actions.some(candidate => candidate.action === action &&
+    manifestHasPermission(manifest, candidate.resource, candidate.action));
+  const canWrite = allowed && hasAction('update') && (!typed.hasOverride || typed.canWrite);
+  const canCreate = allowed && hasAction('create') && (!typed.hasOverride || typed.canCreate);
+  const canDelete = allowed && hasAction('delete') && (!typed.hasOverride || typed.canDelete);
   return {
-    ...resolveTypedPagePermissions({
-      isSuperAdmin: false,
-      pageOverride: data.pageOverride,
-    }),
-    isLoading: false,
+    canRead: allowed && (!typed.hasOverride || typed.canRead),
+    canWrite, canCreate, canDelete, canManage: canWrite || canCreate || canDelete,
+    hasOverride: typed.hasOverride, isBlocked: !allowed || typed.isBlocked, isLoading: false,
   };
 }
 
-/**
- * Backward-compatible shim — returns true only when the user has an explicit
- * manage-level override (any write permission granted).
- *
- * Prefer `usePagePermissions` for new code.
- */
 export function usePageManageOverride(pageSlug: string, skip = false): boolean {
   const perms = usePagePermissions(pageSlug, skip);
   return !perms.isBlocked && perms.canManage;

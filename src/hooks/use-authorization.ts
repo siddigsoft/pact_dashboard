@@ -37,9 +37,11 @@ export const useAuthorization = () => {
   // The signed-in user's permissions and multi-role union come from one
   // server-derived source. View As deliberately remains a preview path; it
   // must not impersonate the target user's authenticated access context.
-  const { data: currentAccessManifest } = useCurrentUserAccessManifest(
-    !!currentUser?.id && !viewAsRoleRaw,
+  const { data: manifestData, isError: manifestError } = useCurrentUserAccessManifest(
+    !!currentUser?.id,
   );
+
+  const currentAccessManifest = !manifestError && manifestData?.user_id === currentUser?.id ? manifestData : undefined;
 
   // Everything below is memoized so every returned function keeps a stable
   // identity between renders. Without this, `hasAnyRole` etc. get a new
@@ -57,10 +59,7 @@ export const useAuthorization = () => {
   // their own data (e.g. FOM seeing 0 cost submissions).
   // Validate against the REAL profile roles — never through viewAs itself.
   if (viewAsRole && currentUser) {
-    const realRoles = [
-      currentUser.role,
-      ...(Array.isArray(currentUser.roles) ? currentUser.roles : []),
-    ];
+    const realRoles = currentAccessManifest?.roles ?? [];
     const isRealSA =
       realRoles.some(r => normalizeRole(r) === 'superAdmin') || isSuperAdminUser;
     if (!isRealSA) {
@@ -86,7 +85,7 @@ export const useAuthorization = () => {
       return normalized === 'superAdmin';
     }
     if (isSuperAdminUser) return true;
-    const roles = [currentUser.role, ...(Array.isArray(currentUser.roles) ? currentUser.roles : [])];
+    const roles = currentAccessManifest?.roles ?? [];
     return roles.some(r => {
       const normalized = normalizeRole(r);
       return normalized === 'superAdmin';
@@ -118,7 +117,7 @@ export const useAuthorization = () => {
     }
     return currentAccessManifest
       ? manifestHasPermission(currentAccessManifest, resource, action)
-      : hasPermission(currentUser.id, resource, action);
+      : false;
   };
 
   /**
@@ -134,14 +133,7 @@ export const useAuthorization = () => {
       return normalizedCheckRoles.some(r => r === normalizedViewAs);
     }
     // Include primary role + user_roles table entries + additional JSONB roles from profiles
-    const additionalRoleStrings = Array.isArray(currentUser.additionalRoles)
-      ? currentUser.additionalRoles.map((r: any) => r?.role).filter(Boolean)
-      : [];
-    const userRoles = currentAccessManifest?.roles.length ? currentAccessManifest.roles : [
-      currentUser.role,
-      ...(Array.isArray(currentUser.roles) ? currentUser.roles : []),
-      ...additionalRoleStrings,
-    ];
+    const userRoles = currentAccessManifest?.roles ?? [];
     const normalizedUserRoles = userRoles.map(r => normalizeRole(r)).filter(Boolean);
     const normalizedCheckRoles = roles.map(r => normalizeRole(r)).filter(Boolean);
     return normalizedCheckRoles.some(checkRole => normalizedUserRoles.includes(checkRole));
@@ -152,15 +144,8 @@ export const useAuthorization = () => {
    * Uses role normalization to handle different naming conventions
    */
   const hasAllRoles = (roles: string[]): boolean => {
-    if (!currentUser) return false;
-    const additionalRoleStrings = Array.isArray(currentUser.additionalRoles)
-      ? currentUser.additionalRoles.map((r: any) => r?.role).filter(Boolean)
-      : [];
-    const userRoles = currentAccessManifest?.roles.length ? currentAccessManifest.roles : [
-      currentUser.role,
-      ...(Array.isArray(currentUser.roles) ? currentUser.roles : []),
-      ...additionalRoleStrings,
-    ];
+    if (!currentUser || (!viewAsRole && !currentAccessManifest)) return false;
+    const userRoles = viewAsRole ? [viewAsRole] : currentAccessManifest?.roles ?? [];
     const normalizedUserRoles = userRoles.map(r => normalizeRole(r)).filter(Boolean);
     const normalizedCheckRoles = roles.map(r => normalizeRole(r)).filter(Boolean);
     return normalizedCheckRoles.every(checkRole => normalizedUserRoles.includes(checkRole));
@@ -171,7 +156,9 @@ export const useAuthorization = () => {
    */
   const getCurrentUserPermissions = () => {
     if (!currentUser) return [];
-    return getUserPermissions(currentUser.id);
+    if (viewAsRole) return viewAsMode === 'user' && viewAsUserId ? getUserPermissions(viewAsUserId) : [];
+    return (currentAccessManifest?.role_permissions ?? []).filter(permission =>
+      manifestHasPermission(currentAccessManifest!, permission.resource, permission.action));
   };
 
   /**
@@ -181,8 +168,7 @@ export const useAuthorization = () => {
     if (isSuperAdmin()) return true;
     return checkPermission('roles', 'create') || 
            checkPermission('roles', 'update') || 
-           checkPermission('roles', 'delete') ||
-           hasAnyRole(['admin']);
+           checkPermission('roles', 'delete');
   };
 
   /**
@@ -192,8 +178,7 @@ export const useAuthorization = () => {
     if (isSuperAdmin()) return true;
     return checkPermission('users', 'create') || 
            checkPermission('users', 'update') || 
-           checkPermission('users', 'delete') ||
-           hasAnyRole(['admin']);
+           checkPermission('users', 'delete');
   };
 
   /**
@@ -201,8 +186,7 @@ export const useAuthorization = () => {
    */
   const canApproveMMP = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('mmp', 'approve') ||
-           hasAnyRole(['admin']);
+    return checkPermission('mmp', 'approve');
   };
 
   /**
@@ -211,8 +195,7 @@ export const useAuthorization = () => {
   const canManageFinances = (): boolean => {
     if (isSuperAdmin()) return true;
     return checkPermission('finances', 'update') ||
-           checkPermission('finances', 'approve') ||
-           hasAnyRole(['admin']);
+           checkPermission('finances', 'approve');
   };
 
   /**
@@ -220,8 +203,7 @@ export const useAuthorization = () => {
    */
   const canViewAllSiteVisits = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('site_visits', 'read') ||
-           hasAnyRole(['admin']);
+    return checkPermission('site_visits', 'read');
   };
 
   /**
@@ -229,8 +211,7 @@ export const useAuthorization = () => {
    */
   const canCreateProjects = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('projects', 'create') ||
-           hasAnyRole(['admin']);
+    return checkPermission('projects', 'create');
   };
 
   /**
@@ -238,7 +219,7 @@ export const useAuthorization = () => {
    */
   const canEditFeeStructures = (): boolean => {
     if (isSuperAdmin()) return true;
-    return hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'SuperAdmin', 'super_admin']);
+    return checkPermission('finances', 'update');
   };
 
   /**
@@ -283,16 +264,12 @@ export const useAuthorization = () => {
   const canSubmitCostRequest = (): boolean => {
     if (isSuperAdmin()) return true;
     return checkPermission('cost_submissions', 'submit') ||
-           checkPermission('cost_submissions', 'create') ||
-           hasAnyRole(['admin', 'supervisor', 'coordinator', 'fom', 'dataCollector', 'dataTeam', 'countryDirector',
-                       'Field Operation Manager (FOM)', 'DataCollector', 'DataTeam']);
+           checkPermission('cost_submissions', 'create');
   };
 
   const canApproveCostSubmission = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('cost_submissions', 'approve') ||
-           hasAnyRole(['admin', 'fom', 'supervisor', 'countryDirector',
-                       'Field Operation Manager (FOM)', 'SeniorOperationsLead']);
+    return checkPermission('cost_submissions', 'approve');
   };
 
   const canMarkCostPaid = (): boolean => {
@@ -303,17 +280,14 @@ export const useAuthorization = () => {
 
   const canExportCostSubmissions = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('cost_submissions', 'export') ||
-           hasAnyRole(['admin', 'financialAdmin', 'auditor', 'fom', 'supervisor', 'countryDirector']);
+    return checkPermission('cost_submissions', 'export');
   };
 
   // ── Down Payments ───────────────────────────────────────────────────────
   const canSubmitDownPayment = (): boolean => {
     if (isSuperAdmin()) return true;
     return checkPermission('down_payments', 'submit') ||
-           checkPermission('down_payments', 'create') ||
-           hasAnyRole(['admin', 'fom', 'supervisor', 'coordinator',
-                       'Field Operation Manager (FOM)']);
+           checkPermission('down_payments', 'create');
   };
 
   const canApproveDownPayment = (): boolean => {
@@ -327,41 +301,34 @@ export const useAuthorization = () => {
   // ── HR / Payroll / Leave ────────────────────────────────────────────────
   const canManageHR = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('hr', 'read') || checkPermission('hr', 'update') ||
-           hasAnyRole(['admin', 'Admin']);
+    return checkPermission('hr', 'read') || checkPermission('hr', 'update');
   };
 
   const canManagePayroll = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('payroll', 'read') || checkPermission('payroll', 'approve') ||
-           hasAnyRole(['admin', 'financialAdmin', 'Admin', 'FinancialAdmin']);
+    return checkPermission('payroll', 'read') || checkPermission('payroll', 'approve');
   };
 
   const canApproveLeave = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('leave', 'approve') ||
-           hasAnyRole(['admin', 'supervisor', 'Admin', 'Supervisor']);
+    return checkPermission('leave', 'approve');
   };
 
   // ── Accounting ──────────────────────────────────────────────────────────
   const canManageAccounting = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('accounting', 'read') || checkPermission('accounting', 'create') ||
-           hasAnyRole(['admin', 'financialAdmin', 'auditor', 'Admin', 'FinancialAdmin', 'Auditor']);
+    return checkPermission('accounting', 'read') || checkPermission('accounting', 'create');
   };
 
   const canWriteAccounting = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('accounting', 'create') || checkPermission('accounting', 'update') ||
-           hasAnyRole(['admin', 'financialAdmin', 'Admin', 'FinancialAdmin']);
+    return checkPermission('accounting', 'create') || checkPermission('accounting', 'update');
   };
 
   // ── Surveys ─────────────────────────────────────────────────────────────
   const canManageSurveys = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('surveys', 'create') || checkPermission('surveys', 'update') ||
-           hasAnyRole(['admin', 'ict', 'dataTeam', 'projectManager',
-                       'Admin', 'ICT', 'DataTeam', 'ProjectManager']);
+    return checkPermission('surveys', 'create') || checkPermission('surveys', 'update');
   };
 
   const canViewSurveys = (): boolean => {
@@ -377,67 +344,53 @@ export const useAuthorization = () => {
   // ── Portfolio & Analytics ───────────────────────────────────────────────
   const canViewPortfolio = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('portfolio', 'read') ||
-           hasAnyRole(['admin', 'fom', 'countryDirector', 'projectManager',
-                       'Field Operation Manager (FOM)', 'CountryDirector', 'ProjectManager']);
+    return checkPermission('portfolio', 'read');
   };
 
   const canViewAnalytics = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('analytics', 'read') ||
-           hasAnyRole(['admin', 'fom', 'countryDirector', 'projectManager', 'dataTeam',
-                       'Field Operation Manager (FOM)', 'SeniorOperationsLead']);
+    return checkPermission('analytics', 'read');
   };
 
   // ── Notifications & Communication ───────────────────────────────────────
   const canBroadcast = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('broadcast', 'create') ||
-           hasAnyRole(['admin', 'Admin']);
+    return checkPermission('broadcast', 'create');
   };
 
   const canManageWhatsApp = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('whatsapp', 'update') ||
-           hasAnyRole(['admin', 'ict', 'Admin', 'ICT']);
+    return checkPermission('whatsapp', 'update');
   };
 
   // ── CRM ─────────────────────────────────────────────────────────────────
   const canManageCRM = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('crm', 'create') || checkPermission('crm', 'update') ||
-           hasAnyRole(['admin', 'fom', 'projectManager', 'countryDirector',
-                       'Admin', 'Field Operation Manager (FOM)', 'ProjectManager']);
+    return checkPermission('crm', 'create') || checkPermission('crm', 'update');
   };
 
   // ── Safety & Incidents ──────────────────────────────────────────────────
   const canReportIncident = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('incidents', 'create') ||
-           hasAnyRole(['admin', 'fom', 'supervisor', 'coordinator', 'dataCollector',
-                       'Field Operation Manager (FOM)', 'Supervisor', 'Coordinator', 'DataCollector']);
+    return checkPermission('incidents', 'create');
   };
 
   // ── Tasks ───────────────────────────────────────────────────────────────
   const canAssignTasks = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('tasks', 'assign') ||
-           hasAnyRole(['admin', 'fom', 'projectManager', 'countryDirector',
-                       'Admin', 'Field Operation Manager (FOM)', 'ProjectManager']);
+    return checkPermission('tasks', 'assign');
   };
 
   // ── Integrations ────────────────────────────────────────────────────────
   const canManageIntegrations = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('integrations', 'update') ||
-           hasAnyRole(['admin', 'ict', 'Admin', 'ICT']);
+    return checkPermission('integrations', 'update');
   };
 
   // ── HR — Benefits, Succession, Pulse Surveys, HR Analytics ─────────────
   const canManageBenefits = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('benefits', 'update') || checkPermission('benefits', 'approve') ||
-           hasAnyRole(['admin', 'Admin']);
+    return checkPermission('benefits', 'update') || checkPermission('benefits', 'approve');
   };
 
   const canViewBenefits = (): boolean => {
@@ -452,8 +405,7 @@ export const useAuthorization = () => {
 
   const canManageSuccession = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('succession', 'update') || checkPermission('succession', 'create') ||
-           hasAnyRole(['admin', 'Admin', 'seniorOperationsLead', 'SeniorOperationsLead']);
+    return checkPermission('succession', 'update') || checkPermission('succession', 'create');
   };
 
   const canViewSuccession = (): boolean => {
@@ -463,14 +415,12 @@ export const useAuthorization = () => {
 
   const canApproveSuccession = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('succession', 'approve') ||
-           hasAnyRole(['admin', 'countryDirector', 'Admin', 'CountryDirector']);
+    return checkPermission('succession', 'approve');
   };
 
   const canManagePulseSurveys = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('pulse_surveys', 'create') || checkPermission('pulse_surveys', 'update') ||
-           hasAnyRole(['admin', 'ict', 'Admin', 'ICT']);
+    return checkPermission('pulse_surveys', 'create') || checkPermission('pulse_surveys', 'update');
   };
 
   const canViewPulseSurveys = (): boolean => {
@@ -485,15 +435,13 @@ export const useAuthorization = () => {
 
   const canViewHRAnalytics = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('hr_analytics', 'read') ||
-           hasAnyRole(['admin', 'countryDirector', 'Admin', 'CountryDirector']);
+    return checkPermission('hr_analytics', 'read');
   };
 
   // ── Finance — Pre-Funding, Procurement, Fixed Assets ────────────────────
   const canManagePreFunding = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('pre_funding', 'create') || checkPermission('pre_funding', 'approve') ||
-           hasAnyRole(['admin', 'financialAdmin', 'Admin', 'FinancialAdmin']);
+    return checkPermission('pre_funding', 'create') || checkPermission('pre_funding', 'approve');
   };
 
   const canViewPreFunding = (): boolean => {
@@ -503,27 +451,22 @@ export const useAuthorization = () => {
 
   const canManageProcurement = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('procurement', 'create') || checkPermission('procurement', 'update') ||
-           hasAnyRole(['admin', 'financialAdmin', 'Admin', 'FinancialAdmin']);
+    return checkPermission('procurement', 'create') || checkPermission('procurement', 'update');
   };
 
   const canApproveProcurement = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('procurement', 'approve') ||
-           hasAnyRole(['admin', 'financialAdmin', 'countryDirector',
-                       'Admin', 'FinancialAdmin', 'CountryDirector']);
+    return checkPermission('procurement', 'approve');
   };
 
   const canManageFixedAssets = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('fixed_assets', 'create') || checkPermission('fixed_assets', 'update') ||
-           hasAnyRole(['admin', 'financialAdmin', 'Admin', 'FinancialAdmin']);
+    return checkPermission('fixed_assets', 'create') || checkPermission('fixed_assets', 'update');
   };
 
   const canExportFixedAssets = (): boolean => {
     if (isSuperAdmin()) return true;
-    return checkPermission('fixed_assets', 'export') ||
-           hasAnyRole(['admin', 'financialAdmin', 'auditor', 'Admin', 'FinancialAdmin', 'Auditor']);
+    return checkPermission('fixed_assets', 'export');
   };
 
   /**

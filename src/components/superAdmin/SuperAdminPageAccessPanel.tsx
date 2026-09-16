@@ -129,7 +129,7 @@ export function SuperAdminPageAccessPanel() {
     try {
       const existing = getOverride(slug);
       if (existing) {
-        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, granted_by: currentUser?.id }).eq('id', existing.id);
+        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, granted_by: currentUser?.id, approved_by: currentUser?.id, approved_at: new Date().toISOString() }).eq('id', existing.id);
       } else {
         await supabase.from('page_access_overrides').insert({
           page_slug: slug,
@@ -137,6 +137,8 @@ export function SuperAdminPageAccessPanel() {
           is_blocked: isBlocked,
           level:      isBlocked ? 'view' : 'manage',
           granted_by: currentUser?.id,
+          approved_by: currentUser?.id,
+          approved_at: new Date().toISOString(),
         });
       }
       toast({

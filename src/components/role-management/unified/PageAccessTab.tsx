@@ -137,6 +137,7 @@ interface Profile { id: string; full_name: string | null; role: string | null; }
 interface ByPageOverride {
   id: string; page_slug: string; user_id: string; is_blocked: boolean;
   level?: string | null; notes?: string | null; granted_by?: string | null;
+  reason?: string | null; expires_at?: string | null; approved_by?: string | null; approved_at?: string | null;
 }
 
 // ── CS action labels for inline display ──────────────────────────────────────
@@ -366,6 +367,7 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
   const overrideByPageSlug = useMemo(() => {
     const m: Record<string, Record<string, ByPageOverride>> = {};
     allOverrides.forEach(o => {
+      if (o.expires_at && Date.parse(o.expires_at) <= Date.now()) return;
       if (!m[o.page_slug]) m[o.page_slug] = {};
       m[o.page_slug][o.user_id] = o;
     });
@@ -427,7 +429,11 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
         is_blocked: isBlocked,
         level,
         notes,
+        reason: null,
+        expires_at: null,
         granted_by: currentUser?.id,
+        approved_by: currentUser?.id,
+        approved_at: new Date().toISOString(),
       }));
       const { error } = await supabase
         .from('page_access_overrides')

@@ -11,19 +11,23 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CreateRoleRequest, RESOURCES, ACTIONS, ResourceType, ActionType, RoleWithPermissions } from '@/types/roles';
 import { roleTemplates, permissionPresets, getCategoryColor, RoleTemplate } from '@/constants/roleTemplates';
+import { RoleBaselineAccessEditor } from './RoleBaselineAccessEditor';
+import { RoleBaselineAccess } from '@/types/roles';
+import { supabase } from '@/integrations/supabase/client';
 import { PAGE_DEFS } from '@/pages/PageAccessControl';
 import {
   Briefcase, MapPin, Wallet, BarChart3, Globe, Users, FileSearch, Wrench,
   Wand2, ListChecks, Star, Info, ChevronLeft, ChevronRight, Check,
 } from 'lucide-react';
 
-type WizardStep = 'template' | 'details' | 'pages' | 'actions' | 'assign' | 'review';
+type WizardStep = 'template' | 'details' | 'pages' | 'actions' | 'baseline' | 'assign' | 'review';
 
 const STEPS: Array<{ id: WizardStep; label: string }> = [
   { id: 'template', label: 'Template' },
   { id: 'details', label: 'Role details' },
   { id: 'pages', label: 'Page access' },
   { id: 'actions', label: 'Actions' },
+  { id: 'baseline', label: 'Tabs, columns & scope' },
   { id: 'assign', label: 'Assign users' },
   { id: 'review', label: 'Review & save' },
 ];
@@ -56,6 +60,9 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
   cloneSourceRole,
   users = [],
 }) => {
+  const [baseline, setBaseline] = useState<RoleBaselineAccess>({ tab_rules: [], column_rules: [] });
+  const [allowCostScope, setAllowCostScope] = useState(false);
+  useEffect(() => { if (open) { supabase.rpc('workspace_check_super_admin').then(({ data }) => setAllowCostScope(data === true)); } }, [open]);
   const [step, setStep] = useState<WizardStep>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<RoleTemplate | null>(null);
   const [formData, setFormData] = useState({ name: '', display_name: '', description: '' });
@@ -98,6 +105,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
   }, [cloneSourceRole, open]);
 
   const resetDialogState = () => {
+    setBaseline({ tab_rules: [], column_rules: [] });
     setStep('template');
     setSelectedTemplate(null);
     setFormData({ name: '', display_name: '', description: '' });
@@ -196,15 +204,16 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
         setError('Select at least one action permission.');
         return;
       }
-      setStep('assign');
+      setStep('baseline');
       return;
     }
+    if (step === 'baseline') { setStep('assign'); return; }
     if (step === 'assign') { setStep('review'); return; }
   };
 
   const goBack = () => {
     setError(null);
-    const order: WizardStep[] = ['template', 'details', 'pages', 'actions', 'assign', 'review'];
+    const order: WizardStep[] = ['template', 'details', 'pages', 'actions', 'baseline', 'assign', 'review'];
     const idx = order.indexOf(step);
     if (idx > 0) setStep(order[idx - 1]);
   };
@@ -220,6 +229,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
     }
 
     const payload: CreateRoleRequest = {
+      ...baseline,
       name: formData.name.trim(),
       display_name: formData.display_name.trim(),
       description: formData.description.trim(),
@@ -375,7 +385,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                 {step === 'pages' && (
                   <div className="space-y-4">
                     <p className="text-sm text-muted-foreground">
-                      Selected pages will include this role in <code>page_role_configs</code> so sidebar and route defaults grant access.
+                      Selected pages grant access to this role in navigation and routes.
                     </p>
                     {pageGroups.map(([group, pages]) => (
                       <Card key={group}>
@@ -447,11 +457,13 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                   </div>
                 )}
 
+                {step === 'baseline' && <RoleBaselineAccessEditor value={baseline} onChange={setBaseline} allowCostScope={allowCostScope} />}
+
                 {step === 'assign' && (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
                       <Checkbox id="set-primary" checked={setAsPrimary} onCheckedChange={(c) => setSetAsPrimary(!!c)} />
-                      <Label htmlFor="set-primary">Set as primary role on profiles.role for assigned users</Label>
+                      <Label htmlFor="set-primary">Set as primary role for assigned users</Label>
                     </div>
                     <Input placeholder="Filter usersâ€¦" value={userFilter} onChange={(e) => setUserFilter(e.target.value)} />
                     <div className="space-y-2 max-h-[50vh] overflow-auto border rounded-md p-3">
@@ -499,6 +511,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                         ))}
                       </CardContent>
                     </Card>
+                    <Card><CardHeader><CardTitle className="text-base">Tabs, columns & scope</CardTitle></CardHeader><CardContent className="text-sm">{baseline.tab_rules?.filter(rule => rule.is_blocked).length ?? 0} hidden tabs · {baseline.column_rules?.filter(rule => rule.is_hidden).length ?? 0} hidden columns · Cost scope: {baseline.cost_scope?.mode ?? 'application default'}</CardContent></Card>
                     <Card>
                       <CardHeader><CardTitle className="text-base">Users ({assignUserIds.length})</CardTitle></CardHeader>
                       <CardContent className="text-sm">
@@ -514,7 +527,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                           Primary role update: {setAsPrimary ? 'yes' : 'no'}
                         </p>
                         <p className="text-muted-foreground">
-                          Save runs as one transactional RPC (<code>upsert_role_access</code>) with a single audit row.
+                          Role, access defaults and assignments save together with one audit record.
                         </p>
                       </CardContent>
                     </Card>

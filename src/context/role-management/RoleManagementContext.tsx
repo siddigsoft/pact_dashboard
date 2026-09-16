@@ -55,7 +55,6 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   const { toast } = useToast();
   const [permissionsCache, setPermissionsCache] = useState<Record<string, Pick<Permission, 'resource' | 'action' | 'conditions'>[]>>({});
   const [overridesCache, setOverridesCache] = useState<Record<string, { resource: string; action: string; is_granted: boolean; expires_at: string | null }[]>>({});
-  const [profileRolesCache, setProfileRolesCache] = useState<Record<string, string>>({});
 
   const fetchRoles = useCallback(async () => {
     setIsLoading(true);
@@ -89,43 +88,10 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     }
   }, []);
 
-  const normalizeRoleStatic = (r: string): AppRole | null => {
-    const map: Record<string, AppRole> = {
-      superadmin: 'SuperAdmin', super_admin: 'SuperAdmin', 'super admin': 'SuperAdmin',
-      admin: 'Admin',
-      countrydirector: 'CountryDirector', country_director: 'CountryDirector', 'country director': 'CountryDirector',
-      seniormanagement: 'SeniorManagement', senior_management: 'SeniorManagement', 'senior management': 'SeniorManagement',
-      'field operation manager (fom)': 'Field Operation Manager (FOM)', fom: 'Field Operation Manager (FOM)',
-      financialadmin: 'FinancialAdmin', financial_admin: 'FinancialAdmin',
-      ict: 'ICT',
-      projectmanager: 'ProjectManager', project_manager: 'ProjectManager',
-      senioroperationslead: 'SeniorOperationsLead', senior_operations_lead: 'SeniorOperationsLead', 'senior operations lead': 'SeniorOperationsLead',
-      supervisor: 'Supervisor',
-      coordinator: 'Coordinator',
-      datateam: 'DataTeam', data_team: 'DataTeam', 'data team': 'DataTeam',
-      datacollector: 'DataCollector', data_collector: 'DataCollector', 'data collector': 'DataCollector',
-      reviewer: 'Reviewer',
-      auditor: 'Auditor',
-    };
-    return map[r.toLowerCase()] ?? (DEFAULT_ROLE_PERMISSIONS[r as AppRole] ? (r as AppRole) : null);
-  };
-
   const refreshUserPermissions = useCallback(async (userId: string): Promise<Permission[]> => {
     try {
       const { data, error } = await supabase.rpc('get_user_permissions', { user_uuid: userId });
       if (error) throw error;
-
-      // Fetch the user's primary profile role so hasPermission can also use DEFAULT_ROLE_PERMISSIONS for it
-      try {
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', userId)
-          .single();
-        if (prof?.role) {
-          setProfileRolesCache(prev => ({ ...prev, [userId]: prof.role }));
-        }
-      } catch { /* profile fetch is best-effort */ }
 
       setPermissionsCache(prev => ({ ...prev, [userId]: (data || []) as any }));
 
@@ -167,6 +133,9 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
             conditions: (p as { conditions?: unknown }).conditions ?? null,
           })),
           page_slugs: roleData.page_slugs ?? [],
+          tab_rules: roleData.tab_rules ?? [],
+          column_rules: roleData.column_rules ?? [],
+          ...(roleData.cost_scope ? { cost_scope: roleData.cost_scope } : {}),
           assign_user_ids: roleData.assign_user_ids ?? [],
           set_as_primary: roleData.set_as_primary ?? true,
           reason: roleData.reason ?? 'Role saved via Role Management wizard',
@@ -224,8 +193,10 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
             action: permission.action,
             conditions: (permission as { conditions?: unknown }).conditions ?? null,
           })),
-          // Omit page_slugs and assign_user_ids: an edit must not silently
-          // alter existing page defaults or user assignments.
+          ...(roleData.page_slugs ? { page_slugs: roleData.page_slugs } : {}),
+          ...(roleData.tab_rules ? { tab_rules: roleData.tab_rules } : {}),
+          ...(roleData.column_rules ? { column_rules: roleData.column_rules } : {}),
+          ...(roleData.cost_scope ? { cost_scope: roleData.cost_scope } : {}),
           reason: 'Role updated from Role Management',
         },
       });
@@ -377,14 +348,6 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     const hasSuperAdminPerm = perms?.some(p => p.resource === 'system' && p.action === 'override');
     if (hasSuperAdminPerm) return true;
 
-    // Also check if their role string indicates SuperAdmin (covers the case where
-    // the DB permissions table hasn't been seeded yet)
-    const uRoles = userRoles.filter(ur => ur.user_id === userId);
-    const isSuperAdminByRole = uRoles.some(ur =>
-      ['SuperAdmin', 'super_admin', 'superAdmin', 'Super Admin'].includes(ur.role as string)
-    );
-    if (isSuperAdminByRole) return true;
-
     // ── 2. Per-user overrides win over role defaults ──────────────────────────
     const overrides = overridesCache[userId];
     if (overrides && overrides.length > 0) {
@@ -397,28 +360,8 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
       return perms.some(p => p.resource === resource && p.action === action);
     }
 
-    // ── 4. Fallback to DEFAULT_ROLE_PERMISSIONS ───────────────────────────────
-    // Check user_roles table entries
-    const fromUserRoles = uRoles.some(ur => {
-      const normalized = normalizeRoleStatic(ur.role as string);
-      if (!normalized) return false;
-      return (DEFAULT_ROLE_PERMISSIONS[normalized] || []).some(
-        p => p.resource === resource && p.action === action
-      );
-    });
-    if (fromUserRoles) return true;
-
-    // ── 5. Also check the user's primary profile role ─────────────────────────
-    // This covers users whose profile.role differs from user_roles (e.g. role='admin'
-    // in profiles but only 'dataCollector' in user_roles).
-    const profileRole = profileRolesCache[userId];
-    if (profileRole) {
-      const normalizedProfile = normalizeRoleStatic(profileRole);
-      if (normalizedProfile && (DEFAULT_ROLE_PERMISSIONS[normalizedProfile] || []).some(
-        p => p.resource === resource && p.action === action
-      )) return true;
-    }
-
+    // An empty server permission set is authoritative; never restore revoked
+    // permissions from static presets or a free-text profile role.
     return false;
   };
 

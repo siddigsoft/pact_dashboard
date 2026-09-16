@@ -133,7 +133,7 @@
   import { useQuery } from "@tanstack/react-query";
   import { useNavBadgeCountsContext } from "@/context/NavBadgeCountsContext";
   import { getChangelogUnreadCount } from "@/lib/changelog-utils";
-  import { PAGE_DEFS, getPageDefinition, getPageNavigationGroup } from "@/pages/PageAccessControl";
+  import { PAGE_DEFS, getPageDefinition, getPageNavigationGroup } from "@/lib/access-registry";
   import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from "@/types/user-preferences";
   import { normalizeRole } from "@/utils/roleMapping";
   import { getMmpDisplayLabel } from "@/lib/mmp-display";

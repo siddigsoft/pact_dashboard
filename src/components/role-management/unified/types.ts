@@ -16,6 +16,13 @@ export interface PageOverride {
   page_slug: string;
   is_blocked: boolean;
   granted_by?: string | null;
+  /** Why this access decision differs from the role default. */
+  reason?: string | null;
+  /** Overrides are ignored after this timestamp. */
+  expires_at?: string | null;
+  /** Administrator who approved the current decision. */
+  approved_by?: string | null;
+  approved_at?: string | null;
   created_at: string;
 }
 
@@ -25,7 +32,10 @@ export interface PermissionOverride {
   resource: string;
   action: string;
   is_granted: boolean;
+  reason?: string | null;
   expires_at?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
   created_at: string;
 }
 

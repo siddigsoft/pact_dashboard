@@ -1,7 +1,5 @@
 import { useLocation } from 'react-router-dom';
-import { useAppContext } from '@/context/AppContext';
-import { normalizeRole } from '@/utils/roleMapping';
-import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { PAGE_DEFS } from '@/lib/access-registry';
 import { usePagePermissions } from '@/hooks/usePageManageOverride';
 import { resolveSlug } from '@/lib/page-roles';
 
@@ -21,27 +19,22 @@ export interface PageGuardResult {
  * current page via a `page_access_overrides` row (is_blocked=true or r:false).
  *
  * Super Admins are always allowed (never blocked).
- * Unknown routes (no matching slug) are always allowed (fail-open for
- * pages not yet registered in PAGE_DEFS).
+ * Protected unknown routes fail closed until registered.
  */
 export function usePageAccessGuard(): PageGuardResult {
-  const { currentUser } = useAppContext();
   const location = useLocation();
-  const isSuperAdmin = normalizeRole(currentUser?.role ?? '') === 'superAdmin';
 
   const slug = resolveSlug(`${location.pathname}${location.search}${location.hash}`)
     ?? resolveSlug(location.pathname);
   const pageDef = slug ? PAGE_DEFS.find(p => p.slug === slug) : null;
 
-  // Typed override resolver only (legacy screen JSON removed from runtime).
-  // skip=true for super admins (always allowed) and unknown routes (fail-open).
-  const perms = usePagePermissions(slug ?? '', isSuperAdmin || !slug);
+  // Use the same canonical manifest and granular permissions as actions.
+  const perms = usePagePermissions(slug ?? '');
 
   // Blocked when an explicit typed override removes access:
   //   • page_access_overrides.is_blocked = true
   //   • r:false in the notes JSON
-  const isBlocked = !isSuperAdmin && !!slug && perms.hasOverride &&
-    (perms.isBlocked || !perms.canRead);
+  const isBlocked = !perms.isLoading && (!slug || perms.isBlocked || !perms.canRead);
 
   return {
     isBlocked,

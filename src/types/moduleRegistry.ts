@@ -39,6 +39,10 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     color: 'blue',
     description: 'User accounts, roles, permissions, system settings, and access control',
     pages: [
+      { page: 'Permissions Management', route: '/permissions-management', description: 'Review and manage access permissions', actions: [
+        { key: 'permissions:read', label: 'View Permissions', description: 'Review access configuration', resource: 'permissions', action: 'read' },
+      ] },
+
       {
         page: 'User Management',
         route: '/admin-hub',
@@ -379,6 +383,20 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     color: 'green',
     description: 'Budget, wallets, cost submissions, down payments, accounting, procurement, fixed assets',
     pages: [
+      { page: 'Field Payments', route: '/field-payments', description: 'Review field payment records', actions: [
+        { key: 'finances:read', label: 'View Field Payments', description: 'Read field payments', resource: 'finances', action: 'read' },
+      ] },
+      { page: 'Cost Approval', route: '/cost-approval', description: 'Review submitted costs', actions: [
+        { key: 'cost_submissions:read', label: 'View Costs', description: 'Read cost submissions', resource: 'cost_submissions', action: 'read' },
+        { key: 'cost_submissions:approve', label: 'Approve Costs', description: 'Review and approve costs', resource: 'cost_submissions', action: 'approve' },
+      ] },
+      { page: 'Cycle Exception Rollover', route: '/cycle-exceptions/rollover', description: 'Review cycle rollover exceptions', actions: [
+        { key: 'finances:read', label: 'View Rollover Exceptions', description: 'Read cycle exceptions', resource: 'finances', action: 'read' },
+      ] },
+      { page: 'Cycle Exception Resolution', route: '/cycle-exceptions/resolution', description: 'Review cycle exception resolution', actions: [
+        { key: 'finances:read', label: 'View Resolution Exceptions', description: 'Read cycle exceptions', resource: 'finances', action: 'read' },
+      ] },
+
       {
         page: 'Finance Hub',
         route: '/finance-hub',
@@ -1347,6 +1365,10 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     color: 'sky',
     description: 'Personal dashboard, project list, and user workspace',
     pages: [
+      { page: 'My Incentives', route: '/incentives', description: 'View personal incentive records', actions: [
+        { key: 'mmp:read', label: 'View Incentives', description: 'Read incentive records', resource: 'mmp', action: 'read' },
+      ] },
+
       {
         page: 'Dashboard',
         route: '/dashboard',

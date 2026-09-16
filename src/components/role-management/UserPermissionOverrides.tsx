@@ -222,6 +222,8 @@ export function UserPermissionOverrides() {
               user_id: selectedUserId, resource, action,
               is_granted: isGranted,
               granted_by: grantedBy,
+              approved_by: grantedBy,
+              approved_at: new Date().toISOString(),
               reason: pendingReason || null,
               expires_at: pendingExpiry || null,
               updated_at: new Date().toISOString(),
