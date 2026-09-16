@@ -281,6 +281,33 @@ export function resolveSlug(pathname: string): string | null {
   return null;
 }
 
+/**
+ * The single registry-derived description of a protected navigation target.
+ *
+ * Consumers should use this rather than resolving the page slug and the
+ * action-specific requirement separately.  Returning `null` is deliberate:
+ * callers can keep explicitly public routes outside the protected route tree,
+ * while a route inside that tree can choose a clear fail-closed response.
+ */
+export interface RouteAccessTarget {
+  slug: string;
+  routePermission: RoutePermission | null;
+}
+
+export function resolveRouteAccessTarget(
+  pathname: string,
+  search = '',
+  hash = '',
+): RouteAccessTarget | null {
+  const slug = resolveSlug(`${pathname}${search}${hash}`) ?? resolveSlug(pathname);
+  if (!slug) return null;
+
+  return {
+    slug,
+    routePermission: resolveRoutePermission(pathname, search, hash),
+  };
+}
+
 /** URL-based variant of canSeePage. Fail-closed: an unknown path returns
  *  `false` so an undeclared route never silently leaks to the sidebar. If a
  *  caller wants to OR with custom logic (e.g. `perms.X`), it must do so

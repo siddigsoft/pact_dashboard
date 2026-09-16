@@ -265,8 +265,7 @@ import {
   canSeePage,
   canSeePageWithOverridesResult,
   canSeeRoutePermission,
-  resolveRoutePermission,
-  resolveSlug,
+  resolveRouteAccessTarget,
   getPageLabel,
   type RoutePermission,
 } from './lib/page-roles';
@@ -320,7 +319,7 @@ const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
   // the outer guard has confirmed it.  The outer guard still owns explicit
   // blocks and remains pending until that lookup completes.
   const isActionGuardedReport = Boolean(
-    resolveRoutePermission(location.pathname, location.search, location.hash)
+    resolveRouteAccessTarget(location.pathname, location.search, location.hash)?.routePermission
   );
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin'])
     || hasPreFundingRead
@@ -431,17 +430,20 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   // SuperAdmin bypasses all page-level checks
   if (viewingAsSuperAdmin) return <>{children}</>;
 
-  const slug = resolveSlug(`${location.pathname}${location.search}${location.hash}`)
-    ?? resolveSlug(location.pathname);
-
-  // Unknown path (no slug in PAGE_DEFS) → fail-open so new routes work
-  if (!slug) return <>{children}</>;
-
-  const routePermission = resolveRoutePermission(
+  const target = resolveRouteAccessTarget(
     location.pathname,
     location.search,
     location.hash,
   );
+
+  // This guard only enforces routes declared in PAGE_DEFS. Public routes are
+  // intentionally outside this route tree, while every registered target is
+  // evaluated from the manifest and fails closed if that manifest is absent.
+  // Unregistered protected routes retain AuthGuard until they are added to the
+  // access registry; denying them here would break those legacy routes before
+  // they have a configuration surface.
+  if (!target) return <>{children}</>;
+  const { slug, routePermission } = target;
 
   // Normal navigation is evaluated exclusively from the server-derived
   // manifest. Do not silently fall back to profile roles or browser-side
@@ -868,7 +870,7 @@ const AppRoutes = () => {
       </Route>
 
       {/* WorkspaceHub — full-screen, no main sidebar */}
-      <Route path="/workspace" element={<AuthGuard><WorkspaceHub /></AuthGuard>} />
+      <Route path="/workspace" element={<AuthGuard><PageRouteGuard><WorkspaceHub /></PageRouteGuard></AuthGuard>} />
 
       {/* Redirects */}
       <Route path="/mmp/view/:id" element={<MmpViewRedirect />} />
