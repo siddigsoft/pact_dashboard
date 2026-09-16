@@ -64,12 +64,100 @@ const ACTION_ICONS: Partial<Record<ActionType, any>> = {
   approve: CheckCircle2, export: Columns,
 };
 
+const MMP_REPORT_BUTTONS = [
+  {
+    action: 'full_report' as const,
+    label: 'Full MMP Report',
+    description: 'View and download the complete MMP status report as PDF or Excel.',
+  },
+  {
+    action: 'state_report' as const,
+    label: 'State MMP Report',
+    description: 'View and download the state-scoped MMP status report as PDF or Excel.',
+  },
+  {
+    action: 'hub_report' as const,
+    label: 'Hub MMP Report',
+    description: 'View and download the assigned-hub MMP status report as PDF or Excel.',
+  },
+];
+const MMP_REPORT_ACTIONS = new Set(MMP_REPORT_BUTTONS.map(({ action }) => action));
+
 function StatusIcon({ eff, small }: { eff: AccessEffect; small?: boolean }) {
   const sz = small ? 'h-3 w-3' : 'h-3.5 w-3.5';
   if (eff === 'superadmin' || eff === 'granted' || eff === 'role-yes')
     return <CheckCircle2 className={cn(sz, eff === 'granted' ? 'text-emerald-500' : eff === 'role-yes' ? 'text-blue-400' : 'text-red-400')} />;
   if (eff === 'blocked') return <XCircle className={cn(sz, 'text-red-500')} />;
   return <MinusCircle className={cn(sz, 'text-slate-300')} />;
+}
+
+// ── MMP report button access ─────────────────────────────────────────────────
+// These are pinned in Buttons & Actions so each report scope can be overridden
+// independently. They remain in the registry for search and Reports filtering.
+function MmpReportButtonsSection() {
+  const { savingKey, effectiveAction, explainAction, toggleAction } = useSelectedUserAccess();
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40">
+        <Columns className="h-3.5 w-3.5 text-indigo-500" />
+        <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-400">
+          MMP Report Buttons
+        </span>
+        <Badge className="ml-auto text-[9px] h-4 px-1.5 bg-indigo-100 text-indigo-700 border-indigo-200 border">
+          Scoped access
+        </Badge>
+      </div>
+      <div className="divide-y">
+        {MMP_REPORT_BUTTONS.map(perm => {
+          const eff = effectiveAction('mmp', perm.action);
+          const trace = explainAction('mmp', perm.action);
+          const saving = savingKey === `perm:mmp:${perm.action}`;
+          const hasOverride = eff === 'granted' || eff === 'blocked';
+          return (
+            <div key={perm.action} className={cn(
+              'flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg',
+              eff === 'granted' ? 'bg-emerald-50/50 dark:bg-emerald-900/5' :
+              eff === 'blocked' ? 'bg-red-50/50 dark:bg-red-900/5 opacity-60' :
+              eff === 'role-yes' ? 'bg-blue-50/20' : 'opacity-40'
+            )}>
+              <StatusIcon eff={eff} small />
+              <Key className="h-3 w-3 text-muted-foreground shrink-0" />
+              <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1">
+                <span className="text-xs font-medium">{perm.label}</span>
+                <span className="basis-full text-[10px] leading-snug text-muted-foreground">{perm.description}</span>
+                <span className="basis-full text-[10px] leading-snug text-muted-foreground/80" title={trace.summary}>
+                  {trace.source === 'user_override' ? 'Override' : trace.source === 'super_admin' ? 'Super Admin' : 'Role default'}: {trace.summary}
+                </span>
+              </div>
+              {hasOverride && (
+                <Badge className={cn('text-[9px] h-4 px-1.5 border-0 shrink-0',
+                  eff === 'granted' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                )}>
+                  {eff === 'granted' ? 'Granted' : 'Blocked'}
+                </Badge>
+              )}
+              <button
+                disabled={saving}
+                onClick={() => toggleAction('mmp', perm.action)}
+                className={cn('text-[10px] border rounded px-2 py-0.5 shrink-0 font-medium transition-colors disabled:opacity-40 min-w-[72px] text-center',
+                  eff === 'granted' ? 'text-amber-600 border-amber-200 hover:bg-amber-50' :
+                  eff === 'blocked' ? 'text-emerald-600 border-emerald-200 hover:bg-emerald-50' :
+                  eff === 'role-yes' ? 'text-red-600 border-red-200 hover:bg-red-50' :
+                  'text-emerald-600 border-emerald-200 hover:bg-emerald-50'
+                )}
+              >
+                {saving ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> :
+                  eff === 'granted' ? 'Remove' :
+                  eff === 'blocked' ? 'Restore' :
+                  eff === 'role-yes' ? 'Block' : 'Grant'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // ── Active Grants panel (cross-user) ─────────────────────────────────────────
@@ -325,6 +413,7 @@ export function PermissionsTab({
 
   const filteredModules = useMemo(() => {
     const q = moduleSearch.toLowerCase();
+    const pinnedMmpReportsVisible = actionFilter === 'buttons' && !moduleSearch;
     type RegisteredAction = {
       action: ModuleAction;
       module: ModuleDefinition;
@@ -367,12 +456,19 @@ export function PermissionsTab({
     // Keep the first registry location as the display location while every
     // duplicate registration remains searchable through searchText above.
     return Array.from(actionsByKey.values())
-      .filter(({ isReportAccess, searchText }) => {
+      .filter(({ action, isReportAccess, searchText }) => {
         const matchesType = actionFilter === 'all'
-          || (actionFilter === 'reports' ? isReportAccess : !isReportAccess);
-        return matchesType && (!q || searchText.includes(q));
+          || (actionFilter === 'reports'
+            ? isReportAccess
+            : !isReportAccess || MMP_REPORT_ACTIONS.has(action.action));
+        return matchesType
+          && (!q || searchText.includes(q));
       })
       .reduce<ModuleDefinition[]>((modules, registered) => {
+        const actions = pinnedMmpReportsVisible
+          ? registered.page.actions.filter(a => !MMP_REPORT_ACTIONS.has(a.action))
+          : registered.page.actions;
+        if (actions.length === 0) return modules;
         let mod = modules.find(candidate => candidate.module === registered.module.module);
         if (!mod) {
           mod = { ...registered.module, pages: [] };
@@ -383,7 +479,11 @@ export function PermissionsTab({
           page = { ...registered.page, actions: [] };
           mod.pages.push(page);
         }
-        page.actions.push(registered.action);
+        actions.forEach(action => {
+          // Keep the first registry location for normal rendering; duplicate
+          // registrations are already collapsed above.
+          if (action.key === registered.action.key) page!.actions.push(action);
+        });
         return modules;
       }, []);
   }, [moduleSearch, actionFilter]);
@@ -462,6 +562,10 @@ export function PermissionsTab({
                   userRole={userRole}
                   isSelectedSuperAdmin={isSelectedSuperAdmin}
                 />
+              )}
+              {/* Pinned: each MMP report scope has its own override */}
+              {!moduleSearch && actionFilter === 'buttons' && (
+                <MmpReportButtonsSection />
               )}
 
               {/* Standard module accordion */}
