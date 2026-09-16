@@ -32,6 +32,7 @@ import {
 import { AppRole } from '@/types';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
 import { normalizeRole } from '@/utils/roleMapping';
+import { getMmpDisplayLabel } from '@/lib/mmp-display';
 
 export interface MenuGroup {
   id: string;
@@ -140,7 +141,7 @@ export const getWorkflowMenuGroups = (
   if (canSeeProgrammeHub && !isHidden('/programme-hub'))
     planningItems.push({ id: 'programme-hub', title: 'Programme Hub', url: '/programme-hub', icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
   if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isSeniorManagement)) {
-    const mmpTitle = (isDataCollector || isCoordinator || isSupervisor) ? 'My Sites Management' : 'MMP Management';
+    const mmpTitle = getMmpDisplayLabel(defaultRole, roles, isSuperAdmin);
     planningItems.push({ id: 'mmp-management', title: mmpTitle, url: '/mmp', icon: Database, priority: 2, isPinned: isPinned('/mmp') });
   }
   if (planningItems.length) groups.push({ id: 'planning', label: 'Planning & Setup', order: 2, items: planningItems });

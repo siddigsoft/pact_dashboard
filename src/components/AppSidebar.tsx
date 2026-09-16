@@ -136,6 +136,7 @@
   import { PAGE_DEFS } from "@/pages/PageAccessControl";
   import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from "@/types/user-preferences";
   import { normalizeRole } from "@/utils/roleMapping";
+  import { getMmpDisplayLabel } from "@/lib/mmp-display";
   import { useViewAs } from "@/context/ViewAsContext";
   import { useCurrentUserAccessManifest } from "@/hooks/useCurrentUserAccessManifest";
   import { evaluateManifestPageAccess, manifestHasPermission } from "@/lib/current-user-access";
@@ -468,7 +469,7 @@
       planningItems.push({ id: 'programme-hub', title: "Programme Hub", url: "/programme-hub", icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
     }
     if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isProjectManager || isSeniorManagement)) {
-      const mmpTitle = (isDataCollector || isCoordinator || isSupervisor) ? "My Sites Management" : "MMP Management";
+      const mmpTitle = getMmpDisplayLabel(defaultRole, roles, isSuperAdmin);
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     const canSeeFieldDataHub = isSuperAdmin || isAdmin || isICT || isFOM || isDataTeam || isProjectManager || isCountryDirector || isSeniorManagement;

@@ -35,6 +35,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { TabProps } from './types';
 import { expandRelatedPageSlugs, getRelatedPageSlugs } from '@/lib/pageAccessLinks';
+import { getMmpDisplayLabel } from '@/lib/mmp-display';
 
 // ── Page → resources mapping (used to surface action overrides inline) ────────
 const PAGE_SLUG_TO_RESOURCES: Record<string, string[]> = {
@@ -117,10 +118,7 @@ function pageDisplayLabel(page: (typeof PAGE_DEFS)[number], rawRole?: string | n
   if (page.slug === 'communication-hub') return 'Communication';
   if (page.slug === 'portfolio') return 'Portfolio';
   if (page.slug === 'mmp') {
-    const role = getRoleCode(rawRole ?? null);
-    if (role === 'dataCollector' || role === 'coordinator' || role === 'supervisor') {
-      return 'My Sites Management';
-    }
+    return getMmpDisplayLabel(rawRole);
   }
   return page.label;
 }

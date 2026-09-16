@@ -86,3 +86,7 @@ Access Control must display the same page names and destinations users see in th
 **Why:** administrators assign access based on visible navigation names; internal registry names and legacy paths made it unclear which page a rule controlled.
 
 **How to apply:** treat sidebar labels and destinations as the display authority, but never rename an existing permission slug or database override solely to change its presentation.
+
+Management-role naming has precedence over additional field roles. Super Admin, Admin, FOM, and other management users must see `MMP Management`; `My Sites Management` is only for field-role-only users.
+
+**Why:** a Super Admin with an additional field role was incorrectly given the field-user sidebar alias even though the page and permissions remained managerial.
