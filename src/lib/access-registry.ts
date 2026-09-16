@@ -439,23 +439,27 @@ export const PAGE_GROUPS = [
  * to PAGE_DEFS: a page's access group must not need a second, divergent map in
  * the sidebar before it can be surfaced for an explicit grant.
  */
-export const PAGE_NAVIGATION_GROUPS: Record<string, { id: string; label: string; order: number }> = {
-  'My Workspace': { id: 'workspace-parent', label: 'My Workspace', order: 1 },
-  'Communication': { id: 'comms-parent', label: 'Communication', order: 3 },
-  'Programme Management': { id: 'programme-parent', label: 'Programme Management', order: 2 },
-  'Field Operations': { id: 'fieldops-parent', label: 'Field Operations', order: 4 },
-  'Coordination': { id: 'coordination-parent', label: 'Coordination', order: 5 },
-  'Finance': { id: 'finance-parent', label: 'Finance', order: 6 },
-  'Accounting': { id: 'accounting-parent', label: 'Accounting', order: 7 },
-  'HR & People': { id: 'hr-parent', label: 'HR & People', order: 8 },
-  'CRM': { id: 'crm-parent', label: 'CRM', order: 9 },
-  'Analytics': { id: 'analytics-parent', label: 'Analytics', order: 10 },
-  'Surveys': { id: 'surveys-parent', label: 'Surveys', order: 11 },
-  'Administration': { id: 'admin-parent', label: 'Administration', order: 12 },
-  'Super Admin': { id: 'superadmin-parent', label: 'Super Admin', order: 13 },
+/**
+ * `parentGroup` must match AppSidebar SECTION_CFG keys. Manifest-built groups
+ * without it are sorted into `__ungrouped__` and never rendered.
+ */
+export const PAGE_NAVIGATION_GROUPS: Record<string, { id: string; label: string; order: number; parentGroup: string }> = {
+  'My Workspace': { id: 'workspace-parent', label: 'My Workspace', order: 1, parentGroup: 'workspace' },
+  'Communication': { id: 'comms-parent', label: 'Communication', order: 3, parentGroup: 'comms' },
+  'Programme Management': { id: 'programme-parent', label: 'Programme Management', order: 2, parentGroup: 'programme' },
+  'Field Operations': { id: 'fieldops-parent', label: 'Field Operations', order: 4, parentGroup: 'fieldops' },
+  'Coordination': { id: 'coordination-parent', label: 'Coordination', order: 5, parentGroup: 'coordination' },
+  'Finance': { id: 'finance-parent', label: 'Finance', order: 6, parentGroup: 'finance' },
+  'Accounting': { id: 'accounting-parent', label: 'Accounting', order: 7, parentGroup: 'accounting' },
+  'HR & People': { id: 'hr-parent', label: 'HR & People', order: 8, parentGroup: 'hr' },
+  'CRM': { id: 'crm-parent', label: 'CRM', order: 9, parentGroup: 'crm' },
+  'Analytics': { id: 'analytics-parent', label: 'Analytics', order: 10, parentGroup: 'analytics' },
+  'Surveys': { id: 'surveys-parent', label: 'Surveys', order: 11, parentGroup: 'surveys' },
+  'Administration': { id: 'admin-parent', label: 'Administration', order: 12, parentGroup: 'admin' },
+  'Super Admin': { id: 'superadmin-parent', label: 'Super Admin', order: 13, parentGroup: 'superadmin' },
   // Audit pages remain inside the administrative shell until the sidebar gets
   // its own audit parent; keeping that decision here prevents a hidden fallback.
-  'Audit & Security': { id: 'admin-parent', label: 'Audit & Security', order: 14 },
+  'Audit & Security': { id: 'admin-parent', label: 'Audit & Security', order: 14, parentGroup: 'admin' },
 };
 
 export function getPageDefinition(slug: string): PageDef | undefined {

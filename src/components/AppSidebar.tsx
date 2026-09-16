@@ -1130,14 +1130,22 @@
       // below are retained solely for the separate administrator preview.
       if (!viewAs && !isSuperAdmin) {
         if (!currentAccessManifest) return [];
-        const groups: MenuGroup[] = [];
+        const groups: Array<MenuGroup & { parentGroup: string }> = [];
         for (const page of getManifestNavigationPages(currentAccessManifest)) {
           if (menuPrefs.hiddenItems.includes(page.path)) continue;
           const navigation = getPageNavigationGroup(page.group);
           if (!navigation) continue;
           let group = groups.find(candidate => candidate.id === navigation.id);
           if (!group) {
-            group = { id: navigation.id, label: navigation.label, order: navigation.order, items: [] };
+            // parentGroup is required for the SECTION_CFG renderer; without it
+            // granted pages land in __ungrouped__ and the sidebar stays blank.
+            group = {
+              id: navigation.id,
+              label: navigation.label,
+              order: navigation.order,
+              parentGroup: navigation.parentGroup,
+              items: [],
+            };
             groups.push(group);
           }
           group.items.push({ id: page.slug, title: page.label, url: page.path, icon: page.icon,
@@ -1174,9 +1182,14 @@
       let groups: typeof rawMenuGroups = rawMenuGroups.map(g => ({ ...g, items: [...g.items] }));
 
       // Helper: find or create a group by id.
-      const getOrCreateGroup = (groupId: string, label: string, order: number) => {
-        let g = groups.find(x => x.id === groupId);
-        if (!g) { g = { id: groupId, label, order, items: [] }; groups.push(g); }
+      const getOrCreateGroup = (groupId: string, label: string, order: number, parentGroup?: string) => {
+        let g = groups.find(x => x.id === groupId) as (MenuGroup & { parentGroup?: string }) | undefined;
+        if (!g) {
+          g = { id: groupId, label, order, items: [], ...(parentGroup ? { parentGroup } : {}) };
+          groups.push(g);
+        } else if (parentGroup && !(g as { parentGroup?: string }).parentGroup) {
+          (g as { parentGroup?: string }).parentGroup = parentGroup;
+        }
         return g;
       };
 
@@ -1218,7 +1231,7 @@
           if (!alreadyExists) {
             const navigationGroup = getPageNavigationGroup(pageDef.group);
             if (!navigationGroup) continue;
-            getOrCreateGroup(navigationGroup.id, navigationGroup.label, navigationGroup.order).items.push({
+            getOrCreateGroup(navigationGroup.id, navigationGroup.label, navigationGroup.order, navigationGroup.parentGroup).items.push({
               id: pageDef.slug,
               title: pageDef.label,
               url: pageDef.path,
@@ -1245,14 +1258,19 @@
             if (!navigationGroup) continue;
             const alreadyExists = groups.some(g => g.items.some(item => item.url === pageDef.path));
             if (!alreadyExists) {
-              const group = getOrCreateGroup(navigationGroup.id, navigationGroup.label, navigationGroup.order);
-              group.items.push({
-                id: pageDef.slug,
-                title: pageDef.label,
-                url: pageDef.path,
-                icon: pageDef.icon,
-                priority: 99,
-              });
+            const group = getOrCreateGroup(
+              navigationGroup.id,
+              navigationGroup.label,
+              navigationGroup.order,
+              navigationGroup.parentGroup,
+            );
+            group.items.push({
+              id: pageDef.slug,
+              title: pageDef.label,
+              url: pageDef.path,
+              icon: pageDef.icon,
+              priority: 99,
+            });
             }
           }
         }
