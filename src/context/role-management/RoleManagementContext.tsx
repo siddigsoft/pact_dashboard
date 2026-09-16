@@ -204,76 +204,35 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     if (!session.success) return false;
     setIsLoading(true);
     try {
-      const updates: any = {};
-      if (roleData.display_name !== undefined) updates.display_name = roleData.display_name;
-      if (roleData.description !== undefined) updates.description = roleData.description;
-      if (roleData.is_active !== undefined) updates.is_active = roleData.is_active;
-
-      if (Object.keys(updates).length > 0) {
-        const { error: roleError } = await supabase
-          .from('roles')
-          .update(updates)
-          .eq('id', roleId);
-        if (roleError) {
-          throw roleError;
-        }
+      const existingRole = roles.find((role) => role.id === roleId);
+      if (!existingRole) {
+        throw new Error('Role is not loaded. Refresh roles and try again.');
       }
 
-      // Ensure desiredPermissions always includes a `conditions` property
-      const desiredPermissions = roleData.permissions?.map(p => ({ ...p, conditions: (p as any).conditions ?? null }));
-
-      if (desiredPermissions) {
-        const { data: existing, error: existingErr } = await supabase
-          .from('permissions')
-          .select('id, resource, action')
-          .eq('role_id', roleId);
-        if (existingErr) {
-          throw existingErr;
-        }
-
-        const existingArr = (existing || []) as { id: string; resource: string; action: string }[];
-        
-        const desiredSet = new Set(desiredPermissions.map(p => `${p.resource}:${p.action}`));
-        const existingSet = new Set(existingArr.map(p => `${p.resource}:${p.action}`));
-
-        // Delete permissions that are no longer desired
-        const toDeleteIds = existingArr
-          .filter((p) => !desiredSet.has(`${p.resource}:${p.action}`))
-          .map((p) => p.id);
-        
-        if (toDeleteIds.length > 0) {
-          const { error: delErr } = await supabase
-            .from('permissions')
-            .delete()
-            .in('id', toDeleteIds);
-          if (delErr) {
-            throw delErr;
-          }
-        }
-
-        // Insert only missing desired permissions to avoid requiring ON CONFLICT
-        const toInsert = desiredPermissions
-          .filter(p => !existingSet.has(`${p.resource}:${p.action}`))
-          .map(p => ({
-            role_id: roleId,
-            resource: p.resource,
-            action: p.action,
-            conditions: p.conditions ?? null,
-          }));
-        
-        if (toInsert.length > 0) {
-          const { error: insErr } = await supabase
-            .from('permissions')
-            .insert(toInsert);
-          if (insErr) {
-            throw insErr;
-          }
-        }
-      }
+      // The server replaces the role and its permission set in one transaction.
+      // This avoids the previous partial-save window between separate role,
+      // permission-delete, and permission-insert browser requests.
+      const { error } = await supabase.rpc('upsert_role_access', {
+        payload: {
+          role_id: roleId,
+          name: existingRole.name,
+          display_name: roleData.display_name ?? existingRole.display_name,
+          description: roleData.description ?? existingRole.description ?? '',
+          is_active: roleData.is_active ?? existingRole.is_active,
+          permissions: (roleData.permissions ?? existingRole.permissions ?? []).map((permission) => ({
+            resource: permission.resource,
+            action: permission.action,
+            conditions: (permission as { conditions?: unknown }).conditions ?? null,
+          })),
+          // Omit page_slugs and assign_user_ids: an edit must not silently
+          // alter existing page defaults or user assignments.
+          reason: 'Role updated from Role Management',
+        },
+      });
+      if (error) throw error;
 
       toast({ title: 'Role updated', description: 'Role was updated successfully.' });
-      // Refresh roles in background to avoid blocking the dialog close
-      fetchRoles().catch(() => {});
+      await fetchRoles();
       return true;
     } catch (error: any) {
       console.error('Error updating role:', error);
