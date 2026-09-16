@@ -68,6 +68,16 @@ describe('related page access families', () => {
     );
   });
 
+  it('maps cost submission and down payment grants to org-wide read actions', async () => {
+    const { getPageRoutePermissions } = await import('@/lib/pageAccessLinks');
+    expect(getPageRoutePermissions(['cost-submission'])).toEqual([
+      { resource: 'cost_submissions', action: 'read' },
+    ]);
+    expect(getPageRoutePermissions(['down-payment-approval'])).toEqual([
+      { resource: 'down_payments', action: 'read' },
+    ]);
+  });
+
   it('only links slugs that exist in PAGE_DEFS', () => {
     const registered = new Set(PAGE_DEFS.map((p) => p.slug));
     for (const [primary, related] of Object.entries(PAGE_RELATED)) {

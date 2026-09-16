@@ -3,6 +3,7 @@ import {
   evaluateManifestPageAccess,
   evaluateManifestRouteAccess,
   getManifestNavigationPages,
+  manifestHasExplicitActionGrant,
   manifestHasPermission,
   manifestIsTabBlocked,
   overrideIsActive,
@@ -211,6 +212,21 @@ describe('current user access manifest evaluator', () => {
       { resource: 'subscriptions', action: 'read' },
     )).toMatchObject({ allowed: false, source: 'role_baseline' });
     expect(manifestHasPermission(context, 'subscriptions', 'read')).toBe(false);
+  });
+
+  it('distinguishes explicit action grants from role-default permissions', () => {
+    const withOverride = manifest({
+      action_overrides: { 'cost_submissions:read': { is_granted: true } },
+      role_permissions: [],
+    });
+    const roleOnly = manifest({
+      action_overrides: {},
+      role_permissions: [{ resource: 'cost_submissions', action: 'read' }],
+    });
+    expect(manifestHasExplicitActionGrant(withOverride, 'cost_submissions', 'read')).toBe(true);
+    expect(manifestHasPermission(withOverride, 'cost_submissions', 'read')).toBe(true);
+    expect(manifestHasExplicitActionGrant(roleOnly, 'cost_submissions', 'read')).toBe(false);
+    expect(manifestHasPermission(roleOnly, 'cost_submissions', 'read')).toBe(true);
   });
 
   it('allows a page override for an ordinary page even when no role baseline exists', () => {

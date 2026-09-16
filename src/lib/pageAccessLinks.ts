@@ -100,7 +100,18 @@ export function resolvePageToggleIntent(effect: AccessEffect): PageToggleIntent 
  * Action-protected pages (e.g. MMP) can appear "Granted" solely because of a
  * user_permission_overrides row. Page Remove Grant must clear those too, or
  * the UI looks like it refused the click.
+ *
+ * Finance pages are not all registered in ReportsDirectory; keep their org-wide
+ * read gates here so Grant/Remove on Cost Submission / Down Payment stay in sync.
  */
+const PAGE_ACTION_GATES: Record<string, RoutePermission> = {
+  mmp: { resource: 'mmp', action: 'read' },
+  'mmp-full-report': { resource: 'mmp', action: 'read' },
+  'cost-submission': { resource: 'cost_submissions', action: 'read' },
+  'cost-approval': { resource: 'cost_submissions', action: 'read' },
+  'down-payment-approval': { resource: 'down_payments', action: 'read' },
+};
+
 export function getPageRoutePermissions(slugs: readonly string[]): RoutePermission[] {
   const seen = new Set<string>();
   const permissions: RoutePermission[] = [];
@@ -108,7 +119,10 @@ export function getPageRoutePermissions(slugs: readonly string[]): RoutePermissi
     const page = PAGE_DEFS.find(candidate => candidate.slug === slug);
     if (!page) continue;
     const url = new URL(page.path, 'https://access.local');
-    const permission = resolveRoutePermission(url.pathname, url.search, url.hash);
+    const permission =
+      resolveRoutePermission(url.pathname, url.search, url.hash) ??
+      PAGE_ACTION_GATES[slug] ??
+      null;
     if (!permission) continue;
     const key = `${permission.resource}:${permission.action}`;
     if (seen.has(key)) continue;

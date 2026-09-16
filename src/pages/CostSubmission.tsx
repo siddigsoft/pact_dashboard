@@ -257,7 +257,7 @@ const CostSubmission = () => {
    }, [mmpFiles]);
   
   // Role checks — canonical camelCase codes via useAuthorization hook
-  const { hasAnyRole, isSuperAdmin: isSuperAdminFn, checkPermission } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin: isSuperAdminFn, checkPermission, hasExplicitActionGrant } = useAuthorization();
   const isAdmin           = hasAnyRole(['admin']);
   const isSupervisor      = hasAnyRole(['supervisor']);
   const isFOM             = hasAnyRole(['fom']);
@@ -283,8 +283,13 @@ const CostSubmission = () => {
 
   // Pre-Fund gate — provides allocation context for auto-linking; does NOT block submission
   const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
-  
-  const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector;
+
+  // Explicit Access Control grants (e.g. Field Assistant + cost_submissions:read)
+  // unlock the same org-wide list Down Payment Approval already shows.
+  const hasGrantedOrgCostView =
+    hasExplicitActionGrant('cost_submissions', 'read') ||
+    hasExplicitActionGrant('cost_submissions', 'approve');
+  const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector || hasGrantedOrgCostView;
 
   // FOM, Admin, SuperAdmin, CountryDirector default to "All Submissions"; submitters default to Submit Request
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit" | "reports" | "delete_requests">(
@@ -1146,7 +1151,7 @@ const CostSubmission = () => {
   // A FOM who also holds a Supervisor role must NOT be pre-filtered by the supervisor's
   // hub/state team list, or they would silently lose cross-state submissions.
   const filterSubmissionsForSupervisor = (allSubs: typeof allSubmissionsQuery.submissions) => {
-    if (isAdmin || isSuperAdmin || isAdminOrSuperUser) return allSubs;
+    if (isAdmin || isSuperAdmin || isAdminOrSuperUser || hasGrantedOrgCostView) return allSubs;
     if (isFOM || isCountryDirector) return allSubs; // approval-chain roles: no pre-filter
     if (isSupervisor && teamMemberIds.length > 0) {
       return allSubs?.filter(s => teamMemberIds.includes(s.submittedBy)) || [];

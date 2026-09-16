@@ -110,6 +110,18 @@ export function manifestHasPermission(
   );
 }
 
+/** True only for an active user_permission_overrides grant — not role defaults.
+ * Used when Access Control intentionally widens scope (e.g. Field Assistant
+ * viewing org-wide Cost Submissions like Down Payment Approval). */
+export function manifestHasExplicitActionGrant(
+  manifest: CurrentUserAccessManifest,
+  resource: string,
+  action: string,
+): boolean {
+  const override = manifest.action_overrides[`${resource}:${action}`];
+  return !!override && overrideIsActive(override) && override.is_granted === true;
+}
+
 /** The shared direct-URL and sidebar decision includes registered query tabs.
  * Unknown protected destinations are denied rather than admitted by a menu. */
 export function evaluateManifestRouteAccess(manifest: CurrentUserAccessManifest, pathname: string, search = '', hash = ''): boolean {

@@ -6,7 +6,7 @@ import { ResourceType, ActionType } from '@/types/roles';
 import { normalizeRole } from '@/utils/roleMapping';
 import { useViewAs } from '@/context/ViewAsContext';
 import { useCurrentUserAccessManifest } from '@/hooks/useCurrentUserAccessManifest';
-import { manifestHasPermission } from '@/lib/current-user-access';
+import { manifestHasExplicitActionGrant, manifestHasPermission } from '@/lib/current-user-access';
 
 export const useAuthorization = () => {
   const { currentUser } = useAppContext();
@@ -117,6 +117,14 @@ export const useAuthorization = () => {
     }
     return currentAccessManifest
       ? manifestHasPermission(currentAccessManifest, resource, action)
+      : false;
+  };
+
+  /** Active user override grant only — excludes role-default permissions. */
+  const hasExplicitActionGrant = (resource: ResourceType, action: ActionType): boolean => {
+    if (!currentUser || viewAsRole) return false;
+    return currentAccessManifest
+      ? manifestHasExplicitActionGrant(currentAccessManifest, resource, action)
       : false;
   };
 
@@ -497,6 +505,7 @@ export const useAuthorization = () => {
   return {
     // Core permission checks
     checkPermission,
+    hasExplicitActionGrant,
     hasAnyRole,
     hasAllRoles,
     getCurrentUserPermissions,
