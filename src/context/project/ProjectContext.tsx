@@ -14,6 +14,8 @@ import { dispatchNotification } from '@/lib/notify';
 import { logAuditEvent } from '@/utils/audit-logger';
 import { provisionProjectChat, syncProjectChatParticipants } from '@/hooks/use-project-chat';
 import { useIsDataScopeActive } from '@/context/DataScopeContext';
+import { useCurrentUserAccessManifest } from '@/hooks/useCurrentUserAccessManifest';
+import { manifestHasExplicitActionGrant } from '@/lib/current-user-access';
 
 interface ProjectContextProps {
   projects: Project[];
@@ -104,12 +106,17 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const { currentUser, roles: userRoles } = useUser();
   const projectScopeActive = useIsDataScopeActive('project');
+  // ProjectProvider sits above RoleManagement; read the access manifest directly
+  // so Access Control projects:read grants unlock the org-wide catalogue.
+  const { data: accessManifest } = useCurrentUserAccessManifest(!!currentUser?.id);
 
   const projectsQuery = useProjectsQuery(!!currentUser && projectScopeActive);
   const allProjects = projectsQuery.data ?? [];
   const loading = projectsQuery.isLoading;
 
-  /** Admins and super admins see every project; everyone else only sees projects they are part of. */
+  /** Admins, super admins, and Access Control projects:read grantees see every
+   *  project; everyone else only sees projects they are part of.
+   *  My Projects stays membership-scoped via useUserProjects. */
   const projects = useMemo(() => {
     if (!currentUser) return allProjects;
 
@@ -121,7 +128,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ].filter(Boolean);
 
     const normalised = allRoleStrings.map(r => normalizeRole(r)).filter(Boolean);
+    const hasOrgProjectsGrant =
+      !!accessManifest &&
+      accessManifest.user_id === currentUser.id &&
+      manifestHasExplicitActionGrant(accessManifest, 'projects', 'read');
     const canSeeAll =
+      hasOrgProjectsGrant ||
       normalised.includes('superAdmin') ||
       normalised.includes('admin') ||
       allRoleStrings.some(r =>
@@ -138,7 +150,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       (Array.isArray(p?.team?.teamComposition) &&
         p.team.teamComposition.some((m: any) => m?.userId === uid))
     );
-  }, [allProjects, currentUser, userRoles]);
+  }, [allProjects, currentUser, userRoles, accessManifest]);
 
   useEffect(() => {
     if (projectsQuery.isError && projectsQuery.error) {

@@ -2,7 +2,8 @@
  * Related page families for Access Control Workspace.
  *
  * Grant / block / clear cascades across:
- * 1. Explicit product families (My Projects ↔ Projects)
+ * 1. Explicit product families (kept empty for Projects — My Projects is
+ *    membership-scoped and must not inherit org-wide Projects grants)
  * 2. Legacy standalone paths that App.tsx redirects into hub URLs
  * 3. Query-tab PAGE_DEFS entries and their hub parents
  */
@@ -12,11 +13,10 @@ import { PAGE_DEFS } from '@/lib/access-registry';
 import { PAGE_ACCESS_REDIRECTS } from '@/lib/pageAccessRedirects';
 import { resolveRoutePermission, type RoutePermission } from '@/lib/page-roles';
 
-/** Manual product families that are not expressed as App redirects. */
-const MANUAL_RELATED: Record<string, readonly string[]> = {
-  'my-projects': ['projects'],
-  projects: ['my-projects'],
-};
+/** Manual product families that are not expressed as App redirects.
+ * My Projects and Projects are intentionally NOT linked: one is membership,
+ * the other is the org-wide catalogue. */
+const MANUAL_RELATED: Record<string, readonly string[]> = {};
 
 function hubPathOf(path: string): string {
   return path.split('?')[0].split('#')[0];
@@ -110,6 +110,8 @@ const PAGE_ACTION_GATES: Record<string, RoutePermission> = {
   'cost-submission': { resource: 'cost_submissions', action: 'read' },
   'cost-approval': { resource: 'cost_submissions', action: 'read' },
   'down-payment-approval': { resource: 'down_payments', action: 'read' },
+  // Org-wide catalogue only — do not attach this gate to my-projects.
+  projects: { resource: 'projects', action: 'read' },
 };
 
 export function getPageRoutePermissions(slugs: readonly string[]): RoutePermission[] {

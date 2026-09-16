@@ -312,7 +312,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     };
   }
 
-  // ── Page toggle (cascades to related page family, e.g. my-projects ↔ projects)
+  // ── Page toggle (cascades only within configured related families)
   async function togglePage(slug: string) {
     setSavingKey(`page-family:${expandRelatedPageSlugs(slug).slice().sort().join('|')}`);
     const eff = effectivePage(slug);

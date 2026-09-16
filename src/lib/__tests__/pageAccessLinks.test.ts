@@ -31,12 +31,11 @@ describe('project route slug wiring', () => {
 });
 
 describe('related page access families', () => {
-  it('links My Projects with Projects so grants stay in sync', () => {
-    expect(getRelatedPageSlugs('my-projects')).toContain('projects');
-    expect(getRelatedPageSlugs('projects')).toContain('my-projects');
-    expect(expandRelatedPageSlugs('my-projects')).toEqual(
-      expect.arrayContaining(['my-projects', 'projects']),
-    );
+  it('keeps My Projects independent from org-wide Projects', () => {
+    expect(getRelatedPageSlugs('my-projects')).not.toContain('projects');
+    expect(getRelatedPageSlugs('projects')).not.toContain('my-projects');
+    expect(expandRelatedPageSlugs('my-projects')).toEqual(['my-projects']);
+    expect(expandRelatedPageSlugs('projects')).toEqual(['projects']);
   });
 
   it('links Approval Dashboard with the Super Admin hub tab it redirects to', () => {
@@ -68,7 +67,7 @@ describe('related page access families', () => {
     );
   });
 
-  it('maps cost submission and down payment grants to org-wide read actions', async () => {
+  it('maps cost submission, down payment, and projects grants to org-wide read actions', async () => {
     const { getPageRoutePermissions } = await import('@/lib/pageAccessLinks');
     expect(getPageRoutePermissions(['cost-submission'])).toEqual([
       { resource: 'cost_submissions', action: 'read' },
@@ -76,6 +75,10 @@ describe('related page access families', () => {
     expect(getPageRoutePermissions(['down-payment-approval'])).toEqual([
       { resource: 'down_payments', action: 'read' },
     ]);
+    expect(getPageRoutePermissions(['projects'])).toEqual([
+      { resource: 'projects', action: 'read' },
+    ]);
+    expect(getPageRoutePermissions(['my-projects'])).toEqual([]);
   });
 
   it('only links slugs that exist in PAGE_DEFS', () => {
@@ -162,8 +165,6 @@ describe('exhaustive page access redirect coverage', () => {
 
   it('covers high-risk legacy pages that previously confused admins', () => {
     const expectations: Array<{ slug: string; mustInclude: string[] }> = [
-      { slug: 'my-projects', mustInclude: ['projects'] },
-      { slug: 'projects', mustInclude: ['my-projects'] },
       { slug: 'approval-dashboard', mustInclude: ['sa-approval-dashboard', 'super-admin-hub'] },
       { slug: 'chat', mustInclude: ['communication-hub'] },
       { slug: 'portfolio', mustInclude: ['programme-hub'] },

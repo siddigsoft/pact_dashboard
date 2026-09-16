@@ -55,7 +55,7 @@ function getInitialView(): ViewMode {
 const ProjectsPage = () => {
   const navigate = useNavigate();
   useProjectStalledAlert();
-  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin, hasExplicitActionGrant, checkPermission } = useAuthorization();
   const { currentUser } = useUser();
 
   const projectContext = useProjectContext();
@@ -80,8 +80,14 @@ const ProjectsPage = () => {
     navigate(`/projects/${projectId}`);
   };
 
-  // These roles see ONLY projects they are a member of (no financial tabs in detail)
+  // Access Control grant of Projects / projects:read unlocks the org-wide catalogue
+  // (independent from My Projects membership).
+  const hasGrantedOrgProjectsAccess = hasExplicitActionGrant('projects', 'read');
+
+  // These roles see ONLY projects they are a member of (no financial tabs in detail),
+  // unless Access Control explicitly granted org-wide Projects.
   const isLimitedViewer =
+    !hasGrantedOrgProjectsAccess &&
     !isSuperAdmin() &&
     !hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'projectManager', 'ProjectManager']) &&
     hasAnyRole(['employee', 'Employee', 'fom', 'FOM', 'countryDirector', 'Country Director', 'hr', 'HR']);
@@ -143,14 +149,15 @@ const ProjectsPage = () => {
     setFilterSearch('');
   };
 
-  // Full access: Super Admin, Admin, FOM, ICT, Project Managers.
-  // Limited access (member-only, no financial tabs): Employee, Country Director, HR.
+  // Baseline roles, Access Control page/action grant, or projects:read permission.
   const canViewProjects =
     isSuperAdmin() ||
     hasAnyRole([
       'admin', 'Admin', 'fom', 'FOM', 'ict', 'ICT', 'projectManager', 'ProjectManager',
       'employee', 'Employee', 'countryDirector', 'Country Director', 'hr', 'HR',
-    ]);
+    ]) ||
+    hasGrantedOrgProjectsAccess ||
+    checkPermission('projects', 'read');
 
   if (!canViewProjects) {
     return (
