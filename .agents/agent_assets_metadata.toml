@@ -119,3 +119,17 @@ mtime_ms = 1789658711134
 storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:8061f5ee-0482-4ab7-b0dc-02ca73db7311/0d0ad51a-a432-4ab6-8511-eb357185c7e9/4db5169e-423f-43aa-a63a-a8c29432ecf0"
 storage_version_token = "1789658745017552"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "ZmNPgz3DLv8mYTG4KK9Kh"
+uri = "file://docs/incentive-bonuses-system-plan.md"
+type = "text"
+title = "Incentive Bonuses System Plan"
+description = "Complete plan covering eligibility, WFP gating, calculation, approval, Wallet and Payroll settlement, GL integration, permissions, reporting, testing, and rollout."
+logical_id = "71486955-fa04-4617-a694-9bfdccdeae5f"
+content_hash = "sha256:555e2cc43f9d000e5528c5cde230c1126d2701645ba3dfd196aa74e5d5d6b41c"
+size = 24096
+mtime_ms = 1789658934353
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:8061f5ee-0482-4ab7-b0dc-02ca73db7311/71486955-fa04-4617-a694-9bfdccdeae5f/4c1dfa8c-0eb9-4646-8a7b-6b74c9047d11"
+storage_version_token = "1789658967547918"
+content_type = "text/markdown"
