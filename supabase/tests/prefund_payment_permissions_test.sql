@@ -56,21 +56,16 @@ BEGIN
   LIMIT 1;
   IF v_role_id IS NOT NULL THEN
     IF EXISTS (
-      SELECT required.resource, required.action
-      FROM (VALUES
-        ('down_payments', 'mark_paid'),
-        ('cost_submissions', 'mark_paid'),
-        ('pre_funding', 'use_for_payment')
-      ) AS required(resource, action)
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM public.permissions p
-        WHERE p.role_id = v_role_id
-          AND p.resource = required.resource
-          AND p.action = required.action
-      )
+      SELECT 1
+      FROM public.permissions p
+      WHERE p.role_id = v_role_id
+        AND (p.resource, p.action) IN (
+          ('down_payments', 'mark_paid'),
+          ('cost_submissions', 'mark_paid'),
+          ('pre_funding', 'use_for_payment')
+        )
     ) THEN
-      RAISE EXCEPTION 'Field Assistant is missing a required payment capability';
+      RAISE EXCEPTION 'Field Assistant must not retain a role-wide payment capability';
     END IF;
 
     IF EXISTS (

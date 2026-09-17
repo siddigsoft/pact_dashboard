@@ -531,7 +531,7 @@ export default function DownPaymentApproval() {
     ? canApproveDownPayment()
     : canApprovePendingAdminOnly;
   const canMarkPaidActions = canMarkDownPaymentPaid();
-  const isFieldPaymentOnly = canMarkPaidActions && !hasWorkflowRole && !canApproveActions;
+  const isFieldPaymentOnly = canMarkPaidActions && !canApproveActions;
   const canEditActions = isAdmin && checkPermission('down_payments', 'update');
   const canExportActions = checkPermission('down_payments', 'export');
   const canDeletePayment = checkPermission('down_payments', 'delete');

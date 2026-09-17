@@ -50,16 +50,22 @@ describe('Pre-Fund payment permissions', () => {
     ]));
   });
 
-  it('grants Field Assistant payment capabilities without approval authority', () => {
-    const migration = readFileSync(
+  it('limits the former Field Assistant payment grant to Kassala supervisors', () => {
+    const originalMigration = readFileSync(
       `${process.cwd()}/supabase/migrations/20260917150000_field_assistant_payment_permissions.sql`,
       'utf8',
     );
-    expect(migration).toContain("'fieldassistant'");
-    expect(migration).toContain("('down_payments', 'mark_paid')");
-    expect(migration).toContain("('cost_submissions', 'mark_paid')");
-    expect(migration).toContain("('pre_funding', 'use_for_payment')");
-    expect(migration).not.toMatch(/\('(?:down_payments|cost_submissions|pre_funding)',\s*'approve'\)/);
+    const scopedMigration = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917180000_kassala_supervisor_payment_scope.sql`,
+      'utf8',
+    );
+    expect(originalMigration).not.toMatch(/\('(?:down_payments|cost_submissions|pre_funding)',\s*'approve'\)/);
+    expect(scopedMigration).toContain('is_kassala_hub_supervisor');
+    expect(scopedMigration).toContain("'down_payments'::text, 'mark_paid'::text");
+    expect(scopedMigration).toContain("'pre_funding'::text, 'use_for_payment'::text");
+    expect(scopedMigration).toContain('DELETE FROM public.permissions');
+    expect(scopedMigration).toContain("'fieldassistant'");
+    expect(scopedMigration).toContain('assert_kassala_down_payment_scope');
   });
 
   it('keeps both Down Payment batch actions behind the Field Assistant payment grants', () => {
@@ -95,6 +101,7 @@ describe('Pre-Fund payment permissions', () => {
 
     expect(page).toContain('Tier 1: Payment Processing');
     expect(page).toContain('Approval and rejection actions are unavailable.');
+    expect(page).toContain('const isFieldPaymentOnly = canMarkPaidActions && !canApproveActions;');
     expect(page).toMatch(/isFieldPaymentOnly[\s\S]*approvalMode=\{isFieldPaymentOnly[\s\S]*\? 'explicit_payment'/);
     expect(migration).toContain("p.action = 'approve'");
     expect(migration).toContain("o.action = 'approve'");
