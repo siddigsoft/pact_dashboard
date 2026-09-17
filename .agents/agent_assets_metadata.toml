@@ -6,87 +6,116 @@ id = "BdDLCYtOFQgcXEkKhpH8y"
 uri = "file://docs/ACCOUNTING_MODULE_MASTER_PLAN.md"
 type = "text"
 title = "PACT Accounting & Finance Module — Master Plan"
+logical_id = "598dc1f8-0f37-461a-a8bb-d924d403a426"
 
 [[outputs]]
 id = "g8fuGiCuJree5-8FtEQBF"
 uri = "file://docs/ACCOUNTING_MODULE_MASTER_PLAN_V2.md"
 type = "text"
 title = "Accounting Module Master Plan — Consolidated"
+logical_id = "dd323826-21f0-4187-8729-d61fc795a260"
 
 [[outputs]]
 id = "rLauCTgASTmvzkKy-rhfS"
 uri = "file://docs/ACCOUNTING_REPORTING_EXTENSION.md"
 type = "text"
 title = "Accounting — Reporting, Charting & Projection Extension"
+logical_id = "00bf98b3-5ee5-4ca1-9333-076a26971bb7"
 
 [[outputs]]
 id = "kpVRnzfW7aGMjCTlkVH_i"
 uri = "file://docs/BLOCK_EDITOR_PLAN.md"
 type = "text"
 title = "PACT Notion-Style Block Editor — Saved Plan"
+logical_id = "c86b05f1-9e48-43a1-a52e-c4bd50077faa"
 
 [[outputs]]
 id = "L8EaVIyqCfB3wM55kLyVP"
 uri = "file://docs/ACCOUNTING_OPEN_QUESTIONS_SIGNOFF.md"
 type = "text"
 title = "Open Questions Sign-off Sheet"
+logical_id = "dbe5a5f2-3671-4cd4-9726-0035f829dd98"
 
 [[outputs]]
 id = "DOKhFru5fGIhPA85zegwj"
 uri = "file://docs/ACCOUNTING_REALITY_CHECK_DELTA.md"
 type = "text"
 title = "§2 Reality-Check Delta Report"
+logical_id = "6f5f0f7c-a796-4d46-ad2c-865703743df1"
 
 [[outputs]]
 id = "3syuMzCHrz0ESZ3y25vPK"
 uri = "file://docs/ACCOUNTING_PHASE1_DESIGN.md"
 type = "text"
 title = "Phase 1 Sprint Design Doc"
+logical_id = "25ee9e2a-74c0-40a4-8ab7-fbf6d39da740"
 
 [[outputs]]
 id = "3TGnZIdyTSmq4WhDE3ZS5"
 uri = "file://docs/PLANNING_INDEX.md"
 type = "text"
 title = "PACT Planning Master Index (all 7 docs in one file)"
+logical_id = "599179bd-11a7-4bff-af6f-e3c9c5ec2569"
 
 [[outputs]]
 id = "GS3Ui62eytQ-Y57uinTHt"
 uri = "file://public/PACT_Command_Center_Staff_Onboarding.pptx"
 type = "slides"
 title = "PACT Command Center — Staff Onboarding"
+logical_id = "1dcc90d7-af43-4469-90e3-fb26d0ed458f"
 
 [[outputs]]
 id = "JndYRPG-AoiMmMzaJNosM"
 uri = "file://PACT_Platform_Technical_Brief.md"
 type = "text"
 title = "PACT Platform — IT Technical Brief"
+logical_id = "45799b9f-bb47-4d86-89d1-f6a88be3f2b1"
 
 [[outputs]]
 id = "-69yuRx3FYt4dweYd4Hi9"
 uri = "file://PACT_Operations_Workflow_Management_Brief.docx"
 type = "word_document"
 title = "PACT Operations & Financial Workflow — Management Brief"
+logical_id = "d586169f-16ff-40d8-b133-5a1daa06bdcc"
 
 [[outputs]]
 id = "YFwH_h27YB-kJ8Ng8Zn9q"
 uri = "file://pre_funding_ALL_IN_ONE.zip"
 type = "unspecified"
 title = "Pre-Funding — Complete SQL (download)"
+logical_id = "475dab3a-9829-459e-ac79-37824e96d6c6"
 
 [[outputs]]
 id = "OFpKdqv1IBwyLLDPNHy2C"
 uri = "file://TESTING_MANUAL_2026-07-15.md"
 type = "text"
 title = "Testing Manual — 2026-07-15"
+logical_id = "a4854aed-5d52-49f9-a9d6-51357e456924"
 
 [[outputs]]
 id = "WM9bgfKaYrZaJeZMcVN7q"
 uri = "file://USER_MANUAL_2026-07-15.md"
 type = "text"
 title = "User Manual — 2026-07-15"
+logical_id = "54236005-f2cd-4a60-934d-c2ea8aa214fe"
 
 [[outputs]]
 id = "H0ypLNeHvsIZWhFs_svaI"
 uri = "file://HR_Profiles_User_Manual_2026-07-15.docx"
 type = "word_document"
 title = "HR & Profiles User Manual — July 2026"
+logical_id = "86965234-a2dd-45dd-b246-44230e3a21dc"
+
+[[outputs]]
+id = "DypAtXsyKbMPaajN-uWCF"
+uri = "file://docs/full-mmp-report-performance-plan.md"
+type = "text"
+title = "Full MMP Report Performance Plan"
+description = "Complete phased plan covering database indexes, production measurement, progressive loading, payload reduction, rendering, caching, security verification, and performance targets."
+logical_id = "0d0ad51a-a432-4ab6-8511-eb357185c7e9"
+content_hash = "sha256:fa4761215af10c37516b05a52e091581aae22df65cce2a4572e28ca62df12127"
+size = 9476
+mtime_ms = 1789658711134
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:8061f5ee-0482-4ab7-b0dc-02ca73db7311/0d0ad51a-a432-4ab6-8511-eb357185c7e9/4db5169e-423f-43aa-a63a-a8c29432ecf0"
+storage_version_token = "1789658745017552"
+content_type = "text/markdown"
