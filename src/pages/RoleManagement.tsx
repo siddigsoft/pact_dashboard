@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -28,6 +29,7 @@ const accessInventory = getAccessInventory();
 const accessInventoryIssues = getAccessInventoryIssues();
 
 const RoleManagement = () => {
+  const navigate = useNavigate();
   const { currentUser, users, refreshUsers } = useAppContext();
   const { canManageRoles: canManageRolesAuth, isSuperAdmin: isSuperAdminFn } = useAuthorization();
   const { canBypassApproval, createApprovalRequest, hasPendingRequest } = useApproval();
@@ -212,6 +214,16 @@ const RoleManagement = () => {
           </div>
         </div>
         <div className="flex w-full flex-wrap gap-2 lg:w-auto">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => navigate('/admin-hub?tab=users')}
+            className="w-full gap-1.5 sm:w-auto"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Administration Hub
+          </Button>
           <Button
             size="sm"
             variant="outline"

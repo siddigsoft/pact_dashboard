@@ -712,7 +712,7 @@ const AppRoutes = () => {
         <Route path="/audit-compliance" element={<Navigate to="/admin-hub?tab=audit-compliance" replace />} />
         <Route path="/archive" element={<Navigate to="/analytics?tab=archive" replace />} />
         <Route path="/calendar" element={<Calendar />} />
-        <Route path="/role-management" element={<Navigate to="/admin-hub?tab=role-management" replace />} />
+        <Route path="/role-management" element={<RoleManagement />} />
         <Route path="/page-access" element={<Navigate to="/super-admin-hub?tab=user-access" replace />} />
         {/* ── Super Admin Hub ── */}
         <Route path="/super-admin-hub" element={<SuperAdminHub />} />

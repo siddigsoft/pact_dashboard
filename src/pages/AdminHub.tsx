@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState, useRef, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Loader2, Users, Shield, Building2, Award, DollarSign,
   CheckSquare, ClipboardList, Settings, Activity, Info,
@@ -89,6 +89,7 @@ const Spinner = () => (
 );
 
 export default function AdminHub() {
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('tab') as AdminTab | null;
   const _savedAdm = localStorage.getItem('hub_last_tab_admin') as AdminTab | null;
@@ -110,6 +111,14 @@ export default function AdminHub() {
     (_savedAdm && visibleAllTabs.find(t => t.id === _savedAdm)) ? _savedAdm : (visibleAllTabs[0]?.id ?? DEFAULT_TAB)
   ) as AdminTab;
   const activeTab: AdminTab = (visibleAllTabs.find(t => t.id === rawTab) ? rawTab : _defaultAdm) as AdminTab;
+
+  useEffect(() => {
+    if (activeTab !== 'role-management') return;
+    // Role Management is a dense, full-page security workspace. Do not nest it
+    // beneath the Administration Hub's three navigation levels.
+    localStorage.setItem('hub_last_tab_admin', 'users');
+    navigate('/role-management', { replace: true });
+  }, [activeTab, navigate]);
 
   const activeTabDef = ALL_TABS.find(t => t.id === activeTab) ?? ALL_TABS[0];
   // Never fall back to the unfiltered SECTIONS catalog. That made blocked/loading
