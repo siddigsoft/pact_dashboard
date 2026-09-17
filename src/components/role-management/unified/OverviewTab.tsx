@@ -78,7 +78,7 @@ export function OverviewTab({ userId, userRole, userName, isSelectedSuperAdmin, 
 
   if (loading) {
     return (
-      <div className="p-6 space-y-4">
+      <div className="h-full min-h-0 overflow-y-auto p-6 space-y-4">
         {[1,2,3,4].map(i => (
           <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />
         ))}
@@ -87,7 +87,7 @@ export function OverviewTab({ userId, userRole, userName, isSelectedSuperAdmin, 
   }
 
   return (
-    <div className="p-5 space-y-5 overflow-y-auto">
+    <div className="h-full min-h-0 overflow-y-auto p-5 space-y-5">
       {/* SA lock notice */}
       {isSelectedSuperAdmin && (
         <div className="flex items-center gap-3 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs dark:bg-red-950/20 dark:border-red-800/40 dark:text-red-300">

@@ -177,18 +177,15 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       // always included, then active canonical assignments are added.
       const roleNames = unionRoleNames(userRole, customRoleNames);
       const roleIds = assignedRows.filter((row: any) => row.roles?.is_active === true).map((row: any) => row.role_id);
-      let nextRoleTabBlocks: Record<string, boolean> = {};
-      if (roleIds.length) {
-        const { data: tabRows, error: tabError } = await bounded((supabase as any).from('role_tab_configs').select('role_id, page_slug, is_blocked').in('role_id', roleIds));
-        if (!isCurrent()) return;
-        if (tabError) throw tabError;
-        const slugs = new Set<string>((tabRows ?? []).map((row: any) => row.page_slug));
-        nextRoleTabBlocks = Object.fromEntries([...slugs].map(slug => [slug, roleIds.every(id => (tabRows ?? []).some((row: any) => row.role_id === id && row.page_slug === slug && row.is_blocked))]));
-      }
-
       // A user may hold several canonical roles. Load defaults for every one so
       // the editor never silently treats a custom role as if it did not exist.
-      const [userColumnsRes, roleColumnsRes, userFiltersRes, roleFiltersRes, userScopesRes, roleScopesRes] = await bounded(Promise.all([
+      // Once role IDs/names are known, all remaining dimensions can load in one
+      // parallel stage instead of waiting for tabs before starting configs.
+      const roleTabsQuery = roleIds.length
+        ? (supabase as any).from('role_tab_configs').select('role_id, page_slug, is_blocked').in('role_id', roleIds)
+        : Promise.resolve({ data: [], error: null });
+      const [roleTabsRes, userColumnsRes, roleColumnsRes, userFiltersRes, roleFiltersRes, userScopesRes, roleScopesRes] = await bounded(Promise.all([
+        bounded(roleTabsQuery),
         bounded(supabase.from('column_visibility_config').select('*').eq('user_id', userId)),
         bounded(supabase.from('column_visibility_config').select('*').in('role', roleNames)),
         bounded((supabase as any).from('filter_visibility_config').select('*').eq('user_id', userId)),
@@ -197,8 +194,14 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
         bounded(supabase.from('data_scope_config').select('*').in('role', roleNames)),
       ]));
       if (!isCurrent()) return;
-      const configError = [userColumnsRes, roleColumnsRes, userFiltersRes, roleFiltersRes, userScopesRes, roleScopesRes].find(result => result.error)?.error;
+      const configError = [roleTabsRes, userColumnsRes, roleColumnsRes, userFiltersRes, roleFiltersRes, userScopesRes, roleScopesRes].find(result => result.error)?.error;
       if (configError) throw configError;
+      const tabRows = roleTabsRes.data ?? [];
+      const tabSlugs = new Set<string>(tabRows.map((row: any) => row.page_slug));
+      const nextRoleTabBlocks = Object.fromEntries([...tabSlugs].map(slug => [
+        slug,
+        roleIds.every(id => tabRows.some((row: any) => row.role_id === id && row.page_slug === slug && row.is_blocked)),
+      ]));
       const nextPageRoleConfigs = Object.fromEntries(
         (roleConfigRes.data ?? []).map((row: any) => [row.page_slug, row.roles ?? []]),
       );

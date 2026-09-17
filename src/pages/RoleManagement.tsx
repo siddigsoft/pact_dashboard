@@ -195,7 +195,7 @@ const RoleManagement = () => {
 
   return (
     <div className={activeRoleTab === 'access-manager'
-      ? 'mx-auto flex h-[calc(100dvh-11rem)] min-h-[620px] w-full max-w-none flex-col gap-3 p-2 sm:p-3'
+      ? 'mx-auto flex h-[calc(100dvh-7rem)] min-h-0 w-full max-w-none flex-col gap-3 overflow-hidden p-2 sm:p-3'
       : 'mx-auto w-full max-w-[1480px] space-y-5 p-3 sm:p-5 lg:p-7'
     }>
       {/* Header */}
@@ -355,7 +355,7 @@ const RoleManagement = () => {
 
         <TabsContent
           value="access-manager"
-          className="m-0 flex min-h-[680px] flex-1 flex-col overflow-hidden rounded-xl border bg-background p-0 data-[state=inactive]:hidden"
+          className="m-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background p-0 data-[state=inactive]:hidden"
         >
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-card px-3 py-2 shadow-sm sm:px-5">
             <div className="flex min-w-0 items-center gap-3">
@@ -392,7 +392,7 @@ const RoleManagement = () => {
               <span className="sm:hidden">Test</span>
             </Button>
           </div>
-          <UnifiedAccessManager containerClassName="flex min-h-0 flex-1 flex-col overflow-hidden bg-background md:flex-row" />
+          <UnifiedAccessManager containerClassName="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background md:flex-row" />
         </TabsContent>
 
       </Tabs>

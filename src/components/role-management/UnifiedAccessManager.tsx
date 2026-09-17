@@ -108,12 +108,6 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
   );
   const isSA = isSuperAdminRole(selectedUser?.role);
 
-  useEffect(() => {
-    if (selectedId && !filteredUsers.some(user => user.id === selectedId)) {
-      setSelectedId(null);
-    }
-  }, [filteredUsers, selectedId]);
-
   const tabProps = selectedUser ? {
     userId: selectedUser.id,
     userRole: selectedUser.role,
@@ -122,10 +116,10 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
   } : null;
 
   return (
-    <div className={containerClassName ?? "flex h-[calc(100vh-260px)] min-h-[600px] border rounded-xl overflow-hidden bg-background"}>
+    <div className={containerClassName ?? "flex h-full min-h-0 min-w-0 overflow-hidden rounded-xl border bg-background"}>
 
       {/* ── Left panel: user list ── */}
-      <div className="flex max-h-56 w-full shrink-0 flex-col border-b border-slate-200 bg-[#f3f5f3] md:max-h-none md:w-72 md:border-b-0 md:border-r">
+      <div className="flex max-h-44 w-full shrink-0 flex-col border-b border-slate-200 bg-[#f3f5f3] md:max-h-none md:w-64 md:border-b-0 md:border-r lg:w-72">
         {/* Search */}
         <div className="space-y-2 border-b border-slate-200 p-3">
           <div className="flex items-center justify-between">
@@ -175,14 +169,14 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
       ) : (
         <SelectedUserAccessProvider key={selectedUser.id} userId={selectedUser.id} userRole={selectedUser.role}>
           <AccessLoadGate>
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {/* User header */}
             <UserHeader user={selectedUser} isSA={isSA} />
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={v => setActiveTab(v as TabKey)}
               aria-label="Access management sections"
-              className="flex-1 flex flex-col overflow-hidden">
+              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <TabsList className="h-auto min-h-9 w-full shrink-0 justify-start gap-0 overflow-x-auto rounded-none border-b bg-card px-3">
                 {([
                   { key: 'overview',     icon: User,   label: 'Overview' },
@@ -206,34 +200,34 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
 
               {tabProps && (
                 <>
-                  <TabsContent value="overview" className="flex-1 overflow-hidden m-0">
+                  <TabsContent value="overview" className="m-0 min-h-0 flex-1 overflow-hidden">
                     <OverviewTab {...tabProps} onTabChange={t => setActiveTab((t === 'permissions' ? 'buttons' : t) as TabKey)} />
                   </TabsContent>
-                  <TabsContent value="pages" className="flex-1 overflow-hidden m-0">
+                  <TabsContent value="pages" className="m-0 min-h-0 flex-1 overflow-hidden">
                     <PageAccessTab {...tabProps} initialPageSlug={requestedPage ?? undefined} onTabChange={t => setActiveTab((t === 'permissions' ? 'buttons' : t) as TabKey)} />
                   </TabsContent>
-                  <TabsContent value="tabs" className="flex-1 overflow-hidden m-0">
+                  <TabsContent value="tabs" className="m-0 min-h-0 flex-1 overflow-hidden">
                     <TabAccessTab {...tabProps} />
                   </TabsContent>
-                  <TabsContent value="buttons" className="flex-1 overflow-hidden m-0">
+                  <TabsContent value="buttons" className="m-0 min-h-0 flex-1 overflow-hidden">
                     <PermissionsTab {...tabProps} section="actions" actionFilter="buttons" />
                   </TabsContent>
-                  <TabsContent value="reports" className="flex-1 overflow-hidden m-0">
+                  <TabsContent value="reports" className="m-0 min-h-0 flex-1 overflow-hidden">
                     <PermissionsTab {...tabProps} section="actions" actionFilter="reports" />
                   </TabsContent>
-                  <TabsContent value="columns" className="flex-1 overflow-hidden m-0">
+                  <TabsContent value="columns" className="m-0 min-h-0 flex-1 overflow-hidden">
                     <PermissionsTab {...tabProps} section="columns" />
                   </TabsContent>
-                  <TabsContent value="filters" className="flex-1 overflow-hidden m-0">
+                  <TabsContent value="filters" className="m-0 min-h-0 flex-1 overflow-hidden">
                     <FilterControlsTab {...tabProps} />
                   </TabsContent>
-                  <TabsContent value="scope" className="flex-1 overflow-hidden m-0">
+                  <TabsContent value="scope" className="m-0 min-h-0 flex-1 overflow-hidden">
                     <DataScopeTab {...tabProps} />
                   </TabsContent>
-                  <TabsContent value="overrides" className="flex-1 overflow-hidden m-0">
+                  <TabsContent value="overrides" className="m-0 min-h-0 flex-1 overflow-hidden">
                     <PermissionsTab {...tabProps} section="grants" />
                   </TabsContent>
-                  <TabsContent value="audit" className="flex-1 overflow-hidden m-0">
+                  <TabsContent value="audit" className="m-0 min-h-0 flex-1 overflow-hidden">
                     <AccessAuditTab {...tabProps} />
                   </TabsContent>
                 </>
