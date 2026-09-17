@@ -180,6 +180,10 @@ describe('Pre-Fund payment permissions', () => {
       `${process.cwd()}/supabase/migrations/20260917250000_salma_down_payment_processing_only.sql`,
       'utf8',
     );
+    const salmaApprovalTabOnly = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917260000_salma_down_payment_approval_tab_only.sql`,
+      'utf8',
+    );
 
     expect(migration).toContain("('cost_submissions'::text, 'read'::text");
     expect(migration).toContain("('cost_submissions'::text, 'mark_paid'::text");
@@ -207,6 +211,13 @@ describe('Pre-Fund payment permissions', () => {
     expect(salmaDownPaymentProcessing).toContain("'down_payments'::text,\n      'approve'::text,\n      false");
     expect(salmaDownPaymentProcessing).toContain("'down_payments'::text,\n      'mark_paid'::text,\n      true");
     expect(salmaDownPaymentProcessing).toContain("'pre_funding'::text,\n      'use_for_payment'::text,\n      true");
+    expect(salmaApprovalTabOnly).toContain("('down-payment-approval:approval'::text, false)");
+    expect(salmaApprovalTabOnly).toContain("('down-payment-approval:byState'::text, true)");
+    expect(salmaApprovalTabOnly).toContain("('down-payment-approval:byProject'::text, true)");
+    expect(salmaApprovalTabOnly).toContain("('down-payment-approval:byMMP'::text, true)");
+    expect(salmaApprovalTabOnly).toContain("('down-payment-approval:allRequests'::text, true)");
+    expect(salmaApprovalTabOnly).toContain("('down-payment-approval:disbursement'::text, true)");
+    expect(salmaApprovalTabOnly).toContain("('down-payment-approval:coverage'::text, true)");
     const downPaymentPage = readFileSync(
       `${process.cwd()}/src/pages/DownPaymentApproval.tsx`,
       'utf8',
