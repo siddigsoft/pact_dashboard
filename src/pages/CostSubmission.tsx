@@ -275,11 +275,27 @@ const CostSubmission = () => {
   const isStrictCostSubmissionAdmin = isAdmin || isSuperAdminFn();
   const isFinanceAdmin    = hasAnyRole(['financialAdmin']);
   const isDataTeam        = hasAnyRole(['dataTeam']);
+  const [hasKassalaSupervisorAssignment, setHasKassalaSupervisorAssignment] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!currentUser?.id) {
+      setHasKassalaSupervisorAssignment(false);
+      return;
+    }
+    supabase
+      .rpc('is_kassala_hub_supervisor', { p_user_id: currentUser.id })
+      .then(({ data, error }) => {
+        if (active) setHasKassalaSupervisorAssignment(!error && data === true);
+      });
+    return () => { active = false; };
+  }, [currentUser?.id]);
+
   const canApproveCostByPermission = checkPermission('cost_submissions', 'approve');
-  const canMarkCostPaid = canMarkCostPaidByPermission();
   const isKassalaCostSupervisor =
     !isAdmin && !isFinanceAdmin && !isFOM && !isCountryDirector
-    && isSupervisor && canApproveCostByPermission && canMarkCostPaid;
+    && hasKassalaSupervisorAssignment;
+  const canMarkCostPaid = isKassalaCostSupervisor || canMarkCostPaidByPermission();
   const isCostFilterVisible = (key: string) =>
     isKassalaCostSupervisor || isFilterVisible(`cost-submission.${key}`);
   const canManagePreFundFilters = isAdmin || isSuperAdminFn() || isKassalaCostSupervisor;
@@ -298,12 +314,15 @@ const CostSubmission = () => {
   const hasGrantedOrgCostView =
     hasExplicitActionGrant('cost_submissions', 'read') ||
     hasExplicitActionGrant('cost_submissions', 'approve');
-  const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector || hasGrantedOrgCostView;
+  const canViewTeamSubmissions = isAdmin || isSupervisor || isKassalaCostSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector || hasGrantedOrgCostView;
 
   // FOM, Admin, SuperAdmin, CountryDirector default to "All Submissions"; submitters default to Submit Request
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit" | "reports" | "delete_requests">(
     (isFOM || isSuperAdmin || isAdmin || isCountryDirector || canViewTeamSubmissions) ? "history" : "submit"
   );
+  useEffect(() => {
+    if (isKassalaCostSupervisor) setActiveTab(current => current === 'submit' ? 'history' : current);
+  }, [isKassalaCostSupervisor]);
   // Task #56 — top-of-page expense-type selector (operational vs personal reimbursement)
   const [expenseMode, setExpenseMode] = useState<ExpenseMode>("operational");
   const [pendingMode, setPendingMode] = useState<ExpenseMode | null>(null);
@@ -2586,7 +2605,7 @@ const CostSubmission = () => {
   const canMarkAsPaid = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus !== 'approved' && derivedStatus !== 'partially_paid') return false;
-    return canMarkCostPaidByPermission();
+    return canMarkCostPaid;
   };
 
   const canReconcile = (oc: OperationalCostSubmission): boolean => {
@@ -2656,7 +2675,7 @@ const CostSubmission = () => {
   };
 
   const openMarkAsPaidDialog = (oc: OperationalCostSubmission) => {
-    if (!canMarkCostPaidByPermission()) {
+    if (!canMarkCostPaid) {
       toast({
         title: 'Payment access denied / لا صلاحية للدفع',
         description: 'Your role is not authorized to mark Cost Submissions paid or use shared Pre-Funds.',
@@ -2927,7 +2946,7 @@ const CostSubmission = () => {
   const handleConfirmBatchCostPay = async () => {
     const { submissions: subs, proofFiles, notes, preFundId, payMode, payPercent, customInputType, payCustomAmountStr } = batchCostPayDialog;
     if (!currentUser?.id || subs.length === 0) return;
-    if (!canMarkCostPaidByPermission()) {
+    if (!canMarkCostPaid) {
       toast({
         title: 'Payment access denied / لا صلاحية للدفع',
         description: 'Your role is not authorized to mark Cost Submissions paid or use shared Pre-Funds.',
@@ -5296,11 +5315,11 @@ const CostSubmission = () => {
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="h-5 w-5 text-slate-600" />
                 <CardTitle>
-                  {(isAdmin || isSuperAdmin) ? "All Cost Submissions" : isCountryDirector ? "All Approvals" : isFOM ? "Approval Queue" : isSupervisor ? "Team Submissions" : "My Submissions"}
+                  {(isAdmin || isSuperAdmin || isKassalaCostSupervisor) ? "All Cost Submissions" : isCountryDirector ? "All Approvals" : isFOM ? "Approval Queue" : isSupervisor ? "Team Submissions" : "My Submissions"}
                 </CardTitle>
               </div>
               <CardDescription>
-                {(isAdmin || isSuperAdmin)
+                {(isAdmin || isSuperAdmin || isKassalaCostSupervisor)
                   ? "Review and manage all cost submissions across the organization. Approve, reject, or request more information."
                   : isCountryDirector
                     ? "Review and manage all cost submissions you oversee. Approve or reject as the final decision-maker."
@@ -5332,7 +5351,7 @@ const CostSubmission = () => {
             )}
 
             {/* Submitter filter */}
-            {isCostFilterVisible('user') && (isAdminOrSuperUser || isSuperAdmin || isSupervisor || isFOM || isCountryDirector) && userOptions.length > 1 && (
+            {isCostFilterVisible('user') && (isAdminOrSuperUser || isSuperAdmin || isSupervisor || isKassalaCostSupervisor || isFOM || isCountryDirector) && userOptions.length > 1 && (
               <Select value={userFilter} onValueChange={setUserFilter} data-testid="select-user-filter">
                 <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="trigger-user-filter">
                   <SelectValue placeholder="All Submitters" />

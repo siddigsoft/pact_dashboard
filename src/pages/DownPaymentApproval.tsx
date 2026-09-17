@@ -511,6 +511,21 @@ export default function DownPaymentApproval() {
   const { toast } = useToast();
   const { canApproveDownPayment, canMarkDownPaymentPaid, checkPermission, hasAnyRole } = useAuthorization();
   const { isTabBlocked, isFilterVisible } = useCurrentUserAccess();
+  const [hasKassalaSupervisorAssignment, setHasKassalaSupervisorAssignment] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!currentUser?.id) {
+      setHasKassalaSupervisorAssignment(false);
+      return;
+    }
+    supabase
+      .rpc('is_kassala_hub_supervisor', { p_user_id: currentUser.id })
+      .then(({ data, error }) => {
+        if (active) setHasKassalaSupervisorAssignment(!error && data === true);
+      });
+    return () => { active = false; };
+  }, [currentUser?.id]);
 
   const userRole = currentUser?.role?.toLowerCase();
   const normalizedRole = userRole?.replace(/[\s_-]/g, '') ?? '';
@@ -527,13 +542,13 @@ export default function DownPaymentApproval() {
   // with down_payments:approve gets the narrow Tier 2 approval entry point;
   // it must not be promoted into the supervisor/admin control surface.
   const canApprovePendingAdminOnly = !hasWorkflowRole && canApproveDownPayment();
-  const canApproveActions = hasWorkflowRole
+  const canApproveActions = hasKassalaSupervisorAssignment || (hasWorkflowRole
     ? canApproveDownPayment()
-    : canApprovePendingAdminOnly;
-  const canMarkPaidActions = canMarkDownPaymentPaid();
+    : canApprovePendingAdminOnly);
+  const canMarkPaidActions = hasKassalaSupervisorAssignment || canMarkDownPaymentPaid();
   const isFieldPaymentOnly = canMarkPaidActions && !canApproveActions;
   const isKassalaTier1PaymentSupervisor =
-    !isAdmin && isSupervisor && canMarkPaidActions && canApproveActions;
+    !isAdmin && hasKassalaSupervisorAssignment;
   const canEditActions = isAdmin && checkPermission('down_payments', 'update');
   const canExportActions = checkPermission('down_payments', 'export');
   const canDeletePayment =
@@ -757,7 +772,7 @@ export default function DownPaymentApproval() {
   }, [requests]);
 
   const openPreFundPaymentDialog = useCallback(async (req: DownPaymentRequest, amount: number) => {
-    if (!canMarkDownPaymentPaid() ||
+    if (!canMarkPaidActions ||
       !['approved', 'partially_paid'].includes(req.status) ||
       getDownPaymentBalance(req).remaining <= 0) {
       toast({ title: 'Payment unavailable', description: 'Only approved requests with a positive remaining balance can be paid.', variant: 'destructive' });
@@ -775,10 +790,10 @@ export default function DownPaymentApproval() {
     } catch (error: any) {
       toast({ title: 'Could not load Pre-Funds', description: error.message, variant: 'destructive' });
     }
-  }, [canMarkDownPaymentPaid, toast]);
+  }, [canMarkPaidActions, toast]);
 
   const handleMarkFullyPaid = useCallback((req: DownPaymentRequest) => {
-    if (!canMarkDownPaymentPaid() ||
+    if (!canMarkPaidActions ||
       !['approved', 'partially_paid'].includes(req.status)) {
       toast({ title: 'Payment unavailable', description: 'This request is not eligible for payment.', variant: 'destructive' });
       return;
@@ -789,13 +804,13 @@ export default function DownPaymentApproval() {
       return;
     }
     void openPreFundPaymentDialog(req, remaining);
-  }, [canMarkDownPaymentPaid, openPreFundPaymentDialog, toast]);
+  }, [canMarkPaidActions, openPreFundPaymentDialog, toast]);
 
   // ── Partial payment: deduct only what was actually paid now ───────────────
   const handleConfirmPartialPay = useCallback(async () => {
     const { req } = partialPayDialog;
     if (!req || !currentUser?.id) return;
-    if (!canMarkDownPaymentPaid() || !['approved', 'partially_paid'].includes(req.status)) {
+    if (!canMarkPaidActions || !['approved', 'partially_paid'].includes(req.status)) {
       toast({ title: 'Payment unavailable', description: 'This request is not eligible for payment.', variant: 'destructive' });
       return;
     }
@@ -823,7 +838,7 @@ export default function DownPaymentApproval() {
       // status/balance change while the dialog was open fails closed.
       const currentReq = requests.find(candidate => candidate.id === req.id) ?? req;
       const currentRemaining = getDownPaymentBalance(currentReq).remaining;
-      if (!canMarkDownPaymentPaid() ||
+      if (!canMarkPaidActions ||
         !['approved', 'partially_paid'].includes(currentReq.status) ||
         currentRemaining <= 0 || partialAmt > currentRemaining) {
         throw new Error('The request is no longer eligible for this payment.');
@@ -855,7 +870,7 @@ export default function DownPaymentApproval() {
     } finally {
       setPartialPayDialog(p => ({ ...p, saving: false }));
     }
-  }, [partialPayDialog, currentUser, requests, canMarkDownPaymentPaid, refreshRequests, toast]);
+  }, [partialPayDialog, currentUser, requests, canMarkPaidActions, refreshRequests, toast]);
 
   const openPreFundCorrectionDialog = useCallback(async (evidence: PaymentEvidence) => {
     if (!isFinanceAdmin || !checkPermission('down_payments', 'reconcile') || !evidence.isCorrectable) return;

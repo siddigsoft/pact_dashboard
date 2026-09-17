@@ -171,9 +171,13 @@ describe('Pre-Fund payment permissions', () => {
     expect(migration).toContain('Cost Submission Tier 1 approval is limited to Kassala Hub');
     expect(migration).toContain('OR public.can_view_operational_cost_submission');
     expect(page).toContain("getEffectiveSubmissionHubId(oc) === 'kassala-hub'");
+    expect(page).toContain("rpc('is_kassala_hub_supervisor'");
     expect(page).toContain('isKassalaCostSupervisor || isFilterVisible');
     expect(page).toContain('isAdmin || isSuperAdminFn() || isKassalaCostSupervisor');
     expect(mobilePage).toContain("effectiveHub === 'kassala-hub'");
     expect(mobilePage).toContain('if (isKassalaCostSupervisor) return false;');
+    expect(
+      readFileSync(`${process.cwd()}/src/pages/DownPaymentApproval.tsx`, 'utf8'),
+    ).toContain("rpc('is_kassala_hub_supervisor'");
   });
 });

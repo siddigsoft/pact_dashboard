@@ -9,4 +9,4 @@ Kassala Hub Supervisor assignments are a deliberate exception with two different
 
 **Why:** Approval permissions previously appeared grantable to non-finance users while payment buttons were hard-coded to Finance/Admin roles, making Role Management grants ineffective and conflating approval with disbursement.
 
-**How to apply:** Keep pending approval states non-payable. Enforce the dual payment permission in controls, confirmation handlers, and the atomic database path. For Kassala supervisors, enforce the narrower approval scope per request in both UI and database transitions, not through client role claims.
+**How to apply:** Keep pending approval states non-payable. Enforce the dual payment permission in controls, confirmation handlers, and the atomic database path. For Kassala supervisors, enforce the narrower approval scope per request in both UI and database transitions, not through client role claims. Detect the special assignment with the authoritative RPC because primary roles and cached action grants can miss secondary Supervisor assignments.
