@@ -168,6 +168,10 @@ describe('Pre-Fund payment permissions', () => {
       `${process.cwd()}/supabase/migrations/20260917220000_kassala_supervisor_canonical_assignment.sql`,
       'utf8',
     );
+    const additionalRoleFix = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917230000_kassala_supervisor_additional_roles.sql`,
+      'utf8',
+    );
 
     expect(migration).toContain("('cost_submissions'::text, 'read'::text");
     expect(migration).toContain("('cost_submissions'::text, 'mark_paid'::text");
@@ -180,6 +184,11 @@ describe('Pre-Fund payment permissions', () => {
     expect(canonicalAssignmentFix).toContain(
       'GRANT EXECUTE ON FUNCTION public.is_kassala_hub_supervisor(uuid) TO authenticated, service_role',
     );
+    expect(additionalRoleFix).toContain('jsonb_array_elements');
+    expect(additionalRoleFix).toContain('p.additional_roles');
+    expect(additionalRoleFix).toContain("additional_role.value->>'role'");
+    expect(additionalRoleFix).toContain("additional_role.value->>'hub_id'");
+    expect(additionalRoleFix).toContain("p.location->>'secondary_hub_id'");
     expect(page).toContain("getEffectiveSubmissionHubId(oc) === 'kassala-hub'");
     expect(page).toContain("rpc('is_kassala_hub_supervisor'");
     expect(page).toContain('isKassalaCostSupervisor || isFilterVisible');
