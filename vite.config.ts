@@ -792,6 +792,10 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     chunkSizeWarningLimit: 1000,
+    // Computing gzip sizes retains every generated chunk in memory after rendering.
+    // Production packaging only needs the emitted assets; bundle sizes are checked
+    // separately from dist so large builds stay within constrained workspaces.
+    reportCompressedSize: false,
     rollupOptions: {
       // Limit parallel file writes during chunk rendering — prevents OOM on low-RAM servers
       maxParallelFileOps: 3,
@@ -802,6 +806,9 @@ export default defineConfig(({ mode }) => ({
         'capacitor-native-settings',
       ],
       output: {
+        // Merge tiny chunks when Rollup can do so without crossing a dynamic import
+        // boundary. This reduces render/write overhead while keeping lazy routes lazy.
+        experimentalMinChunkSize: 20_000,
         manualChunks(id) {
           // Core React libraries + Radix UI (MUST be in same chunk to avoid forwardRef errors)
           // All packages that depend on React or that React components depend on must be here
