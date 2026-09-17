@@ -10,7 +10,8 @@ import { useNavigate } from 'react-router-dom';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { canSeePage, canSeePageWithOverrides } from '@/lib/page-roles';
+import { canSeePageWithOverrides } from '@/lib/page-roles';
+import { canShowFullMmpReport } from '@/lib/mmp-report-access';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { BudgetStatusBadge } from '@/components/budget/BudgetStatusBadge';
 import ForwardToFOMDialog from './ForwardToFOMDialog';
@@ -132,7 +133,13 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const canForwardMMP = !isSupervisor && !isCountryDirector && (checkPermission('mmp', 'update') || isAdmin || isICT);
   // Management sees the full report; supervisors receive the same report UI
   // with data constrained by the secure report RPC to their assigned hubs.
-  const canViewFullReport = !isSupervisor && checkPermission('mmp', 'full_report') && canSeePage('mmp-full-report', effectiveCurrentUser?.role);
+  // This report opens inside MMP Management. Its dedicated action permission
+  // and secure report RPC are authoritative; a legacy page-role list must not
+  // cancel an explicit user grant.
+  const canViewFullReport = canShowFullMmpReport(
+    isSupervisor,
+    checkPermission('mmp', 'full_report'),
+  );
   const canViewHubReport = isSupervisor && checkPermission('mmp', 'hub_report') && hubReportAllowed;
   // State Report is visible to FOM — same dialog, scoped label, red styling
   const canViewStateReport = isFOM && checkPermission('mmp', 'state_report');
