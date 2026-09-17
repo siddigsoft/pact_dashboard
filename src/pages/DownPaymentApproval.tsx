@@ -531,6 +531,7 @@ export default function DownPaymentApproval() {
     ? canApproveDownPayment()
     : canApprovePendingAdminOnly;
   const canMarkPaidActions = canMarkDownPaymentPaid();
+  const isFieldPaymentOnly = canMarkPaidActions && !hasWorkflowRole && !canApproveActions;
   const canEditActions = isAdmin && checkPermission('down_payments', 'update');
   const canExportActions = checkPermission('down_payments', 'export');
   const canDeletePayment = checkPermission('down_payments', 'delete');
@@ -1157,6 +1158,8 @@ export default function DownPaymentApproval() {
           <p className="text-muted-foreground mt-1">
             {isCountryDirector
               ? 'Monitor all transportation advance requests across the programme'
+              : isFieldPaymentOnly
+                ? 'Process eligible approved transportation advance payments'
               : !canApproveActions
                 ? 'View all transportation advance requests you have been granted access to'
               : selectedTier === 'tier1'
@@ -1174,13 +1177,19 @@ export default function DownPaymentApproval() {
             </Button>
           </div>
         )}
-        {!isAdmin && !isCountryDirector && canApproveActions && (
+        {!isAdmin && !isCountryDirector && isFieldPaymentOnly && (
+          <Badge variant="outline" className="self-start flex items-center gap-1 border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-700">
+            <Wallet className="h-3 w-3" />
+            Tier 1: Payment Processing
+          </Badge>
+        )}
+        {!isAdmin && !isCountryDirector && canApproveActions && !isFieldPaymentOnly && (
           <Badge variant="outline" className="self-start flex items-center gap-1">
             <Shield className="h-3 w-3" />
             {isSupervisor ? 'Tier 1: Supervisor Review' : 'Tier 2: Admin Processing'}
           </Badge>
         )}
-        {!isAdmin && !isCountryDirector && !canApproveActions && (
+        {!isAdmin && !isCountryDirector && !canApproveActions && !isFieldPaymentOnly && (
           <Badge variant="secondary" className="self-start flex items-center gap-1">
             <Shield className="h-3 w-3" />
             View only
@@ -1500,10 +1509,14 @@ export default function DownPaymentApproval() {
 
         {/* ─── Approval (default) ─── */}
         {isDownPaymentTabVisible('approval') && <TabsContent value="approval" className="space-y-4">
-          <Alert className={selectedTier === 'tier1' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : ''}>
+          <Alert className={isFieldPaymentOnly
+            ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30'
+            : selectedTier === 'tier1' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : ''}>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              {canApprovePendingAdminOnly ? (
+              {isFieldPaymentOnly ? (
+                <><strong>Tier 1 - Payment Processing:</strong> Process eligible approved requests individually or in a batch. Approval and rejection actions are unavailable.</>
+              ) : canApprovePendingAdminOnly ? (
                 <><strong>Tier 2 - Granted Approval:</strong> Review and approve eligible requests already awaiting Admin processing. Payment remains available only with the separate payment and pre-funding grants.</>
               ) : selectedTier === 'tier1' ? (
                 <><strong>Tier 1 - Supervisor Approval Flow:</strong> Review down-payment requests from data collectors and coordinators. Approved requests will be forwarded to Tier 2 (Admin) for final processing and payment.</>
@@ -1530,7 +1543,9 @@ export default function DownPaymentApproval() {
             canDeletePayment={canDeletePayment}
             canApproveActions={canApproveActions}
             canApprovePendingAdminOnly={canApprovePendingAdminOnly}
-            approvalMode={canApprovePendingAdminOnly
+            approvalMode={isFieldPaymentOnly
+              ? 'explicit_payment'
+              : canApprovePendingAdminOnly
               ? (canMarkPaidActions ? 'explicit_combined' : 'explicit_pending_admin')
               : (canMarkPaidActions && !hasWorkflowRole ? 'explicit_payment' : 'workflow')}
             canMarkPaid={canMarkPaidActions}

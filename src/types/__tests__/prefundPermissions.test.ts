@@ -82,4 +82,23 @@ describe('Pre-Fund payment permissions', () => {
       /canMarkPaid && payableCount > 1[\s\S]*data-testid="button-batch-pay"/,
     );
   });
+
+  it('keeps Field Assistant in Tier 1 payment processing without approval', () => {
+    const page = readFileSync(
+      `${process.cwd()}/src/pages/DownPaymentApproval.tsx`,
+      'utf8',
+    );
+    const migration = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917170000_field_assistant_payment_only_tier.sql`,
+      'utf8',
+    );
+
+    expect(page).toContain('Tier 1: Payment Processing');
+    expect(page).toContain('Approval and rejection actions are unavailable.');
+    expect(page).toMatch(/isFieldPaymentOnly[\s\S]*approvalMode=\{isFieldPaymentOnly[\s\S]*\? 'explicit_payment'/);
+    expect(migration).toContain("p.action = 'approve'");
+    expect(migration).toContain("o.action = 'approve'");
+    expect(migration).toContain("o.is_granted = true");
+    expect(migration).toContain("'fieldassistant'");
+  });
 });

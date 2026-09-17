@@ -82,6 +82,18 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'Field Assistant payment grant must not add approval authority';
     END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM public.user_permission_overrides o
+      JOIN public.canonical_user_role_assignments a ON a.user_id = o.user_id
+      WHERE a.role_id = v_role_id
+        AND o.is_granted = true
+        AND o.action = 'approve'
+        AND o.resource IN ('down_payments', 'cost_submissions', 'pre_funding')
+    ) THEN
+      RAISE EXCEPTION 'Field Assistant must not retain a user-level payment approval grant';
+    END IF;
   END IF;
   IF to_regprocedure('public._assert_pre_fund_payment_access()') IS NULL THEN
     RAISE EXCEPTION 'dedicated Pre-Fund payment assertion is missing';
