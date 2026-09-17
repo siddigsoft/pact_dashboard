@@ -47,6 +47,32 @@ BEGIN
       updated_at = now(),
       approved_at = now();
 
+  -- Payment access must not inherit either Down Payment approval tier from the
+  -- Admin role or the Kassala Supervisor assignment.
+  INSERT INTO public.user_permission_overrides (
+    user_id,
+    resource,
+    action,
+    is_granted,
+    reason,
+    expires_at,
+    approved_at
+  ) VALUES (
+    v_user_id,
+    'down_payments',
+    'approve',
+    false,
+    'Payment processing only; Down Payment Tier 1 and Tier 2 approval are excluded.',
+    NULL,
+    now()
+  )
+  ON CONFLICT (user_id, resource, action) DO UPDATE
+  SET is_granted = false,
+      reason = EXCLUDED.reason,
+      expires_at = NULL,
+      updated_at = now(),
+      approved_at = now();
+
   INSERT INTO public.page_access_overrides (
     user_id,
     page_slug,

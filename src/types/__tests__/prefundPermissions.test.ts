@@ -200,7 +200,22 @@ describe('Pre-Fund payment permissions', () => {
     expect(salmaPaymentGrant).toContain("'tier2-approvals'");
     expect(salmaPaymentGrant).toContain('is_blocked = true');
     expect(salmaPaymentGrant).not.toContain("('cost_submissions'::text, 'approve'::text)");
-    expect(salmaPaymentGrant).not.toContain("('down_payments'::text, 'approve'::text)");
+    expect(salmaPaymentGrant).toContain("'down_payments',\n    'approve',\n    false");
+    const downPaymentPage = readFileSync(
+      `${process.cwd()}/src/pages/DownPaymentApproval.tsx`,
+      'utf8',
+    );
+    expect(downPaymentPage).toContain('const canApproveActions = hasWorkflowRole');
+    expect(downPaymentPage).toContain('{isAdmin && !isFieldPaymentOnly && (');
+    expect(downPaymentPage).toContain("if (isFieldPaymentOnly && visibleViewTabs.includes('approval'))");
+    const downPaymentPanel = readFileSync(
+      `${process.cwd()}/src/components/downPayment/DownPaymentApprovalPanel.tsx`,
+      'utf8',
+    );
+    expect(downPaymentPanel).toContain("['approved', 'processing', 'completed']");
+    expect(downPaymentPanel).toContain("isPaymentOnly ? 'grid-cols-3'");
+    expect(downPaymentPanel).toContain('button-approved-batch-pay');
+    expect(downPaymentPanel).toContain('button-batch-pay');
     expect(page).toContain("getEffectiveSubmissionHubId(oc) === 'kassala-hub'");
     expect(page).toContain("rpc('is_kassala_hub_supervisor'");
     expect(page).toContain('isKassalaCostSupervisor || isFilterVisible');

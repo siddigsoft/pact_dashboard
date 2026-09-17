@@ -543,9 +543,12 @@ export default function DownPaymentApproval() {
   // with down_payments:approve gets the narrow Tier 2 approval entry point;
   // it must not be promoted into the supervisor/admin control surface.
   const canApprovePendingAdminOnly = !hasWorkflowRole && canApproveDownPayment();
-  const canApproveActions = hasKassalaSupervisorAssignment || (hasWorkflowRole
+  // checkPermission applies an explicit user deny before role defaults and the
+  // Kassala assignment grant. This lets a payment processor keep Admin page
+  // access without receiving either Down Payment approval tier.
+  const canApproveActions = hasWorkflowRole
     ? canApproveDownPayment()
-    : canApprovePendingAdminOnly);
+    : canApprovePendingAdminOnly;
   const canMarkPaidActions = hasKassalaSupervisorAssignment || canMarkDownPaymentPaid();
   const isFieldPaymentOnly = canMarkPaidActions && !canApproveActions;
   const isKassalaTier1PaymentSupervisor =
@@ -565,7 +568,9 @@ export default function DownPaymentApproval() {
   );
 
   const [selectedTier, setSelectedTier] = useState<'tier1' | 'tier2'>(isAdmin ? 'tier2' : 'tier1');
-  const [viewTab, setViewTab] = useState(canApproveActions ? 'approval' : 'allRequests');
+  const [viewTab, setViewTab] = useState(
+    canApproveActions || canMarkPaidActions ? 'approval' : 'allRequests',
+  );
   const visibleViewTabs = useMemo(
     () => ['approval', 'byState', 'byProject', 'byMMP', 'allRequests', 'disbursement', 'coverage']
       .filter(isDownPaymentTabVisible),
@@ -575,6 +580,11 @@ export default function DownPaymentApproval() {
   useEffect(() => {
     if (!visibleViewTabs.includes(viewTab)) setViewTab(visibleViewTabs[0] ?? 'allRequests');
   }, [viewTab, visibleViewTabs]);
+  useEffect(() => {
+    if (isFieldPaymentOnly && visibleViewTabs.includes('approval')) {
+      setViewTab('approval');
+    }
+  }, [isFieldPaymentOnly, visibleViewTabs]);
   // Persisted dismissal: keyed by sorted site names so a new duplicate re-shows the banner.
   const LS_BANNER_KEY = 'dp_dup_banner_dismissed_key';
   const [dismissedDupKey, setDismissedDupKey] = useState<string>(() => localStorage.getItem(LS_BANNER_KEY) ?? '');
@@ -1192,7 +1202,7 @@ export default function DownPaymentApproval() {
                 : 'Process approved down-payment requests and manage payments'}
           </p>
         </div>
-        {isAdmin && (
+        {isAdmin && !isFieldPaymentOnly && (
           <div className="flex items-center gap-2 p-1 bg-muted rounded-lg">
             <Button variant={selectedTier === 'tier1' ? 'default' : 'ghost'} size="sm" onClick={() => setSelectedTier('tier1')} className="gap-2" data-testid="button-tier1">
               <Users className="h-4 w-4" />Tier 1: Supervisor

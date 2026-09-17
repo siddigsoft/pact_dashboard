@@ -403,6 +403,7 @@ export function DownPaymentApprovalPanel({
   const isStandaloneExplicit = approvalMode !== 'workflow';
   const isExplicitApproval = approvalMode === 'explicit_pending_admin' || approvalMode === 'explicit_combined';
   const hasExplicitPaymentSurface = approvalMode === 'explicit_payment' || approvalMode === 'explicit_combined';
+  const isPaymentOnly = approvalMode === 'explicit_payment';
   const { toast } = useToast();
   const { isFilterVisible } = useCurrentUserAccess();
   const requests = externalRequests ?? contextRequests;
@@ -423,12 +424,15 @@ export function DownPaymentApprovalPanel({
   const [singlePayPreFundId, setSinglePayPreFundId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('pending');
   useEffect(() => {
-    const defaultTab = approvalMode === 'explicit_payment' ? 'processing' : 'pending';
+    const defaultTab = isPaymentOnly ? 'approved' : 'pending';
+    const allowedExplicitTabs = isPaymentOnly
+      ? ['approved', 'processing', 'completed']
+      : ['pending', 'processing'];
     if (isStandaloneExplicit && activeTab !== defaultTab &&
-        !(approvalMode === 'explicit_combined' && (activeTab === 'pending' || activeTab === 'processing'))) {
+        !allowedExplicitTabs.includes(activeTab)) {
       setActiveTab(defaultTab);
     }
-  }, [approvalMode, isStandaloneExplicit, activeTab]);
+  }, [isPaymentOnly, isStandaloneExplicit, activeTab]);
   const [completedSubTab, setCompletedSubTab] = useState<'paid_waiting' | 'confirmed'>('paid_waiting');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
@@ -671,7 +675,7 @@ export function DownPaymentApprovalPanel({
   }, [filteredRequests, userRole, approvalMode, isExplicitApproval]);
 
   const approvedRequests = useMemo(() => {
-    if (userRole === 'admin') {
+    if (userRole === 'admin' || hasExplicitPaymentSurface) {
       return filteredRequests.filter(req => req.status === 'approved');
     }
     return [];
@@ -679,7 +683,7 @@ export function DownPaymentApprovalPanel({
 
   const processingRequests = useMemo(() => {
     if (hasExplicitPaymentSurface) {
-      return filteredRequests.filter(r => r.status === 'approved' || r.status === 'partially_paid');
+      return filteredRequests.filter(r => r.status === 'partially_paid');
     }
     if (userRole === 'admin') {
       return filteredRequests.filter(req => req.status === 'partially_paid');
@@ -3874,7 +3878,12 @@ export function DownPaymentApprovalPanel({
     () => Array.from(selectedIds).sort().join('|'),
     [selectedIds],
   );
-  const renderCardWithCheckbox = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showCheckbox={!isStandaloneExplicit} />, [RequestCard, isStandaloneExplicit]);
+  const renderCardWithCheckbox = useCallback(
+    (r: DownPaymentRequest) => (
+      <RequestCard request={r} showCheckbox={!isStandaloneExplicit || hasExplicitPaymentSurface} />
+    ),
+    [RequestCard, isStandaloneExplicit, hasExplicitPaymentSurface],
+  );
   const renderCardPlain = useCallback((r: DownPaymentRequest) => <RequestCard request={r} />, [RequestCard]);
   const renderCardWithConfirmation = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showConfirmationDetails />, [RequestCard]);
   const selectedRequestBalance = selectedRequest
@@ -3980,18 +3989,20 @@ export function DownPaymentApprovalPanel({
       <Tabs
         value={isStandaloneExplicit ? activeTab : activeTab}
         onValueChange={value => {
-          if (!isStandaloneExplicit || (approvalMode === 'explicit_combined' && ['pending', 'processing'].includes(value))) {
+          if (!isStandaloneExplicit
+              || (isPaymentOnly && ['approved', 'processing', 'completed'].includes(value))
+              || (approvalMode === 'explicit_combined' && ['pending', 'processing'].includes(value))) {
             setActiveTab(value);
           }
         }}
         className="w-full"
       >
-        <TabsList className={`grid w-full ${isStandaloneExplicit ? (isExplicitApproval && hasExplicitPaymentSurface ? 'grid-cols-2' : 'grid-cols-1') : (userRole === 'admin' ? 'grid-cols-6' : 'grid-cols-5')} mb-4`}>
+        <TabsList className={`grid w-full ${isPaymentOnly ? 'grid-cols-3' : isStandaloneExplicit ? (isExplicitApproval && hasExplicitPaymentSurface ? 'grid-cols-2' : 'grid-cols-1') : (userRole === 'admin' ? 'grid-cols-6' : 'grid-cols-5')} mb-4`}>
           {(!isStandaloneExplicit || isExplicitApproval) && <TabsTrigger value="pending" data-testid="tab-pending">
             Pending
             <Badge variant="secondary" className="ml-2">{pendingRequests.length}</Badge>
           </TabsTrigger>}
-          {!isStandaloneExplicit && userRole === 'admin' && (
+          {((!isStandaloneExplicit && userRole === 'admin') || isPaymentOnly) && (
             <TabsTrigger value="approved" data-testid="tab-approved">
               Approved
               {approvedRequests.length > 0
@@ -4004,7 +4015,7 @@ export function DownPaymentApprovalPanel({
             Processing
             <Badge variant="secondary" className="ml-2">{processingRequests.length}</Badge>
           </TabsTrigger>}
-          {!isStandaloneExplicit && <TabsTrigger value="completed" data-testid="tab-completed">
+          {(!isStandaloneExplicit || isPaymentOnly) && <TabsTrigger value="completed" data-testid="tab-completed">
             Completed
             <Badge variant="secondary" className="ml-2">{completedRequests.length}</Badge>
           </TabsTrigger>}
@@ -4139,11 +4150,11 @@ export function DownPaymentApprovalPanel({
                     </Button>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Button size="sm" onClick={() => {
+                    {!isPaymentOnly && <Button size="sm" onClick={() => {
                       if (selectedApproved.length > 0) openBulkPaymentRequestDialog(selectedApproved, '', `${selectedApproved.length} Selected`);
                     }} disabled={processing} data-testid="button-approved-request-payment">
                       <Mail className="h-4 w-4 mr-1" /> Request Payment ({selectedApproved.length})
-                    </Button>
+                    </Button>}
                     {canMarkPaid && <Button size="sm" variant="default" onClick={() => {
                       if (selectedApproved.length > 0) openActionDialog(selectedApproved[0], 'pay');
                     }} disabled={processing} data-testid="button-approved-process-payment">
@@ -4154,19 +4165,19 @@ export function DownPaymentApprovalPanel({
                         <Wallet className="h-4 w-4 mr-1" /> Batch Pay ({selectedApproved.length})
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" onClick={() => {
+                    {canExportActions && <Button size="sm" variant="outline" onClick={() => {
                       if (selectedApproved.length > 0) handleDownloadBulkPdf(selectedApproved, `${selectedApproved.length} Selected`);
                     }} disabled={processing} data-testid="button-approved-bulk-pdf">
                       <FileText className="h-4 w-4 mr-1" /> PDF ({selectedIds.size})
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => {
+                    </Button>}
+                    {canExportActions && <Button size="sm" variant="outline" onClick={() => {
                       if (selectedApproved.length > 0) openBulkExcelRequestDialog(selectedApproved, '', `${selectedApproved.length} Selected`);
                     }} disabled={processing} data-testid="button-approved-bulk-excel">
                       <FileSpreadsheet className="h-4 w-4 mr-1" /> Excel ({selectedIds.size})
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_admin')} disabled={processing} data-testid="button-approved-revert-admin">
+                    </Button>}
+                    {!isPaymentOnly && <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_admin')} disabled={processing} data-testid="button-approved-revert-admin">
                       <Undo2 className="h-4 w-4 mr-1" /> Revert to Pending Admin
-                    </Button>
+                    </Button>}
                     {isSuperAdmin && (
                       <Button size="sm" variant="outline" className="text-destructive border-destructive/30" onClick={handleBulkDelete} disabled={processing} data-testid="button-approved-delete">
                         <Trash2 className="h-4 w-4 mr-1" /> Delete ({selectedIds.size})
@@ -4363,7 +4374,7 @@ export function DownPaymentApprovalPanel({
               </CardContent>
             </Card>
           )}
-          {!isStandaloneExplicit && selectedIds.size > 0 && processingRequests.length > 0 && (() => {
+          {(!isStandaloneExplicit || isPaymentOnly) && selectedIds.size > 0 && processingRequests.length > 0 && (() => {
             const selectedProcessing = processingRequests.filter(r => selectedIds.has(r.id));
             const approvedCount = selectedProcessing.filter(r => r.status === 'approved').length;
             const payableCount = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid').length;
@@ -4385,13 +4396,13 @@ export function DownPaymentApprovalPanel({
                   </Button>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Button size="sm" onClick={() => {
+                  {!isPaymentOnly && <Button size="sm" onClick={() => {
                     const selected = selectedProcessing.filter(r => r.status === 'approved');
                     if (selected.length > 0) openBulkPaymentRequestDialog(selected, '', `${selected.length} Selected`);
                   }} disabled={approvedCount === 0 || processing} data-testid="button-selected-request-payment">
                     <Mail className="h-4 w-4 mr-1" />
                     Request Payment ({approvedCount})
-                  </Button>
+                  </Button>}
                   {canMarkPaid && <Button size="sm" variant="default" onClick={() => {
                     const selected = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid');
                     if (selected.length > 0) {
@@ -4412,26 +4423,26 @@ export function DownPaymentApprovalPanel({
                     </Button>
                   )}
 
-                  <Button size="sm" variant="outline" onClick={() => {
+                  {canExportActions && <Button size="sm" variant="outline" onClick={() => {
                     if (selectedProcessing.length > 0) handleDownloadBulkPdf(selectedProcessing, `${selectedProcessing.length} Selected`);
                   }} disabled={processing} data-testid="button-selected-bulk-pdf">
                     <FileText className="h-4 w-4 mr-1" />
                     PDF ({selectedIds.size})
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => {
+                  </Button>}
+                  {canExportActions && <Button size="sm" variant="outline" onClick={() => {
                     if (selectedProcessing.length > 0) openBulkExcelRequestDialog(selectedProcessing, '', `${selectedProcessing.length} Selected`);
                   }} disabled={processing} data-testid="button-selected-bulk-excel">
                     <FileSpreadsheet className="h-4 w-4 mr-1" />
                     Excel ({selectedIds.size})
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_supervisor')} disabled={processing} data-testid="button-selected-revert-supervisor">
+                  </Button>}
+                  {!isPaymentOnly && <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_supervisor')} disabled={processing} data-testid="button-selected-revert-supervisor">
                     <Undo2 className="h-4 w-4 mr-1" />
                     Revert to Pending
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_admin')} disabled={processing} data-testid="button-selected-revert-admin">
+                  </Button>}
+                  {!isPaymentOnly && <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_admin')} disabled={processing} data-testid="button-selected-revert-admin">
                     <Undo2 className="h-4 w-4 mr-1" />
                     Revert to Admin
-                  </Button>
+                  </Button>}
                   {isSuperAdmin && (
                     <Button size="sm" variant="outline" className="text-destructive border-destructive/30" onClick={handleBulkDelete} disabled={processing} data-testid="button-selected-delete">
                       <Trash2 className="h-4 w-4 mr-1" />
