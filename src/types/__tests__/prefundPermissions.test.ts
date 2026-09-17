@@ -184,6 +184,10 @@ describe('Pre-Fund payment permissions', () => {
       `${process.cwd()}/supabase/migrations/20260917260000_salma_down_payment_approval_tab_only.sql`,
       'utf8',
     );
+    const salmaCostSubmitterFilter = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917270000_salma_cost_submitter_filter.sql`,
+      'utf8',
+    );
 
     expect(migration).toContain("('cost_submissions'::text, 'read'::text");
     expect(migration).toContain("('cost_submissions'::text, 'mark_paid'::text");
@@ -218,6 +222,9 @@ describe('Pre-Fund payment permissions', () => {
     expect(salmaApprovalTabOnly).toContain("('down-payment-approval:allRequests'::text, true)");
     expect(salmaApprovalTabOnly).toContain("('down-payment-approval:disbursement'::text, true)");
     expect(salmaApprovalTabOnly).toContain("('down-payment-approval:coverage'::text, true)");
+    expect(salmaCostSubmitterFilter).toContain("'cost-submission.user'");
+    expect(salmaCostSubmitterFilter).toContain('is_hidden = false');
+    expect(salmaCostSubmitterFilter).not.toContain('cost_submissions');
     const downPaymentPage = readFileSync(
       `${process.cwd()}/src/pages/DownPaymentApproval.tsx`,
       'utf8',
