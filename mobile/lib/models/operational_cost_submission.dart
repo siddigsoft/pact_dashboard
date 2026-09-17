@@ -728,6 +728,10 @@ class CostSubmissionPermissions {
   final bool isCountryDirector;
   final bool isDataCollector;
   final String role;
+  final String? assignedHubId;
+  final String? assignedHubName;
+  final bool authoritativeKassalaSupervisor;
+  final String? kassalaHubId;
 
   CostSubmissionPermissions({
     required this.canSubmit,
@@ -742,9 +746,19 @@ class CostSubmissionPermissions {
     required this.isCountryDirector,
     required this.isDataCollector,
     required this.role,
+    this.assignedHubId,
+    this.assignedHubName,
+    this.authoritativeKassalaSupervisor = false,
+    this.kassalaHubId,
   });
 
-  factory CostSubmissionPermissions.fromRole(String? role) {
+  factory CostSubmissionPermissions.fromRole(
+    String? role, {
+    String? assignedHubId,
+    String? assignedHubName,
+    bool authoritativeKassalaSupervisor = false,
+    String? kassalaHubId,
+  }) {
     final r = role?.toLowerCase() ?? '';
 
     final isSuperAdmin = r == 'super_admin' || r == 'superadmin';
@@ -769,8 +783,10 @@ class CostSubmissionPermissions {
           isCountryDirector ||
           isAdmin ||
           isSupervisor,
-      canViewTeam: isAdmin || isSupervisor || isCountryDirector || isFOM,
-      canApprove: isAdmin || isSupervisor || isFOM || isCountryDirector,
+      canViewTeam: authoritativeKassalaSupervisor ||
+          isAdmin || isSupervisor || isCountryDirector || isFOM,
+      canApprove: authoritativeKassalaSupervisor ||
+          isAdmin || isSupervisor || isFOM || isCountryDirector,
       canPayOut: isAdmin || isSuperAdmin,
       isAdmin: isAdmin,
       isSuperAdmin: isSuperAdmin,
@@ -780,7 +796,20 @@ class CostSubmissionPermissions {
       isCountryDirector: isCountryDirector,
       isDataCollector: isDataCollector,
       role: r,
+      assignedHubId: assignedHubId,
+      assignedHubName: assignedHubName,
+      authoritativeKassalaSupervisor: authoritativeKassalaSupervisor,
+      kassalaHubId: kassalaHubId,
     );
+  }
+
+  bool get isKassalaHubSupervisor =>
+      authoritativeKassalaSupervisor ||
+      (isSupervisor && _isKassalaHub(assignedHubName ?? assignedHubId));
+
+  static bool _isKassalaHub(String? value) {
+    final normalized = value?.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    return normalized == 'kassala' || normalized == 'kassalahub';
   }
 
   /// Tier 1 approvers: Supervisor, FOM (for their subordinates)
@@ -789,9 +818,17 @@ class CostSubmissionPermissions {
   bool canApproveTier1(OperationalCostSubmission submission) {
     if (submission.status != OperationalCostStatus.pending) return false;
     final submitterRole = submission.submitterRole?.toLowerCase() ?? '';
+    if (isKassalaHubSupervisor) {
+      return submitterRole.contains('coordinator') &&
+          (submission.hubId == assignedHubId ||
+              submission.hubId == kassalaHubId ||
+              _isKassalaHub(submission.hubId ?? submission.hubName));
+    }
 
     // Coordinator → Supervisor approves Tier 1
-    if (submitterRole.contains('coordinator') && isSupervisor) return true;
+    if (submitterRole.contains('coordinator') && isSupervisor) {
+      return assignedHubId == null || submission.hubId == assignedHubId;
+    }
 
     // Supervisor → FOM approves Tier 1
     if (submitterRole.contains('supervisor') && isFOM) return true;

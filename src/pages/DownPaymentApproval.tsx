@@ -509,12 +509,12 @@ export default function DownPaymentApproval() {
   const { isSuperAdmin } = useSuperAdmin();
   const { requests, loading, refreshRequests } = useDownPayment();
   const { toast } = useToast();
-  const { canApproveDownPayment, canMarkDownPaymentPaid, checkPermission } = useAuthorization();
+  const { canApproveDownPayment, canMarkDownPaymentPaid, checkPermission, hasAnyRole } = useAuthorization();
   const { isTabBlocked, isFilterVisible } = useCurrentUserAccess();
 
   const userRole = currentUser?.role?.toLowerCase();
   const normalizedRole = userRole?.replace(/[\s_-]/g, '') ?? '';
-  const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
+  const isSupervisor = hasAnyRole(['Supervisor', 'Hub Supervisor']);
   const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || userRole === 'ict' || isSuperAdmin;
   const isFOM = userRole === 'fom' || userRole === 'field operation manager';
   const isCountryDirector = userRole === 'countrydirector' || userRole === 'country_director';
@@ -532,12 +532,17 @@ export default function DownPaymentApproval() {
     : canApprovePendingAdminOnly;
   const canMarkPaidActions = canMarkDownPaymentPaid();
   const isFieldPaymentOnly = canMarkPaidActions && !canApproveActions;
+  const isKassalaTier1PaymentSupervisor =
+    !isAdmin && isSupervisor && canMarkPaidActions && canApproveActions;
   const canEditActions = isAdmin && checkPermission('down_payments', 'update');
   const canExportActions = checkPermission('down_payments', 'export');
-  const canDeletePayment = !isFieldPaymentOnly && checkPermission('down_payments', 'delete');
+  const canDeletePayment =
+    !isFieldPaymentOnly && !isKassalaTier1PaymentSupervisor
+    && checkPermission('down_payments', 'delete');
   const canCorrectPreFund = isFinanceAdmin && checkPermission('down_payments', 'reconcile');
   const isPageFilterVisible = (key: string) =>
-    isFieldPaymentOnly || isFilterVisible(`down-payment-approval.${key}`);
+    isFieldPaymentOnly || isKassalaTier1PaymentSupervisor
+      || isFilterVisible(`down-payment-approval.${key}`);
   const isDownPaymentTabVisible = useCallback(
     (tabId: string) => !isTabBlocked(hubTabSlug('down-payment-approval', tabId)),
     [isTabBlocked],
@@ -644,7 +649,9 @@ export default function DownPaymentApproval() {
   const [paymentDeleteDialog, setPaymentDeleteDialog] = useState<{ payment: PaymentEvidence | null; reason: string; saving: boolean }>({ payment: null, reason: '', saving: false });
   const [preFundLinkError, setPreFundLinkError] = useState<string | null>(null);
   const [preFundFilterOptions, setPreFundFilterOptions] = useState<Array<{ id: string; name: string; currency: string }>>([]);
-  const canManagePreFundFilters = userRole === 'admin' || userRole === 'superadmin' || isSuperAdmin || isFieldPaymentOnly;
+  const canManagePreFundFilters =
+    userRole === 'admin' || userRole === 'superadmin' || isSuperAdmin
+    || isFieldPaymentOnly || isKassalaTier1PaymentSupervisor;
   const [preFundCorrectionDialog, setPreFundCorrectionDialog] = useState<{
     open: boolean;
     evidence: PaymentEvidence | null;
@@ -1516,7 +1523,9 @@ export default function DownPaymentApproval() {
             : selectedTier === 'tier1' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : ''}>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              {isFieldPaymentOnly ? (
+              {isKassalaTier1PaymentSupervisor ? (
+                <><strong>Tier 1 - Kassala Approval &amp; Payment:</strong> Approve or reject Tier 1 requests for Kassala Hub, and process eligible approved requests from every hub. Tier 2 approval is unavailable.</>
+              ) : isFieldPaymentOnly ? (
                 <><strong>Tier 1 - Payment Processing:</strong> Process eligible approved requests individually or in a batch. Approval and rejection actions are unavailable.</>
               ) : canApprovePendingAdminOnly ? (
                 <><strong>Tier 2 - Granted Approval:</strong> Review and approve eligible requests already awaiting Admin processing. Payment remains available only with the separate payment and pre-funding grants.</>
@@ -1544,6 +1553,10 @@ export default function DownPaymentApproval() {
             }}
             canDeletePayment={canDeletePayment}
             canApproveActions={canApproveActions}
+            canApproveRequest={request => !isKassalaTier1PaymentSupervisor
+              || ['kassala', 'kassalahub'].includes(
+                (request.hubName ?? '').toLowerCase().replace(/[^a-z]/g, ''),
+              )}
             canApprovePendingAdminOnly={canApprovePendingAdminOnly}
             approvalMode={isFieldPaymentOnly
               ? 'explicit_payment'

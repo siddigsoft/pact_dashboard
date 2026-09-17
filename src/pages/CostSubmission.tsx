@@ -275,7 +275,14 @@ const CostSubmission = () => {
   const isStrictCostSubmissionAdmin = isAdmin || isSuperAdminFn();
   const isFinanceAdmin    = hasAnyRole(['financialAdmin']);
   const isDataTeam        = hasAnyRole(['dataTeam']);
-  const canManagePreFundFilters = isAdmin || isSuperAdminFn();
+  const canApproveCostByPermission = checkPermission('cost_submissions', 'approve');
+  const canMarkCostPaid = canMarkCostPaidByPermission();
+  const isKassalaCostSupervisor =
+    !isAdmin && !isFinanceAdmin && !isFOM && !isCountryDirector
+    && isSupervisor && canApproveCostByPermission && canMarkCostPaid;
+  const isCostFilterVisible = (key: string) =>
+    isKassalaCostSupervisor || isFilterVisible(`cost-submission.${key}`);
+  const canManagePreFundFilters = isAdmin || isSuperAdminFn() || isKassalaCostSupervisor;
 
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataTeam || isDataCollector;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
@@ -905,15 +912,15 @@ const CostSubmission = () => {
   });
   const [costSearch, setCostSearch] = useState('');
   useEffect(() => {
-    if (!isFilterVisible('cost-submission.status')) setStatusFilter('all');
-    if (!isFilterVisible('cost-submission.mmp')) setMmpFilter('all');
-    if (!isFilterVisible('cost-submission.user')) setUserFilter('all');
-    if (!isFilterVisible('cost-submission.state')) setStateFilter('all');
-    if (!isFilterVisible('cost-submission.pre-fund')) setCostPreFundFilter('all');
-    if (!isFilterVisible('cost-submission.tier')) setTierFilter('all');
-    if (!isFilterVisible('cost-submission.search')) setCostSearch('');
-    if (!isFilterVisible('cost-submission.date')) { setOcDateFrom(''); setOcDateTo(''); }
-    if (!isFilterVisible('cost-submission.amount')) { setOcAmtMin(''); setOcAmtMax(''); }
+    if (!isCostFilterVisible('status')) setStatusFilter('all');
+    if (!isCostFilterVisible('mmp')) setMmpFilter('all');
+    if (!isCostFilterVisible('user')) setUserFilter('all');
+    if (!isCostFilterVisible('state')) setStateFilter('all');
+    if (!isCostFilterVisible('pre-fund')) setCostPreFundFilter('all');
+    if (!isCostFilterVisible('tier')) setTierFilter('all');
+    if (!isCostFilterVisible('search')) setCostSearch('');
+    if (!isCostFilterVisible('date')) { setOcDateFrom(''); setOcDateTo(''); }
+    if (!isCostFilterVisible('amount')) { setOcAmtMin(''); setOcAmtMax(''); }
   }, [isFilterVisible]);
   // Inverted logic: stores which categories are COLLAPSED. Empty set = all expanded.
   // This correctly handles any category key, including custom/unknown ones.
@@ -1507,6 +1514,9 @@ const CostSubmission = () => {
     if (oc.tier1_status !== 'pending') return false;
     if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
     if (isSuperAdmin || isAdmin) return true;
+    if (isKassalaCostSupervisor) {
+      return hasFourTiers(oc) && getEffectiveSubmissionHubId(oc) === 'kassala-hub';
+    }
     // Coordinator: T1 = Hub Supervisor (or FOM when the hub has no supervisor).
     if (hasFourTiers(oc)) {
       // Resolve effective hub (submission hub_id, or fall back to submitter's hubId)
@@ -1580,6 +1590,10 @@ const CostSubmission = () => {
   };
 
   const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2 | 3 | 4) => {
+    if (isKassalaCostSupervisor && (tier !== 1 || !canTier1Approve(oc))) {
+      toast({ title: 'Not authorized', description: 'Tier 1 approval is limited to Kassala Hub Cost Submissions.', variant: 'destructive' });
+      return;
+    }
     setApprovalDialog({ open: true, action, tier, submission: oc });
     setApprovalNotes('');
     setApprovalReason('');
@@ -1614,6 +1628,11 @@ const CostSubmission = () => {
   const handleGroupApproval = async () => {
     const { action, tier, groupId, groupTitle, submissions } = groupApprovalDialog;
     if (!submissions.length || !currentUser?.id || !groupId) return;
+    if (isKassalaCostSupervisor &&
+        (tier !== 1 || submissions.some(submission => !canTier1Approve(submission)))) {
+      toast({ title: 'Not authorized', description: 'Every selected Tier 1 submission must belong to Kassala Hub.', variant: 'destructive' });
+      return;
+    }
     setGroupApprovalProcessing(true);
     try {
       const now = new Date().toISOString();
@@ -5298,7 +5317,7 @@ const CostSubmission = () => {
           {/* Filter row: MMP / Submitter / State */}
           <div className="flex items-center gap-2 flex-wrap mb-1" data-testid="mmp-filter-bar">
             {/* MMP filter */}
-            {isFilterVisible('cost-submission.mmp') && mmpOptions.length > 0 && !cycleContextMmpId && (
+            {isCostFilterVisible('mmp') && mmpOptions.length > 0 && !cycleContextMmpId && (
               <Select value={mmpFilter} onValueChange={v => { setMmpFilter(v); setUserFilter('all'); setStateFilter('all'); }} data-testid="select-mmp-filter">
                 <SelectTrigger className="h-8 text-xs w-[200px]" data-testid="trigger-mmp-filter">
                   <SelectValue placeholder="All MMPs" />
@@ -5313,7 +5332,7 @@ const CostSubmission = () => {
             )}
 
             {/* Submitter filter */}
-            {isFilterVisible('cost-submission.user') && (isAdminOrSuperUser || isSuperAdmin || isSupervisor || isFOM || isCountryDirector) && userOptions.length > 1 && (
+            {isCostFilterVisible('user') && (isAdminOrSuperUser || isSuperAdmin || isSupervisor || isFOM || isCountryDirector) && userOptions.length > 1 && (
               <Select value={userFilter} onValueChange={setUserFilter} data-testid="select-user-filter">
                 <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="trigger-user-filter">
                   <SelectValue placeholder="All Submitters" />
@@ -5328,7 +5347,7 @@ const CostSubmission = () => {
             )}
 
             {/* State filter */}
-            {isFilterVisible('cost-submission.state') && (isAdminOrSuperUser || isSuperAdmin) && stateOptions.length > 1 && (
+            {isCostFilterVisible('state') && (isAdminOrSuperUser || isSuperAdmin || isKassalaCostSupervisor) && stateOptions.length > 1 && (
               <Select value={stateFilter} onValueChange={setStateFilter} data-testid="select-state-filter">
                 <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="trigger-state-filter">
                   <SelectValue placeholder="All States" />
@@ -5342,7 +5361,7 @@ const CostSubmission = () => {
               </Select>
             )}
 
-            {isFilterVisible('cost-submission.pre-fund') && canManagePreFundFilters && (
+            {isCostFilterVisible('pre-fund') && canManagePreFundFilters && (
               <Select value={costPreFundFilter} onValueChange={setCostPreFundFilter} data-testid="select-cost-pre-fund-filter">
                 <SelectTrigger className="h-8 text-xs w-[210px]">
                   <SelectValue placeholder="Paid from Pre-Fund" />
@@ -5361,7 +5380,7 @@ const CostSubmission = () => {
             )}
 
             {/* Approval-tier filter — Super Admin only */}
-            {isFilterVisible('cost-submission.tier') && isSuperAdmin && (
+            {isCostFilterVisible('tier') && (isSuperAdmin || isKassalaCostSupervisor) && (
               <Select value={tierFilter} onValueChange={v => setTierFilter(v as typeof tierFilter)} data-testid="select-tier-filter">
                 <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="trigger-tier-filter">
                   <SelectValue placeholder="All Tiers" />
@@ -5429,7 +5448,7 @@ const CostSubmission = () => {
             </div>
           )}
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-filter-bar">
-            {isFilterVisible('cost-submission.status') && ([
+            {isCostFilterVisible('status') && ([
               { key: 'all', label: 'All', labelAr: 'الكل', count: filteredOperationalCosts.length, color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
               { key: 'pending', label: 'Pending', labelAr: 'معلق', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'pending').length, color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
               { key: 'under_review', label: 'In Review', labelAr: 'قيد المراجعة', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'under_review').length, color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' },
@@ -5858,7 +5877,7 @@ const CostSubmission = () => {
                       </div>
                     </div>
                   )}
-                  {isFilterVisible('cost-submission.search') && <div className="relative">
+                  {isCostFilterVisible('search') && <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
                       placeholder="Search by description, vendor, reference, category..."
@@ -5951,11 +5970,11 @@ const CostSubmission = () => {
                       {savedFilters.map((f, fi) => (
                         <div key={fi} className="inline-flex items-center rounded-full border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 text-[10px] font-medium text-violet-700 dark:text-violet-400 overflow-hidden">
                           <button className="px-2 py-0.5" onClick={() => {
-                            setCostSearch(isFilterVisible('cost-submission.search') ? f.search : '');
-                            setOcDateFrom(isFilterVisible('cost-submission.date') ? f.dateFrom : '');
-                            setOcDateTo(isFilterVisible('cost-submission.date') ? f.dateTo : '');
-                            setOcAmtMin(isFilterVisible('cost-submission.amount') ? f.amtMin : '');
-                            setOcAmtMax(isFilterVisible('cost-submission.amount') ? f.amtMax : '');
+                            setCostSearch(isCostFilterVisible('search') ? f.search : '');
+                            setOcDateFrom(isCostFilterVisible('date') ? f.dateFrom : '');
+                            setOcDateTo(isCostFilterVisible('date') ? f.dateTo : '');
+                            setOcAmtMin(isCostFilterVisible('amount') ? f.amtMin : '');
+                            setOcAmtMax(isCostFilterVisible('amount') ? f.amtMax : '');
                           }} data-testid={`button-apply-saved-filter-${fi}`}>{f.label}</button>
                           <button className="px-1.5 border-l border-violet-200 dark:border-violet-700 hover:text-red-500" onClick={() => { const u = savedFilters.filter((_, i) => i !== fi); setSavedFilters(u); localStorage.setItem('oc_saved_filters', JSON.stringify(u)); }} data-testid={`button-remove-saved-filter-${fi}`}><X className="h-2.5 w-2.5" /></button>
                         </div>
@@ -5963,9 +5982,9 @@ const CostSubmission = () => {
                     </div>
                   )}
                   {/* Advanced date/amount filter panel */}
-                  {showAdvFilters && (isFilterVisible('cost-submission.date') || isFilterVisible('cost-submission.amount')) && (
+                  {showAdvFilters && (isCostFilterVisible('date') || isCostFilterVisible('amount')) && (
                     <div className="rounded-lg border bg-muted/30 p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {isFilterVisible('cost-submission.date') && (
+                      {isCostFilterVisible('date') && (
                         <div className="contents">
                           <div>
                             <label className="text-[10px] text-muted-foreground mb-1 block">Date from</label>
@@ -5977,7 +5996,7 @@ const CostSubmission = () => {
                           </div>
                         </div>
                       )}
-                      {isFilterVisible('cost-submission.amount') && (
+                      {isCostFilterVisible('amount') && (
                         <div className="contents">
                           <div>
                             <label className="text-[10px] text-muted-foreground mb-1 block">Min amount</label>

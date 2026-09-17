@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/cost_submission_models.dart';
 import '../models/cost_submission.dart' as ops;
+import '../models/operational_cost_submission.dart' as operational;
 import '../models/site_visit.dart';
 import '../repositories/cost_submission_repository.dart';
 import '../services/cost_submission_service.dart';
@@ -149,7 +150,7 @@ final pendingCostSubmissionsProvider =
       try {
         final profileResponse = await supabase
             .from('profiles')
-            .select('role, state_id, hub_id')
+            .select('role, state_id, hub_id, hubs:hub_id(name)')
             .eq('id', currentUserId)
             .maybeSingle();
 
@@ -162,9 +163,34 @@ final pendingCostSubmissionsProvider =
         final isFom = userRole.contains('fom');
         final isCoordinator = userRole.contains('coordinator');
         final isSupervisor = userRole.contains('supervisor');
+        final permissions = operational.CostSubmissionPermissions.fromRole(
+          profileResponse?['role']?.toString(),
+          assignedHubId: profileResponse?['hub_id']?.toString(),
+          assignedHubName: (profileResponse?['hubs'] as Map?)?['name']?.toString(),
+          authoritativeKassalaSupervisor: await supabase.rpc(
+            'is_kassala_hub_supervisor',
+            params: {'p_user_id': currentUserId},
+          ) == true,
+          kassalaHubId: (await supabase
+              .from('hubs')
+              .select('id')
+              .ilike('name', '%kassala%')
+              .limit(1)
+              .maybeSingle())?['id']?.toString(),
+        );
 
         // Admins, coordinators, FOMs, and supervisors see tier-1 pending submissions.
-        if (isAdmin || isCoordinator || isFom || isSupervisor) {
+        if (isAdmin || isCoordinator || isFom || isSupervisor ||
+            permissions.canViewTeam) {
+          if (permissions.isKassalaHubSupervisor) {
+            final response = await supabase.rpc(
+              'get_all_operational_cost_submissions',
+            );
+            return (response as List)
+                .map((json) => ops.OperationalCostSubmission.fromJson(json))
+                .where((s) => s.tier1Status == 'pending')
+                .toList();
+          }
           var query = supabase
               .from('operational_cost_submissions')
               .select('*, profiles!submitted_by(full_name)')

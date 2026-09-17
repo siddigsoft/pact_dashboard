@@ -32,11 +32,27 @@ class OperationalCostService {
     try {
       final response = await _supabase
           .from('profiles')
-          .select('role')
+          .select('role, hub_id, hubs:hub_id(name)')
           .eq('id', userId)
           .single();
+      final authoritativeKassala = await _supabase.rpc(
+        'is_kassala_hub_supervisor',
+        params: {'p_user_id': userId},
+      );
+      final kassalaHub = await _supabase
+          .from('hubs')
+          .select('id')
+          .ilike('name', '%kassala%')
+          .limit(1)
+          .maybeSingle();
 
-      return CostSubmissionPermissions.fromRole(response['role'] as String?);
+      return CostSubmissionPermissions.fromRole(
+        response['role'] as String?,
+        assignedHubId: response['hub_id']?.toString(),
+        assignedHubName: (response['hubs'] as Map?)?['name']?.toString(),
+        authoritativeKassalaSupervisor: authoritativeKassala == true,
+        kassalaHubId: kassalaHub?['id']?.toString(),
+      );
     } catch (e) {
       print('Error getting user permissions: $e');
       return CostSubmissionPermissions.fromRole(null);
@@ -76,28 +92,24 @@ class OperationalCostService {
     OperationalCostStatus? status,
   }) async {
     try {
-      var query = _supabase.from('operational_cost_submissions').select('''
-            *,
-            profiles:submitted_by(name, role),
-            projects:project_id(name),
-            hubs:hub_id(name)
-          ''');
-
-      if (hubId != null) {
-        query = query.eq('hub_id', hubId);
-      }
-      if (projectId != null) {
-        query = query.eq('project_id', projectId);
-      }
-      if (status != null) {
-        query = query.eq('status', status.value);
-      }
-
-      final response = await query.order('created_at', ascending: false);
-
-      return (response as List)
+      final response = await _supabase.rpc(
+        'get_all_operational_cost_submissions',
+      );
+      var submissions = (response as List)
           .map((json) => OperationalCostSubmission.fromJson(json))
           .toList();
+
+      if (hubId != null) {
+        submissions = submissions.where((s) => s.hubId == hubId).toList();
+      }
+      if (projectId != null) {
+        submissions = submissions.where((s) => s.projectId == projectId).toList();
+      }
+      if (status != null) {
+        submissions = submissions.where((s) => s.status == status).toList();
+      }
+      submissions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return submissions;
     } catch (e) {
       print('Error fetching all submissions: $e');
       return [];
@@ -244,6 +256,7 @@ class OperationalCostService {
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', submissionId)
+          .eq('submitted_by', currentUserId!)
           .inFilter('status', ['pending', 'under_review']);
 
       return true;
@@ -272,6 +285,17 @@ class OperationalCostService {
     }
 
     try {
+      final submission = await _supabase
+          .from('operational_cost_submissions')
+          .select('hub_id, hubs:hub_id(name), submitter_role, status')
+          .eq('id', submissionId)
+          .maybeSingle();
+      if (submission == null ||
+          !permissions.canApproveTier1(
+            OperationalCostSubmission.fromJson(submission),
+          )) {
+        return false;
+      }
       await _supabase
           .from('operational_cost_submissions')
           .update({

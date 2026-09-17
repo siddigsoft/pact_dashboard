@@ -89,7 +89,9 @@ class _CostHistoryTabState extends State<CostHistoryTab> {
                       onTier3Reject: () =>
                           _handleTier3Review(submission, false),
                       onMarkPaid: () => _handleMarkPaid(submission),
-                      onCancel: () => _handleCancel(submission),
+                      onCancel: _service.currentUserId == submission.userId
+                          ? () => _handleCancel(submission)
+                          : null,
                       onDownloadCertificate: () =>
                           _handleDownloadCertificate(submission),
                       onExportCsv: () => _handleExportCsv(submission),

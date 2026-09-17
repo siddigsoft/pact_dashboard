@@ -215,12 +215,34 @@ final _submissionHistoryProvider =
       if (userId == null || userId.isEmpty) return [];
       try {
         final supabase = ref.watch(supabaseClientProvider);
-        final response = await supabase
-            .from('operational_cost_submissions')
-            .select()
-            .eq('submitted_by', userId)
-            .order('created_at', ascending: false)
-            .limit(50);
+        final profile = await supabase
+            .from('profiles')
+            .select('role, hub_id, hubs:hub_id(name)')
+            .eq('id', userId)
+            .maybeSingle();
+        final permissions = CostSubmissionPermissions.fromRole(
+          profile?['role']?.toString(),
+          assignedHubId: profile?['hub_id']?.toString(),
+          assignedHubName: (profile?['hubs'] as Map?)?['name']?.toString(),
+          authoritativeKassalaSupervisor: await supabase.rpc(
+            'is_kassala_hub_supervisor',
+            params: {'p_user_id': userId},
+          ) == true,
+          kassalaHubId: (await supabase
+              .from('hubs')
+              .select('id')
+              .ilike('name', '%kassala%')
+              .limit(1)
+              .maybeSingle())?['id']?.toString(),
+        );
+        final response = permissions.isKassalaHubSupervisor
+            ? await supabase.rpc('get_all_operational_cost_submissions')
+            : await supabase
+                .from('operational_cost_submissions')
+                .select()
+                .eq('submitted_by', userId)
+                .order('created_at', ascending: false)
+                .limit(50);
         return (response as List)
             .map(
               (j) =>
@@ -231,6 +253,37 @@ final _submissionHistoryProvider =
         return [];
       }
     });
+
+final _costHistoryPermissionsProvider =
+    FutureProvider.autoDispose<CostSubmissionPermissions>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null || userId.isEmpty) {
+    return CostSubmissionPermissions.fromRole(null);
+  }
+  final supabase = ref.watch(supabaseClientProvider);
+  final profile = await supabase
+      .from('profiles')
+      .select('role, hub_id, hubs:hub_id(name)')
+      .eq('id', userId)
+      .maybeSingle();
+  final authoritativeKassala = await supabase.rpc(
+    'is_kassala_hub_supervisor',
+    params: {'p_user_id': userId},
+  );
+  final kassalaHub = await supabase
+      .from('hubs')
+      .select('id')
+      .ilike('name', '%kassala%')
+      .limit(1)
+      .maybeSingle();
+  return CostSubmissionPermissions.fromRole(
+    profile?['role']?.toString(),
+    assignedHubId: profile?['hub_id']?.toString(),
+    assignedHubName: (profile?['hubs'] as Map?)?['name']?.toString(),
+    authoritativeKassalaSupervisor: authoritativeKassala == true,
+    kassalaHubId: kassalaHub?['id']?.toString(),
+  );
+});
 
 // ─────────────────────────────────────────────────────────────
 // Main screen
@@ -2944,6 +2997,7 @@ class _HistoryTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_submissionHistoryProvider);
+    final permissionsAsync = ref.watch(_costHistoryPermissionsProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(
@@ -2959,10 +3013,12 @@ class _HistoryTab extends ConsumerWidget {
                 : 'Your past submissions will appear here',
           );
         }
+        final permissions = permissionsAsync.valueOrNull ??
+            CostSubmissionPermissions.fromRole(userRole);
         return CostHistoryTab(
           isArabic: isArabic,
           submissions: items,
-          permissions: CostSubmissionPermissions.fromRole(userRole),
+          permissions: permissions,
           onActionComplete: () => ref.invalidate(_submissionHistoryProvider),
         );
       },

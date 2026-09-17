@@ -109,7 +109,7 @@ describe('Pre-Fund payment permissions', () => {
     expect(migration).toContain("'fieldassistant'");
   });
 
-  it('gives Kassala supervisors global payment-only access and admin-style filters', () => {
+  it('gives Kassala supervisors global payment access and admin-style filters', () => {
     const page = readFileSync(
       `${process.cwd()}/src/pages/DownPaymentApproval.tsx`,
       'utf8',
@@ -123,8 +123,57 @@ describe('Pre-Fund payment permissions', () => {
     expect(migration).toContain("('down_payments'::text, 'mark_paid'::text)");
     expect(migration).toContain('a.is_global_payment_supervisor');
     expect(migration).toContain("p_action IN ('approve', 'delete')");
-    expect(page).toContain('isFieldPaymentOnly || isFilterVisible');
-    expect(page).toContain("const canDeletePayment = !isFieldPaymentOnly");
-    expect(page).toContain('isSuperAdmin || isFieldPaymentOnly');
+    expect(page).toContain('isFieldPaymentOnly || isKassalaTier1PaymentSupervisor');
+    expect(page).toContain('!isFieldPaymentOnly && !isKassalaTier1PaymentSupervisor');
+    expect(page).toContain('|| isFieldPaymentOnly || isKassalaTier1PaymentSupervisor');
+  });
+
+  it('restores Kassala-only Tier 1 approval without granting Tier 2', () => {
+    const page = readFileSync(
+      `${process.cwd()}/src/pages/DownPaymentApproval.tsx`,
+      'utf8',
+    );
+    const panel = readFileSync(
+      `${process.cwd()}/src/components/downPayment/DownPaymentApprovalPanel.tsx`,
+      'utf8',
+    );
+    const migration = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917200000_kassala_supervisor_tier1_approval.sql`,
+      'utf8',
+    );
+
+    expect(migration).toContain(`'{"tier":"supervisor","hub":"Kassala"}'::jsonb`);
+    expect(migration).toContain("OLD.status IS DISTINCT FROM 'pending_supervisor'");
+    expect(migration).toContain("NEW.status NOT IN ('pending_admin', 'rejected')");
+    expect(migration).toContain('Tier 1 approval is limited to Kassala Hub requests');
+    expect(page).toContain('Tier 1 - Kassala Approval &amp; Payment:');
+    expect(page).toContain('canApproveRequest={request => !isKassalaTier1PaymentSupervisor');
+    expect(panel).toContain('canApproveActions && canApproveRequest(request)');
+  });
+
+  it('mirrors global payment and Kassala-only Tier 1 access for Cost Submissions', () => {
+    const page = readFileSync(
+      `${process.cwd()}/src/pages/CostSubmission.tsx`,
+      'utf8',
+    );
+    const mobilePage = readFileSync(
+      `${process.cwd()}/src/pages/MobileCostSubmission.tsx`,
+      'utf8',
+    );
+    const migration = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917210000_kassala_supervisor_cost_submission_scope.sql`,
+      'utf8',
+    );
+
+    expect(migration).toContain("('cost_submissions'::text, 'read'::text");
+    expect(migration).toContain("('cost_submissions'::text, 'mark_paid'::text");
+    expect(migration).toContain("('cost_submissions'::text, 'approve'::text");
+    expect(migration).toContain('Cost Submission Tier 1 approval is limited to Kassala Hub');
+    expect(migration).toContain('OR public.can_view_operational_cost_submission');
+    expect(page).toContain("getEffectiveSubmissionHubId(oc) === 'kassala-hub'");
+    expect(page).toContain('isKassalaCostSupervisor || isFilterVisible');
+    expect(page).toContain('isAdmin || isSuperAdminFn() || isKassalaCostSupervisor');
+    expect(mobilePage).toContain("effectiveHub === 'kassala-hub'");
+    expect(mobilePage).toContain('if (isKassalaCostSupervisor) return false;');
   });
 });

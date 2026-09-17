@@ -44,7 +44,7 @@ import { generateFinancialStatementPdf, type StatementRow, type StatementConfig 
 import { generateFinancialStatementExcel } from "@/utils/financialStatementExcel";
 import type { SupportingDocument } from "@/types/cost-submission";
 import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, ChevronDown, ChevronUp, Eye } from "lucide-react";
-import { hubs } from "@/data/sudanStates";
+import { hubs, normalizeHubId } from "@/data/sudanStates";
 
 const EXPENSE_CATEGORY_MAP: Record<string, { label: string; icon: any }> = {
   permits: { label: 'Permits & Licenses', icon: Ticket },
@@ -258,7 +258,7 @@ const STATUS_AR_MAP_OC: Record<string, string> = {
 const MobileCostSubmission = () => {
   const navigate = useNavigate();
   const { currentUser, roles } = useAppContext();
-  const { hasAnyRole, isSuperAdmin: isSuperAdminFn } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin: isSuperAdminFn, checkPermission, canMarkCostPaid } = useAuthorization();
   const { users } = useUser();
   const { projects: allProjects } = useProjectContext();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
@@ -272,6 +272,11 @@ const MobileCostSubmission = () => {
   const isDataCollector = hasAnyRole(['dataCollector']);
   const isSuperAdmin = isAdminOrSuperUser || isSuperAdminFn();
   const isFinanceAdmin = hasAnyRole(['financialAdmin']);
+  const isKassalaCostSupervisor =
+    !isAdmin && !isFinanceAdmin && !isFOM && !isCountryDirector
+    && isSupervisor
+    && checkPermission('cost_submissions', 'approve')
+    && canMarkCostPaid();
 
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataCollector;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
@@ -470,6 +475,7 @@ const MobileCostSubmission = () => {
 
   const filterSubmissionsForSupervisor = (allSubs: typeof allSubmissionsQuery.submissions) => {
     if (isAdmin || isSuperAdmin || isAdminOrSuperUser) return allSubs;
+    if (isKassalaCostSupervisor) return allSubs;
     if (isSupervisor && teamMemberIds.length > 0) {
       return allSubs?.filter(s => teamMemberIds.includes(s.submittedBy)) || [];
     }
@@ -485,16 +491,16 @@ const MobileCostSubmission = () => {
     : rawSubmissions;
 
   const submissions = useMemo(() => {
-    if (isAdminOrSuperUser || isSuperAdmin) return supervisorFilteredSubmissions;
+    if (isAdminOrSuperUser || isSuperAdmin || isKassalaCostSupervisor) return supervisorFilteredSubmissions;
     if (userProjectIds.length === 0) return [];
     return supervisorFilteredSubmissions.filter(s => 
       !s.projectId || userProjectIds.includes(s.projectId)
     );
-  }, [supervisorFilteredSubmissions, userProjectIds, isAdminOrSuperUser, isSuperAdmin]);
+  }, [supervisorFilteredSubmissions, userProjectIds, isAdminOrSuperUser, isSuperAdmin, isKassalaCostSupervisor]);
 
   const filteredOperationalCosts = useMemo(() => {
     let filtered = operationalCosts;
-    if (!isAdminOrSuperUser && !isSuperAdmin) {
+    if (!isAdminOrSuperUser && !isSuperAdmin && !isKassalaCostSupervisor) {
       if (isSupervisor && teamMemberIds.length > 0) {
         filtered = filtered.filter(o => teamMemberIds.includes(o.submitted_by) || o.submitted_by === currentUser?.id);
       } else if (!canViewTeamSubmissions) {
@@ -505,7 +511,7 @@ const MobileCostSubmission = () => {
       }
     }
     return filtered;
-  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
+  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isKassalaCostSupervisor, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
 
   const isCoordinatorSubmission = (oc: OperationalCostSubmission): boolean => {
     const role = (oc.submitter_role || '').toLowerCase();
@@ -546,6 +552,11 @@ const MobileCostSubmission = () => {
     if (oc.tier1_status !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
+    if (isKassalaCostSupervisor) {
+      const submitter = users.find(user => user.id === oc.submitted_by);
+      const effectiveHub = normalizeHubId(oc.hub_id || submitter?.hubId || submitter?.stateId);
+      return isCoordinatorSubmission(oc) && effectiveHub === 'kassala-hub';
+    }
     if (isCoordinatorSubmission(oc)) return isSupervisor;
     if (isSupervisorSubmission(oc)) return isFOM || isCountryDirector;
     if (isFomSubmission(oc)) return isCountryDirector;
@@ -578,6 +589,10 @@ const MobileCostSubmission = () => {
   };
 
   const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2 | 3) => {
+    if (isKassalaCostSupervisor && (tier !== 1 || !canTier1Approve(oc))) {
+      toast({ title: 'Not authorized', description: 'Tier 1 approval is limited to Kassala Hub Cost Submissions.', variant: 'destructive' });
+      return;
+    }
     setApprovalDialog({ open: true, action, tier, submission: oc });
     setApprovalNotes('');
   };
@@ -760,6 +775,7 @@ const MobileCostSubmission = () => {
   };
 
   const canDeleteSubmission = (oc: OperationalCostSubmission): boolean => {
+    if (isKassalaCostSupervisor) return false;
     const ds = getOperationalDerivedStatus(oc);
     if (ds !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;

@@ -130,6 +130,7 @@ interface DownPaymentApprovalPanelProps {
   onDeletePayment?: (paymentEventId: string) => void;
   /** These are resolved from the user's Down Payment button grants. */
   canApproveActions?: boolean;
+  canApproveRequest?: (request: DownPaymentRequest) => boolean;
   /** A standalone approve grant may approve only already eligible Tier 2
    * requests; it must not expose reject, revert, or supervisor override. */
   canApprovePendingAdminOnly?: boolean;
@@ -389,6 +390,7 @@ export function DownPaymentApprovalPanel({
   canDeletePayment = false,
   onDeletePayment,
   canApproveActions = true,
+  canApproveRequest = () => true,
   canApprovePendingAdminOnly = false,
   approvalMode = 'workflow',
   canMarkPaid = false,
@@ -770,6 +772,10 @@ export function DownPaymentApprovalPanel({
 
   const handleApprove = async () => {
     if (!selectedRequest || !currentUser) return;
+    if (!canApproveRequest(selectedRequest)) {
+      toast({ title: 'Not authorized', description: 'Tier 1 approval is limited to Kassala Hub requests.', variant: 'destructive' });
+      return;
+    }
 
     const finalAmount = calculateApprovedAmount();
 
@@ -831,6 +837,10 @@ export function DownPaymentApprovalPanel({
   const handleReject = async () => {
     if (isExplicitApproval) return;
     if (!selectedRequest || !currentUser || !rejectionReason.trim()) return;
+    if (!canApproveRequest(selectedRequest)) {
+      toast({ title: 'Not authorized', description: 'Tier 1 rejection is limited to Kassala Hub requests.', variant: 'destructive' });
+      return;
+    }
 
     setProcessing(true);
     try {
@@ -955,8 +965,16 @@ export function DownPaymentApprovalPanel({
 
     setProcessing(true);
     try {
+      const eligibleIds = Array.from(selectedIds).filter(id => {
+        const request = requests.find(candidate => candidate.id === id);
+        return request ? canApproveRequest(request) : false;
+      });
+      if (eligibleIds.length === 0) {
+        toast({ title: 'No eligible requests', description: 'Tier 1 approval is limited to Kassala Hub requests.', variant: 'destructive' });
+        return;
+      }
       await bulkApprove({
-        requestIds: Array.from(selectedIds),
+        requestIds: eligibleIds,
         approvalType,
         approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
         customAmount: approvalType === 'custom' ? customAmount : undefined,
@@ -976,7 +994,8 @@ export function DownPaymentApprovalPanel({
   const handleQuickApproveByCollector = async () => {
     if (isExplicitApproval) return;
     if (!currentUser || !filters.dataCollectorId) return;
-    const collectorReqs = pendingRequests.filter(r => r.requestedBy === filters.dataCollectorId);
+    const collectorReqs = pendingRequests.filter(r =>
+      r.requestedBy === filters.dataCollectorId && canApproveRequest(r));
     if (collectorReqs.length === 0) return;
     selectAll(collectorReqs);
     const collectorName = allUniqueRequesters.find(e => e.id === filters.dataCollectorId)?.name;
@@ -3245,7 +3264,7 @@ export function DownPaymentApprovalPanel({
           )}
 
           <div className="flex flex-wrap gap-2">
-            {canApproveActions && userRole === 'supervisor' && request.status === 'pending_supervisor' && (
+            {canApproveActions && canApproveRequest(request) && userRole === 'supervisor' && request.status === 'pending_supervisor' && (
               <>
                 <Button
                   size="sm"

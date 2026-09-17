@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/cost_submission.dart';
+import '../models/operational_cost_submission.dart' as operational;
 
 /// Cost Submission Service - Matches React implementation
 ///
@@ -36,8 +37,8 @@ class CostSubmissionService {
                 .map((json) => OperationalCostSubmission.fromJson(json))
                 .toList();
           }
-        } catch (_) {
-          // RPC not available – fall through to direct query
+        } catch (e) {
+          throw Exception('Unable to load authorized Cost Submissions: $e');
         }
       }
       final response = await _supabase
@@ -207,6 +208,54 @@ class CostSubmissionService {
     }
 
     try {
+      if (tier == 1) {
+        final profile = await _supabase
+            .from('profiles')
+            .select('role, hub_id, hubs:hub_id(name)')
+            .eq('id', currentUserId!)
+            .maybeSingle();
+        final authoritativeKassala = await _supabase.rpc(
+          'is_kassala_hub_supervisor',
+          params: {'p_user_id': currentUserId},
+        );
+        final kassalaHub = await _supabase
+            .from('hubs')
+            .select('id')
+            .ilike('name', '%kassala%')
+            .limit(1)
+            .maybeSingle();
+        final permissions = operational.CostSubmissionPermissions.fromRole(
+          profile?['role']?.toString(),
+          assignedHubId: profile?['hub_id']?.toString(),
+          assignedHubName: (profile?['hubs'] as Map?)?['name']?.toString(),
+          authoritativeKassalaSupervisor: authoritativeKassala == true,
+          kassalaHubId: kassalaHub?['id']?.toString(),
+        );
+        final raw = await _supabase
+            .from('operational_cost_submissions')
+            .select()
+            .eq('id', submissionId)
+            .maybeSingle();
+        if (raw == null ||
+            !permissions.canApproveTier1(
+              operational.OperationalCostSubmission.fromJson(raw),
+            )) {
+          throw Exception('Not authorized for this Tier 1 review');
+        }
+      } else {
+        final profile = await _supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', currentUserId!)
+            .maybeSingle();
+        final permissions = operational.CostSubmissionPermissions.fromRole(
+          profile?['role']?.toString(),
+        );
+        if ((permissions.isSupervisor || permissions.isKassalaHubSupervisor) &&
+            !permissions.isAdmin) {
+          throw Exception('Supervisors cannot review Tier 2 or higher');
+        }
+      }
       final now = DateTime.now().toIso8601String();
 
       final data = {
@@ -381,8 +430,9 @@ class CostSubmissionService {
             'paid_at': now,
             'paid_by': currentUserId,
             'updated_at': now,
-            'wallet_transaction_id': ?walletTransactionId,
-            'paid_amount_cents': ?paidAmountCents,
+            if (walletTransactionId != null)
+              'wallet_transaction_id': walletTransactionId,
+            if (paidAmountCents != null) 'paid_amount_cents': paidAmountCents,
           })
           .eq('id', submissionId);
     } catch (e) {
