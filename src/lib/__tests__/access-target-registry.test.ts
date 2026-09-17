@@ -19,7 +19,9 @@ describe('canonical access target registry', () => {
   it('does not mistake action inventory coverage for verified server enforcement', () => {
     for (const target of ACCESS_TARGET_REGISTRY) {
       expect(target.enforcement.owner).toBeTruthy();
-      expect(['partial', 'requires_verification']).toContain(target.enforcement.server);
+      expect(target.enforcement.server).toBe('metadata');
+      expect(target.enforcement.boundary).toBe('registry');
+      expect(target.enforcement.evidence).toBeUndefined();
     }
   });
 });

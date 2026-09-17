@@ -276,7 +276,7 @@ const RoleManagement = () => {
         <TabsContent value="compare" className="m-0"><RoleComparison roles={roles} /></TabsContent>
         <TabsContent value="governance" className="m-0">
           <Card className="border-slate-200/80 bg-[#fbfaf7] shadow-none">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><ScrollText className="h-4 w-4 text-slate-500" />Access registry review</CardTitle><p className="text-xs text-muted-foreground">Configuration metadata only. Registration does not prove server-side enforcement.</p></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><ScrollText className="h-4 w-4 text-slate-500" />Access registry review</CardTitle><p className="text-xs text-muted-foreground">Only targets with a named RPC, RLS policy, or server check are reported as verified. Registration and UI hiding are metadata only.</p></CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between border-b border-slate-200/70 py-3">
                 <div>
@@ -286,6 +286,36 @@ const RoleManagement = () => {
                   </p>
                 </div>
                 <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">Metadata inventory</Badge>
+              </div>
+              <div className="flex items-center justify-between gap-4 border-b border-slate-200/70 py-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-700">Verified source boundaries</p>
+                  <p className="text-xs text-slate-500">
+                    {Object.values(accessInventory).flat().filter(item => item.serverEnforcement === 'verified').length} targets have concrete enforcement evidence.
+                  </p>
+                </div>
+                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">Source verified</Badge>
+              </div>
+              {Object.values(accessInventory).flat()
+                .filter(item => item.serverEnforcement === 'verified')
+                .map(item => (
+                  <div key={`verified:${item.key}`} className="flex items-center justify-between gap-4 border-b border-slate-200/70 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-700">{item.label}</p>
+                      <p className="truncate text-xs text-slate-500">{item.enforcementBoundary.toUpperCase()} · {item.enforcementOwner}</p>
+                      {item.enforcementEvidence && <p className="truncate font-mono text-[10px] text-slate-400">{item.enforcementEvidence}</p>}
+                    </div>
+                    <Badge variant="outline" className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-700">Verified</Badge>
+                  </div>
+                ))}
+              <div className="flex items-center justify-between gap-4 border-b border-slate-200/70 py-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-700">Sensitive columns without source evidence</p>
+                  <p className="text-xs text-slate-500">
+                    {accessInventory.columns.filter(item => item.sensitive && item.serverEnforcement !== 'verified').length} columns remain metadata-only until their query or RPC denies or projects them.
+                  </p>
+                </div>
+                <Badge variant="outline" className="shrink-0 border-amber-200 bg-amber-50 text-amber-700">Requires verification</Badge>
               </div>
               {accessInventoryIssues.length === 0 ? (
                 <div className="flex items-center justify-between py-3">

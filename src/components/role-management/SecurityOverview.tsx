@@ -34,10 +34,15 @@ export function SecurityOverview({
     + inventory.filters.length
     + inventory.columns.length
     + inventory.scopes.length;
+  const verifiedBoundaryCount = Object.values(inventory)
+    .flat()
+    .filter(item => item.serverEnforcement === 'verified').length;
+  const unverifiedSensitiveColumnCount = inventory.columns
+    .filter(item => item.sensitive && item.serverEnforcement !== 'verified').length;
   const signals = [
     { label: 'Active role baselines', value: `${activeRoleCount}/${roleCount}`, note: 'active roles available for assignment', tone: activeRoleCount === roleCount ? 'good' : 'neutral' },
-    { label: 'Registered metadata', value: String(registeredTargetCount), note: 'targets available for policy configuration', tone: 'neutral' },
-    { label: 'Registry review', value: String(inventoryIssueCount), note: 'cross-registry mappings requiring review', tone: inventoryIssueCount ? 'warn' : 'good' },
+    { label: 'Verified source boundaries', value: String(verifiedBoundaryCount), note: 'targets with named RPC, RLS, or server evidence', tone: verifiedBoundaryCount ? 'good' : 'warn' },
+    { label: 'Sensitive columns to verify', value: String(unverifiedSensitiveColumnCount), note: 'registered columns without source-denial evidence', tone: unverifiedSensitiveColumnCount ? 'warn' : 'good' },
   ];
 
   return (
@@ -81,8 +86,8 @@ export function SecurityOverview({
           <CardHeader className="border-b border-slate-200/80 px-5 py-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <CardTitle className="text-sm text-slate-800">Control posture</CardTitle>
-                <p className="mt-1 text-xs text-slate-500">The current shape of access across PACT.</p>
+                <CardTitle className="text-sm text-slate-800">Enforcement evidence</CardTitle>
+                <p className="mt-1 text-xs text-slate-500">Verified boundaries are counted separately from configuration metadata.</p>
               </div>
                <Badge variant="outline" className={inventoryIssueCount ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}>
                  {inventoryIssueCount ? 'Review mappings' : 'No mapping drift'}
@@ -93,7 +98,7 @@ export function SecurityOverview({
             <PostureRow icon={ShieldCheck} label="Active role baseline" value={`${activeRoleCount} of ${roleCount}`} note="roles available to assign" />
             <PostureRow icon={Users} label="Directory identities" value={String(userCount)} note="users loaded into this workspace" />
             <PostureRow icon={LockKeyhole} label="Role assignments" value={String(assignmentCount)} note="canonical user-to-role links" />
-            <PostureRow icon={Activity} label="Registered reports" value={String(inventory.reports.length)} note="export/report capabilities" />
+             <PostureRow icon={Activity} label="Registered metadata" value={String(registeredTargetCount)} note="not proof of source enforcement" />
           </CardContent>
         </Card>
 

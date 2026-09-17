@@ -36,7 +36,12 @@ export interface AccessInventoryItem {
   description?: string;
   sensitive?: boolean;
   destructive?: boolean;
-  serverEnforcement: 'metadata' | 'partial' | 'requires_verification';
+  registryKey?: string;
+  route?: string;
+  enforcementOwner: string;
+  enforcementBoundary: 'registry' | 'route' | 'rpc' | 'rls' | 'server_check';
+  enforcementEvidence?: string;
+  serverEnforcement: 'metadata' | 'requires_verification' | 'verified';
 }
 
 export interface AccessInventory {
@@ -73,6 +78,45 @@ function uniqueByKey(items: AccessInventoryItem[]): AccessInventoryItem[] {
   return [...new Map(items.map(item => [item.key, item])).values()];
 }
 
+const VERIFIED_ACTION_BOUNDARIES: Record<string, {
+  owner: string;
+  boundary: 'rpc' | 'rls' | 'server_check';
+  evidence: string;
+}> = {
+  '/mmp:mmp:full_report': {
+    owner: 'public.get_mmp_report_payload(uuid, text)',
+    boundary: 'rpc',
+    evidence: 'supabase/migrations/20260914b_mmp_report_kind_permissions.sql',
+  },
+  '/mmp:mmp:state_report': {
+    owner: 'public.get_mmp_report_payload(uuid, text)',
+    boundary: 'rpc',
+    evidence: 'supabase/migrations/20260914b_mmp_report_kind_permissions.sql',
+  },
+  '/mmp:mmp:hub_report': {
+    owner: 'public.get_mmp_report_payload(uuid, text)',
+    boundary: 'rpc',
+    evidence: 'supabase/migrations/20260914b_mmp_report_kind_permissions.sql',
+  },
+};
+
+function actionEnforcement(route: string, action: ModuleAction) {
+  const evidence = VERIFIED_ACTION_BOUNDARIES[`${route}:${actionKey(action)}`];
+  if (evidence) {
+    return {
+      serverEnforcement: 'verified' as const,
+      enforcementOwner: evidence.owner,
+      enforcementBoundary: evidence.boundary,
+      enforcementEvidence: evidence.evidence,
+    };
+  }
+  return {
+    serverEnforcement: 'requires_verification' as const,
+    enforcementOwner: route,
+    enforcementBoundary: 'route' as const,
+  };
+}
+
 /** Enumerates the current access surface without adding permission truth. */
 export function getAccessInventory(): AccessInventory {
   const pages = PAGE_DEFS.map(page => ({
@@ -81,6 +125,8 @@ export function getAccessInventory(): AccessInventory {
     kind: 'page' as const,
     description: page.note,
     serverEnforcement: 'requires_verification' as const,
+    enforcementOwner: page.group,
+    enforcementBoundary: 'route' as const,
   }));
 
   const routes = PAGE_DEFS.map(page => ({
@@ -90,6 +136,8 @@ export function getAccessInventory(): AccessInventory {
     kind: 'route' as const,
     description: page.note,
     serverEnforcement: 'requires_verification' as const,
+    enforcementOwner: page.path,
+    enforcementBoundary: 'route' as const,
   }));
 
   const tabs = HUB_TAB_REGISTRY.flatMap(hub =>
@@ -101,21 +149,28 @@ export function getAccessInventory(): AccessInventory {
         kind: 'tab' as const,
         description: tab.description,
         serverEnforcement: 'requires_verification' as const,
+        enforcementOwner: hub.hubSlug,
+        enforcementBoundary: 'route' as const,
       })),
     ),
   );
 
   const actions = MODULE_REGISTRY.flatMap(module =>
     module.pages.flatMap(modulePage =>
-      modulePage.actions.map(action => ({
-        key: actionKey(action),
+      modulePage.actions.map(action => {
+        const pageSlug = PAGE_DEFS.find(page => page.path.split(/[?#]/, 1)[0] === modulePage.route.split(/[?#]/, 1)[0])?.slug;
+        const registryKey = actionKey(action);
+        return {
+        key: `${modulePage.route}:${registryKey}`,
+        registryKey,
         label: action.label,
-        pageSlug: PAGE_DEFS.find(page => page.path.split(/[?#]/, 1)[0] === modulePage.route.split(/[?#]/, 1)[0])?.slug,
+        pageSlug,
+        route: modulePage.route,
         kind: (action.action === 'export' ? 'report' : 'action') as 'report' | 'action',
         description: action.description,
         destructive: action.isDestructive,
-        serverEnforcement: 'requires_verification' as const,
-      })),
+        ...actionEnforcement(modulePage.route, action),
+      }}),
     ),
   );
 
@@ -126,6 +181,8 @@ export function getAccessInventory(): AccessInventory {
     kind: 'filter' as const,
     description: filter.description,
     serverEnforcement: 'metadata' as const,
+    enforcementOwner: filter.page,
+    enforcementBoundary: 'registry' as const,
   }));
 
   const columns = COLUMN_REGISTRY.flatMap(page =>
@@ -137,6 +194,8 @@ export function getAccessInventory(): AccessInventory {
       description: column.description,
       sensitive: column.sensitive,
       serverEnforcement: column.sensitive ? 'requires_verification' as const : 'metadata' as const,
+      enforcementOwner: page.pageSlug,
+      enforcementBoundary: 'registry' as const,
     })),
   );
 
@@ -145,6 +204,8 @@ export function getAccessInventory(): AccessInventory {
     label: scope.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()),
     kind: 'scope' as const,
     serverEnforcement: 'requires_verification' as const,
+    enforcementOwner: `scope:${scope}`,
+    enforcementBoundary: 'registry' as const,
   }));
 
   return {
@@ -201,7 +262,7 @@ export function getAccessInventoryIssues(): AccessInventoryIssue[] {
   for (const target of ACCESS_TARGET_REGISTRY) {
     const registeredActions = getRegisteredPageActions(target.page.slug);
     for (const action of registeredActions) {
-      if (!inventory.actions.some(item => item.key === actionKey(action) && item.pageSlug === target.page.slug)) {
+      if (!inventory.actions.some(item => item.registryKey === actionKey(action) && item.pageSlug === target.page.slug)) {
         issues.push({
           kind: 'unknown-action-page',
           key: `${target.page.slug}:${actionKey(action)}`,

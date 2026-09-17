@@ -11,7 +11,9 @@ export interface AccessTargetDefinition {
   enforcement: {
     owner: string;
     client: 'registered';
-    server: 'partial' | 'requires_verification';
+    server: 'metadata' | 'verified';
+    boundary: 'registry' | 'route' | 'rpc' | 'rls' | 'server_check';
+    evidence?: string;
   };
 }
 
@@ -47,9 +49,8 @@ export const ACCESS_TARGET_REGISTRY: AccessTargetDefinition[] = PAGE_DEFS.map(pa
     dependencies: parent ? [parent.slug] : [],
     enforcement: {
       owner: page.group, client: 'registered',
-      server: getRegisteredPageActions(page.slug).some(action =>
-        ['pre_funding', 'cost_submissions', 'down_payments'].includes(action.resource) || action.action === 'export')
-        ? 'partial' : 'requires_verification',
+      server: 'metadata',
+      boundary: 'registry',
     },
   };
 });
