@@ -137,7 +137,13 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       || message.includes('schema cache') || message.includes('row-level security');
   }
 
-  useEffect(() => () => { mounted.current = false; }, []);
+  // React StrictMode runs an extra setup → cleanup → setup cycle in
+  // development. Re-arm the guard on every setup or the second load treats the
+  // mounted provider as stale forever and leaves every tab on its skeleton.
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const load = useCallback(async () => {
     if (!userId) return;
