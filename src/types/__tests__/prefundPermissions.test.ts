@@ -172,6 +172,10 @@ describe('Pre-Fund payment permissions', () => {
       `${process.cwd()}/supabase/migrations/20260917230000_kassala_supervisor_additional_roles.sql`,
       'utf8',
     );
+    const salmaPaymentGrant = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917240000_salma_global_payment_without_tier2.sql`,
+      'utf8',
+    );
 
     expect(migration).toContain("('cost_submissions'::text, 'read'::text");
     expect(migration).toContain("('cost_submissions'::text, 'mark_paid'::text");
@@ -189,6 +193,14 @@ describe('Pre-Fund payment permissions', () => {
     expect(additionalRoleFix).toContain("additional_role.value->>'role'");
     expect(additionalRoleFix).toContain("additional_role.value->>'hub_id'");
     expect(additionalRoleFix).toContain("p.location->>'secondary_hub_id'");
+    expect(salmaPaymentGrant).toContain("lower(btrim(p.email)) = 'salma@pactorg.com'");
+    expect(salmaPaymentGrant).toContain("('down_payments'::text, 'mark_paid'::text)");
+    expect(salmaPaymentGrant).toContain("('cost_submissions'::text, 'mark_paid'::text)");
+    expect(salmaPaymentGrant).toContain("('pre_funding'::text, 'use_for_payment'::text)");
+    expect(salmaPaymentGrant).toContain("'tier2-approvals'");
+    expect(salmaPaymentGrant).toContain('is_blocked = true');
+    expect(salmaPaymentGrant).not.toContain("('cost_submissions'::text, 'approve'::text)");
+    expect(salmaPaymentGrant).not.toContain("('down_payments'::text, 'approve'::text)");
     expect(page).toContain("getEffectiveSubmissionHubId(oc) === 'kassala-hub'");
     expect(page).toContain("rpc('is_kassala_hub_supervisor'");
     expect(page).toContain('isKassalaCostSupervisor || isFilterVisible');
