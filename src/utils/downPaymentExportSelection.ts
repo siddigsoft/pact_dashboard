@@ -36,3 +36,18 @@ export function resolveDownPaymentExportSelection(
       return { data: input.all, tabLabel: 'All' };
   }
 }
+
+export function resolveDownPaymentRemainingBalanceSelection(
+  approvedOutstanding: DownPaymentRequest[],
+  processingOutstanding: DownPaymentRequest[],
+): { data: DownPaymentRequest[]; tabLabel: string } {
+  return {
+    data: Array.from(
+      new Map(
+        [...approvedOutstanding, ...processingOutstanding]
+          .map(request => [request.id, request]),
+      ).values(),
+    ),
+    tabLabel: 'Remaining Balance',
+  };
+}

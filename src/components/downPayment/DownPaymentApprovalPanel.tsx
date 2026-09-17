@@ -75,7 +75,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats, matchesDownPaymentHub } from '@/utils/downPaymentExport';
 import type { DownPaymentEvidenceMap } from '@/utils/downPaymentExport';
-import { resolveDownPaymentExportSelection } from '@/utils/downPaymentExportSelection';
+import {
+  resolveDownPaymentExportSelection,
+  resolveDownPaymentRemainingBalanceSelection,
+} from '@/utils/downPaymentExportSelection';
 import { allocateExactProportionally } from '@/utils/proportionalAllocation';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel, generateFinancialStatementExcelBase64, generateAllSheetsStatementExcelBase64 } from '@/utils/financialStatementExcel';
@@ -758,6 +761,14 @@ export function DownPaymentApprovalPanel({
     activeExportSelectionRef.current = activeExportSelection;
   }, [activeExportSelection]);
 
+  const remainingBalanceExportSelection = useMemo(
+    () => resolveDownPaymentRemainingBalanceSelection(
+      approvedOutstandingRequests,
+      processingOutstandingRequests,
+    ),
+    [approvedOutstandingRequests, processingOutstandingRequests],
+  );
+
   const calculateApprovedAmount = () => {
     if (!selectedRequest) return 0;
     switch (approvalType) {
@@ -1212,6 +1223,39 @@ export function DownPaymentApprovalPanel({
       console.error('Down-payment export error:', err);
       const message = err instanceof Error ? err.message : 'Unknown export error';
       toast({ title: 'Export Failed', description: `Could not generate the report: ${message}`, variant: 'destructive' });
+    }
+  };
+
+  const handleRemainingBalanceExcelExport = async () => {
+    const { data, tabLabel } = remainingBalanceExportSelection;
+    if (data.length === 0) {
+      toast({ title: 'No Remaining Balance', description: 'No approved requests have an outstanding balance.', variant: 'destructive' });
+      return;
+    }
+
+    const exportRows = data.map(request => {
+      const balance = getDownPaymentBalance(request, preFundPaymentEvidence?.get(request.id) ?? []);
+      return {
+        ...request,
+        totalPaidAmount: balance.paid,
+        remainingAmount: balance.remaining,
+        approvedAmount: balance.approved,
+        paymentEvidenceSource: balance.paymentBasis,
+      };
+    });
+
+    try {
+      await exportToExcel(
+        exportRows,
+        'down-payments-remaining-balance',
+        tabLabel,
+        preFundPaymentEvidence as DownPaymentEvidenceMap | undefined,
+      );
+      toast({ title: 'Export Downloaded', description: 'Remaining balance Excel report exported successfully.' });
+    } catch (err) {
+      console.error('Down-payment remaining balance export error:', err);
+      const message = err instanceof Error ? err.message : 'Unknown export error';
+      toast({ title: 'Export Failed', description: `Could not generate the remaining balance report: ${message}`, variant: 'destructive' });
     }
   };
 
@@ -3951,6 +3995,17 @@ export function DownPaymentApprovalPanel({
               <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleExport('excel'); }} data-testid="button-export-excel">
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 Excel
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start"
+                onClick={() => { setExportMenuOpen(false); void handleRemainingBalanceExcelExport(); }}
+                disabled={remainingBalanceExportSelection.data.length === 0}
+                data-testid="button-export-remaining-balance-excel"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Remaining Balance
               </Button>
               <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleExport('pdf'); }} data-testid="button-export-pdf">
                 <FileText className="h-4 w-4 mr-2" />
