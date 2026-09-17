@@ -176,6 +176,10 @@ describe('Pre-Fund payment permissions', () => {
       `${process.cwd()}/supabase/migrations/20260917240000_salma_global_payment_without_tier2.sql`,
       'utf8',
     );
+    const salmaDownPaymentProcessing = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917250000_salma_down_payment_processing_only.sql`,
+      'utf8',
+    );
 
     expect(migration).toContain("('cost_submissions'::text, 'read'::text");
     expect(migration).toContain("('cost_submissions'::text, 'mark_paid'::text");
@@ -200,7 +204,9 @@ describe('Pre-Fund payment permissions', () => {
     expect(salmaPaymentGrant).toContain("'tier2-approvals'");
     expect(salmaPaymentGrant).toContain('is_blocked = true');
     expect(salmaPaymentGrant).not.toContain("('cost_submissions'::text, 'approve'::text)");
-    expect(salmaPaymentGrant).toContain("'down_payments',\n    'approve',\n    false");
+    expect(salmaDownPaymentProcessing).toContain("'down_payments'::text,\n      'approve'::text,\n      false");
+    expect(salmaDownPaymentProcessing).toContain("'down_payments'::text,\n      'mark_paid'::text,\n      true");
+    expect(salmaDownPaymentProcessing).toContain("'pre_funding'::text,\n      'use_for_payment'::text,\n      true");
     const downPaymentPage = readFileSync(
       `${process.cwd()}/src/pages/DownPaymentApproval.tsx`,
       'utf8',
