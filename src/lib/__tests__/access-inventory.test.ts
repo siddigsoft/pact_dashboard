@@ -63,9 +63,15 @@ describe('canonical access inventory', () => {
     )).toBe(true);
   });
 
-  it('surfaces cross-registry mappings as reviewable drift instead of silently accepting them', () => {
+  it('has no orphaned or duplicate mappings across registry families', () => {
     const issues = getAccessInventoryIssues();
-    expect(issues.some(issue => issue.kind === 'unknown-page')).toBe(true);
-    expect(issues.every(issue => issue.key && issue.message)).toBe(true);
+    expect(issues).toEqual([]);
+  });
+
+  it('keeps legacy filter keys while assigning one canonical owner', () => {
+    const filters = getAccessInventory().filters;
+    expect(filters.find(item => item.key === 'crm-partners.search')?.pageSlug).toBe('crm:partners');
+    expect(filters.find(item => item.key === 'admin-wallets.search')?.pageSlug).toBe('finance-hub:admin-wallets');
+    expect(filters.find(item => item.key === 'hr-hub.org-chart.search')?.pageSlug).toBe('hr-hub:org-chart');
   });
 });

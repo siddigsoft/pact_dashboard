@@ -15,6 +15,7 @@ import { MODULE_REGISTRY, type ModuleAction } from '@/types/moduleRegistry';
 import { FILTER_REGISTRY, type FilterDefinition } from '@/lib/filter-registry';
 import { COLUMN_REGISTRY, type PageColumnDef } from '@/lib/column-registry';
 import { ACCESS_TARGET_REGISTRY, getRegisteredPageActions } from '@/lib/access-target-registry';
+import { PAGE_ACCESS_REDIRECTS } from '@/lib/pageAccessRedirects';
 
 export const ACCESS_SCOPE_DIMENSIONS = [
   'hub',
@@ -72,6 +73,15 @@ const tabSlugs = new Set(
 
 function actionKey(action: ModuleAction): string {
   return action.key || `${action.resource}:${action.action}`;
+}
+
+function pageSlugForRoute(route: string): string | undefined {
+  const exactTarget = route.split('#', 1)[0];
+  const exact = PAGE_DEFS.find(page => page.path.split('#', 1)[0] === exactTarget);
+  if (exact) return exact.slug;
+
+  const pathname = route.split(/[?#]/, 1)[0];
+  return PAGE_DEFS.find(page => page.path.split(/[?#]/, 1)[0] === pathname)?.slug;
 }
 
 function uniqueByKey(items: AccessInventoryItem[]): AccessInventoryItem[] {
@@ -158,7 +168,7 @@ export function getAccessInventory(): AccessInventory {
   const actions = MODULE_REGISTRY.flatMap(module =>
     module.pages.flatMap(modulePage =>
       modulePage.actions.map(action => {
-        const pageSlug = PAGE_DEFS.find(page => page.path.split(/[?#]/, 1)[0] === modulePage.route.split(/[?#]/, 1)[0])?.slug;
+        const pageSlug = pageSlugForRoute(modulePage.route);
         const registryKey = actionKey(action);
         return {
         key: `${modulePage.route}:${registryKey}`,
@@ -222,9 +232,8 @@ export function getAccessInventory(): AccessInventory {
 
 /**
  * Finds configuration drift without treating a registry entry as proof of
- * authorization. Some legacy filter/column keys intentionally remain visible
- * here until their owning page is normalized; the UI can show them as
- * "needs mapping" instead of silently dropping their policy.
+ * authorization. Persisted filter and column keys may retain legacy prefixes,
+ * but every entry must name one canonical page or hub-tab owner.
  */
 export function getAccessInventoryIssues(): AccessInventoryIssue[] {
   const issues: AccessInventoryIssue[] = [];
@@ -262,7 +271,17 @@ export function getAccessInventoryIssues(): AccessInventoryIssue[] {
   for (const target of ACCESS_TARGET_REGISTRY) {
     const registeredActions = getRegisteredPageActions(target.page.slug);
     for (const action of registeredActions) {
-      if (!inventory.actions.some(item => item.registryKey === actionKey(action) && item.pageSlug === target.page.slug)) {
+      const directMatch = inventory.actions.some(item =>
+        item.registryKey === actionKey(action) && item.pageSlug === target.page.slug
+      );
+      // Redirect declarations are the supported alias list. A legacy page may
+      // expose its destination's actions, but only when that exact destination
+      // route owns the same registered action.
+      const destination = PAGE_ACCESS_REDIRECTS.find(redirect => redirect.fromPath === target.page.path)?.toPath;
+      const aliasMatch = destination && inventory.actions.some(item =>
+        item.registryKey === actionKey(action) && item.route === destination
+      );
+      if (!directMatch && !aliasMatch) {
         issues.push({
           kind: 'unknown-action-page',
           key: `${target.page.slug}:${actionKey(action)}`,

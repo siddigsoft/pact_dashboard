@@ -33,6 +33,88 @@ export function isHubTabSlug(slug: string): boolean {
 }
 
 export const HUB_TAB_REGISTRY: HubDef[] = [
+  // ── Field Ops Hub ─────────────────────────────────────────────────────────
+  {
+    hubSlug: 'field-ops',
+    hubLabel: 'Field Ops Hub',
+    sections: [
+      {
+        sectionId: 'monitoring',
+        sectionLabel: 'Monitoring',
+        tabs: [
+          { tabId: 'site-visits', label: 'Site Visits', description: 'Plan and manage field site visits.' },
+          { tabId: 'monitoring-form', label: 'Monitoring Form', description: 'Submit structured monitoring data for a site visit.' },
+          { tabId: 'coverage-map', label: 'MMP Coverage Map', description: 'Map MMP site coverage and completion status.' },
+        ],
+      },
+      {
+        sectionId: 'safety',
+        sectionLabel: 'Safety & Assets',
+        tabs: [
+          { tabId: 'safety-hub', label: 'Safety Hub', description: 'Review safety alerts and field staff check-ins.' },
+          { tabId: 'incident-reports', label: 'Incident Reports', description: 'Log and follow up on field incidents.' },
+          { tabId: 'equipment', label: 'Equipment Tracking', description: 'Track equipment assigned to field teams.' },
+        ],
+      },
+      {
+        sectionId: 'teams',
+        sectionLabel: 'Teams & Maps',
+        tabs: [
+          { tabId: 'field-team', label: 'Field Team', description: 'Field team map, roster, and availability.' },
+          { tabId: 'map', label: 'Field Map', description: 'Map registered sites, hubs, and field team positions.' },
+          { tabId: 'field-operation-manager', label: 'Field Operation Manager', description: 'Coordinate active field operations across hubs.' },
+        ],
+      },
+    ],
+  },
+
+  // ── Field Data Hub ────────────────────────────────────────────────────────
+  {
+    hubSlug: 'field-data',
+    hubLabel: 'Field Data Hub',
+    sections: [
+      {
+        sectionId: 'data',
+        sectionLabel: 'Data',
+        tabs: [
+          { tabId: 'forms', label: 'Forms & Servers', description: 'Manage field forms and collection servers.' },
+          { tabId: 'datasets', label: 'Datasets', description: 'Browse and filter collected datasets.' },
+          { tabId: 'sampling', label: 'Sampling', description: 'Design sampling frameworks and frames.' },
+          { tabId: 'studies', label: 'Multi-Round Studies', description: 'Manage baseline, midline, endline, and panel studies.' },
+          { tabId: 'quality', label: 'Data Quality', description: 'Review rules, flags, and the cleaning queue.' },
+          { tabId: 'monitoring', label: 'Fieldwork Monitor', description: 'Track daily progress and enumerator activity.' },
+          { tabId: 'cases', label: 'Case Management', description: 'Manage escalations, follow-ups, and resolutions.' },
+          { tabId: 'workflow', label: 'Workflow', description: 'Configure approval and review pipelines.' },
+          { tabId: 'exports', label: 'Smart Export', description: 'Prepare field data exports and transformations.' },
+          { tabId: 'languages', label: 'Multi-Language', description: 'Manage translations and language versions.' },
+          { tabId: 'collaboration', label: 'Collaboration', description: 'Manage team access and shared workspaces.' },
+          { tabId: 'backup', label: 'Backup & Recovery', description: 'Manage scheduled backups and restore points.' },
+          { tabId: 'api', label: 'API & Integrations', description: 'Manage webhooks, API access, and connectors.' },
+          { tabId: 'notifications', label: 'Notifications', description: 'Configure alerts, reminders, and escalations.' },
+        ],
+      },
+    ],
+  },
+
+  // ── CRM Hub ───────────────────────────────────────────────────────────────
+  {
+    hubSlug: 'crm',
+    hubLabel: 'CRM Hub',
+    sections: [
+      {
+        sectionId: 'relationships',
+        sectionLabel: 'Relationships',
+        tabs: [
+          { tabId: 'dashboard', label: 'CRM Dashboard', description: 'Summary of CRM relationships, pipeline, and activity.' },
+          { tabId: 'partners', label: 'Partners', description: 'Partner and donor organisations.' },
+          { tabId: 'contacts', label: 'Contacts', description: 'People associated with partner organisations.' },
+          { tabId: 'engagements', label: 'Engagements', description: 'Meetings and relationship activity.' },
+          { tabId: 'pipeline', label: 'Pipeline', description: 'Partnership and funding opportunities.' },
+        ],
+      },
+    ],
+  },
+
   // ── Down-Payment Approval ────────────────────────────────────────────────
   // This is a page with internal views rather than a conventional hub. It uses
   // the same tab-override mechanism so the Access Control Workspace has one

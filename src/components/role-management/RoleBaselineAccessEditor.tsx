@@ -2,7 +2,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { HUB_TAB_REGISTRY, hubTabSlug } from '@/lib/hub-tab-defs';
-import { COLUMN_REGISTRY } from '@/lib/column-registry';
+import { COLUMN_REGISTRY, columnStorageSlug } from '@/lib/column-registry';
 import { RoleBaselineAccess } from '@/types/roles';
 
 export function RoleBaselineAccessEditor({ value, onChange, allowCostScope }: {
@@ -31,8 +31,9 @@ export function RoleBaselineAccessEditor({ value, onChange, allowCostScope }: {
       {COLUMN_REGISTRY.map(page => <div key={page.pageSlug} className="space-y-2 border rounded-md p-3">
         <h4 className="text-sm font-medium">{page.pageLabel}</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">{page.columns.map(column => {
-          const rule = columns.find(item => item.page_slug === page.pageSlug && item.column_key === column.key);
-          return <label key={column.key} className="flex items-center gap-2 text-sm"><Checkbox checked={rule?.is_hidden ?? false} onCheckedChange={checked => onChange({ ...value, column_rules: [...columns.filter(item => item !== rule), { page_slug: page.pageSlug, column_key: column.key, is_hidden: !!checked }] })} />{column.label}</label>;
+          const storageSlug = columnStorageSlug(page);
+          const rule = columns.find(item => item.page_slug === storageSlug && item.column_key === column.key);
+          return <label key={column.key} className="flex items-center gap-2 text-sm"><Checkbox checked={rule?.is_hidden ?? false} onCheckedChange={checked => onChange({ ...value, column_rules: [...columns.filter(item => item !== rule), { page_slug: storageSlug, column_key: column.key, is_hidden: !!checked }] })} />{column.label}</label>;
         })}</div>
       </div>)}
     </section>

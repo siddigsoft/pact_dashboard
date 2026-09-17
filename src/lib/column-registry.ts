@@ -12,9 +12,16 @@ export interface ColumnDef {
 }
 
 export interface PageColumnDef {
+  /** Canonical page or hub-tab owner shown in access inventory. */
   pageSlug: string;
+  /** Persisted column_visibility_config.page_slug used by runtime consumers. */
+  storageSlug?: string;
   pageLabel: string;
   columns: ColumnDef[];
+}
+
+export function columnStorageSlug(page: PageColumnDef): string {
+  return page.storageSlug ?? page.pageSlug;
 }
 
 export const COLUMN_REGISTRY: PageColumnDef[] = [
@@ -36,8 +43,9 @@ export const COLUMN_REGISTRY: PageColumnDef[] = [
     ],
   },
   {
-    pageSlug: 'payroll-admin',
-    pageLabel: 'Payroll Admin',
+    pageSlug: 'hr-hub:payroll-admin',
+    storageSlug: 'payroll-admin',
+    pageLabel: 'HR Hub · Payroll Admin',
     columns: [
       { key: 'name',          label: 'Employee Name' },
       { key: 'position',      label: 'Position' },
@@ -81,8 +89,9 @@ export const COLUMN_REGISTRY: PageColumnDef[] = [
     ],
   },
   {
-    pageSlug: 'admin-wallets',
-    pageLabel: 'Wallets Admin',
+    pageSlug: 'finance-hub:admin-wallets',
+    storageSlug: 'admin-wallets',
+    pageLabel: 'Finance Hub · Wallets Admin',
     columns: [
       { key: 'user',              label: 'User / Owner' },
       { key: 'hub',               label: 'Hub' },
@@ -134,8 +143,9 @@ export const COLUMN_REGISTRY: PageColumnDef[] = [
     ],
   },
   {
-    pageSlug: 'accounting-general-ledger',
-    pageLabel: 'General Ledger',
+    pageSlug: 'accounting:ledger',
+    storageSlug: 'accounting-general-ledger',
+    pageLabel: 'Accounting · General Ledger',
     columns: [
       { key: 'date',        label: 'Date' },
       { key: 'entry_no',    label: 'Entry #' },
@@ -146,8 +156,9 @@ export const COLUMN_REGISTRY: PageColumnDef[] = [
     ],
   },
   {
-    pageSlug: 'accounting-journals',
-    pageLabel: 'Journal Entries',
+    pageSlug: 'accounting:journals',
+    storageSlug: 'accounting-journals',
+    pageLabel: 'Accounting · Journal Entries',
     columns: [
       { key: 'entry_no',    label: 'Entry #' },
       { key: 'date',        label: 'Posting Date' },
@@ -189,7 +200,8 @@ export const COLUMN_REGISTRY: PageColumnDef[] = [
     ],
   },
   {
-    pageSlug: 'hr',
+    pageSlug: 'hr-hub',
+    storageSlug: 'hr',
     pageLabel: 'HR Hub',
     columns: [
       { key: 'staff',          label: 'Staff Name' },

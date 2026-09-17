@@ -30,7 +30,7 @@ import {
   parsePermissions, DEFAULT_PERMS, PERM_DEFS,
   type Perms, type AccessStatus,
 } from '@/pages/PageAccessControl';
-import { COLUMN_REGISTRY } from '@/lib/column-registry';
+import { COLUMN_REGISTRY, columnStorageSlug } from '@/lib/column-registry';
 import { useSelectedUserAccess } from '@/context/role-management/SelectedUserAccessContext';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
@@ -545,7 +545,10 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
     [columnConfigs, userRole],
   );
   const colRegBySlug = useMemo(() =>
-    Object.fromEntries(COLUMN_REGISTRY.map(p => [p.pageSlug, p])),
+    Object.fromEntries(COLUMN_REGISTRY.flatMap(p => [
+      [p.pageSlug, p],
+      [columnStorageSlug(p), p],
+    ])),
     [],
   );
   const filteredByUserPages = useMemo(() => {
@@ -979,12 +982,13 @@ function ByUserBody({
                   const isExpanded = expandedPages.has(page.slug);
 
                   const colDef = colRegBySlug[page.slug];
+                   const colStorageSlug = colDef ? columnStorageSlug(colDef) : page.slug;
                   const pageResources = PAGE_SLUG_TO_RESOURCES[page.slug] ?? [];
                   const pagePermOverrides = permOverrides.filter(o => pageResources.includes(o.resource));
                   const hasExpandContent = !!colDef || pagePermOverrides.length > 0;
 
                   const colRuleCount = (colDef?.columns ?? []).filter(c => {
-                    const k = `${page.slug}:${c.key}`;
+                     const k = `${colStorageSlug}:${c.key}`;
                     return userColMap[k] || roleColMap[k];
                   }).length;
                   const actionOverrideCount = pagePermOverrides.length;
@@ -1073,11 +1077,11 @@ function ByUserBody({
                                 <span className="w-24 text-center">This user only</span>
                               </div>
                               {colDef.columns.map(col => {
-                                const k = `${page.slug}:${col.key}`;
+                                 const k = `${colStorageSlug}:${col.key}`;
                                 const roleRow = roleColMap[k];
                                 const userRow = userColMap[k];
-                                const roleSaving = savingKey === `col:role:${page.slug}:${col.key}`;
-                                const userSaving = savingKey === `col:user:${page.slug}:${col.key}`;
+                                 const roleSaving = savingKey === `col:role:${colStorageSlug}:${col.key}`;
+                                 const userSaving = savingKey === `col:user:${colStorageSlug}:${col.key}`;
                                 const roleRemSaving = roleRow ? savingKey === `col:remove:${roleRow.id}` : false;
                                 const userRemSaving = userRow ? savingKey === `col:remove:${userRow.id}` : false;
                                 return (
@@ -1101,7 +1105,7 @@ function ByUserBody({
                                       ) : (
                                         <Tooltip>
                                           <TooltipTrigger asChild>
-                                            <button disabled={roleSaving} onClick={e => { e.stopPropagation(); upsertColumnVisibility(page.slug, col.key, true, 'role'); }}
+                                             <button disabled={roleSaving} onClick={e => { e.stopPropagation(); upsertColumnVisibility(colStorageSlug, col.key, true, 'role'); }}
                                               className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 border rounded text-red-600 border-red-200 hover:bg-red-50 disabled:opacity-40">
                                               {roleSaving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <EyeOff className="h-2.5 w-2.5" />} Hide
                                             </button>
@@ -1125,7 +1129,7 @@ function ByUserBody({
                                       ) : (
                                         <Tooltip>
                                           <TooltipTrigger asChild>
-                                            <button disabled={userSaving} onClick={e => { e.stopPropagation(); upsertColumnVisibility(page.slug, col.key, true, 'user'); }}
+                                             <button disabled={userSaving} onClick={e => { e.stopPropagation(); upsertColumnVisibility(colStorageSlug, col.key, true, 'user'); }}
                                               className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 border rounded text-red-600 border-red-200 hover:bg-red-50 disabled:opacity-40">
                                               {userSaving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <EyeOff className="h-2.5 w-2.5" />} Hide
                                             </button>

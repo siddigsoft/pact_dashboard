@@ -34,31 +34,53 @@ const PAGE_SOURCE: Record<string, string> = {
   'admin-whatsapp': 'src/pages/AdminWhatsApp.tsx',
 };
 
+const LEGACY_PREFIX_BY_OWNER: Record<string, string> = {
+  'finance-hub:duplicate-payments': 'duplicate-payments-report',
+  'hr-hub:org-chart': 'hr-hub.org-chart',
+  'hr-hub:equipment': 'hr-assets',
+  'hr-hub:policy-library': 'hr-policy-library',
+  leave: 'leave-requests',
+  'hr-hub:payroll-admin': 'payroll-admin',
+  'crm:partners': 'crm-partners',
+  'crm:contacts': 'crm-contacts',
+  'crm:pipeline': 'crm-opportunities',
+  'crm:engagements': 'crm-engagements',
+  'field-ops:field-team': 'field-team',
+  'field-payments': 'field-payments-centre',
+  'field-data:exports': 'field-data-exports',
+  'super-admin-hub:cycle-health': 'admin-cycle-health',
+  'finance-hub:admin-wallets': 'admin-wallets',
+  'whatsapp-admin': 'admin-whatsapp',
+};
+
+const sourceKey = (owner: string) => LEGACY_PREFIX_BY_OWNER[owner] ?? owner;
+
 describe('filter registry wiring', () => {
   it('has stable unique keys', () => {
     const keys = FILTER_REGISTRY.map(item => item.key);
     expect(new Set(keys).size).toBe(keys.length);
   });
   it('maps every registered page to an exact source file', () => {
-    for (const item of FILTER_REGISTRY) expect(PAGE_SOURCE[item.page], item.key).toBeTruthy();
+    for (const item of FILTER_REGISTRY) expect(PAGE_SOURCE[sourceKey(item.page)], item.key).toBeTruthy();
   });
 
   it('has exact visibility and neutral-reset wiring for every filter', () => {
     const cache = new Map<string, string>();
     for (const item of FILTER_REGISTRY) {
-      const file = PAGE_SOURCE[item.page];
-      const extraFile = item.page === 'down-payment-approval' ? 'src/pages/DownPaymentApproval.tsx' : null;
+      const legacyPrefix = sourceKey(item.page);
+      const file = PAGE_SOURCE[legacyPrefix];
+      const extraFile = legacyPrefix === 'down-payment-approval' ? 'src/pages/DownPaymentApproval.tsx' : null;
       const source = cache.get(file) ?? [
         fs.readFileSync(path.resolve(process.cwd(), file), 'utf8'),
         ...(extraFile ? [fs.readFileSync(path.resolve(process.cwd(), extraFile), 'utf8')] : []),
       ].join('\n');
       cache.set(file, source);
 
-      if (item.page === 'mmp-management') {
+      if (legacyPrefix === 'mmp-management') {
         const shortKey = item.key.slice('mmp-management.'.length);
         expect(source, `${item.key} visibility`).toContain(`visible('${shortKey}')`);
         expect(source, `${item.key} reset`).toContain(`!visible('${shortKey}')`);
-      } else if (item.page === 'down-payment-approval') {
+      } else if (legacyPrefix === 'down-payment-approval') {
         const shortKey = item.key.slice('down-payment-approval.'.length);
         expect(source, `${item.key} render guard`).toContain(`isFilterVisible('${item.key}')`);
         expect(source, `${item.key} reset registration`).toContain(`['${shortKey}',`);

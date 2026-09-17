@@ -15,7 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { MODULE_REGISTRY, ModuleAction, ModuleDefinition, ModulePage } from '@/types/moduleRegistry';
 import { ResourceType, ActionType } from '@/types/roles';
-import { COLUMN_REGISTRY } from '@/lib/column-registry';
+import { COLUMN_REGISTRY, columnStorageSlug } from '@/lib/column-registry';
 import { useSelectedUserAccess } from '@/context/role-management/SelectedUserAccessContext';
 import { TabProps, AccessEffect } from './types';
 import { supabase } from '@/integrations/supabase/client';
@@ -691,11 +691,12 @@ export function PermissionsTab({
                 <span className="w-28 text-center">User Override<br/><span className="font-normal text-[9px] normal-case">Only this user</span></span>
               </div>
               {pageDef?.columns.map(col => {
-                const roleKey = `${selectedPage}:${col.key}`;
+                const storageSlug = columnStorageSlug(pageDef);
+                const roleKey = `${storageSlug}:${col.key}`;
                 const roleRow = roleColMap[roleKey];
                 const userRow = userColMap[roleKey];
-                const roleSaving = savingKey === `col:role:${selectedPage}:${col.key}`;
-                const userSaving = savingKey === `col:user:${selectedPage}:${col.key}`;
+                const roleSaving = savingKey === `col:role:${storageSlug}:${col.key}`;
+                const userSaving = savingKey === `col:user:${storageSlug}:${col.key}`;
                 const roleRemoveSaving = roleRow ? savingKey === `col:remove:${roleRow.id}` : false;
                 const userRemoveSaving = userRow ? savingKey === `col:remove:${userRow.id}` : false;
 
@@ -730,7 +731,7 @@ export function PermissionsTab({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <button disabled={roleSaving}
-                                onClick={() => upsertColumnVisibility(selectedPage, col.key, true, 'role', selectedRoleDefault)}
+                                onClick={() => upsertColumnVisibility(storageSlug, col.key, true, 'role', selectedRoleDefault)}
                                 className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 border rounded text-red-600 border-red-200 hover:bg-red-50 disabled:opacity-40">
                                 {roleSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
                                 Hide
@@ -764,7 +765,7 @@ export function PermissionsTab({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <button disabled={userSaving}
-                                onClick={() => upsertColumnVisibility(selectedPage, col.key, true, 'user')}
+                                onClick={() => upsertColumnVisibility(storageSlug, col.key, true, 'user')}
                                 className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 border rounded text-red-600 border-red-200 hover:bg-red-50 disabled:opacity-40">
                                 {userSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
                                 Hide

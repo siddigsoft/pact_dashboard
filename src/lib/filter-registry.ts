@@ -18,8 +18,9 @@ const pageFilters = (
   page: string,
   pageLabel: string,
   filters: readonly (readonly [string, string])[],
+  keyPrefix = page,
 ): FilterDefinition[] => filters.map(([key, label]) =>
-  f(page, pageLabel, `${page}.${key}`, label, `Show the ${label.toLowerCase()} filter`),
+  f(page, pageLabel, `${keyPrefix}.${key}`, label, `Show the ${label.toLowerCase()} filter`),
 );
 
 export const FILTER_REGISTRY: readonly FilterDefinition[] = [
@@ -53,37 +54,37 @@ export const FILTER_REGISTRY: readonly FilterDefinition[] = [
     ['date', 'Date'], ['paid', 'Payment Status'], ['reconciled', 'Reconciliation Status'],
   ]),
   ...pageFilters('wallet-reports', 'Wallet Reports', [['search', 'Search']]),
-  ...pageFilters('duplicate-payments-report', 'Duplicate Payments Report', [
+  ...pageFilters('finance-hub:duplicate-payments', 'Finance Hub · Duplicate Payments', [
     ['search', 'Search'], ['hub', 'Hub'], ['state', 'State'], ['mmp', 'MMP'],
     ['enumerator', 'Enumerator'], ['month', 'Month'], ['severity', 'Severity'],
-  ]),
+  ], 'duplicate-payments-report'),
   ...pageFilters('salary-retainer-report', 'Salary & Retainer Report', [
     ['search', 'Search'], ['department', 'Department'], ['type', 'Employment Type'],
   ]),
-  ...pageFilters('hr-hub.org-chart', 'HR Hub · Organization Chart', [
+  ...pageFilters('hr-hub:org-chart', 'HR Hub · Organization Chart', [
     ['search', 'Search'], ['department', 'Department'],
-  ]),
-  ...pageFilters('hr-assets', 'HR Assets', [
+  ], 'hr-hub.org-chart'),
+  ...pageFilters('hr-hub:equipment', 'HR Hub · Equipment & Assets', [
     ['search', 'Search'], ['type', 'Asset Type'], ['status', 'Status'],
     ['assigned-to', 'Assigned To'], ['department', 'Department'],
-  ]),
-  ...pageFilters('hr-policy-library', 'HR Policy Library', [
+  ], 'hr-assets'),
+  ...pageFilters('hr-hub:policy-library', 'HR Hub · Policy Library', [
     ['search', 'Policy Search'], ['category', 'Policy Category'], ['status', 'Policy Status'],
     ['compliance-policy', 'Compliance Policy'], ['compliance-department', 'Compliance Department'],
     ['compliance-hub', 'Compliance Hub'], ['compliance-status', 'Compliance Status'],
-  ]),
-  ...pageFilters('leave-requests', 'Leave Requests', [['status', 'Status'], ['type', 'Leave Type']]),
-  ...pageFilters('payroll-admin', 'Payroll Admin', [
+  ], 'hr-policy-library'),
+  ...pageFilters('leave', 'Leave Requests', [['status', 'Status'], ['type', 'Leave Type']], 'leave-requests'),
+  ...pageFilters('hr-hub:payroll-admin', 'HR Hub · Payroll Admin', [
     ['salary-search', 'Salary Search'], ['salary-status', 'Salary Status'],
-  ]),
-  ...pageFilters('crm-partners', 'CRM Partners', [
+  ], 'payroll-admin'),
+  ...pageFilters('crm:partners', 'CRM · Partners', [
     ['search', 'Search'], ['type', 'Partner Type'], ['status', 'Status'],
-  ]),
-  ...pageFilters('crm-contacts', 'CRM Contacts', [['search', 'Search'], ['partner', 'Partner']]),
-  ...pageFilters('crm-opportunities', 'CRM Opportunities', [['search', 'Search'], ['stage', 'Stage']]),
-  ...pageFilters('crm-engagements', 'CRM Engagements', [
+  ], 'crm-partners'),
+  ...pageFilters('crm:contacts', 'CRM · Contacts', [['search', 'Search'], ['partner', 'Partner']], 'crm-contacts'),
+  ...pageFilters('crm:pipeline', 'CRM · Pipeline', [['search', 'Search'], ['stage', 'Stage']], 'crm-opportunities'),
+  ...pageFilters('crm:engagements', 'CRM · Engagements', [
     ['search', 'Search'], ['type', 'Engagement Type'], ['partner', 'Partner'],
-  ]),
+  ], 'crm-engagements'),
   ...pageFilters('hub-operations', 'Hub Operations', [
     ['search', 'Search'], ['state', 'State'], ['hub', 'Hub'], ['locality', 'Locality'],
     ['activity', 'Activity Type'], ['status', 'Status'], ['source', 'Site Source'],
@@ -91,17 +92,17 @@ export const FILTER_REGISTRY: readonly FilterDefinition[] = [
   ...pageFilters('field-operation-manager', 'Field Operation Manager', [
     ['search', 'Search'], ['month', 'Month'], ['hub', 'Hub'],
   ]),
-  ...pageFilters('field-team', 'Field Team', [['search', 'Search'], ['role', 'Role'], ['status', 'Status']]),
-  ...pageFilters('field-payments-centre', 'Field Payments Centre', [
+  ...pageFilters('field-ops:field-team', 'Field Ops · Field Team', [['search', 'Search'], ['role', 'Role'], ['status', 'Status']], 'field-team'),
+  ...pageFilters('field-payments', 'Field Payments Centre', [
     ['hub', 'Hub'], ['state', 'State'], ['mmp', 'MMP'], ['enumerator', 'Enumerator'],
     ['fees-search', 'Fees Search'], ['fees-status', 'Fees Status'],
     ['advances-search', 'Advances Search'], ['advances-status', 'Advances Status'],
     ['exceptions-search', 'Exceptions Search'], ['exceptions-decision', 'Exception Decision'],
     ['exceptions-status', 'Exception Status'], ['recovery-search', 'Recovery Search'],
-  ]),
-  ...pageFilters('field-data-exports', 'Field Data Exports', [
+  ], 'field-payments-centre'),
+  ...pageFilters('field-data:exports', 'Field Data · Exports', [
     ['history-search', 'History Search'], ['format', 'Export Format'],
-  ]),
+  ], 'field-data-exports'),
   ...pageFilters('projects', 'Projects', [
     ['search', 'Search'], ['type', 'Project Type'], ['status', 'Status'], ['manager', 'Project Manager'],
   ]),
@@ -115,9 +116,9 @@ export const FILTER_REGISTRY: readonly FilterDefinition[] = [
     ['hub', 'Hub'], ['state', 'State'],
   ]),
   ...pageFilters('departments', 'Departments', [['department', 'Department'], ['search', 'Search']]),
-  ...pageFilters('admin-cycle-health', 'Cycle Health Administration', [['search', 'Search']]),
-  ...pageFilters('admin-wallets', 'Wallet Administration', [['search', 'Search']]),
-  ...pageFilters('admin-whatsapp', 'WhatsApp Administration', [['log-type', 'Log Type']]),
+  ...pageFilters('super-admin-hub:cycle-health', 'Super Admin Hub · Cycle Health', [['search', 'Search']], 'admin-cycle-health'),
+  ...pageFilters('finance-hub:admin-wallets', 'Finance Hub · Wallet Administration', [['search', 'Search']], 'admin-wallets'),
+  ...pageFilters('whatsapp-admin', 'WhatsApp Administration', [['log-type', 'Log Type']], 'admin-whatsapp'),
 ];
 
 export const FILTER_REGISTRY_BY_KEY = Object.fromEntries(FILTER_REGISTRY.map(item => [item.key, item]));

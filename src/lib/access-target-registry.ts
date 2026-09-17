@@ -27,7 +27,7 @@ export function getRegisteredPageActions(slug: string): ModuleAction[] {
   const actions = MODULE_REGISTRY.flatMap(module => module.pages)
     .filter(candidate => routes.has(candidate.route))
     .flatMap(candidate => candidate.actions);
-  return [...new Map(actions.map(action => [action.key, action])).values()];
+  return [...new Map(actions.map(action => [action.key || `${action.resource}:${action.action}`, action])).values()];
 }
 
 /** Shared, typed projection of existing page, tab and action definitions.
