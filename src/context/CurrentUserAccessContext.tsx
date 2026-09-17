@@ -5,7 +5,11 @@ import { isSuperAdminRole } from '@/lib/effectiveAccess';
 import { overrideIsActive, manifestIsTabBlocked } from '@/lib/current-user-access';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-import { resolveFilterVisibility, type FilterVisibilityConfig } from '@/lib/filter-visibility';
+import {
+  hasExplicitVisibleFilterOverride,
+  resolveFilterVisibility,
+  type FilterVisibilityConfig,
+} from '@/lib/filter-visibility';
 
 interface CurrentUserAccessValue {
   overrides: Map<string, boolean>;
@@ -13,12 +17,14 @@ interface CurrentUserAccessValue {
   refresh: () => Promise<void>;
   loading: boolean;
   isFilterVisible: (key: string) => boolean;
+  isFilterExplicitlyVisible: (key: string) => boolean;
   filterLoading: boolean;
   filterError: string | null;
 }
 
 const CurrentUserAccessContext = createContext<CurrentUserAccessValue>({
-  overrides: new Map(), isTabBlocked: () => true, isFilterVisible: () => false, filterLoading: true, filterError: null,
+  overrides: new Map(), isTabBlocked: () => true, isFilterVisible: () => false,
+  isFilterExplicitlyVisible: () => false, filterLoading: true, filterError: null,
   refresh: async () => {}, loading: true,
 });
 
@@ -69,6 +75,11 @@ export const CurrentUserAccessProvider: FC<{ children: ReactNode }> = ({ childre
         rows: filterQuery.data as FilterVisibilityConfig[] | undefined,
         initialLoading: filterQuery.isLoading && !filterQuery.data,
         failedWithoutData: filterQuery.isError && !filterQuery.data,
+      }),
+      isFilterExplicitlyVisible: (key: string) => hasExplicitVisibleFilterOverride({
+        key,
+        userId: currentUser?.id,
+        rows: filterQuery.data as FilterVisibilityConfig[] | undefined,
       }),
       filterLoading: Boolean(currentUser?.id) && filterQuery.isLoading,
       filterError: filterQuery.isError ? 'Filter visibility settings could not be refreshed; filters are conservatively hidden until the last good configuration is available.' : null,

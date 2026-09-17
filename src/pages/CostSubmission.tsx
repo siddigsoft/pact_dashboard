@@ -245,7 +245,7 @@ const CostSubmission = () => {
    const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
    const { mmpFiles } = useMMP();
    const { toast } = useToast();
-   const { isFilterVisible } = useCurrentUserAccess();
+  const { isFilterVisible, isFilterExplicitlyVisible } = useCurrentUserAccess();
 
    // Build MMP lookup map: mmp_file_id -> mmp name
    const mmpNameMap = useMemo(() => {
@@ -299,6 +299,8 @@ const CostSubmission = () => {
   const canMarkCostPaid = isKassalaCostSupervisor || canMarkCostPaidByPermission();
   const isCostFilterVisible = (key: string) =>
     isKassalaCostSupervisor || isFilterVisible(`cost-submission.${key}`);
+  const isCostFilterExplicitlyVisible = (key: string) =>
+    isFilterExplicitlyVisible(`cost-submission.${key}`);
   const canManagePreFundFilters = isAdmin || isSuperAdminFn() || isKassalaCostSupervisor;
 
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataTeam || isDataCollector;
@@ -5352,7 +5354,7 @@ const CostSubmission = () => {
             )}
 
             {/* Submitter filter */}
-            {isCostFilterVisible('user') && (isAdminOrSuperUser || isSuperAdmin || isSupervisor || isKassalaCostSupervisor || isFOM || isCountryDirector) && userOptions.length > 1 && (
+            {isCostFilterVisible('user') && (isAdminOrSuperUser || isSuperAdmin || isSupervisor || isKassalaCostSupervisor || isFOM || isCountryDirector) && (userOptions.length > 1 || isCostFilterExplicitlyVisible('user')) && (
               <Select value={userFilter} onValueChange={setUserFilter} data-testid="select-user-filter">
                 <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="trigger-user-filter">
                   <SelectValue placeholder="All Submitters" />

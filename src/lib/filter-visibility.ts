@@ -26,6 +26,19 @@ export function resolveFilterVisibility(input: {
   return roleRows.length ? !roleRows.some(row => row.is_hidden) : true;
 }
 
+export function hasExplicitVisibleFilterOverride(input: {
+  key: string;
+  userId: string | null | undefined;
+  rows: readonly FilterVisibilityConfig[] | undefined;
+}): boolean {
+  if (!input.userId) return false;
+  return input.rows?.some(row =>
+    row.filter_key === input.key
+    && row.user_id === input.userId
+    && row.is_hidden === false,
+  ) ?? false;
+}
+
 /** Clicking a target with no override toggles the inherited result. */
 export function nextFilterOverride(
   existing: FilterVisibilityConfig | undefined,

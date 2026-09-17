@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { nextFilterOverride, resolveFilterVisibility } from '../filter-visibility';
+import {
+  hasExplicitVisibleFilterOverride,
+  nextFilterOverride,
+  resolveFilterVisibility,
+} from '../filter-visibility';
 
 const base = {
   key: 'crm-contacts.search',
@@ -18,13 +22,24 @@ describe('filter visibility resolution', () => {
   });
 
   it('lets an explicit user-visible override win over a role hide', () => {
+    const rows = [
+      { filter_key: base.key, role: 'staff', is_hidden: true },
+      { filter_key: base.key, user_id: base.userId, is_hidden: false },
+    ];
     expect(resolveFilterVisibility({
       ...base,
-      rows: [
-        { filter_key: base.key, role: 'staff', is_hidden: true },
-        { filter_key: base.key, user_id: base.userId, is_hidden: false },
-      ],
+      rows,
     })).toBe(true);
+    expect(hasExplicitVisibleFilterOverride({
+      key: base.key,
+      userId: base.userId,
+      rows,
+    })).toBe(true);
+    expect(hasExplicitVisibleFilterOverride({
+      key: base.key,
+      userId: 'another-user',
+      rows,
+    })).toBe(false);
   });
 
   it('creates the opposite of inherited visibility and restores an existing override', () => {
