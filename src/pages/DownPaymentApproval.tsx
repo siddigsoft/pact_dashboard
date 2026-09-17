@@ -522,6 +522,7 @@ export default function DownPaymentApproval() {
     supabase
       .rpc('is_kassala_hub_supervisor', { p_user_id: currentUser.id })
       .then(({ data, error }) => {
+        if (error) console.error('[DownPaymentApproval] Failed to resolve Kassala Supervisor assignment:', error);
         if (active) setHasKassalaSupervisorAssignment(!error && data === true);
       });
     return () => { active = false; };

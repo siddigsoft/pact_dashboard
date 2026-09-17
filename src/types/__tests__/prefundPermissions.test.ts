@@ -164,12 +164,22 @@ describe('Pre-Fund payment permissions', () => {
       `${process.cwd()}/supabase/migrations/20260917210000_kassala_supervisor_cost_submission_scope.sql`,
       'utf8',
     );
+    const canonicalAssignmentFix = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917220000_kassala_supervisor_canonical_assignment.sql`,
+      'utf8',
+    );
 
     expect(migration).toContain("('cost_submissions'::text, 'read'::text");
     expect(migration).toContain("('cost_submissions'::text, 'mark_paid'::text");
     expect(migration).toContain("('cost_submissions'::text, 'approve'::text");
     expect(migration).toContain('Cost Submission Tier 1 approval is limited to Kassala Hub');
     expect(migration).toContain('OR public.can_view_operational_cost_submission');
+    expect(canonicalAssignmentFix).toContain('FROM public.canonical_user_role_assignments a');
+    expect(canonicalAssignmentFix).toContain('JOIN public.profiles p ON p.id = a.user_id');
+    expect(canonicalAssignmentFix).toContain('p.secondary_hub_id');
+    expect(canonicalAssignmentFix).toContain(
+      'GRANT EXECUTE ON FUNCTION public.is_kassala_hub_supervisor(uuid) TO authenticated, service_role',
+    );
     expect(page).toContain("getEffectiveSubmissionHubId(oc) === 'kassala-hub'");
     expect(page).toContain("rpc('is_kassala_hub_supervisor'");
     expect(page).toContain('isKassalaCostSupervisor || isFilterVisible');
