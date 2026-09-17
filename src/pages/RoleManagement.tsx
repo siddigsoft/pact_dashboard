@@ -392,7 +392,7 @@ const RoleManagement = () => {
               <span className="sm:hidden">Test</span>
             </Button>
           </div>
-          <UnifiedAccessManager containerClassName="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background md:flex-row" />
+          <UnifiedAccessManager containerClassName="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background sm:flex-row" />
         </TabsContent>
 
       </Tabs>

@@ -119,7 +119,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
     <div className={containerClassName ?? "flex h-full min-h-0 min-w-0 overflow-hidden rounded-xl border bg-background"}>
 
       {/* ── Left panel: user list ── */}
-      <div className="flex max-h-44 w-full shrink-0 flex-col border-b border-slate-200 bg-[#f3f5f3] md:max-h-none md:w-64 md:border-b-0 md:border-r lg:w-72">
+      <div className="flex max-h-44 w-full shrink-0 flex-col border-b border-slate-200 bg-[#f3f5f3] sm:max-h-none sm:w-52 sm:border-b-0 sm:border-r md:w-60 lg:w-72">
         {/* Search */}
         <div className="space-y-2 border-b border-slate-200 p-3">
           <div className="flex items-center justify-between">
