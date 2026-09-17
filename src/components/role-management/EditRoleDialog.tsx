@@ -179,12 +179,12 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
           </TabsContent>
           
           <TabsContent value="baseline" className="space-y-4">
-            {baselineLoading ? <p className="text-sm">Loading access defaults…</p> : !baselineError && <>
+            {baselineLoading ? <p className="text-sm">Loading access defaultsâ€¦</p> : !baselineError && <>
               <h3 className="font-semibold">Page access</h3>
               <p className="text-sm text-muted-foreground">Selected pages grant this role access. All defaults save together.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">{PAGE_DEFS.map(page => <label key={page.slug} className="flex items-center gap-2 text-sm"><Checkbox checked={pages.includes(page.slug)} onCheckedChange={checked => setPages(current => checked ? [...current, page.slug] : current.filter(slug => slug !== page.slug))} />{page.label}</label>)}</div>
               <RoleBaselineAccessEditor value={baseline} onChange={setBaseline} allowCostScope={allowCostScope} />
-              <Button type="button" disabled={submitting || isLoading} onClick={() => { void handleSubmit({ preventDefault() {} } as React.FormEvent); }}>{submitting ? 'Saving…' : 'Save role and access defaults'}</Button>
+              <Button type="button" disabled={submitting || isLoading} onClick={() => { void handleSubmit({ preventDefault() {} } as React.FormEvent); }}>{submitting ? 'Savingâ€¦' : 'Save role and access defaults'}</Button>
             </>}
           </TabsContent>
           <TabsContent value="permissions">

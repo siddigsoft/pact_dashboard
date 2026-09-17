@@ -308,7 +308,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     return { effect, source: 'role_default', summary: 'Registry default shows this filter.' };
   }
   async function toggleFilter(filterKey: string, target: 'user' | 'role' = 'user', roleName = userRole) {
-    if (effectiveRoleNames.some(isSuperAdminRole)) return;
+    if ((target === 'user' && effectiveRoleNames.some(isSuperAdminRole)) || (target === 'role' && isSuperAdminRole(roleName))) return;
     setSavingKey(`filter:${target}:${filterKey}`);
     try {
       const existing = filterConfigs.find(row => (target === 'user' ? row.user_id === userId : row.role === roleName) && row.filter_key === filterKey);
@@ -550,6 +550,9 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   ) {
     setSavingKey(`col:${target}:${pageSlug}:${columnKey}`);
     try {
+      if ((target === 'user' && effectiveRoleNames.some(isSuperAdminRole)) || (target === 'role' && isSuperAdminRole(roleName))) {
+        throw new Error('Super Admin access cannot be overridden.');
+      }
       const row = target === 'user'
         ? { user_id: userId, role: null, page_slug: pageSlug, column_key: columnKey, is_hidden: isHidden, set_by: currentUser?.id ?? null }
         : { user_id: null, role: roleName, page_slug: pageSlug, column_key: columnKey, is_hidden: isHidden, set_by: currentUser?.id ?? null };
@@ -567,6 +570,10 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   async function removeColumnVisibility(id: string) {
     setSavingKey(`col:remove:${id}`);
     try {
+      const existing = columnConfigs.find(row => row.id === id);
+      if (isSuperAdminRole(existing?.role) || (existing?.user_id === userId && effectiveRoleNames.some(isSuperAdminRole))) {
+        throw new Error('Super Admin access cannot be overridden.');
+      }
       const { error } = await supabase.from('column_visibility_config').delete().eq('id', id);
       if (error) throw error;
       toast({ title: 'Column rule removed' });
@@ -584,6 +591,9 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   ): Promise<void> {
     setSavingKey(`scope:${target}:${scopeType}:${scopeValue}`);
     try {
+      if ((target === 'user' && effectiveRoleNames.some(isSuperAdminRole)) || (target === 'role' && isSuperAdminRole(roleName))) {
+        throw new Error('Super Admin access cannot be overridden.');
+      }
       const row = target === 'user'
         ? {
           user_id: userId, role: null, scope_type: scopeType, scope_value: scopeValue,
@@ -616,6 +626,9 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     setSavingKey(`scope:replace:${target}`);
     setScopePreviewError(null);
     try {
+      if ((target === 'user' && effectiveRoleNames.some(isSuperAdminRole)) || (target === 'role' && isSuperAdminRole(roleName))) {
+        throw new Error('Super Admin access cannot be overridden.');
+      }
       const { data, error } = await (supabase as any).rpc(
         'replace_operational_cost_data_scope',
         {
@@ -663,6 +676,10 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   async function removeDataScope(id: string) {
     setSavingKey(`scope:remove:${id}`);
     try {
+      const existing = dataScopeRows.find(row => row.id === id);
+      if (isSuperAdminRole(existing?.role) || (existing?.user_id === userId && effectiveRoleNames.some(isSuperAdminRole))) {
+        throw new Error('Super Admin access cannot be overridden.');
+      }
       const { error } = await supabase.from('data_scope_config').delete().eq('id', id);
       if (error) throw error;
       toast({ title: 'Scope rule removed' });

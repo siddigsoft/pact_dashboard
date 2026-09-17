@@ -21,6 +21,7 @@ import { PermissionsTab }  from './unified/PermissionsTab';
 import { DataScopeTab }    from './unified/DataScopeTab';
 import { AccessAuditTab }  from './unified/AccessAuditTab';
 import { FilterControlsTab } from './unified/FilterControlsTab';
+import { isSuperAdminRole } from '@/lib/effectiveAccess';
 
 // ── Role display helpers ────────────────────────────────────────────────────
 const ROLE_LABEL: Record<string, string> = {
@@ -65,17 +66,17 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
   const [selectedId, setSelectedId] = useState<string | null>(requestedUser);
   const [activeTab, setActiveTab]   = useState<TabKey>(requestedPage ? 'pages' : 'overview');
 
-  // Distinct roles in the user list (exclude superAdmin — can't be overridden)
+  // Distinct roles in the user list (Super Admin aliases cannot be overridden).
   const allRoles = useMemo(() => {
-    const roles = [...new Set(users.map(u => u.role).filter(Boolean))].filter(r => r !== 'superAdmin');
+    const roles = [...new Set(users.map(u => u.role).filter(Boolean))].filter(r => !isSuperAdminRole(r));
     return roles.sort();
   }, [users]);
 
-  // Filter users: exclude superAdmins from the editable list
+  // Filter users: exclude every supported Super Admin spelling.
   const filteredUsers = useMemo<UAMUser[]>(() => {
     const q = search.toLowerCase();
     return (users as UAMUser[]).filter(u => {
-      if (!u.role || u.role === 'superAdmin') return false;
+      if (!u.role || isSuperAdminRole(u.role)) return false;
       if (roleFilter !== 'all' && u.role !== roleFilter) return false;
       if (q) {
         const name = (u.name ?? '').toLowerCase();
@@ -105,7 +106,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
     () => (selectedId ? ((users as UAMUser[]).find(u => u.id === selectedId) ?? null) : null),
     [users, selectedId],
   );
-  const isSA = selectedUser?.role === 'superAdmin';
+  const isSA = isSuperAdminRole(selectedUser?.role);
 
   useEffect(() => {
     if (selectedId && !filteredUsers.some(user => user.id === selectedId)) {
@@ -124,9 +125,13 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
     <div className={containerClassName ?? "flex h-[calc(100vh-260px)] min-h-[600px] border rounded-xl overflow-hidden bg-background"}>
 
       {/* ── Left panel: user list ── */}
-      <div className="flex max-h-56 w-full shrink-0 flex-col border-b bg-muted/20 md:max-h-none md:w-72 md:border-b-0 md:border-r">
+      <div className="flex max-h-56 w-full shrink-0 flex-col border-b border-slate-200 bg-[#f3f5f3] md:max-h-none md:w-72 md:border-b-0 md:border-r">
         {/* Search */}
-        <div className="p-3 border-b space-y-2">
+        <div className="space-y-2 border-b border-slate-200 p-3">
+          <div className="flex items-center justify-between">
+            <div><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">People</p><p className="text-xs text-slate-600">Effective access context</p></div>
+            <Badge variant="outline" className="border-slate-300 bg-white text-[9px] text-slate-500">Live</Badge>
+          </div>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input value={search} onChange={e => setSearch(e.target.value)}
@@ -156,8 +161,11 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
           ))}
         </div>
 
-        <div className="p-2 border-t text-[10px] text-muted-foreground text-center">
+        <div className="space-y-2 border-t border-slate-200 p-2 text-[10px] text-muted-foreground">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 px-1"><span className="inline-flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Inherited</span><span className="inline-flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-amber-500" />Override</span><span className="inline-flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-slate-400" />Protected</span></div>
+          <p className="text-center">
           {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} · Super Admins excluded
+          </p>
         </div>
       </div>
 
@@ -285,8 +293,8 @@ function UserHeader({ user, isSA }: { user: UAMUser; isSA: boolean }) {
   const roleCls = ROLE_COLOR[user.role] ?? 'bg-gray-100 text-gray-600';
   return (
     <div className={cn(
-      'shrink-0 flex items-center gap-3 px-5 py-3 border-b',
-      isSA ? 'bg-red-50/50 dark:bg-red-950/10' : 'bg-card/50'
+      'shrink-0 flex items-center gap-3 border-b border-slate-200 px-5 py-3',
+      isSA ? 'bg-red-50/60 dark:bg-red-950/10' : 'bg-[#fbfaf7]'
     )}>
       <Avatar className="h-9 w-9 shrink-0">
         <AvatarFallback className={cn('text-sm font-bold', roleCls)}>{initials}</AvatarFallback>
@@ -301,6 +309,7 @@ function UserHeader({ user, isSA }: { user: UAMUser; isSA: boolean }) {
           )}
         </div>
         <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
+        <p className="mt-1 text-[10px] text-slate-500">Editing context <span className="font-medium text-slate-700">user exception layer</span> · inherited role baseline remains visible</p>
       </div>
       <span className={cn('text-[10px] px-2 py-1 rounded-full font-medium shrink-0', roleCls)}>
         {ROLE_LABEL[user.role] ?? user.role}
