@@ -534,8 +534,10 @@ export default function DownPaymentApproval() {
   const isFieldPaymentOnly = canMarkPaidActions && !canApproveActions;
   const canEditActions = isAdmin && checkPermission('down_payments', 'update');
   const canExportActions = checkPermission('down_payments', 'export');
-  const canDeletePayment = checkPermission('down_payments', 'delete');
+  const canDeletePayment = !isFieldPaymentOnly && checkPermission('down_payments', 'delete');
   const canCorrectPreFund = isFinanceAdmin && checkPermission('down_payments', 'reconcile');
+  const isPageFilterVisible = (key: string) =>
+    isFieldPaymentOnly || isFilterVisible(`down-payment-approval.${key}`);
   const isDownPaymentTabVisible = useCallback(
     (tabId: string) => !isTabBlocked(hubTabSlug('down-payment-approval', tabId)),
     [isTabBlocked],
@@ -572,16 +574,16 @@ export default function DownPaymentApproval() {
     setFilters(current => {
       const next = { ...current };
       const clear = (key: string, field: keyof DownPaymentFilter) => {
-        if (!isFilterVisible(`down-payment-approval.${key}`)) delete (next as any)[field];
+        if (!isPageFilterVisible(key)) delete (next as any)[field];
       };
       ['search', 'hub', 'state', 'locality', 'user', 'mmp', 'pre-fund', 'date', 'status', 'site', 'amount']
         .forEach(key => clear(key, ({ search: 'searchTerm', hub: 'hubId', state: 'stateName', locality: 'localityName', user: 'dataCollectorId', mmp: 'mmpName', 'pre-fund': 'preFundId', date: 'dateFrom', status: 'status', site: 'siteName', amount: 'amountMin' } as any)[key]));
-      if (!isFilterVisible('down-payment-approval.date')) delete (next as any).dateTo;
-      if (!isFilterVisible('down-payment-approval.amount')) delete (next as any).amountMax;
-      if (!isFilterVisible('down-payment-approval.state') || !isFilterVisible('down-payment-approval.locality')) delete (next as any).localityName;
+      if (!isPageFilterVisible('date')) delete (next as any).dateTo;
+      if (!isPageFilterVisible('amount')) delete (next as any).amountMax;
+      if (!isPageFilterVisible('state') || !isPageFilterVisible('locality')) delete (next as any).localityName;
       return JSON.stringify(next) === JSON.stringify(current) ? current : next;
     });
-  }, [isFilterVisible]);
+  }, [isFieldPaymentOnly, isFilterVisible]);
 
   // ── Duplicate active-advance detection ────────────────────────────────────
   // Find sites that have more than one active (non-cancelled/rejected/deleted)
@@ -642,7 +644,7 @@ export default function DownPaymentApproval() {
   const [paymentDeleteDialog, setPaymentDeleteDialog] = useState<{ payment: PaymentEvidence | null; reason: string; saving: boolean }>({ payment: null, reason: '', saving: false });
   const [preFundLinkError, setPreFundLinkError] = useState<string | null>(null);
   const [preFundFilterOptions, setPreFundFilterOptions] = useState<Array<{ id: string; name: string; currency: string }>>([]);
-  const canManagePreFundFilters = userRole === 'admin' || userRole === 'superadmin' || isSuperAdmin;
+  const canManagePreFundFilters = userRole === 'admin' || userRole === 'superadmin' || isSuperAdmin || isFieldPaymentOnly;
   const [preFundCorrectionDialog, setPreFundCorrectionDialog] = useState<{
     open: boolean;
     evidence: PaymentEvidence | null;
@@ -684,7 +686,7 @@ export default function DownPaymentApproval() {
   const submitPaymentDelete = useCallback(async () => {
     const payment = paymentDeleteDialog.payment;
     if (!payment || paymentDeleteDialog.reason.trim().length < 5) return;
-    if (!checkPermission('down_payments', 'delete')) {
+    if (isFieldPaymentOnly || !checkPermission('down_payments', 'delete')) {
       toast({ title: 'Not authorized', description: 'You do not have permission to delete a down-payment payment.', variant: 'destructive' });
       return;
     }
@@ -699,7 +701,7 @@ export default function DownPaymentApproval() {
       toast({ title: 'Payment deletion failed', description: error?.message ?? 'The payment could not be deleted.', variant: 'destructive' });
       setPaymentDeleteDialog(current => ({ ...current, saving: false }));
     }
-  }, [checkPermission, paymentDeleteDialog, refreshRequests, toast]);
+  }, [checkPermission, isFieldPaymentOnly, paymentDeleteDialog, refreshRequests, toast]);
 
   useEffect(() => {
     if (!canManagePreFundFilters) {
@@ -1323,7 +1325,7 @@ export default function DownPaymentApproval() {
                 )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {isFilterVisible('down-payment-approval.search') && <div>
+                {isPageFilterVisible('search') && <div>
                   <Label className="text-xs">Search</Label>
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1336,7 +1338,7 @@ export default function DownPaymentApproval() {
                     />
                   </div>
                 </div>}
-                {isFilterVisible('down-payment-approval.hub') && <div>
+                {isPageFilterVisible('hub') && <div>
                   <Label className="text-xs">Hub</Label>
                   <Select value={filters.hubId || 'all'} onValueChange={v => setFilters(f => ({ ...f, hubId: v === 'all' ? undefined : v, stateName: undefined, localityName: undefined }))}>
                     <SelectTrigger data-testid="select-page-filter-hub"><SelectValue placeholder="All Hubs" /></SelectTrigger>
@@ -1346,7 +1348,7 @@ export default function DownPaymentApproval() {
                     </SelectContent>
                   </Select>
                 </div>}
-                {isFilterVisible('down-payment-approval.state') && <div>
+                {isPageFilterVisible('state') && <div>
                   <Label className="text-xs">State</Label>
                   <Select value={filters.stateName || 'all'} onValueChange={v => setFilters(f => ({ ...f, stateName: v === 'all' ? undefined : v, localityName: undefined }))}>
                     <SelectTrigger data-testid="select-page-filter-state"><SelectValue placeholder="All States" /></SelectTrigger>
@@ -1356,7 +1358,7 @@ export default function DownPaymentApproval() {
                     </SelectContent>
                   </Select>
                 </div>}
-                {isFilterVisible('down-payment-approval.locality') && <div>
+                {isPageFilterVisible('locality') && <div>
                   <Label className="text-xs">Locality</Label>
                   <Select value={filters.localityName || 'all'} onValueChange={v => setFilters(f => ({ ...f, localityName: v === 'all' ? undefined : v }))}>
                     <SelectTrigger data-testid="select-page-filter-locality"><SelectValue placeholder="All Localities" /></SelectTrigger>
@@ -1366,7 +1368,7 @@ export default function DownPaymentApproval() {
                     </SelectContent>
                   </Select>
                 </div>}
-                {isFilterVisible('down-payment-approval.user') && <div>
+                {isPageFilterVisible('user') && <div>
                 <div>
                   <Label className="text-xs">Data Collector</Label>
                   <Select value={filters.dataCollectorId || 'all'} onValueChange={v => setFilters(f => ({ ...f, dataCollectorId: v === 'all' ? undefined : v }))}>
@@ -1378,7 +1380,7 @@ export default function DownPaymentApproval() {
                   </Select>
                 </div>
                 </div>}
-                {isFilterVisible('down-payment-approval.mmp') && <div>
+                {isPageFilterVisible('mmp') && <div>
                   <Label className="text-xs">MMP</Label>
                   <Select value={filters.mmpName || 'all'} onValueChange={v => setFilters(f => ({ ...f, mmpName: v === 'all' ? undefined : v }))}>
                     <SelectTrigger data-testid="select-page-filter-mmp"><SelectValue placeholder="All MMPs" /></SelectTrigger>
@@ -1388,7 +1390,7 @@ export default function DownPaymentApproval() {
                     </SelectContent>
                   </Select>
                 </div>}
-                {isFilterVisible('down-payment-approval.pre-fund') && canManagePreFundFilters && (
+                {isPageFilterVisible('pre-fund') && canManagePreFundFilters && (
                   <div>
                     <Label className="text-xs">Paid from Pre-Fund</Label>
                     <Select value={filters.preFundId || 'all'} onValueChange={v => setFilters(f => ({ ...f, preFundId: v === 'all' ? undefined : v }))}>
@@ -1409,7 +1411,7 @@ export default function DownPaymentApproval() {
                     </Select>
                   </div>
                 )}
-                {isFilterVisible('down-payment-approval.date') && (
+                {isPageFilterVisible('date') && (
                   <div className="contents">
                     <div>
                       <Label className="text-xs">Date From</Label>
@@ -1421,7 +1423,7 @@ export default function DownPaymentApproval() {
                     </div>
                   </div>
                 )}
-                {isFilterVisible('down-payment-approval.status') && <div>
+                {isPageFilterVisible('status') && <div>
                   <Label className="text-xs">Status</Label>
                   <Select
                     value={(filters.status && filters.status.length === 1) ? filters.status[0] : 'all'}

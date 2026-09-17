@@ -108,4 +108,23 @@ describe('Pre-Fund payment permissions', () => {
     expect(migration).toContain("o.is_granted = true");
     expect(migration).toContain("'fieldassistant'");
   });
+
+  it('gives Kassala supervisors global payment-only access and admin-style filters', () => {
+    const page = readFileSync(
+      `${process.cwd()}/src/pages/DownPaymentApproval.tsx`,
+      'utf8',
+    );
+    const migration = readFileSync(
+      `${process.cwd()}/supabase/migrations/20260917190000_kassala_supervisor_global_payment_only.sql`,
+      'utf8',
+    );
+
+    expect(migration).toContain("('down_payments'::text, 'read'::text)");
+    expect(migration).toContain("('down_payments'::text, 'mark_paid'::text)");
+    expect(migration).toContain('a.is_global_payment_supervisor');
+    expect(migration).toContain("p_action IN ('approve', 'delete')");
+    expect(page).toContain('isFieldPaymentOnly || isFilterVisible');
+    expect(page).toContain("const canDeletePayment = !isFieldPaymentOnly");
+    expect(page).toContain('isSuperAdmin || isFieldPaymentOnly');
+  });
 });
