@@ -69,6 +69,7 @@ import {
   Send,
   Fingerprint,
   Users,
+  ExternalLink,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -438,6 +439,7 @@ export function DownPaymentApprovalPanel({
   }, [isPaymentOnly, isStandaloneExplicit, activeTab]);
   const [completedSubTab, setCompletedSubTab] = useState<'paid_waiting' | 'confirmed'>('paid_waiting');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [receiptPreview, setReceiptPreview] = useState<{ url: string; label: string } | null>(null);
   const [showFilters, setShowFilters] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -3134,17 +3136,22 @@ export function DownPaymentApprovalPanel({
                       try { const parsed = JSON.parse(request.paymentProofUrl!); urls = Array.isArray(parsed) ? parsed : [request.paymentProofUrl!]; }
                       catch { urls = [request.paymentProofUrl!]; }
                       return urls.map((url, i) => (
-                        <a
+                        <button
+                          type="button"
                           key={i}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setReceiptPreview({
+                              url,
+                              label: urls.length > 1 ? `Payment Receipt ${i + 1}` : 'Payment Receipt',
+                            });
+                          }}
                           className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-medium"
                           data-testid={`link-payment-receipt-${request.id}-${i}`}
                         >
                           <Eye className="h-3 w-3" />
                           {urls.length > 1 ? `Receipt ${i + 1}` : 'View Receipt / عرض الإيصال'}
-                        </a>
+                        </button>
                       ));
                     })()}
                     {request.paymentProofUploadedAt && (
@@ -6333,6 +6340,49 @@ export function DownPaymentApprovalPanel({
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!receiptPreview} onOpenChange={(open) => { if (!open) setReceiptPreview(null); }}>
+        <DialogContent className="flex h-[85dvh] w-[min(94vw,960px)] max-w-none flex-col overflow-hidden p-0">
+          <DialogHeader className="flex shrink-0 flex-row items-center justify-between gap-3 border-b px-5 py-3 text-left">
+            <div>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-4 w-4 text-blue-600" />
+                {receiptPreview?.label ?? 'Payment Receipt'}
+              </DialogTitle>
+              <DialogDescription>View the payment receipt without leaving Down-Payment Tracker.</DialogDescription>
+            </div>
+            {receiptPreview && (
+              <Button variant="outline" size="sm" asChild className="mr-7 shrink-0">
+                <a href={receiptPreview.url} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="mr-1.5 h-4 w-4" />
+                  Open original
+                </a>
+              </Button>
+            )}
+          </DialogHeader>
+          <div className="min-h-0 flex-1 bg-muted/30">
+            {receiptPreview && (() => {
+              const cleanUrl = receiptPreview.url.toLowerCase().split('?')[0];
+              const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'].some(extension => cleanUrl.endsWith(extension));
+              return isImage ? (
+                <div className="flex h-full items-center justify-center p-4">
+                  <img
+                    src={receiptPreview.url}
+                    alt={receiptPreview.label}
+                    className="max-h-full max-w-full rounded object-contain shadow-sm"
+                  />
+                </div>
+              ) : (
+                <iframe
+                  src={receiptPreview.url}
+                  title={receiptPreview.label}
+                  className="h-full w-full border-0 bg-white"
+                />
+              );
+            })()}
+          </div>
         </DialogContent>
       </Dialog>
     </>
