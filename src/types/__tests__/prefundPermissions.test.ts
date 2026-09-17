@@ -243,6 +243,7 @@ describe('Pre-Fund payment permissions', () => {
     expect(page).toContain("getEffectiveSubmissionHubId(oc) === 'kassala-hub'");
     expect(page).toContain("rpc('is_kassala_hub_supervisor'");
     expect(page).toContain('isKassalaCostSupervisor || isFilterVisible');
+    expect(page).toContain('isAdmin || isAdminOrSuperUser || isSuperAdmin || isSupervisor');
     expect(page).toContain('isAdmin || isSuperAdminFn() || isKassalaCostSupervisor');
     expect(mobilePage).toContain("effectiveHub === 'kassala-hub'");
     expect(mobilePage).toContain('if (isKassalaCostSupervisor) return false;');

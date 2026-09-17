@@ -5354,7 +5354,7 @@ const CostSubmission = () => {
             )}
 
             {/* Submitter filter */}
-            {isCostFilterVisible('user') && (isAdminOrSuperUser || isSuperAdmin || isSupervisor || isKassalaCostSupervisor || isFOM || isCountryDirector) && (userOptions.length > 1 || isCostFilterExplicitlyVisible('user')) && (
+            {isCostFilterVisible('user') && (isAdmin || isAdminOrSuperUser || isSuperAdmin || isSupervisor || isKassalaCostSupervisor || isFOM || isCountryDirector) && (userOptions.length > 1 || isCostFilterExplicitlyVisible('user')) && (
               <Select value={userFilter} onValueChange={setUserFilter} data-testid="select-user-filter">
                 <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="trigger-user-filter">
                   <SelectValue placeholder="All Submitters" />
