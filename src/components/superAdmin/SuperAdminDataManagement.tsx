@@ -404,7 +404,27 @@ export function SuperAdminDataManagement() {
   // Declared early — used in useEffect dependency array below (avoids TDZ in production build)
   const [claimedNoCostFilter, setClaimedNoCostFilter] = useState(false);
   // Claimed-sites pagination — declared early for same reason
-  const [claimedVisibleCount, setClaimedVisibleCount] = useState(CLAIMED_PAGE_SIZE);
+  const [claimedFilteredCount, setClaimedFilteredCount] = useState(0);
+  const [claimedTotalCount, setClaimedTotalCount] = useState(0);
+  const [claimedFeedLoaded, setClaimedFeedLoaded] = useState(false);
+  const claimedNextOffsetRef = useRef(0);
+  const [claimedHasMore, setClaimedHasMore] = useState(false);
+  const [claimedLoadingMore, setClaimedLoadingMore] = useState(false);
+  const [claimedServerOptions, setClaimedServerOptions] = useState<any | null>(null);
+  const claimedRequestRef = useRef({ generation: 0, inFlight: false });
+  const claimedPendingReloadRef = useRef(false);
+  const claimedLatestQueryRef = useRef<any>(null);
+  claimedLatestQueryRef.current = {
+    globalSearch: debouncedSearch,
+    siteSearch: debouncedClaimedSiteSearch,
+    status: statusFilter === 'all' ? null : statusFilter,
+    state: stateFilter === 'all' ? null : stateFilter,
+    locality: localityFilter === 'all' ? null : localityFilter,
+    activity: activityFilter === 'all' ? null : activityFilter,
+    mmp: claimedMmpFilter === 'all' ? null : claimedMmpFilter,
+    claimant: claimedByFilter === 'all' ? null : claimedByFilter,
+    noTransport: claimedNoCostFilter,
+  };
 
   // Transaction-specific state
   const [txLoading, setTxLoading] = useState(false);
@@ -523,12 +543,6 @@ export function SuperAdminDataManagement() {
     const timer = setTimeout(() => setDebouncedClaimedSiteSearch(claimedSiteSearch), 300);
     return () => clearTimeout(timer);
   }, [claimedSiteSearch]);
-
-  // Reset claimed-sites page whenever any filter changes
-  useEffect(() => {
-    setClaimedVisibleCount(CLAIMED_PAGE_SIZE);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedClaimedSiteSearch, debouncedSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter, claimedMmpFilter, claimedNoCostFilter]);
 
   // Clear bulk-reclaim selection whenever any Claimed Sites filter changes so
   // stale IDs from a previous filter set are never accidentally reclaimed.
@@ -822,62 +836,86 @@ export function SuperAdminDataManagement() {
     }
   };
 
-  const loadClaimedSites = async () => {
-    if (!beginLoader('claimed-sites')) return;
+  const loadClaimedSites = async (append = false) => {
+    if (!append) {
+      claimedRequestRef.current.generation += 1;
+      setSelectedClaimedSiteIds(new Set());
+      claimedNextOffsetRef.current = 0;
+    }
+    if (claimedRequestRef.current.inFlight) {
+      if (!append) claimedPendingReloadRef.current = true;
+      return;
+    }
+    claimedRequestRef.current.inFlight = true;
+    const generation = claimedRequestRef.current.generation;
+    if (!append && !beginLoader('claimed-sites')) {
+      claimedRequestRef.current.inFlight = false;
+      return;
+    }
     setLoadingClaimed(true);
+    if (append) setClaimedLoadingMore(true);
     try {
-      // Paginated fetch — bypasses Supabase 1000-row default cap
-      const PAGE_SIZE = 1000;
-      let allData: any[] = [];
-      let from = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from('mmp_site_entries')
-          .select('id, site_name, site_code, state, locality, status, accepted_by, claimed_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_file_id, hub_office, additional_claimed_by:additional_data->claimed_by, additional_assigned_to:additional_data->assigned_to')
-          .in('status', POST_DISPATCH_STATUSES)
-          .order('created_at', { ascending: false })
-          .range(from, from + PAGE_SIZE - 1);
-        if (error) { console.error('Claimed sites query error (page', from, '):', error); throw error; }
-        allData = [...allData, ...(data || [])];
-        if ((data || []).length < PAGE_SIZE) break;
-        from += PAGE_SIZE;
-      }
-
-      const uniqueMmpIds = [...new Set(allData.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
-      const mmpNameMap = await resolveMmpNames(uniqueMmpIds);
-      const effectiveMap = await resolveEffectiveClaimants(allData.map((site: any) => site.id));
-      const profileNameMap = await resolveProfileNames(allData.flatMap((site: any) => [
-        effectiveMap.get(site.id), site.accepted_by, site.claimed_by,
-        site.additional_claimed_by, site.additional_assigned_to,
-      ]));
-      const enriched = allData.map((site: any) => {
-        const claimerUid = effectiveMap.get(site.id)
-          || site.accepted_by
-          || site.claimed_by
-          || site.additional_claimed_by
-          || site.additional_assigned_to;
-        const resolvedName = claimerUid && !isProfileUuid(claimerUid)
-          ? claimerUid
-          : (claimerUid && profileNameMap.get(claimerUid)?.name) || 'Not assigned';
-        return {
-          ...site,
-          claimed_by_name: resolvedName,
-          accepted_by_name: resolvedName,
-          effective_claimant_id: claimerUid,
-          effective_claimant_name: resolvedName,
-          main_activity: site.main_activity || site.activity_at_site || null,
-          mmp_id: site.mmp_file_id,
-          mmp_name: mmpNameMap[site.mmp_file_id] || (site.mmp_file_id ? `MMP-${String(site.mmp_file_id).slice(0, 8).toUpperCase()}` : null),
-        };
+      const query = { ...claimedLatestQueryRef.current };
+      const result = await supabase.rpc('superadmin_claimed_sites_query', {
+        p_global_search: query.globalSearch || null,
+        p_site_search: query.siteSearch || null,
+        p_status: query.status,
+        p_state: query.state,
+        p_locality: query.locality,
+        p_activity: query.activity,
+        p_mmp_file_id: query.mmp,
+        p_claimant_key: query.claimant,
+        p_no_transport: query.noTransport,
+        p_limit: CLAIMED_PAGE_SIZE,
+        p_offset: append ? claimedNextOffsetRef.current : 0,
       });
-
-      setClaimedSites(enriched);
+      if (result.error) throw result.error;
+      if (generation !== claimedRequestRef.current.generation) return;
+      const payload: any = result.data || {};
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      claimedNextOffsetRef.current = Math.max(
+        claimedNextOffsetRef.current,
+        Number(payload.next_offset) || (append ? claimedNextOffsetRef.current : rows.length),
+      );
+      const enriched = rows.map((site: any) => ({
+        ...site,
+        claimed_by_name: site.effective_claimant_name || site.accepted_by || site.claimed_by || 'Not assigned',
+        accepted_by_name: site.effective_claimant_name || site.accepted_by || site.claimed_by || 'Not assigned',
+        effective_claimant_name: site.effective_claimant_name || site.accepted_by || site.claimed_by || 'Not assigned',
+        main_activity: site.main_activity || null,
+        mmp_id: site.mmp_file_id,
+      }));
+      setClaimedSites(prev => append
+        ? [...prev, ...enriched.filter((row: any) => !prev.some(existing => existing.id === row.id))]
+        : enriched);
+      setClaimedFilteredCount(Number(payload.filtered_count) || 0);
+      setClaimedTotalCount(Number(payload.total_count) || 0);
+      setClaimedFeedLoaded(true);
+      setClaimedHasMore(Boolean(payload.has_more));
+      const optionsResult = await supabase.rpc('superadmin_claimed_sites_filter_options', {
+        p_global_search: query.globalSearch || null,
+        p_site_search: query.siteSearch || null,
+        p_status: query.status,
+        p_state: query.state,
+        p_locality: query.locality,
+        p_activity: query.activity,
+        p_mmp_file_id: query.mmp,
+        p_claimant_key: query.claimant,
+        p_no_transport: query.noTransport,
+      });
+      if (!optionsResult.error && generation === claimedRequestRef.current.generation) setClaimedServerOptions(optionsResult.data);
       loadedTabsRef.current.add('claimed-sites');
     } catch (error) {
       console.error('Failed to load claimed sites:', error);
     } finally {
       endLoader('claimed-sites');
+      claimedRequestRef.current.inFlight = false;
       setLoadingClaimed(false);
+      setClaimedLoadingMore(false);
+      if (claimedPendingReloadRef.current) {
+        claimedPendingReloadRef.current = false;
+        void loadClaimedSites(false);
+      }
     }
   };
 
@@ -1053,6 +1091,15 @@ export function SuperAdminDataManagement() {
       else if (activeTab === 'mmps') loadMMPs();
     }
   }, [activeTab, isSuperAdmin, userMap]);
+
+  // Claimed Sites is server-filtered. Re-query only the active tab after the
+  // debounced filter values settle; other tabs retain their existing loaders.
+  useEffect(() => {
+    if (!canAccess || userMap.size === 0 || activeTab !== 'claimed-sites') return;
+    void loadClaimedSites(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, debouncedClaimedSiteSearch, debouncedSearch, statusFilter, stateFilter,
+      localityFilter, activityFilter, claimedByFilter, claimedMmpFilter, claimedNoCostFilter]);
 
   const handleResetSiteVisit = async () => {
     if (!selectedSiteVisit || !currentUser || !reason.trim()) return;
@@ -1957,7 +2004,10 @@ export function SuperAdminDataManagement() {
   ].filter(Boolean).length;
 
   const filteredClaimedSites = useMemo(() => {
-    return claimedSites.filter(site => {
+    // Filtering is authoritative on the server. Keep this alias for the
+    // existing table rendering and selection code.
+    return claimedSites;
+    /* return claimedSites.filter(site => {
       const globalSearch = debouncedSearch.toLowerCase();
       const localSearch = debouncedClaimedSiteSearch.toLowerCase();
       
@@ -1985,11 +2035,28 @@ export function SuperAdminDataManagement() {
       
       const matchesNoCost = !claimedNoCostFilter || (site.transport_fee == null || site.transport_fee === 0);
       return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy && matchesMmp && matchesNoCost;
-    });
+    }); */
   }, [claimedSites, debouncedSearch, debouncedClaimedSiteSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter, claimedMmpFilter, claimedNoCostFilter, mmpById]);
 
   // Get unique values for claimed sites filters
   const claimedSitesFilterOptions = useMemo(() => {
+    if (claimedServerOptions) {
+      const option = claimedServerOptions;
+      return {
+        states: Array.isArray(option.states) ? option.states : [],
+        localities: Array.isArray(option.localities) ? option.localities : [],
+        activities: Array.isArray(option.activities) ? option.activities : [],
+        statusOptions: [...new Set((Array.isArray(option.statuses) ? option.statuses : []).map((s: string) => normalizeStatus(s)))].sort(),
+        claimedByUsers: (Array.isArray(option.claimants) ? option.claimants : []).map((c: any) => ({
+          id: c.id,
+          label: c.name || c.id,
+        })),
+        mmpOptions: (Array.isArray(option.mmps) ? option.mmps : []).map((m: any) => ({
+          id: m.id,
+          label: m.name || m.id,
+        })),
+      };
+    }
     const states = [...new Set(claimedSites.map(s => s.state).filter(Boolean))].sort();
 
     const stateFiltered = claimedSites.filter(s => stateFilter === 'all' || s.state === stateFilter);
@@ -2044,7 +2111,7 @@ export function SuperAdminDataManagement() {
       .sort((a, b) => a.label.localeCompare(b.label));
 
     return { states, localities, activities, claimedByUsers, mmpOptions, statusOptions };
-  }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById, mmps, contextMmpFiles]);
+  }, [claimedServerOptions, claimedSites, stateFilter, localityFilter, activityFilter, mmpById, mmps, contextMmpFiles]);
 
   const filteredDispatchedSites = useMemo(() => {
     return dispatchedSites.filter(site => {
@@ -2297,8 +2364,8 @@ export function SuperAdminDataManagement() {
         />
         <StatsCard
           title="Claimed Sites"
-          value={claimedSites.length > 0 ? stats.totalClaimedSites : (quickCounts?.claimed ?? 0)}
-          subtitle={claimedSites.length > 0 ? `${stats.assignedSites} accepted` : (quickCounts?.claimed != null ? 'Loading details…' : '0 accepted')}
+          value={claimedFeedLoaded ? claimedTotalCount : (quickCounts?.claimed ?? 0)}
+          subtitle={claimedFeedLoaded ? `${claimedTotalCount.toLocaleString()} post-dispatch sites` : 'Loading count…'}
           icon={Users}
           color="danger"
           onClick={() => setActiveTab('claimed-sites')}
@@ -2935,7 +3002,7 @@ export function SuperAdminDataManagement() {
                     </Button>
                   )}
                   <Badge variant="outline" className="text-sm px-2 py-0.5">
-                    {filteredClaimedSites.length}
+                    {claimedFilteredCount || filteredClaimedSites.length}
                   </Badge>
                 </div>
               </div>
@@ -2970,7 +3037,7 @@ export function SuperAdminDataManagement() {
                         <Filter className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                         <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">Filter Claimed Sites</span>
                         <span className="text-xs text-blue-600/70 dark:text-blue-400/70">
-                          — {filteredClaimedSites.length} of {claimedSites.length} sites
+                          — {claimedSites.length} loaded of {claimedFilteredCount} matching ({claimedTotalCount} total)
                         </span>
                         {activeCount > 0 && (
                           <span className="rounded-full bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 leading-none">
@@ -3100,8 +3167,8 @@ export function SuperAdminDataManagement() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">All Enumerators</SelectItem>
-                            {claimedSitesFilterOptions.claimedByUsers.map(user => (
-                              <SelectItem key={user} value={user}>{user}</SelectItem>
+                            {claimedSitesFilterOptions.claimedByUsers.map((user: any) => (
+                              <SelectItem key={user.id || user} value={user.id || user}>{user.label || user}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -3149,11 +3216,11 @@ export function SuperAdminDataManagement() {
                             aria-label="Select all filtered sites"
                             data-testid="checkbox-select-all-claimed"
                             checked={
-                              filteredClaimedSites.slice(0, claimedVisibleCount).length > 0 &&
-                              filteredClaimedSites.slice(0, claimedVisibleCount).every(s => selectedClaimedSiteIds.has(s.id))
+                              filteredClaimedSites.length > 0 &&
+                              filteredClaimedSites.every(s => selectedClaimedSiteIds.has(s.id))
                             }
                             onChange={(e) => {
-                              const visible = filteredClaimedSites.slice(0, claimedVisibleCount);
+                              const visible = filteredClaimedSites;
                               if (e.target.checked) {
                                 setSelectedClaimedSiteIds(prev => {
                                   const next = new Set(prev);
@@ -3183,7 +3250,7 @@ export function SuperAdminDataManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredClaimedSites.slice(0, claimedVisibleCount).map((site) => (
+                      {filteredClaimedSites.map((site) => (
                         <TableRow key={site.id} className={`hover:bg-muted/30 ${selectedClaimedSiteIds.has(site.id) ? 'bg-destructive/5' : ''}`} data-testid={`row-claimed-site-${site.id}`}>
                           <TableCell className="pr-0">
                             <input
@@ -3385,25 +3452,26 @@ export function SuperAdminDataManagement() {
                   </Table>
 
                   {/* Pagination footer */}
-                  {filteredClaimedSites.length > claimedVisibleCount && (
+                  {claimedHasMore && (
                     <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
                       <span className="text-xs text-muted-foreground">
-                        Showing {claimedVisibleCount.toLocaleString()} of {filteredClaimedSites.length.toLocaleString()} sites
+                        Showing {claimedSites.length.toLocaleString()} of {claimedFilteredCount.toLocaleString()} matching sites ({claimedTotalCount.toLocaleString()} total)
                       </span>
                       <Button
                         variant="outline"
                         size="sm"
                         className="text-xs h-8"
-                        onClick={() => setClaimedVisibleCount(c => c + CLAIMED_PAGE_SIZE)}
+                        onClick={() => void loadClaimedSites(true)}
+                        disabled={claimedLoadingMore}
                         data-testid="button-claimed-load-more"
                       >
-                        Show {Math.min(CLAIMED_PAGE_SIZE, filteredClaimedSites.length - claimedVisibleCount).toLocaleString()} more
+                        {claimedLoadingMore ? 'Loading…' : `Show more`}
                       </Button>
                     </div>
                   )}
-                  {filteredClaimedSites.length > 0 && filteredClaimedSites.length <= claimedVisibleCount && filteredClaimedSites.length > CLAIMED_PAGE_SIZE && (
+                  {!claimedHasMore && claimedSites.length > 0 && (
                     <div className="px-4 py-2 border-t bg-muted/20 text-center">
-                      <span className="text-xs text-muted-foreground">All {filteredClaimedSites.length.toLocaleString()} sites shown</span>
+                      <span className="text-xs text-muted-foreground">All {claimedSites.length.toLocaleString()} matching sites shown</span>
                     </div>
                   )}
                 </div>
