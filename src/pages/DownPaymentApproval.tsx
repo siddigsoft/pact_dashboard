@@ -559,6 +559,13 @@ export default function DownPaymentApproval() {
     !isFieldPaymentOnly && !isKassalaTier1PaymentSupervisor
     && checkPermission('down_payments', 'delete');
   const canCorrectPreFund = isFinanceAdmin && checkPermission('down_payments', 'reconcile');
+  const canReversePaidDuplicate = isFinanceAdmin
+    && canDeletePayment
+    && canCorrectPreFund
+    && checkPermission('down_payments', 'update')
+    && checkPermission('down_payments', 'approve')
+    && checkPermission('pre_funding', 'update')
+    && checkPermission('wallets', 'update');
   const isPageFilterVisible = (key: string) =>
     isFieldPaymentOnly || isKassalaTier1PaymentSupervisor
       || isFilterVisible(`down-payment-approval.${key}`);
@@ -1578,6 +1585,7 @@ export default function DownPaymentApproval() {
               if (evidence) void openPreFundCorrectionDialog(evidence);
             }}
             canDeletePayment={canDeletePayment}
+            canReversePaidDuplicate={canReversePaidDuplicate}
             canApproveActions={canApproveActions}
             canApproveRequest={request => !isKassalaTier1PaymentSupervisor
               || ['kassala', 'kassalahub'].includes(

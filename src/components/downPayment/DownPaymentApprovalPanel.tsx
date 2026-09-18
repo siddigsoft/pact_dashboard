@@ -131,6 +131,7 @@ interface DownPaymentApprovalPanelProps {
   canCorrectPreFund?: boolean;
   onCorrectPreFund?: (paymentEventId: string) => void;
   canDeletePayment?: boolean;
+  canReversePaidDuplicate?: boolean;
   onDeletePayment?: (paymentEventId: string) => void;
   /** These are resolved from the user's Down Payment button grants. */
   canApproveActions?: boolean;
@@ -392,6 +393,7 @@ export function DownPaymentApprovalPanel({
   canCorrectPreFund = false,
   onCorrectPreFund,
   canDeletePayment = false,
+  canReversePaidDuplicate = false,
   onDeletePayment,
   canApproveActions = true,
   canApproveRequest = () => true,
@@ -416,6 +418,11 @@ export function DownPaymentApprovalPanel({
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
   const [action, setAction] = useState<'approve' | 'reject' | 'pay' | 'view_audit' | 'revert' | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<DownPaymentRequest | null>(null);
+  const [paidDuplicateCorrection, setPaidDuplicateCorrection] = useState<{
+    request: DownPaymentRequest;
+    reason: string;
+    saving: boolean;
+  } | null>(null);
   const [signatureRequest, setSignatureRequest] = useState<DownPaymentRequest | null>(null);
   const [notes, setNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
@@ -1051,6 +1058,39 @@ export function DownPaymentApprovalPanel({
       if (success) closeDialog();
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleReverseAndRemovePaidDuplicate = async () => {
+    if (!paidDuplicateCorrection || !paidDuplicateCorrection.reason.trim()) return;
+
+    setPaidDuplicateCorrection(current => current ? { ...current, saving: true } : null);
+    try {
+      const { data, error } = await (supabase as any).rpc(
+        'reverse_and_void_paid_duplicate_down_payment_rpc',
+        {
+          p_request_id: paidDuplicateCorrection.request.id,
+          p_reason: paidDuplicateCorrection.reason.trim(),
+        },
+      );
+      if (error) throw error;
+      if (data?.success !== true) {
+        throw new Error(data?.error ?? 'The paid duplicate could not be corrected.');
+      }
+
+      toast({
+        title: 'Paid Duplicate Corrected / تم تصحيح الدفعة المكررة',
+        description: 'The payment was reversed to its original Pre-Fund and the duplicate request was removed. The other request remains active.',
+      });
+      setPaidDuplicateCorrection(null);
+      await refreshRequests();
+    } catch (error: any) {
+      toast({
+        title: 'Correction Failed / فشل التصحيح',
+        description: error?.message || 'The paid duplicate could not be corrected.',
+        variant: 'destructive',
+      });
+      setPaidDuplicateCorrection(current => current ? { ...current, saving: false } : null);
     }
   };
 
@@ -2653,7 +2693,7 @@ export function DownPaymentApprovalPanel({
       if (!isStandaloneExplicit) setDeleteConfirm(req);
     }, setSignatureRequest, resendPaymentNotification,
     isSuperAdmin, markPaidProcessing, userRole, currentUser, cancelRequest,
-    preFundPaymentEvidence, canCorrectPreFund, onCorrectPreFund, canDeletePayment, onDeletePayment,
+    preFundPaymentEvidence, canCorrectPreFund, onCorrectPreFund, canDeletePayment, canReversePaidDuplicate, onDeletePayment,
     isStandaloneExplicit, isExplicitApproval, hasExplicitPaymentSurface, approvalMode,
     canApproveActions, canApprovePendingAdminOnly, canMarkPaid,
   };
@@ -2668,7 +2708,7 @@ export function DownPaymentApprovalPanel({
       openActionDialog, openPaymentRequestDialog, handleDownloadCertificate, openEditDialog,
       handleMarkAsPaid, setDeleteConfirm, setSignatureRequest, resendPaymentNotification,
       isSuperAdmin, markPaidProcessing, userRole, currentUser, cancelRequest,
-      preFundPaymentEvidence, canCorrectPreFund, onCorrectPreFund, canDeletePayment, onDeletePayment,
+      preFundPaymentEvidence, canCorrectPreFund, onCorrectPreFund, canDeletePayment, canReversePaidDuplicate, onDeletePayment,
       isStandaloneExplicit, isExplicitApproval, hasExplicitPaymentSurface, approvalMode,
       canApproveActions, canApprovePendingAdminOnly, canMarkPaid,
     } = _cardCtxRef.current;
@@ -2788,15 +2828,24 @@ export function DownPaymentApprovalPanel({
                         <TableCell className="py-2">{getStatusBadge(request.status)}</TableCell>
                         <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{request.justification || '—'}</TableCell>
                         <TableCell className="py-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => setDeleteConfirm(request)}
-                            data-testid={`button-delete-duplicate-current-${request.id}`}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
+                          {canDeletePayment && (!hasRecordedPayment || (canReversePaidDuplicate && request.mmpSiteEntryId)) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              title={hasRecordedPayment ? 'Reverse payment to its original Pre-Fund and remove this duplicate' : 'Delete duplicate request'}
+                              onClick={() => {
+                                if (hasRecordedPayment) {
+                                  setPaidDuplicateCorrection({ request, reason: '', saving: false });
+                                } else {
+                                  setDeleteConfirm(request);
+                                }
+                              }}
+                              data-testid={`button-delete-duplicate-current-${request.id}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                       {/* Sibling requests */}
@@ -2831,15 +2880,24 @@ export function DownPaymentApprovalPanel({
                                     {cancellingId === s.id ? '…' : 'Cancel'}
                                   </Button>
                                 )}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                  onClick={() => setDeleteConfirm(s)}
-                                  data-testid={`button-delete-duplicate-${s.id}`}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
+                                {canDeletePayment && (getDownPaymentBalance(s).paid <= 0 || (canReversePaidDuplicate && s.mmpSiteEntryId)) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    title={getDownPaymentBalance(s).paid > 0 ? 'Reverse payment to its original Pre-Fund and remove this duplicate' : 'Delete duplicate request'}
+                                    onClick={() => {
+                                      if (getDownPaymentBalance(s).paid > 0) {
+                                        setPaidDuplicateCorrection({ request: s, reason: '', saving: false });
+                                      } else {
+                                        setDeleteConfirm(s);
+                                      }
+                                    }}
+                                    data-testid={`button-delete-duplicate-${s.id}`}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -5700,6 +5758,87 @@ export function DownPaymentApprovalPanel({
               data-testid="button-confirm-delete"
             >
               <Trash2 className="h-4 w-4 mr-1" /> Delete Permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!paidDuplicateCorrection}
+        onOpenChange={(open) => {
+          if (!open && !paidDuplicateCorrection?.saving) setPaidDuplicateCorrection(null);
+        }}
+      >
+        <DialogContent className="max-w-lg" data-testid="dialog-reverse-remove-paid-duplicate">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Undo2 className="h-5 w-5" />
+              Reverse & Remove Paid Duplicate
+            </DialogTitle>
+            <DialogDescription>
+              Correct an incorrectly paid duplicate while keeping the other request for this MMP site active.
+            </DialogDescription>
+          </DialogHeader>
+
+          {paidDuplicateCorrection && (
+            <div className="space-y-4 text-sm">
+              <div className="rounded-md bg-muted p-3">
+                <p className="font-medium">{paidDuplicateCorrection.request.siteName}</p>
+                <p className="text-muted-foreground">
+                  Requester: {paidDuplicateCorrection.request.requestedByName || 'Unknown'}
+                </p>
+                <p className="text-muted-foreground">
+                  Paid amount: SDG {getDownPaymentBalance(paidDuplicateCorrection.request).paid.toLocaleString()}
+                </p>
+              </div>
+
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  The payment will be reversed to the same Pre-Fund source from which it was deducted.
+                  Compensating financial evidence will be retained, this duplicate request will be removed
+                  from active screens, and the other request will remain active.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2">
+                <Label htmlFor="paid-duplicate-correction-reason">Correction reason</Label>
+                <Textarea
+                  id="paid-duplicate-correction-reason"
+                  value={paidDuplicateCorrection.reason}
+                  onChange={(event) => setPaidDuplicateCorrection(current =>
+                    current ? { ...current, reason: event.target.value } : null
+                  )}
+                  placeholder="Explain why this paid request is the incorrect duplicate..."
+                  disabled={paidDuplicateCorrection.saving}
+                  data-testid="input-paid-duplicate-correction-reason"
+                />
+                <p className="text-xs text-muted-foreground">
+                  A reason is required and will be stored in the correction audit evidence.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPaidDuplicateCorrection(null)}
+              disabled={paidDuplicateCorrection?.saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReverseAndRemovePaidDuplicate}
+              disabled={!paidDuplicateCorrection?.reason.trim() || paidDuplicateCorrection?.saving}
+              data-testid="button-confirm-reverse-remove-paid-duplicate"
+            >
+              {paidDuplicateCorrection?.saving ? (
+                <><RefreshCw className="mr-1.5 h-4 w-4 animate-spin" /> Correcting...</>
+              ) : (
+                <><Undo2 className="mr-1.5 h-4 w-4" /> Reverse to Pre-Fund & Remove</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
