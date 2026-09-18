@@ -6,7 +6,7 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/hooks/use-toast';
 import { PAGE_DEFS } from '@/lib/access-registry';
 import { resolveRoutePermission } from '@/lib/page-roles';
 
@@ -98,7 +98,6 @@ interface Props {
 
 export function SelectedUserAccessProvider({ userId, userRole, children }: Props) {
   const { currentUser } = useAppContext();
-  const { toast } = useToast();
 
   const [loading, setLoading]             = useState(true);
   const [loadError, setLoadError]         = useState<string | null>(null);
@@ -252,9 +251,11 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       });
       setLoadError(ACCESS_LOAD_ERROR);
     } finally {
-      if (isCurrent()) setLoading(false);
+      // Clear the spinner for the latest sequence even if this provider instance
+      // is mid StrictMode remount; only skip superseded in-flight loads.
+      if (sequence === loadSequence.current) setLoading(false);
     }
-  }, [userId, userRole, toast]);
+  }, [userId, userRole]);
 
   useEffect(() => { load(); }, [load]);
 

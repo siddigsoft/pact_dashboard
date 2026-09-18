@@ -134,7 +134,14 @@ export function TabAccessTab({ isSelectedSuperAdmin }: TabProps) {
                     const slug = hubTabSlug(hub.hubSlug, tab.tabId);
                     const eff = effectivePage(slug);
                     const cfg = EFF_CONFIG[eff];
-                    const saving = savingKey === `page:${slug}`;
+                    // togglePage stores `page-family:<slugs>`; hub tabs are usually a single slug.
+                    const saving = Boolean(
+                      savingKey
+                      && (savingKey === `page:${slug}`
+                        || savingKey === `page-family:${slug}`
+                        || (savingKey.startsWith('page-family:')
+                          && savingKey.slice('page-family:'.length).split('|').includes(slug))),
+                    );
 
                     return (
                       <div key={tab.tabId}

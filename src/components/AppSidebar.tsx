@@ -1364,6 +1364,7 @@
         hubsupervisor:       "Hub Supervisor",
         coordinator:         "Coordinator",
         datacollector:       "Data Collector",
+        fieldassistant:      "Field Assistant",
         datateam:            "Data Team",
         countrydirector:     "Country Director",
         projectmanager:      "Project Manager",
@@ -1378,15 +1379,21 @@
         const viewAsNorm = viewAs.role.toLowerCase().replace(/[\s_-]/g, '');
         return ROLE_LABEL[viewAsNorm] || viewAs.role.charAt(0).toUpperCase() + viewAs.role.slice(1);
       }
-      // Guard: if profile role itself says superAdmin, trust it even if context hasn't resolved yet
+      // Primary display role is profiles.role (currentUser.role). Do not prefer
+      // roles[0] from legacy user_roles — that leftover list still shows
+      // "Data Collector" after Make primary sets Field Assistant.
       const profileRoleNorm = currentUser.role?.toLowerCase().replace(/[\s_-]/g, '');
       if (profileRoleNorm === 'superadmin') return "Super Admin";
+      if (profileRoleNorm) {
+        return ROLE_LABEL[profileRoleNorm]
+          || (currentUser.role ?? '').charAt(0).toUpperCase() + (currentUser.role ?? '').slice(1);
+      }
       if (roles && roles.length > 0) {
         if (roles.includes("admin" as AppRole)) return "Admin";
         const norm0 = (roles[0] as string).toLowerCase().replace(/[\s_-]/g, '');
         return ROLE_LABEL[norm0] || (roles[0] as string).charAt(0).toUpperCase() + (roles[0] as string).slice(1);
       }
-      return ROLE_LABEL[profileRoleNorm ?? ''] || (currentUser.role ?? '').charAt(0).toUpperCase() + (currentUser.role ?? '').slice(1);
+      return "";
     };
 
     const handleLogout = () => {

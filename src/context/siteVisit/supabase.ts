@@ -14,9 +14,9 @@ import { MMP_SITE_ENTRY_DETAIL_COLS } from '@/constants/mmpSiteEntryCols';
 /**
  * Fetches site visits from mmp_site_entries table, with fallback to site_visits table
  */
-export const fetchSiteVisits = async (): Promise<SiteVisit[]> => {
+export const fetchSiteVisits = async (signal?: AbortSignal): Promise<SiteVisit[]> => {
   // Primary and only source: mmp_site_entries
-  const mmpEntries = await fetchSiteVisitsFromMMPEntries();
+  const mmpEntries = await fetchSiteVisitsFromMMPEntries(signal);
   return mmpEntries;
 };
 

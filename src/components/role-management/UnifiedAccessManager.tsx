@@ -169,7 +169,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
       ) : (
         <SelectedUserAccessProvider key={selectedUser.id} userId={selectedUser.id} userRole={selectedUser.role}>
           <AccessLoadGate>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#fbfaf7]">
             {/* User header */}
             <UserHeader user={selectedUser} isSA={isSA} />
 
@@ -177,57 +177,67 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
             <Tabs value={activeTab} onValueChange={v => setActiveTab(v as TabKey)}
               aria-label="Access management sections"
               className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <TabsList className="h-auto min-h-9 w-full shrink-0 justify-start gap-0 overflow-x-auto rounded-none border-b bg-card px-3">
+              <TabsList className="flex h-auto w-full shrink-0 flex-wrap justify-start gap-1.5 rounded-none border-b border-slate-200 bg-[#f3f5f3] px-4 py-2.5">
                 {([
-                  { key: 'overview',     icon: User,   label: 'Overview' },
-                  { key: 'pages',        icon: Globe,  label: 'Page Access' },
-                  { key: 'tabs',         icon: Layers, label: 'Tab Access' },
-                  { key: 'buttons',      icon: Key,    label: 'Buttons & Actions' },
-                  { key: 'reports',      icon: BarChart3, label: 'Reports' },
-                  { key: 'columns',      icon: Columns3, label: 'Columns' },
-                  { key: 'filters',      icon: SlidersHorizontal, label: 'Filter Controls' },
-                  { key: 'scope',        icon: Database, label: 'Data Scope' },
-                  { key: 'overrides',    icon: Shield, label: 'Overrides' },
-                  { key: 'audit',        icon: FileText, label: 'Access Audit' },
-                ] as const).map(({ key, icon: Icon, label }) => (
-                  <TabsTrigger key={key} value={key}
-                    className="h-9 shrink-0 rounded-none text-xs border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent gap-1.5">
-                    <Icon className="h-3 w-3" />
-                    {label}
+                  { key: 'overview',     icon: User,   label: 'Overview', short: 'Overview' },
+                  { key: 'pages',        icon: Globe,  label: 'Page Access', short: 'Pages' },
+                  { key: 'tabs',         icon: Layers, label: 'Tab Access', short: 'Tabs' },
+                  { key: 'buttons',      icon: Key,    label: 'Buttons & Actions', short: 'Actions' },
+                  { key: 'reports',      icon: BarChart3, label: 'Reports', short: 'Reports' },
+                  { key: 'columns',      icon: Columns3, label: 'Columns', short: 'Columns' },
+                  { key: 'filters',      icon: SlidersHorizontal, label: 'Filter Controls', short: 'Filters' },
+                  { key: 'scope',        icon: Database, label: 'Data Scope', short: 'Scope' },
+                  { key: 'overrides',    icon: Shield, label: 'Overrides', short: 'Overrides' },
+                  { key: 'audit',        icon: FileText, label: 'Access Audit', short: 'Audit' },
+                ] as const).map(({ key, icon: Icon, label, short }) => (
+                  <TabsTrigger
+                    key={key}
+                    value={key}
+                    title={label}
+                    className={cn(
+                      'h-8 shrink-0 gap-1.5 rounded-md border-0 px-3 text-xs font-medium shadow-none transition-colors',
+                      'text-slate-600 bg-transparent hover:bg-white/80 hover:text-slate-900',
+                      'data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm',
+                      'dark:text-slate-300 dark:hover:bg-slate-800 dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900',
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                    <span className="hidden lg:inline">{label}</span>
+                    <span className="lg:hidden">{short}</span>
                   </TabsTrigger>
                 ))}
               </TabsList>
 
               {tabProps && (
                 <>
-                  <TabsContent value="overview" className="m-0 min-h-0 flex-1 overflow-hidden">
+                  <TabsContent value="overview" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
                     <OverviewTab {...tabProps} onTabChange={t => setActiveTab((t === 'permissions' ? 'buttons' : t) as TabKey)} />
                   </TabsContent>
-                  <TabsContent value="pages" className="m-0 min-h-0 flex-1 overflow-hidden">
+                  <TabsContent value="pages" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
                     <PageAccessTab {...tabProps} initialPageSlug={requestedPage ?? undefined} onTabChange={t => setActiveTab((t === 'permissions' ? 'buttons' : t) as TabKey)} />
                   </TabsContent>
-                  <TabsContent value="tabs" className="m-0 min-h-0 flex-1 overflow-hidden">
+                  <TabsContent value="tabs" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
                     <TabAccessTab {...tabProps} />
                   </TabsContent>
-                  <TabsContent value="buttons" className="m-0 min-h-0 flex-1 overflow-hidden">
+                  <TabsContent value="buttons" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
                     <PermissionsTab {...tabProps} section="actions" actionFilter="buttons" />
                   </TabsContent>
-                  <TabsContent value="reports" className="m-0 min-h-0 flex-1 overflow-hidden">
+                  <TabsContent value="reports" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
                     <PermissionsTab {...tabProps} section="actions" actionFilter="reports" />
                   </TabsContent>
-                  <TabsContent value="columns" className="m-0 min-h-0 flex-1 overflow-hidden">
+                  <TabsContent value="columns" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
                     <PermissionsTab {...tabProps} section="columns" />
                   </TabsContent>
-                  <TabsContent value="filters" className="m-0 min-h-0 flex-1 overflow-hidden">
+                  <TabsContent value="filters" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
                     <FilterControlsTab {...tabProps} />
                   </TabsContent>
-                  <TabsContent value="scope" className="m-0 min-h-0 flex-1 overflow-hidden">
+                  <TabsContent value="scope" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
                     <DataScopeTab {...tabProps} />
                   </TabsContent>
-                  <TabsContent value="overrides" className="m-0 min-h-0 flex-1 overflow-hidden">
+                  <TabsContent value="overrides" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
                     <PermissionsTab {...tabProps} section="grants" />
                   </TabsContent>
-                  <TabsContent value="audit" className="m-0 min-h-0 flex-1 overflow-hidden">
+                  <TabsContent value="audit" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
                     <AccessAuditTab {...tabProps} />
                   </TabsContent>
                 </>
@@ -287,27 +297,32 @@ function UserHeader({ user, isSA }: { user: UAMUser; isSA: boolean }) {
   const roleCls = ROLE_COLOR[user.role] ?? 'bg-gray-100 text-gray-600';
   return (
     <div className={cn(
-      'shrink-0 flex items-center gap-3 border-b border-slate-200 px-5 py-3',
-      isSA ? 'bg-red-50/60 dark:bg-red-950/10' : 'bg-[#fbfaf7]'
+      'shrink-0 flex items-center gap-3 border-b border-slate-200 px-5 py-3.5',
+      isSA ? 'bg-red-50/60 dark:bg-red-950/10' : 'bg-white dark:bg-background'
     )}>
-      <Avatar className="h-9 w-9 shrink-0">
+      <Avatar className="h-10 w-10 shrink-0 ring-2 ring-slate-100">
         <AvatarFallback className={cn('text-sm font-bold', roleCls)}>{initials}</AvatarFallback>
       </Avatar>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold truncate">{user.name ?? user.email}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100 truncate">
+            {user.name ?? user.email}
+          </p>
+          <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0', roleCls)}>
+            {ROLE_LABEL[user.role] ?? user.role}
+          </span>
           {isSA && (
             <Badge className="text-[9px] px-1.5 bg-red-100 text-red-700 border-0 flex items-center gap-0.5">
               <Shield className="h-2.5 w-2.5" /> Super Admin — Read Only
             </Badge>
           )}
         </div>
-        <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
-        <p className="mt-1 text-[10px] text-slate-500">Editing context <span className="font-medium text-slate-700">user exception layer</span> · inherited role baseline remains visible</p>
+        <p className="text-xs text-slate-500 truncate mt-0.5">{user.email}</p>
       </div>
-      <span className={cn('text-[10px] px-2 py-1 rounded-full font-medium shrink-0', roleCls)}>
-        {ROLE_LABEL[user.role] ?? user.role}
-      </span>
+      <p className="hidden sm:block max-w-[14rem] text-right text-[11px] leading-snug text-slate-500">
+        Editing <span className="font-medium text-slate-700 dark:text-slate-200">user exceptions</span>
+        <span className="block text-slate-400">Role baseline stays visible</span>
+      </p>
     </div>
   );
 }

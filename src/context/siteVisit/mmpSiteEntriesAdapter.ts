@@ -249,17 +249,21 @@ const mapStatusToDb = (appStatus: SiteVisit['status']): string => {
 /**
  * Fetches site visits from mmp_site_entries table
  */
-export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
+export const fetchSiteVisitsFromMMPEntries = async (signal?: AbortSignal): Promise<SiteVisit[]> => {
   const PAGE_SIZE = 1000;
   // Cap parallel fan-out — full-table SELECT * storms were the hottest API path.
   const MAX_PAGES = 5;
 
   // Fetch first page — covers the common case where all data fits in one page
-  const { data: firstPage, error: firstError } = await supabase
+  let firstQuery = supabase
     .from('mmp_site_entries')
     .select(MMP_SITE_ENTRY_CONTEXT_COLS)
     .order('created_at', { ascending: false })
     .range(0, PAGE_SIZE - 1);
+  if (signal && typeof (firstQuery as any).abortSignal === 'function') {
+    firstQuery = (firstQuery as any).abortSignal(signal);
+  }
+  const { data: firstPage, error: firstError } = await firstQuery;
 
   if (firstError) {
     console.error('Error fetching mmp_site_entries (page 0):', firstError);
@@ -268,35 +272,33 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
 
   let allData: any[] = firstPage || [];
 
-  // If the first page was full there is more data — get the total count and
-  // fetch remaining pages in parallel (capped).
+  // If the first page was full there is more data. Skip exact `count` —
+  // under RLS that head-count can hang for some roles and leave the
+  // dashboard stuck on "Loading site visits…". Fetch capped extra pages
+  // and stop early when a page comes back short.
   if (allData.length === PAGE_SIZE) {
-    const { count, error: countError } = await supabase
-      .from('mmp_site_entries')
-      .select('id', { count: 'exact', head: true });
-
-    if (!countError && count && count > PAGE_SIZE) {
-      const remainingPageCount = Math.min(
-        Math.ceil((count - PAGE_SIZE) / PAGE_SIZE),
-        MAX_PAGES - 1
-      );
-      const pagePromises = Array.from({ length: remainingPageCount }, (_, i) => {
-        const from = PAGE_SIZE + i * PAGE_SIZE;
-        return supabase
-          .from('mmp_site_entries')
-          .select(MMP_SITE_ENTRY_CONTEXT_COLS)
-          .order('created_at', { ascending: false })
-          .range(from, from + PAGE_SIZE - 1);
-      });
-
-      const results = await Promise.all(pagePromises);
-      for (const { data, error } of results) {
-        if (error) {
-          console.warn('Error fetching mmp_site_entries page (non-fatal):', error);
-          continue;
-        }
-        if (data && data.length > 0) allData = allData.concat(data);
+    const remainingPageCount = MAX_PAGES - 1;
+    const pagePromises = Array.from({ length: remainingPageCount }, (_, i) => {
+      const from = PAGE_SIZE + i * PAGE_SIZE;
+      let q = supabase
+        .from('mmp_site_entries')
+        .select(MMP_SITE_ENTRY_CONTEXT_COLS)
+        .order('created_at', { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      if (signal && typeof (q as any).abortSignal === 'function') {
+        q = (q as any).abortSignal(signal);
       }
+      return q;
+    });
+
+    const results = await Promise.all(pagePromises);
+    for (const { data, error } of results) {
+      if (error) {
+        console.warn('Error fetching mmp_site_entries page (non-fatal):', error);
+        continue;
+      }
+      if (data && data.length > 0) allData = allData.concat(data);
+      if (!data || data.length < PAGE_SIZE) break;
     }
   }
 
