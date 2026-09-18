@@ -306,6 +306,28 @@ const DISPATCHED_STATUSES = ['dispatched', 'Dispatched', 'smart_assigned', 'Smar
 
 // All correctable target statuses exposed in the Change Status dialog
 const CLAIMED_PAGE_SIZE = 200; // rows shown at a time in the Claimed Sites table
+const PROFILE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isProfileUuid(value: unknown): value is string {
+  return typeof value === 'string' && PROFILE_UUID_PATTERN.test(value.trim());
+}
+
+function mmpDisplayName(row: any): string | null {
+  if (!row) return null;
+  const name = row.name || row.projectName || row.project_name ||
+    formatMmpMonthYear(row.month, row.year) || row.mmpId || row.mmp_id;
+  return name ? String(name).trim() : null;
+}
+
+const LOOKUP_CHUNK_SIZE = 200;
+function chunkLookupIds(ids: string[]): string[][] {
+  const unique = [...new Set(ids.filter(Boolean).map(String))];
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += LOOKUP_CHUNK_SIZE) {
+    chunks.push(unique.slice(i, i + LOOKUP_CHUNK_SIZE));
+  }
+  return chunks;
+}
 
 const ALL_CORRECTABLE_STATUSES = [
   { value: 'accepted',                label: 'Accepted' },
@@ -411,6 +433,78 @@ export function SuperAdminDataManagement() {
     users.forEach(u => map.set(u.id, { name: u.name || 'Unknown', email: u.email }));
     return map;
   }, [users]);
+
+  const contextMmpNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (contextMmpFiles || []).forEach((m: any) => {
+      const label = mmpDisplayName(m);
+      if (m?.id && label) map[String(m.id)] = label;
+    });
+    return map;
+  }, [contextMmpFiles]);
+
+  const resolveMmpNames = useCallback(async (ids: string[]) => {
+    const resolved: Record<string, string> = { ...contextMmpNameMap };
+    const uniqueIds = [...new Set(ids.filter(Boolean).map(String))];
+    const unresolved = () => uniqueIds.filter(id => !resolved[id]);
+    const rpcChunks = chunkLookupIds(unresolved());
+    const rpcResults = await Promise.all(rpcChunks.map(async (chunk) => {
+      const { data, error } = await supabase.rpc('get_mmp_names', { p_ids: chunk });
+      if (error) console.warn('[MMP] Name RPC chunk failed; continuing with fallbacks:', error.message);
+      return data || [];
+    }));
+    // Context names have priority; an RPC result never overwrites one.
+    rpcResults.flat().forEach((row: any) => {
+      const label = mmpDisplayName(row);
+      if (row?.id && label && !resolved[String(row.id)]) resolved[String(row.id)] = label;
+    });
+
+    const directChunks = chunkLookupIds(unresolved());
+    const directResults = await Promise.all(directChunks.map(async (chunk) => {
+      const { data, error } = await supabase
+        .from('mmp_files')
+        .select('id, name, project_name, month, year, mmp_id')
+        .in('id', chunk);
+      if (error) console.warn('[MMP] Direct name chunk failed; orphan fallback will be used:', error.message);
+      return data || [];
+    }));
+    directResults.flat().forEach((row: any) => {
+      const label = mmpDisplayName(row);
+      if (row?.id && label && !resolved[String(row.id)]) resolved[String(row.id)] = label;
+    });
+    return resolved;
+  }, [contextMmpNameMap]);
+
+  const resolveProfileNames = useCallback(async (ids: string[]) => {
+    const resolved = new Map(userMap);
+    const profileIds = [...new Set(ids.filter((id): id is string => isProfileUuid(id)))];
+    const missingIds = profileIds.filter(id => !resolved.has(id));
+    const results = await Promise.all(chunkLookupIds(missingIds).map(async (chunk) => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, username, email')
+        .in('id', chunk);
+      if (error) console.warn('[Profiles] Name chunk failed; legacy values remain available:', error.message);
+      return data || [];
+    }));
+    results.flat().forEach((p: any) => {
+      const name = p.full_name || p.username || p.email;
+      if (p.id && name) resolved.set(p.id, { name, email: p.email });
+    });
+    return resolved;
+  }, [userMap]);
+
+  const resolveEffectiveClaimants = useCallback(async (siteIds: string[]) => {
+    const results = await Promise.all(chunkLookupIds(siteIds).map(async (chunk) => {
+      const { data, error } = await supabase
+        .from('site_effective_claimants')
+        .select('site_entry_id, effective_claimant_id')
+        .in('site_entry_id', chunk);
+      if (error) throw new Error(`Unable to resolve effective claimants: ${error.message}`);
+      return data || [];
+    }));
+    return new Map(results.flat().map((row: any) => [row.site_entry_id, row.effective_claimant_id]));
+  }, []);
 
   // Debounce search input
   useEffect(() => {
@@ -527,7 +621,7 @@ export function SuperAdminDataManagement() {
       while (true) {
         const { data, error } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, site_code, status, accepted_by, visit_completed_at, visit_completed_by, enumerator_fee, state, locality, hub_office, mmp_file_id')
+          .select('id, site_name, site_code, status, accepted_by, visit_completed_at, visit_completed_by, enumerator_fee, state, locality, hub_office, mmp_file_id, additional_claimed_by:additional_data->claimed_by, additional_assigned_to:additional_data->assigned_to, additional_collector_name:additional_data->collector_name, additional_accepted_by_name:additional_data->accepted_by_name, additional_enumerator_name:additional_data->enumerator_name')
           .in('status', ['completed', 'verified'])
           .order('visit_completed_at', { ascending: false })
           .range(from, from + PAGE_SIZE - 1);
@@ -537,23 +631,39 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
-      // Resolve MMP names via SECURITY DEFINER RPC — bypasses RLS on mmp_files so super_admin
-      // always gets names without needing a permissive policy.
       const uniqueMmpIds = [...new Set(allSiteVisits.map((sv: any) => sv.mmp_file_id).filter(Boolean))] as string[];
-      const mmpNameMap: Record<string, string> = {};
-      if (uniqueMmpIds.length > 0) {
-        const rpcArgs = uniqueMmpIds.length > 0 ? { p_ids: uniqueMmpIds } : {};
-        const { data: mmpRows } = await supabase.rpc('get_mmp_names', rpcArgs);
-        (mmpRows || []).forEach((m: any) => {
-          mmpNameMap[m.id] = m.name || m.project_name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
-        });
-      }
+      const mmpNameMap = await resolveMmpNames(uniqueMmpIds);
+
+      const effectiveMap = await resolveEffectiveClaimants(allSiteVisits.map((sv: any) => sv.id));
+      const claimantIds = allSiteVisits.flatMap((sv: any) => [
+        effectiveMap.get(sv.id),
+        sv.accepted_by,
+        sv.additional_claimed_by,
+        sv.additional_assigned_to,
+        sv.visit_completed_by,
+      ]);
+      const profileNameMap = await resolveProfileNames(claimantIds);
 
       const enriched = allSiteVisits.map(sv => ({
         ...sv,
-        accepted_by_name: userMap.get(sv.accepted_by)?.name || 'Unknown',
-        completed_by_name: sv.visit_completed_by ? userMap.get(sv.visit_completed_by)?.name || 'N/A' : 'N/A',
-        mmp_name: sv.mmp_file_id ? (mmpNameMap[sv.mmp_file_id] || null) : null,
+        accepted_by_name: (() => {
+          const reference = effectiveMap.get(sv.id) || sv.accepted_by || sv.additional_claimed_by || sv.additional_assigned_to;
+          if (reference && !isProfileUuid(reference)) return reference;
+          return (reference && profileNameMap.get(reference)?.name)
+            || sv.additional_collector_name
+            || sv.additional_accepted_by_name
+            || sv.additional_enumerator_name
+            || (sv.visit_completed_by && (isProfileUuid(sv.visit_completed_by)
+              ? profileNameMap.get(sv.visit_completed_by)?.name
+              : sv.visit_completed_by))
+            || 'Unknown';
+        })(),
+        completed_by_name: sv.visit_completed_by
+          ? (isProfileUuid(sv.visit_completed_by)
+            ? profileNameMap.get(sv.visit_completed_by)?.name || 'N/A'
+            : sv.visit_completed_by)
+          : 'N/A',
+        mmp_name: sv.mmp_file_id ? (mmpNameMap[sv.mmp_file_id] || `MMP-${String(sv.mmp_file_id).slice(0, 8).toUpperCase()}`) : null,
       }));
 
       setSiteVisits(enriched);
@@ -721,51 +831,22 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
-      // Resolve MMP names — three-layer fallback:
-      //   1. RPC with NO params (SECURITY DEFINER, returns all MMPs, avoids uuid[] cast issue)
-      //   2. Direct mmp_files full fetch (works if bypass policy was applied)
-      //   3. Direct mmp_files filtered by IDs (last resort)
       const uniqueMmpIds = [...new Set(allData.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
-      const mmpNameMap: Record<string, string> = {};
-      const fillMap = (rows: any[]) => rows.forEach((m: any) => {
-        if (m.id) mmpNameMap[String(m.id)] = m.name || m.project?.name || m.project_name || formatMmpMonthYear(m.month, m.year) || m.mmp_id || `MMP-${String(m.id).slice(0, 8).toUpperCase()}`;
-      });
-      // Layer 1: RPC without p_ids — avoids uuid[] JSON cast, returns all MMPs via SECURITY DEFINER
-      {
-        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_mmp_names');
-        if (!rpcErr && (rpcRows || []).length > 0) { fillMap(rpcRows); }
-        else if (rpcErr) console.warn('[MMP] RPC get_mmp_names failed:', rpcErr.message);
-      }
-      // Layer 2: direct full table fetch (if RPC not deployed yet, works with bypass policy)
-      if (Object.keys(mmpNameMap).length === 0) {
-        const { data: allMmpRows } = await supabase
-          .from('mmp_files').select('id, name, project_name, month, year')
-          .order('created_at', { ascending: false }).limit(500);
-        if ((allMmpRows || []).length > 0) { fillMap(allMmpRows!); }
-      }
-      // Layer 3: filtered by specific IDs (last resort)
-      if (Object.keys(mmpNameMap).length === 0 && uniqueMmpIds.length > 0) {
-        const { data: directRows } = await supabase
-          .from('mmp_files').select('id, name, project_name, month, year')
-          .in('id', uniqueMmpIds);
-        if ((directRows || []).length > 0) { fillMap(directRows!); }
-      }
-
-      const { data: effectiveRows, error: effectiveError } = await supabase
-        .from('site_effective_claimants')
-        .select('site_entry_id, effective_claimant_id')
-        .in('site_entry_id', allData.map((site: any) => site.id));
-      if (effectiveError) throw new Error(`Unable to resolve effective claimants: ${effectiveError.message}`);
-      const effectiveMap = new Map((effectiveRows || []).map((row: any) => [row.site_entry_id, row.effective_claimant_id]));
+      const mmpNameMap = await resolveMmpNames(uniqueMmpIds);
+      const effectiveMap = await resolveEffectiveClaimants(allData.map((site: any) => site.id));
+      const profileNameMap = await resolveProfileNames(allData.flatMap((site: any) => [
+        effectiveMap.get(site.id), site.accepted_by, site.claimed_by,
+        site.additional_claimed_by, site.additional_assigned_to,
+      ]));
       const enriched = allData.map((site: any) => {
         const claimerUid = effectiveMap.get(site.id)
           || site.accepted_by
           || site.claimed_by
           || site.additional_claimed_by
           || site.additional_assigned_to;
-        const resolvedName = claimerUid
-          ? (userMap.get(claimerUid)?.name || `UID:${String(claimerUid).slice(0, 8)}`)
-          : 'Not assigned';
+        const resolvedName = claimerUid && !isProfileUuid(claimerUid)
+          ? claimerUid
+          : (claimerUid && profileNameMap.get(claimerUid)?.name) || 'Not assigned';
         return {
           ...site,
           claimed_by_name: resolvedName,
@@ -774,7 +855,7 @@ export function SuperAdminDataManagement() {
           effective_claimant_name: resolvedName,
           main_activity: site.main_activity || site.activity_at_site || null,
           mmp_id: site.mmp_file_id,
-          mmp_name: mmpNameMap[site.mmp_file_id] || null,
+          mmp_name: mmpNameMap[site.mmp_file_id] || (site.mmp_file_id ? `MMP-${String(site.mmp_file_id).slice(0, 8).toUpperCase()}` : null),
         };
       });
 
@@ -808,37 +889,14 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
-      // Resolve MMP names — same layered approach as claimed sites.
       const uniqueDispatchedMmpIds = [...new Set(allDispatched.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
-      const dispatchedMmpNameMap: Record<string, string> = {};
-      const fillDispMap = (rows: any[]) => rows.forEach((m: any) => {
-        if (m.id) dispatchedMmpNameMap[String(m.id)] = m.name || m.project?.name || m.project_name || formatMmpMonthYear(m.month, m.year) || m.mmp_id || `MMP-${String(m.id).slice(0, 8).toUpperCase()}`;
-      });
-      // Layer 1: RPC without p_ids (SECURITY DEFINER, no uuid[] cast needed)
-      {
-        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_mmp_names');
-        if (!rpcErr && (rpcRows || []).length > 0) { fillDispMap(rpcRows); }
-      }
-      // Layer 2: direct full table fetch
-      if (Object.keys(dispatchedMmpNameMap).length === 0) {
-        const { data: allMmpRows } = await supabase
-          .from('mmp_files').select('id, name, project_name, month, year')
-          .order('created_at', { ascending: false }).limit(500);
-        if ((allMmpRows || []).length > 0) { fillDispMap(allMmpRows!); }
-      }
-      // Layer 3: filtered by IDs
-      if (Object.keys(dispatchedMmpNameMap).length === 0 && uniqueDispatchedMmpIds.length > 0) {
-        const { data: directRows } = await supabase
-          .from('mmp_files').select('id, name, project_name, month, year')
-          .in('id', uniqueDispatchedMmpIds);
-        if ((directRows || []).length > 0) { fillDispMap(directRows!); }
-      }
+      const dispatchedMmpNameMap = await resolveMmpNames(uniqueDispatchedMmpIds);
 
       const enriched = allDispatched.map(site => ({
         ...site,
         dispatched_by_name: userMap.get(site.dispatched_by)?.name || 'Unknown',
         main_activity: site.main_activity || site.activity_at_site || null,
-        mmp_name: dispatchedMmpNameMap[site.mmp_file_id] || null,
+        mmp_name: dispatchedMmpNameMap[site.mmp_file_id] || (site.mmp_file_id ? `MMP-${String(site.mmp_file_id).slice(0, 8).toUpperCase()}` : null),
       }));
 
       setDispatchedSites(enriched);
