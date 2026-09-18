@@ -410,7 +410,7 @@ BEGIN
   END IF;
 
   UPDATE public.down_payment_requests
-  SET status = 'deleted',
+  SET status = 'cancelled',
       metadata = (coalesce(metadata, '{}'::jsonb) - 'duplicate_correction_in_progress')
         || jsonb_build_object(
           'deleted', true,
