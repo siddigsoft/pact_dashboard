@@ -254,10 +254,16 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
         p_target_user_id: assignData.user_id,
         p_target_role_id: assignData.role_id,
         p_reason: 'Assigned from Role Management',
+        p_make_primary: assignData.make_primary ?? false,
       });
       if (error) throw error;
 
-      toast({ title: 'Role assigned', description: 'User role assignment saved.' });
+      toast({
+        title: 'Role assigned',
+        description: assignData.make_primary
+          ? 'User role assignment saved and set as the primary display role.'
+          : 'User role assignment saved as an additional role.',
+      });
       await fetchUserRoles();
       await refreshUserPermissions(assignData.user_id);
       return true;

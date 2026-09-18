@@ -1816,7 +1816,7 @@ export type Database = {
         Returns: Json
       }
       assign_role_to_user: {
-        Args: { p_reason?: string | null; p_target_role_id: string; p_target_user_id: string }
+        Args: { p_make_primary?: boolean; p_reason?: string | null; p_target_role_id: string; p_target_user_id: string }
         Returns: Json
       }
       get_nav_badge_counts: {

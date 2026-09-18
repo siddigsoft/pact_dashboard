@@ -96,6 +96,8 @@ export interface AssignRoleRequest {
   user_id: string;
   /** Canonical role definition ID. Do not send a display/name role value. */
   role_id: string;
+  /** Updates the profile's primary/display role without removing other assignments. */
+  make_primary?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
