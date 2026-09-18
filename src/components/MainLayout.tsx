@@ -35,6 +35,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   const [accessModalOpen, setAccessModalOpen] = useState(false);
 
   const isSuperAdmin = normalizeRole(currentUser?.role ?? '') === 'superAdmin';
+  const isSuperAdminHub = location.pathname.startsWith('/super-admin-hub');
   // App's PageRouteGuard is the sole route authorization decision. Resolve the
   // same canonical target here only for presentation (tour/access modal).
   const currentSlug = resolveSlug(`${location.pathname}${location.search}${location.hash}`)
@@ -81,8 +82,10 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
                 />
                 <Navbar />
               </div>
-              <div className="global-scrollable flex-1 flex flex-col relative min-w-0 min-h-0 bg-transparent px-1.5 py-1.5 sm:px-2 sm:py-2 lg:px-3 lg:py-2.5">
-                <div className="w-full rounded-xl border border-slate-200/70 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
+              <div className={`global-scrollable flex-1 flex flex-col relative min-w-0 min-h-0 bg-transparent ${isSuperAdminHub ? '' : 'px-1.5 py-1.5 sm:px-2 sm:py-2 lg:px-3 lg:py-2.5'}`}>
+                <div className={isSuperAdminHub
+                  ? 'flex-1 min-h-0 w-full bg-white dark:bg-gray-900'
+                  : 'w-full rounded-xl border border-slate-200/70 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900'}>
                   {children || <Outlet />}
                 </div>
               </div>

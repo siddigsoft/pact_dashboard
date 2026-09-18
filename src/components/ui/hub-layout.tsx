@@ -35,13 +35,15 @@ interface HubLayoutProps {
   overviewContent?: React.ReactNode;
   /** Page slug for the tour registry — shows a Tour button in the hub header */
   tourSlug?: string;
+  /** Use the viewport-filling shell only for hubs that explicitly opt in. */
+  fullPage?: boolean;
 }
 
 export function HubLayout({
   title, subtitle, hubIcon: HubIcon,
   sections, activeSectionId, activeTabId, activeTabDescription,
   quickLinks, onSectionClick, onTabClick,
-  children, overviewContent, tourSlug,
+  children, overviewContent, tourSlug, fullPage = false,
 }: HubLayoutProps) {
   const activeSection = sections.find(s => s.id === activeSectionId) ?? null;
   const activeTab = activeSection?.tabs.find(t => t.id === activeTabId) ?? null;
@@ -70,7 +72,7 @@ export function HubLayout({
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className={fullPage ? 'flex h-full min-h-0 flex-col overflow-hidden bg-background' : 'flex flex-col min-h-screen bg-background'}>
 
       {/* ── Sticky composite header ── */}
       <div
@@ -261,12 +263,12 @@ export function HubLayout({
 
       {/* ── Overview landing (when no tab selected) ── */}
       {!activeTabId && overviewContent && (
-        <div className="flex-1">{overviewContent}</div>
+        <div className={fullPage ? 'min-h-0 flex-1 overflow-y-auto' : 'flex-1'}>{overviewContent}</div>
       )}
 
       {/* ── Page content ── */}
       {activeTabId && (
-        <div className="flex-1">{children}</div>
+        <div className={fullPage ? 'min-h-0 flex-1 overflow-y-auto' : 'flex-1'}>{children}</div>
       )}
     </div>
   );

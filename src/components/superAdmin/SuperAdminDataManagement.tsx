@@ -397,6 +397,13 @@ export function SuperAdminDataManagement() {
 
   // Cache for loaded tabs to avoid reloading
   const loadedTabsRef = useRef<Set<string>>(new Set());
+  const inFlightLoadersRef = useRef<Set<string>>(new Set());
+  const beginLoader = (key: string) => {
+    if (inFlightLoadersRef.current.has(key)) return false;
+    inFlightLoadersRef.current.add(key);
+    return true;
+  };
+  const endLoader = (key: string) => inFlightLoadersRef.current.delete(key);
 
   // Create userMap for O(1) lookups instead of O(n) array.find()
   const userMap = useMemo(() => {
@@ -482,6 +489,7 @@ export function SuperAdminDataManagement() {
   const [txOffset, setTxOffset] = useState(0);
   const [txHasMore, setTxHasMore] = useState(false);
   const [txLoadingMore, setTxLoadingMore] = useState(false);
+  const transactionRequestRef = useRef({ inFlight: false, generation: 0 });
 
   // Status-correction dialog (Claimed Sites tab)
   const [showChangeStatusDialog, setShowChangeStatusDialog] = useState(false);
@@ -510,6 +518,7 @@ export function SuperAdminDataManagement() {
   const [bulkChangeStatusProgress, setBulkChangeStatusProgress] = useState<{ done: number; total: number } | null>(null);
 
   const loadSiteVisits = async () => {
+    if (!beginLoader('site-visits')) return;
     setLoadingVisits(true);
     try {
       const PAGE_SIZE = 1000;
@@ -552,23 +561,24 @@ export function SuperAdminDataManagement() {
     } catch (error) {
       console.error('Failed to load site visits:', error);
     } finally {
+      endLoader('site-visits');
       setLoadingVisits(false);
     }
   };
 
   const loadWallets = async () => {
+    if (!beginLoader('wallets')) return;
     setLoadingWallets(true);
     try {
-      const { data: walletsData, error: walletsError } = await supabase
-        .from('wallets')
-        .select('*')
-        .order('updated_at', { ascending: false });
+      const [{ data: walletsData, error: walletsError }, { data: txnCounts }] = await Promise.all([
+        supabase
+          .from('wallets')
+          .select('id, user_id, balances, total_earned, total_withdrawn')
+          .order('updated_at', { ascending: false }),
+        supabase.from('wallet_transactions').select('wallet_id'),
+      ]);
 
       if (walletsError) throw walletsError;
-
-      const { data: txnCounts } = await supabase
-        .from('wallet_transactions')
-        .select('wallet_id');
 
       const countMap: Record<string, number> = {};
       (txnCounts || []).forEach((t: any) => {
@@ -590,23 +600,28 @@ export function SuperAdminDataManagement() {
     } catch (error) {
       console.error('Failed to load wallets:', error);
     } finally {
+      endLoader('wallets');
       setLoadingWallets(false);
     }
   };
 
   const loadTransactions = async (offset = 0, append = false) => {
+    if (transactionRequestRef.current.inFlight) return;
+    transactionRequestRef.current.inFlight = true;
+    const requestGeneration = transactionRequestRef.current.generation;
     if (append) setTxLoadingMore(true);
     else { setTxLoading(true); setTxOffset(0); }
     setTxError(null);
     try {
       const { data, error } = await supabase
         .from('wallet_transactions')
-        .select('*')
+        .select('id, wallet_id, user_id, type, amount, currency, description, site_visit_id, related_site_visit_id, created_at')
         .order('created_at', { ascending: false })
         .range(offset, offset + TX_PAGE_SIZE - 1);
 
       if (error) throw error;
 
+      if (requestGeneration !== transactionRequestRef.current.generation) return;
       const rawData = data || [];
       setTxHasMore(rawData.length === TX_PAGE_SIZE);
       if (append) setTxOffset(offset);
@@ -659,6 +674,7 @@ export function SuperAdminDataManagement() {
             (mmpFiles || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
           }
 
+          if (requestGeneration !== transactionRequestRef.current.generation) return;
           const enriched = base.map((t, idx) => {
             const raw = rawData[idx];
             const entryId = raw?.site_visit_id || raw?.related_site_visit_id;
@@ -678,12 +694,14 @@ export function SuperAdminDataManagement() {
       console.error('Failed to load transactions:', err);
       setTxError(err?.message || 'Failed to load transactions. Please try again.');
     } finally {
+      transactionRequestRef.current.inFlight = false;
       setTxLoading(false);
       setTxLoadingMore(false);
     }
   };
 
   const loadClaimedSites = async () => {
+    if (!beginLoader('claimed-sites')) return;
     setLoadingClaimed(true);
     try {
       // Paginated fetch — bypasses Supabase 1000-row default cap
@@ -693,7 +711,7 @@ export function SuperAdminDataManagement() {
       while (true) {
         const { data, error } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_file_id, additional_data, hub_office')
+          .select('id, site_name, site_code, state, locality, status, accepted_by, claimed_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_file_id, hub_office, additional_claimed_by:additional_data->claimed_by, additional_assigned_to:additional_data->assigned_to')
           .in('status', POST_DISPATCH_STATUSES)
           .order('created_at', { ascending: false })
           .range(from, from + PAGE_SIZE - 1);
@@ -733,16 +751,18 @@ export function SuperAdminDataManagement() {
         if ((directRows || []).length > 0) { fillMap(directRows!); }
       }
 
-      const { data: effectiveRows } = await supabase
+      const { data: effectiveRows, error: effectiveError } = await supabase
         .from('site_effective_claimants')
         .select('site_entry_id, effective_claimant_id')
         .in('site_entry_id', allData.map((site: any) => site.id));
+      if (effectiveError) throw new Error(`Unable to resolve effective claimants: ${effectiveError.message}`);
       const effectiveMap = new Map((effectiveRows || []).map((row: any) => [row.site_entry_id, row.effective_claimant_id]));
       const enriched = allData.map((site: any) => {
         const claimerUid = effectiveMap.get(site.id)
           || site.accepted_by
-          || site.additional_data?.claimed_by
-          || site.additional_data?.assigned_to;
+          || site.claimed_by
+          || site.additional_claimed_by
+          || site.additional_assigned_to;
         const resolvedName = claimerUid
           ? (userMap.get(claimerUid)?.name || `UID:${String(claimerUid).slice(0, 8)}`)
           : 'Not assigned';
@@ -763,11 +783,13 @@ export function SuperAdminDataManagement() {
     } catch (error) {
       console.error('Failed to load claimed sites:', error);
     } finally {
+      endLoader('claimed-sites');
       setLoadingClaimed(false);
     }
   };
 
   const loadDispatchedSites = async () => {
+    if (!beginLoader('dispatched-sites')) return;
     setLoadingDispatched(true);
     try {
       const PAGE_SIZE = 1000;
@@ -824,11 +846,13 @@ export function SuperAdminDataManagement() {
     } catch (error) {
       console.error('Failed to load dispatched sites:', error);
     } finally {
+      endLoader('dispatched-sites');
       setLoadingDispatched(false);
     }
   };
 
   const loadMMPs = async () => {
+    if (!beginLoader('mmps')) return;
     setLoadingMMPs(true);
     try {
       // Primary: join projects table to get real name when mmp_files.name is null
@@ -872,9 +896,9 @@ export function SuperAdminDataManagement() {
       if (allMmpIds.length > 0) {
         const countResults = await Promise.all(
           allMmpIds.flatMap(id => [
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', id),
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', id).in('status', ['dispatched', 'assigned']),
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', id).in('status', ['completed', 'verified']),
+            supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true }).eq('mmp_file_id', id),
+            supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true }).eq('mmp_file_id', id).in('status', ['dispatched', 'assigned']),
+            supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true }).eq('mmp_file_id', id).in('status', ['completed', 'verified']),
           ])
         );
         allMmpIds.forEach((id, i) => {
@@ -918,6 +942,7 @@ export function SuperAdminDataManagement() {
     } catch (error) {
       console.error('Failed to load MMPs:', error);
     } finally {
+      endLoader('mmps');
       setLoadingMMPs(false);
     }
   };
@@ -926,9 +951,9 @@ export function SuperAdminDataManagement() {
   const loadQuickCounts = useCallback(async () => {
     try {
       const [claimedRes, txRes, dispatchedRes] = await Promise.all([
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).in('status', POST_DISPATCH_STATUSES),
-        supabase.from('wallet_transactions').select('*', { count: 'exact', head: true }),
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).in('status', DISPATCHED_STATUSES),
+        supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true }).in('status', POST_DISPATCH_STATUSES),
+        supabase.from('wallet_transactions').select('id', { count: 'exact', head: true }),
+        supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true }).in('status', DISPATCHED_STATUSES),
       ]);
       setQuickCounts({
         claimed: claimedRes.count ?? null,
@@ -938,26 +963,12 @@ export function SuperAdminDataManagement() {
     } catch { /* non-critical */ }
   }, []);
 
-  // Force refresh function for manual refresh button
-  const forceRefreshCurrentTab = useCallback(() => {
-    loadedTabsRef.current.delete(activeTab);
-    if (activeTab === 'site-visits') loadSiteVisits();
-    else if (activeTab === 'wallets') loadWallets();
-    else if (activeTab === 'transactions') { setTxError(null); loadTransactions(); }
-    else if (activeTab === 'claimed-sites') loadClaimedSites();
-    else if (activeTab === 'dispatched-sites') loadDispatchedSites();
-    else if (activeTab === 'mmps') loadMMPs();
-  }, [activeTab, userMap]);
-
-  // On mount: load quick stats cards + MMP list immediately (both are fast).
-  // All heavy tab data (site visits, claimed, dispatched, wallets, transactions)
-  // is loaded lazily per-tab via the on-demand useEffect below.
+  // Keep only quick stats eager. MMP fan-out is loaded when its tab is opened.
   const hasPreloadedRef = useRef(false);
   useEffect(() => {
     if (!canAccess || userMap.size === 0 || hasPreloadedRef.current) return;
     hasPreloadedRef.current = true;
     loadQuickCounts(); // fast HEAD queries — populate stats card numbers immediately
-    loadMMPs();        // fast: mmp_files + parallel COUNT queries per MMP (9 MMPs ≈ 27 parallel HEAD requests)
   }, [canAccess, userMap]);
 
   // Fallback: load a tab on-demand if it was somehow missed
@@ -2072,9 +2083,15 @@ export function SuperAdminDataManagement() {
   };
 
   const refreshCurrentTab = () => {
+    if (activeTab === 'transactions' && txLoadingMore) return;
     if (activeTab === 'site-visits') loadSiteVisits();
     else if (activeTab === 'wallets') loadWallets();
-    else if (activeTab === 'transactions') { loadedTabsRef.current.delete('transactions'); setTxError(null); loadTransactions(); }
+    else if (activeTab === 'transactions') {
+      transactionRequestRef.current.generation += 1;
+      loadedTabsRef.current.delete('transactions');
+      setTxError(null);
+      loadTransactions();
+    }
     else if (activeTab === 'claimed-sites') loadClaimedSites();
     else if (activeTab === 'dispatched-sites') loadDispatchedSites();
     else if (activeTab === 'mmps') loadMMPs();
@@ -2106,7 +2123,7 @@ export function SuperAdminDataManagement() {
   }
 
   return (
-    <div className="space-y-5 p-4 md:p-6" data-testid="page-super-admin-data-management">
+    <div className="h-full min-h-0 space-y-5 p-4 md:p-6" data-testid="page-super-admin-data-management">
       {/* Compact Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div className="flex items-center gap-3">
@@ -2125,7 +2142,7 @@ export function SuperAdminDataManagement() {
             variant="outline"
             onClick={refreshCurrentTab}
             disabled={
-              activeTab === 'transactions' ? txLoading :
+              activeTab === 'transactions' ? (txLoading || txLoadingMore) :
               activeTab === 'site-visits' ? loadingVisits :
               activeTab === 'wallets' ? loadingWallets :
               activeTab === 'claimed-sites' ? loadingClaimed :
@@ -2135,7 +2152,7 @@ export function SuperAdminDataManagement() {
             data-testid="button-refresh"
           >
             <RefreshCw className={`h-4 w-4 ${(
-              activeTab === 'transactions' ? txLoading :
+               activeTab === 'transactions' ? (txLoading || txLoadingMore) :
               activeTab === 'site-visits' ? loadingVisits :
               activeTab === 'wallets' ? loadingWallets :
               activeTab === 'claimed-sites' ? loadingClaimed :

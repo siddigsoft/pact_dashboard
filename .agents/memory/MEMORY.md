@@ -73,3 +73,4 @@
 - [Filter visibility controls](filter-visibility-controls.md) — Hidden optional filters must reset to neutral; visibility never replaces Data Scope, RLS, or export authorization.
 - [Access workspace inventory boundary](access-workspace-inventory-boundary.md) — The hybrid access workspace treats registries as editable metadata, never as proof of server enforcement.
 - [Access registry owner normalization](access-registry-owner-normalization.md) — Canonical owners may change, but persisted filter and column identities must remain runtime-compatible.
+- [Full-page hub scroll ownership](full-page-hub-scroll-ownership.md) — Full-viewport hubs must opt in at the shell and keep exactly one content scroll owner.
