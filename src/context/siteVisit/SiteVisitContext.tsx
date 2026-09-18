@@ -34,7 +34,9 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const queriesEnabled = isAuthenticated && siteVisitScopeActive;
   const siteVisitsQuery = useSiteVisitsQuery(queriesEnabled);
   const appSiteVisits = siteVisitsQuery.data ?? [];
-  const loading = queriesEnabled && siteVisitsQuery.isLoading;
+  // Clear the Operations "Loading site visits…" spinner on error / timeout —
+  // isLoading alone stays true while a hung request never settles.
+  const loading = queriesEnabled && siteVisitsQuery.isPending && !siteVisitsQuery.isError;
 
   // Track the previous user id so we can detect the auth-restore moment
   // (null → user id) and force a fresh fetch with the valid session token.
