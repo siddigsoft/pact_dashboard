@@ -76,3 +76,4 @@
 - [Full-page hub scroll ownership](full-page-hub-scroll-ownership.md) — Full-viewport hubs must opt in at the shell and keep exactly one content scroll owner.
 - [Data Management name resolution](data-management-name-resolution.md) — Resolve effective claimants and MMP labels in batches; never rely only on cached users or generated UUID labels.
 - [Claimant reassignment eligibility](claimant-reassignment-eligibility.md) — Replacement claimants are active same-state Data Collectors or Coordinators, enforced before financial transfer.
+- [Claimant settlement serialization](claimant-settlement-serialization.md) — Site settlement and claimant reassignment share site-row serialization; old retries never rewind the latest claimant.

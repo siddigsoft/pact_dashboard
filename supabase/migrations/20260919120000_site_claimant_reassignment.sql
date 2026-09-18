@@ -100,6 +100,44 @@ LEFT JOIN public.site_effective_claimant_projection p
   ON p.site_entry_id = e.id;
 GRANT SELECT ON public.site_effective_claimants TO authenticated;
 
+-- The existing ordinary-settlement guard takes a site-row FOR SHARE lock before
+-- this trigger runs. Reassignment takes the same row FOR UPDATE. Do not also
+-- take the claimant advisory lock here: the WFP AFTER UPDATE settlement path
+-- already owns the site row, so row-then-advisory would deadlock against the
+-- reassignment RPC's advisory-then-row order.
+CREATE OR REPLACE FUNCTION public.guard_site_claimant_wallet_settlement()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  effective_id uuid;
+BEGIN
+  IF NEW.status::text = 'posted'
+     AND NEW.type::text IN ('earning', 'site_visit_fee')
+     AND COALESCE(NEW.metadata ->> 'reassignment_kind', '') <> 'claimant'
+     AND COALESCE(NEW.site_visit_id, NEW.related_site_visit_id) IS NOT NULL THEN
+    SELECT c.effective_claimant_id INTO effective_id
+    FROM public.site_effective_claimants c
+    WHERE c.site_entry_id = COALESCE(NEW.site_visit_id, NEW.related_site_visit_id);
+
+    IF effective_id IS NOT NULL AND effective_id <> NEW.user_id THEN
+      RAISE EXCEPTION
+        'CLAIMANT_SETTLEMENT_MISMATCH: effective claimant % does not match wallet recipient %.',
+        effective_id, NEW.user_id;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_guard_site_claimant_wallet_settlement
+  ON public.wallet_transactions;
+CREATE TRIGGER trg_guard_site_claimant_wallet_settlement
+  BEFORE INSERT OR UPDATE OF status, user_id, site_visit_id, related_site_visit_id
+  ON public.wallet_transactions
+  FOR EACH ROW EXECUTE FUNCTION public.guard_site_claimant_wallet_settlement();
+
 CREATE OR REPLACE FUNCTION public.reassign_site_claimant_rpc(
   p_site_entry_id uuid,
   p_new_claimant_id uuid,
@@ -144,10 +182,8 @@ BEGIN
        OR existing.new_claimant_id <> p_new_claimant_id THEN
       RAISE EXCEPTION 'Idempotency key fingerprint does not match this site and claimant.';
     END IF;
-    INSERT INTO public.site_effective_claimant_projection (site_entry_id, effective_claimant_id)
-    VALUES (existing.site_entry_id, existing.new_claimant_id)
-    ON CONFLICT (site_entry_id) DO UPDATE
-    SET effective_claimant_id = EXCLUDED.effective_claimant_id, updated_at = now();
+    -- A retry of an older A->B request may arrive after a later B->C change.
+    -- Return the original result without rewinding the latest projection.
     RETURN jsonb_build_object('success', true, 'idempotent', true,
       'reassignment_id', existing.id, 'amount_cents', existing.amount_cents);
   END IF;
@@ -182,6 +218,11 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.site_advance_applications a
              WHERE a.mmp_site_entry_id = s.id AND COALESCE(a.applied_cents, 0) > 0) THEN
     RAISE EXCEPTION 'This site has an advance offset; send it to Finance Reconciliation.';
+  END IF;
+  IF COALESCE(s.fee_cash_paid_amount, 0) > 0
+     OR (lower(COALESCE(s.fee_paid_status, '')) = 'paid'
+         AND COALESCE(s.fee_wallet_credit_amount, 0) <= 0) THEN
+    RAISE EXCEPTION 'This site has a non-wallet settlement; send it to Finance Reconciliation.';
   END IF;
 
   -- Only a single posted wallet earning is safe to compensate.  Anything
