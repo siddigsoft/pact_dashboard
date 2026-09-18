@@ -4,6 +4,7 @@ type EntryWithEnumeratorData = {
   accepted_by?: string | null;
   claimed_by?: string | null;
   visit_started_by?: string | null;
+  effective_claimant_id?: string | null;
   additional_data?: Record<string, unknown> | null;
 } | null | undefined;
 
@@ -20,6 +21,7 @@ export function getFieldPaymentEnumeratorReference(
   requestedBy?: string | null,
 ): string | null {
   return (
+    nonEmptyText(entry?.effective_claimant_id) ??
     nonEmptyText(entry?.accepted_by) ??
     nonEmptyText(entry?.claimed_by) ??
     nonEmptyText(entry?.visit_started_by) ??

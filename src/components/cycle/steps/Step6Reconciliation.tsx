@@ -157,6 +157,12 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
         'fee_payment_reference, fee_receipt_url'
       )
       .eq('mmp_file_id', wizardState.selectedMmpId!);
+    const { data: effectiveRows } = await (supabase as any)
+      .from('site_effective_claimants')
+      .select('site_entry_id, effective_claimant_id')
+      .in('site_entry_id', (entries ?? []).map((e: any) => e.id));
+    const effectiveMap = new Map((effectiveRows ?? []).map((r: any) => [r.site_entry_id, r.effective_claimant_id]));
+    for (const e of (entries ?? []) as any[]) e.effective_claimant_id = effectiveMap.get(e.id) ?? null;
 
     const notCoveredIds = new Set(Object.keys(wizardState.uncoveredReasons));
     const confirmedMatchIds = new Set(

@@ -98,6 +98,8 @@ interface ClaimedSiteData {
   accepted_by?: string;
   claimed_by_name?: string;
   accepted_by_name?: string;
+  effective_claimant_id?: string;
+  effective_claimant_name?: string;
   dispatched_at?: string;
   enumerator_fee?: number;
   transport_fee?: number;
@@ -443,6 +445,12 @@ export function SuperAdminDataManagement() {
   const [selectedClaimedSite, setSelectedClaimedSite] = useState<ClaimedSiteData | null>(null);
   const [selectedDispatchedSite, setSelectedDispatchedSite] = useState<DispatchedSiteData | null>(null);
   const [showReclaimSiteDialog, setShowReclaimSiteDialog] = useState(false);
+  const [showReassignClaimantDialog, setShowReassignClaimantDialog] = useState(false);
+  const [reassignClaimantSite, setReassignClaimantSite] = useState<ClaimedSiteData | null>(null);
+  const [reassignClaimantTarget, setReassignClaimantTarget] = useState('');
+  const [reassignClaimantReason, setReassignClaimantReason] = useState('');
+  const [reassignClaimantIdempotencyKey, setReassignClaimantIdempotencyKey] = useState('');
+  const [reassignClaimantProcessing, setReassignClaimantProcessing] = useState(false);
   const [showReturnToApprovedDialog, setShowReturnToApprovedDialog] = useState(false);
   const [reclaimAdvanceInfo, setReclaimAdvanceInfo] = useState<{ pending: any[]; disbursed: any[] } | null>(null);
   const [reclaimAdvanceLoading, setReclaimAdvanceLoading] = useState(false);
@@ -725,8 +733,14 @@ export function SuperAdminDataManagement() {
         if ((directRows || []).length > 0) { fillMap(directRows!); }
       }
 
+      const { data: effectiveRows } = await supabase
+        .from('site_effective_claimants')
+        .select('site_entry_id, effective_claimant_id')
+        .in('site_entry_id', allData.map((site: any) => site.id));
+      const effectiveMap = new Map((effectiveRows || []).map((row: any) => [row.site_entry_id, row.effective_claimant_id]));
       const enriched = allData.map((site: any) => {
-        const claimerUid = site.accepted_by
+        const claimerUid = effectiveMap.get(site.id)
+          || site.accepted_by
           || site.additional_data?.claimed_by
           || site.additional_data?.assigned_to;
         const resolvedName = claimerUid
@@ -736,6 +750,8 @@ export function SuperAdminDataManagement() {
           ...site,
           claimed_by_name: resolvedName,
           accepted_by_name: resolvedName,
+          effective_claimant_id: claimerUid,
+          effective_claimant_name: resolvedName,
           main_activity: site.main_activity || site.activity_at_site || null,
           mmp_id: site.mmp_file_id,
           mmp_name: mmpNameMap[site.mmp_file_id] || null,
@@ -1042,6 +1058,36 @@ export function SuperAdminDataManagement() {
       setSelectedClaimedSite(null);
       setReason('');
       loadClaimedSites();
+    }
+  };
+
+  const openReassignClaimantDialog = (site: ClaimedSiteData) => {
+    setReassignClaimantSite(site);
+    setReassignClaimantTarget('');
+    setReassignClaimantReason('');
+    setReassignClaimantIdempotencyKey(crypto.randomUUID());
+    setShowReassignClaimantDialog(true);
+  };
+
+  const handleReassignClaimant = async () => {
+    if (!reassignClaimantSite || !reassignClaimantTarget || reassignClaimantReason.trim().length < 5) return;
+    setReassignClaimantProcessing(true);
+    try {
+      const { error } = await supabase.rpc('reassign_site_claimant_rpc', {
+        p_site_entry_id: reassignClaimantSite.id,
+        p_new_claimant_id: reassignClaimantTarget,
+        p_reason: reassignClaimantReason.trim(),
+        p_idempotency_key: reassignClaimantIdempotencyKey,
+      });
+      if (error) throw error;
+      toast({ title: 'Claimant changed', description: 'The effective claimant and any eligible wallet settlement were updated.' });
+      setShowReassignClaimantDialog(false);
+      setReassignClaimantSite(null);
+      loadClaimedSites();
+    } catch (error: any) {
+      toast({ title: 'Claimant change blocked', description: error?.message || 'Finance Reconciliation is required for this case.', variant: 'destructive' });
+    } finally {
+      setReassignClaimantProcessing(false);
     }
   };
 
@@ -3171,6 +3217,15 @@ export function SuperAdminDataManagement() {
                                   </button>
                                   <button
                                     type="button"
+                                    title="Change Claimed By"
+                                    className="h-7 w-7 flex items-center justify-center rounded border border-emerald-300 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950 transition-colors"
+                                    onClick={() => openReassignClaimantDialog(site)}
+                                    data-testid={`button-change-claimed-by-${site.id}`}
+                                  >
+                                    <Users className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
                                     title="Reclaim Site"
                                     className="h-7 w-7 flex items-center justify-center rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
                                     onClick={() => openReclaimSiteDialog(site)}
@@ -3190,6 +3245,16 @@ export function SuperAdminDataManagement() {
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                     Change Status
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="gap-1"
+                                    onClick={() => openReassignClaimantDialog(site)}
+                                    data-testid={`button-change-claimed-by-${site.id}`}
+                                  >
+                                    <Users className="h-4 w-4 mr-1" />
+                                    Change Claimed By
                                   </Button>
                                   <Button
                                     variant="destructive"
@@ -3642,6 +3707,60 @@ export function SuperAdminDataManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={showReassignClaimantDialog} onOpenChange={(open) => {
+        if (!reassignClaimantProcessing) setShowReassignClaimantDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Change Claimed By</DialogTitle>
+            <DialogDescription>
+              Raw collection and WFP evidence remains unchanged. Paid wallet-only earnings are moved with a balanced debit and credit.
+            </DialogDescription>
+          </DialogHeader>
+          {reassignClaimantSite && (
+            <div className="space-y-4">
+              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                <div className="font-medium">{reassignClaimantSite.site_name}</div>
+                <div className="text-muted-foreground">{reassignClaimantSite.site_code} · Current claimant: {reassignClaimantSite.effective_claimant_name || reassignClaimantSite.accepted_by_name || reassignClaimantSite.claimed_by_name || 'Unknown'}</div>
+              </div>
+              <div className="space-y-2">
+                <Label>New claimant <span className="text-destructive">*</span></Label>
+                <Select value={reassignClaimantTarget} onValueChange={setReassignClaimantTarget}>
+                  <SelectTrigger><SelectValue placeholder="Select an active collector" /></SelectTrigger>
+                  <SelectContent>
+                    {users
+                      .filter((u: any) => u.id !== (reassignClaimantSite.effective_claimant_id
+                        || reassignClaimantSite.accepted_by || reassignClaimantSite.claimed_by)
+                        && u.is_active !== false
+                        && ['collector', 'enumerator', 'field enumerator', 'field_enumerator', 'datacollector', 'data collector', 'data_collector'].includes(String(u.role || '').toLowerCase()))
+                      .map((u: any) => (
+                        <SelectItem key={u.id} value={u.id}>{u.name || u.email || u.id}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reassign-claimant-reason">Reason <span className="text-destructive">*</span></Label>
+                <Textarea
+                  id="reassign-claimant-reason"
+                  value={reassignClaimantReason}
+                  onChange={(e) => setReassignClaimantReason(e.target.value)}
+                  placeholder="Explain why the claimant is being changed (minimum 5 characters)"
+                  disabled={reassignClaimantProcessing}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReassignClaimantDialog(false)} disabled={reassignClaimantProcessing}>Cancel</Button>
+            <Button onClick={handleReassignClaimant}
+              disabled={reassignClaimantProcessing || !reassignClaimantTarget || reassignClaimantReason.trim().length < 5}>
+              {reassignClaimantProcessing ? 'Changing…' : 'Change Claimed By'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showReclaimSiteDialog} onOpenChange={setShowReclaimSiteDialog}>
         <DialogContent className="max-w-md" data-testid="dialog-reclaim-site">

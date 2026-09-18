@@ -4,6 +4,7 @@ export interface CollectionIdentityRow {
   accepted_by?: string | null;
   claimed_by?: string | null;
   visit_started_by?: string | null;
+  effective_claimant_id?: string | null;
 }
 
 export function isWfpConfirmedCollection(
@@ -24,8 +25,8 @@ export function resolveOfficialCollectionProfileId(
   confirmedByCycleMatch = false,
 ): string | null {
   return isWfpConfirmedCollection(row, confirmedByCycleMatch)
-    ? (row.attribution_collector_id || null)
-    : (row.accepted_by || row.claimed_by || row.visit_started_by || null);
+    ? (row.effective_claimant_id || row.attribution_collector_id || null)
+    : (row.effective_claimant_id || row.accepted_by || row.claimed_by || row.visit_started_by || null);
 }
 
 export function resolveOfficialCollectionProfileName(

@@ -534,6 +534,12 @@ export async function buildCycleCloseWorkbook(
     .from('mmp_site_entries')
     .select('id, site_name, state, locality, accepted_by, claimed_by, visit_started_by, attribution_collector_id, attribution_status, status, transport_fee, enumerator_fee, additional_data')
     .eq('mmp_file_id', mmpId);
+  const { data: effectiveClaimants } = await (supabase as any)
+    .from('site_effective_claimants')
+    .select('site_entry_id, effective_claimant_id')
+    .in('site_entry_id', (entries ?? []).map((e: any) => e.id));
+  const effectiveMap = Object.fromEntries((effectiveClaimants ?? []).map((r: any) => [r.site_entry_id, r.effective_claimant_id]));
+  for (const e of (entries ?? []) as any[]) e.effective_claimant_id = effectiveMap[e.id] ?? null;
 
   const { data: attributionReportResult } = await (supabase as any).rpc(
     'get_cycle_attribution_report',

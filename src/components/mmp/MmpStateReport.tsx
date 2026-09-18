@@ -418,10 +418,15 @@ export default function MmpStateReport({
         // Build siteId → collectorId map from accepted_by / claimed_by
         const isUuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const colMap: Record<string, string> = {};
+        const { data: effectiveRows } = await (supabase as any)
+          .from('site_effective_claimants')
+          .select('site_entry_id, effective_claimant_id')
+          .in('site_entry_id', entries.map((row: any) => row.id).filter(Boolean));
+        const effectiveMap = new Map((effectiveRows ?? []).map((row: any) => [row.site_entry_id, row.effective_claimant_id]));
         entries.forEach((row: any) => {
           if (!row.id) return;
-          // Priority: accepted_by → claimed_by → visit_started_by
-          const val = row.accepted_by || row.claimed_by || row.visit_started_by || '';
+          // Effective overlay first; raw fields remain evidence-only fallbacks.
+          const val = effectiveMap.get(row.id) || row.accepted_by || row.claimed_by || row.visit_started_by || '';
           if (val) colMap[row.id] = val;
         });
         setSiteCollectorMap(colMap);

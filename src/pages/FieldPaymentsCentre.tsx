@@ -688,6 +688,7 @@ export default function FieldPaymentsCentre() {
       const entryMap: Record<string, {
         accepted_by: string | null;
         claimed_by: string | null;
+        effective_claimant_id?: string | null;
         visit_started_by: string | null;
         additional_data: Record<string, unknown> | null;
         mmp_file_id: string | null;
@@ -698,10 +699,14 @@ export default function FieldPaymentsCentre() {
           .from('mmp_site_entries')
           .select('id, accepted_by, claimed_by, visit_started_by, additional_data, mmp_file_id, state')
           .in('id', siteEntryIds);
+        const { data: effectiveRows } = await (supabase as any).from('site_effective_claimants')
+          .select('site_entry_id, effective_claimant_id').in('site_entry_id', siteEntryIds);
+        const effectiveMap = new Map((effectiveRows ?? []).map((r: any) => [r.site_entry_id, r.effective_claimant_id]));
         for (const e of entries ?? []) {
           entryMap[e.id] = {
             accepted_by: e.accepted_by,
             claimed_by: e.claimed_by,
+            effective_claimant_id: effectiveMap.get(e.id) ?? null,
             visit_started_by: e.visit_started_by,
             additional_data: e.additional_data ?? null,
             mmp_file_id: e.mmp_file_id,
@@ -874,6 +879,7 @@ export default function FieldPaymentsCentre() {
         id: string;
         accepted_by: string | null;
         claimed_by: string | null;
+        effective_claimant_id?: string | null;
         visit_started_by: string | null;
         additional_data: Record<string, unknown> | null;
         mmp_file_id: string | null;
@@ -884,11 +890,15 @@ export default function FieldPaymentsCentre() {
           .from('mmp_site_entries')
           .select('id, accepted_by, claimed_by, visit_started_by, additional_data, mmp_file_id, state')
           .in('id', siteEntryIds);
+        const { data: effectiveRows } = await (supabase as any).from('site_effective_claimants')
+          .select('site_entry_id, effective_claimant_id').in('site_entry_id', siteEntryIds);
+        const effectiveMap = new Map((effectiveRows ?? []).map((r: any) => [r.site_entry_id, r.effective_claimant_id]));
         for (const e of entries ?? []) {
           entryMap[e.id] = {
             id: e.id,
             accepted_by: e.accepted_by,
             claimed_by: e.claimed_by,
+            effective_claimant_id: effectiveMap.get(e.id) ?? null,
             visit_started_by: e.visit_started_by,
             additional_data: e.additional_data ?? null,
             mmp_file_id: e.mmp_file_id,
