@@ -558,8 +558,8 @@ export default function DownPaymentApproval() {
   const canDeletePayment =
     !isFieldPaymentOnly && !isKassalaTier1PaymentSupervisor
     && checkPermission('down_payments', 'delete');
-  const canCorrectPreFund = isFinanceAdmin && checkPermission('down_payments', 'reconcile');
-  const canReversePaidDuplicate = isFinanceAdmin
+  const canCorrectPreFund = (isFinanceAdmin || isSuperAdmin) && checkPermission('down_payments', 'reconcile');
+  const canReversePaidDuplicate = (isFinanceAdmin || isSuperAdmin)
     && canDeletePayment
     && canCorrectPreFund
     && checkPermission('down_payments', 'update')
