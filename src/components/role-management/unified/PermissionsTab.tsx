@@ -104,13 +104,13 @@ function MmpReportButtonsSection() {
   const { savingKey, effectiveAction, explainAction, toggleAction } = useSelectedUserAccess();
 
   return (
-    <div className="border rounded-lg overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40">
-        <Columns className="h-3.5 w-3.5 text-indigo-500" />
-        <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-400">
+    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
+      <div className="flex items-center gap-2 px-3 py-3 bg-indigo-50/80 border-b border-indigo-100">
+        <Columns className="h-4 w-4 text-indigo-600" />
+        <span className="text-xs font-semibold tracking-wide text-indigo-900 flex-1">
           MMP Report Buttons
         </span>
-        <Badge className="ml-auto text-[9px] h-4 px-1.5 bg-indigo-100 text-indigo-700 border-indigo-200 border">
+        <Badge className="text-[10px] h-5 px-1.5 bg-white text-indigo-800 border-indigo-200 border">
           Scoped access
         </Badge>
       </div>
@@ -122,23 +122,23 @@ function MmpReportButtonsSection() {
           const hasOverride = eff === 'granted' || eff === 'blocked';
           return (
             <div key={perm.action} className={cn(
-              'flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg',
+              'flex flex-wrap items-center gap-3 px-3 py-2.5 border-b last:border-b-0',
               eff === 'granted' ? 'bg-emerald-50/50 dark:bg-emerald-900/5' :
-              eff === 'blocked' ? 'bg-red-50/50 dark:bg-red-900/5 opacity-60' :
-              eff === 'role-yes' ? 'bg-blue-50/20' : 'opacity-40'
+              eff === 'blocked' ? 'bg-red-50/50 dark:bg-red-900/5 opacity-80' :
+              eff === 'role-yes' ? 'bg-blue-50/20' : 'opacity-75'
             )}>
-              <StatusIcon eff={eff} small />
-              <Key className="h-3 w-3 text-muted-foreground shrink-0" />
-              <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1">
-                <span className="text-xs font-medium">{perm.label}</span>
-                <span className="basis-full text-[10px] leading-snug text-muted-foreground">{perm.description}</span>
-                <span className="basis-full text-[10px] leading-snug text-muted-foreground/80" title={trace.summary}>
+              <StatusIcon eff={eff} />
+              <Key className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{perm.label}</span>
+                <span className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">{perm.description}</span>
+                <span className="text-[11px] text-slate-500" title={trace.summary}>
                   {trace.source === 'user_override' ? 'Override' : trace.source === 'super_admin' ? 'Super Admin' : 'Role default'}: {trace.summary}
                 </span>
               </div>
               {hasOverride && (
-                <Badge className={cn('text-[9px] h-4 px-1.5 border-0 shrink-0',
-                  eff === 'granted' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                <Badge className={cn('text-[10px] h-5 px-1.5 border-0 shrink-0',
+                  eff === 'granted' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                 )}>
                   {eff === 'granted' ? 'Granted' : 'Blocked'}
                 </Badge>
@@ -146,14 +146,15 @@ function MmpReportButtonsSection() {
               <button
                 disabled={saving}
                 onClick={() => toggleAction('mmp', perm.action)}
-                className={cn('text-[10px] border rounded px-2 py-0.5 shrink-0 font-medium transition-colors disabled:opacity-40 min-w-[72px] text-center',
-                  eff === 'granted' ? 'text-amber-600 border-amber-200 hover:bg-amber-50' :
-                  eff === 'blocked' ? 'text-emerald-600 border-emerald-200 hover:bg-emerald-50' :
-                  eff === 'role-yes' ? 'text-red-600 border-red-200 hover:bg-red-50' :
-                  'text-emerald-600 border-emerald-200 hover:bg-emerald-50'
+                className={cn(
+                  'min-w-[4.5rem] shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40',
+                  eff === 'granted' ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100' :
+                  eff === 'blocked' ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100' :
+                  eff === 'role-yes' ? 'border-red-300 bg-white text-red-700 hover:bg-red-50' :
+                  'border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50'
                 )}
               >
-                {saving ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> :
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> :
                   eff === 'granted' ? 'Remove' :
                   eff === 'blocked' ? 'Restore' :
                   eff === 'role-yes' ? 'Block' : 'Grant'}
@@ -299,20 +300,20 @@ function CsButtonAccessSection({ userId, userRole, isSelectedSuperAdmin }: { use
   const groups = Array.from(new Set(CS_BUTTON_ACTIONS.map(a => a.group)));
 
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2.5 bg-muted/40 hover:bg-muted/60 transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-3 bg-orange-50/80 hover:bg-orange-50 transition-colors border-b border-orange-100"
       >
         {expanded
-          ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
-          : <ChevronRight className="h-3 w-3 text-muted-foreground" />
+          ? <ChevronDown className="h-3.5 w-3.5 text-orange-700" />
+          : <ChevronRight className="h-3.5 w-3.5 text-orange-700" />
         }
-        <Settings2 className="h-3.5 w-3.5 text-orange-500" />
-        <span className="text-[11px] font-bold uppercase tracking-wide text-orange-700 dark:text-orange-400 flex-1 text-left">
+        <Settings2 className="h-4 w-4 text-orange-600" />
+        <span className="text-xs font-semibold tracking-wide text-orange-900 flex-1 text-left">
           Cost Submission — Button Access
         </span>
-        <Badge className="text-[9px] h-4 px-1.5 bg-orange-100 text-orange-700 border-orange-200 border">
+        <Badge className="text-[10px] h-5 px-1.5 bg-white text-orange-800 border-orange-200 border">
           Fine-grained overrides
         </Badge>
       </button>
@@ -546,21 +547,30 @@ export function PermissionsTab({
         {/* ── Action Permissions ── */}
         {visibleSection === 'actions' && (
           <div className="flex flex-col flex-1 overflow-hidden">
-            <div className="px-5 py-2.5 border-b flex items-center gap-2">
-              <div className="relative flex-1 max-w-xs">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-3 sm:flex-row sm:items-center dark:bg-background">
+              <div className="relative min-w-0 flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 <Input value={moduleSearch} onChange={e => setModuleSearch(e.target.value)}
-                  placeholder={actionFilter === 'reports' ? 'Search reports and exports…' : 'Search buttons and actions…'} className="pl-8 h-7 text-xs" />
+                  placeholder={actionFilter === 'reports' ? 'Search reports and exports…' : 'Search buttons and actions…'}
+                  className="h-9 border-slate-200 bg-slate-50/80 pl-9 text-sm" />
               </div>
-              <div className="flex gap-2 text-[10px] text-muted-foreground items-center">
-                <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-400" /> Role default</span>
-                <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Granted</span>
-                <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-red-500" /> Blocked</span>
-                <span className="flex items-center gap-1"><MinusCircle className="h-3 w-3 text-slate-300" /> No access</span>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-slate-600">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" /> Role default
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Granted
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-red-800">
+                  <XCircle className="h-3.5 w-3.5 text-red-500" /> Blocked
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-500">
+                  <MinusCircle className="h-3.5 w-3.5 text-slate-400" /> No access
+                </span>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {/* Pinned: Cost Submission fine-grained button access */}
               {!moduleSearch && actionFilter !== 'reports' && (
                 <CsButtonAccessSection
@@ -584,18 +594,18 @@ export function PermissionsTab({
                 return (
                   <div key={mod.module}>
                     <button onClick={() => toggleModule(mod.module)}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 rounded-lg transition-colors">
-                      {isOpen ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground flex-1 text-left">{mod.module}</span>
+                      className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 rounded-lg transition-colors">
+                      {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-slate-500" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-500" />}
+                      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 flex-1 text-left">{mod.module}</span>
                       {overrideCount > 0 && (
-                        <Badge className="text-[9px] h-4 px-1.5 bg-amber-100 text-amber-700 border-0">{overrideCount} override{overrideCount !== 1 ? 's' : ''}</Badge>
+                        <Badge className="text-[10px] h-5 px-1.5 bg-amber-100 text-amber-800 border-0">{overrideCount} override{overrideCount !== 1 ? 's' : ''}</Badge>
                       )}
                     </button>
 
                     {isOpen && mod.pages.map(pg => (
-                      <div key={pg.page} className="ml-4 mb-2">
-                        <p className="text-[10px] text-muted-foreground px-2 py-1">{pg.page}</p>
-                        <div className="space-y-0.5">
+                      <div key={pg.page} className="ml-2 mb-3 rounded-lg border border-slate-200 bg-slate-50/50 p-2 dark:bg-slate-900/20">
+                        <p className="text-xs font-medium text-slate-600 px-2 py-1.5">{pg.page}</p>
+                        <div className="space-y-1">
                           {pg.actions.map(a => {
                             const eff = effectiveAction(a.resource, a.action as ActionType);
                             const trace = explainAction(a.resource, a.action as ActionType);
@@ -604,25 +614,25 @@ export function PermissionsTab({
                             const hasOverride = eff === 'granted' || eff === 'blocked';
                             return (
                               <div key={`${a.resource}:${a.action}`}
-                                className={cn('flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg',
-                                  eff === 'granted' ? 'bg-emerald-50/50 dark:bg-emerald-900/5' :
-                                  eff === 'blocked' ? 'bg-red-50/50 dark:bg-red-900/5 opacity-60' :
-                                  eff === 'role-yes' ? 'bg-blue-50/20' : 'opacity-40'
+                                className={cn('flex flex-wrap items-center gap-3 rounded-md border bg-white px-3 py-2.5 dark:bg-background',
+                                  eff === 'granted' ? 'border-emerald-200 bg-emerald-50/40' :
+                                  eff === 'blocked' ? 'border-red-200 bg-red-50/30 opacity-80' :
+                                  eff === 'role-yes' ? 'border-blue-100' : 'border-slate-200 opacity-75'
                                 )}>
-                                <StatusIcon eff={eff} small />
-                                <Icon className="h-3 w-3 text-muted-foreground shrink-0" />
-                                <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1">
-                                  <span className="text-xs font-medium">{a.label}</span>
+                                <StatusIcon eff={eff} />
+                                <Icon className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                  <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{a.label}</span>
                                   {a.description && (
-                                    <span className="basis-full text-[10px] leading-snug text-muted-foreground">{a.description}</span>
+                                    <span className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">{a.description}</span>
                                   )}
-                                  <span className="basis-full text-[10px] leading-snug text-muted-foreground/80" title={trace.summary}>
+                                  <span className="text-[11px] text-slate-500" title={trace.summary}>
                                     {trace.source === 'user_override' ? 'Override' : trace.source === 'super_admin' ? 'Super Admin' : 'Role default'}: {trace.summary}
                                   </span>
                                 </div>
                                 {hasOverride && (
-                                  <Badge className={cn('text-[9px] h-4 px-1.5 border-0 shrink-0',
-                                    eff === 'granted' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                                  <Badge className={cn('text-[10px] h-5 px-1.5 border-0 shrink-0',
+                                    eff === 'granted' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                                   )}>
                                     {eff === 'granted' ? 'Granted' : 'Blocked'}
                                   </Badge>
@@ -630,14 +640,15 @@ export function PermissionsTab({
                                 <button
                                   disabled={saving}
                                   onClick={() => toggleAction(a.resource, a.action as ActionType)}
-                                  className={cn('text-[10px] border rounded px-2 py-0.5 shrink-0 font-medium transition-colors disabled:opacity-40 min-w-[72px] text-center',
-                                    eff === 'granted' ? 'text-amber-600 border-amber-200 hover:bg-amber-50' :
-                                    eff === 'blocked' ? 'text-emerald-600 border-emerald-200 hover:bg-emerald-50' :
-                                    eff === 'role-yes' ? 'text-red-600 border-red-200 hover:bg-red-50' :
-                                    'text-emerald-600 border-emerald-200 hover:bg-emerald-50'
+                                  className={cn(
+                                    'min-w-[4.5rem] shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40',
+                                    eff === 'granted' ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100' :
+                                    eff === 'blocked' ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100' :
+                                    eff === 'role-yes' ? 'border-red-300 bg-white text-red-700 hover:bg-red-50' :
+                                    'border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50'
                                   )}
                                 >
-                                  {saving ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> :
+                                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> :
                                     eff === 'granted' ? 'Remove' :
                                     eff === 'blocked' ? 'Restore' :
                                     eff === 'role-yes' ? 'Block' : 'Grant'
