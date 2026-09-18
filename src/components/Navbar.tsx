@@ -27,10 +27,8 @@ const Navbar = () => {
         const { currentUser, logout } = useUser();
         const { viewAs } = useViewAs();
 
-        // Resolve the displayed role label from user_roles (currentUser.roles) first,
-        // falling back to profiles.role only when no user_roles entries exist.
-        // This prevents stale profiles.role (e.g. 'dataCollector') from showing
-        // in the navbar dropdown for users who have a higher role in user_roles.
+        // Primary display role is profiles.role (currentUser.role). Legacy
+        // user_roles leftovers must not override an explicit Make primary change.
         const resolvedRoleLabel = (() => {
           if (!currentUser) return 'My Account';
           const ROLE_LABEL: Record<string, string> = {
@@ -38,6 +36,7 @@ const Navbar = () => {
             fom: 'Field Ops Manager', financialadmin: 'Financial Admin',
             supervisor: 'Supervisor', hubsupervisor: 'Hub Supervisor',
             coordinator: 'Coordinator', datacollector: 'Data Collector',
+            fieldassistant: 'Field Assistant',
             datateam: 'Data Team', employee: 'Employee', hr: 'HR',
             hrmanager: 'HR Manager', countrydirector: 'Country Director',
             projectmanager: 'Project Manager', reviewer: 'Reviewer',
@@ -48,18 +47,9 @@ const Navbar = () => {
             const n = viewAs.role.toLowerCase().replace(/[\s_-]/g, '');
             return ROLE_LABEL[n] || viewAs.role.charAt(0).toUpperCase() + viewAs.role.slice(1);
           }
-          const roleList: string[] = Array.isArray(currentUser.roles) && (currentUser.roles as string[]).length > 0
-            ? (currentUser.roles as string[])
-            : currentUser.role ? [currentUser.role] : [];
-          // Highest-privilege roles win
-          for (const r of roleList) {
-            const n = String(r).toLowerCase().replace(/[\s_-]/g, '');
-            if (n === 'superadmin') return 'Super Admin';
-            if (n === 'admin') return 'Admin';
-          }
-          if (roleList.length > 0) {
-            const n = String(roleList[0]).toLowerCase().replace(/[\s_-]/g, '');
-            return ROLE_LABEL[n] || String(roleList[0]).charAt(0).toUpperCase() + String(roleList[0]).slice(1);
+          if (currentUser.role) {
+            const n = String(currentUser.role).toLowerCase().replace(/[\s_-]/g, '');
+            return ROLE_LABEL[n] || String(currentUser.role).charAt(0).toUpperCase() + String(currentUser.role).slice(1);
           }
           return 'My Account';
         })();
