@@ -7,4 +7,4 @@ Replacement claimants must be active Data Collectors or Coordinators assigned to
 
 **Why:** Browser-only filtering can be bypassed, while the legacy financial RPC accepted only primary collector roles and would reject Coordinators after the UI listed them.
 
-**How to apply:** Resolve the site’s displayed state through the canonical states registry, list candidates through a Super Admin-only RPC, and call a private financial core through an eligibility wrapper. Keep legacy and internal financial RPCs revoked from browser roles.
+**How to apply:** Resolve the site’s displayed state through `hub_states.state_id/state_name` (there is no `public.states` table), list candidates through a Super Admin-only RPC, and call a private financial core through an eligibility wrapper. Keep legacy and internal financial RPCs revoked from browser roles.

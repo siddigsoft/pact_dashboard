@@ -2,6 +2,19 @@
 -- canonical state. This migration layers onto the existing reassignment RPC
 -- without changing its financial settlement behavior.
 
+CREATE OR REPLACE FUNCTION public.claimant_reassignment_state_key(p_value text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = ''
+AS $$
+  SELECT regexp_replace(
+    regexp_replace(lower(btrim(coalesce(p_value, ''))), '\s+state$', ''),
+    '[^a-z0-9]', '', 'g'
+  );
+$$;
+
 CREATE OR REPLACE FUNCTION public.claimant_reassignment_role_allowed(
   p_profile_id uuid
 )
@@ -51,18 +64,19 @@ AS $$
   SELECT EXISTS (
     SELECT 1
     FROM public.mmp_site_entries site
-    JOIN public.states state
-      ON (
-        state.id = (
-          CASE WHEN site.state ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-               THEN site.state::uuid ELSE NULL END
-        )
-        OR regexp_replace(lower(coalesce(state.name, '')), '[^a-z0-9]', '', 'g')
-           = regexp_replace(lower(coalesce(site.state, '')), '[^a-z0-9]', '', 'g')
-      )
     JOIN public.profiles profile ON profile.id = p_profile_id
+    JOIN public.hub_states state
+      ON public.claimant_reassignment_state_key(profile.state_id::text)
+         IN (
+           public.claimant_reassignment_state_key(state.state_id::text),
+           public.claimant_reassignment_state_key(state.state_name)
+         )
     WHERE site.id = p_site_entry_id
-      AND profile.state_id = state.id
+      AND public.claimant_reassignment_state_key(site.state)
+          IN (
+            public.claimant_reassignment_state_key(state.state_id::text),
+            public.claimant_reassignment_state_key(state.state_name)
+          )
   );
 $$;
 
@@ -125,14 +139,25 @@ BEGIN
            ),
            'Eligible field role'
          ) AS role,
-         state.name AS state
+         coalesce(
+           (
+             SELECT min(state.state_name)
+             FROM public.hub_states state
+             WHERE public.claimant_reassignment_state_key(p.state_id::text)
+                   IN (
+                     public.claimant_reassignment_state_key(state.state_id::text),
+                     public.claimant_reassignment_state_key(state.state_name)
+                   )
+           ),
+           p.state_id::text
+         ) AS state
   FROM public.profiles p
-  JOIN public.states state ON state.id = p.state_id
   WHERE public.claimant_reassignment_candidate_allowed(p_site_entry_id, p.id)
   ORDER BY lower(coalesce(p.full_name, p.username, p.email));
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.claimant_reassignment_state_key(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.claimant_reassignment_role_allowed(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.claimant_reassignment_state_matches(uuid, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.claimant_reassignment_candidate_allowed(uuid, uuid) FROM PUBLIC, anon, authenticated;
