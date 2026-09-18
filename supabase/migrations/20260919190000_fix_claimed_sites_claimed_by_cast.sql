@@ -1,59 +1,4 @@
--- Harden the claimed-site feed.  Keep status normalization in one place so
--- this feed and its counts cannot drift from the UI's normalizeStatus rules.
-DROP FUNCTION IF EXISTS public.superadmin_claimed_sites_query(text,text,text,text,text,uuid,uuid,boolean,integer,integer);
-DROP FUNCTION IF EXISTS public.superadmin_claimed_sites_filter_options(text,text,text,text,uuid);
-CREATE OR REPLACE FUNCTION public.superadmin_claimed_status_key(v text)
-RETURNS text LANGUAGE sql IMMUTABLE AS $$
-  SELECT CASE lower(regexp_replace(coalesce(v,''), '\s+', '_', 'g'))
-    WHEN 'inprogress' THEN 'ongoing' WHEN 'in_progress' THEN 'ongoing'
-    WHEN 'ongoing' THEN 'ongoing' WHEN 'approved_and_costed' THEN 'costed'
-    WHEN 'declined' THEN 'rejected'
-    ELSE nullif(lower(regexp_replace(coalesce(v,''), '\s+', '_', 'g')),'') END
-$$;
-CREATE OR REPLACE FUNCTION public.superadmin_is_claimed_status(v text)
-RETURNS boolean LANGUAGE sql IMMUTABLE AS $$
-  SELECT public.superadmin_claimed_status_key(v) IN
-    ('accepted','assigned','ongoing','completed','submitted','wfp_confirmed',
-     'not_covered','verified','rejected','costed','returned_to_fom',
-     'recalled','forwarded_to_coordinator')
-$$;
-
--- Escapes user text before LIKE so %, _, and backslash remain literals.
--- Both the feed and every option dimension use this same predicate.
--- A literal '%', '_' or '\' therefore matches those characters; claimant UUID
--- searches use the same path, and changing claimant_key only removes that
--- dimension from the claimant option CTE (not from the other option lists).
-CREATE OR REPLACE FUNCTION public.superadmin_claimed_search_match(haystack text, needle text)
-RETURNS boolean LANGUAGE sql IMMUTABLE AS $$
-  SELECT nullif(btrim(needle),'') IS NULL OR lower(coalesce(haystack,'')) LIKE
-    '%' || replace(replace(replace(lower(btrim(needle)),'\','\\'),'%','\%'),'_','\_') || '%' ESCAPE '\'
-$$;
-
-CREATE INDEX IF NOT EXISTS mmp_site_entries_claimed_created_idx
-  ON public.mmp_site_entries (created_at DESC, id DESC)
-  WHERE public.superadmin_is_claimed_status(status);
-CREATE INDEX IF NOT EXISTS mmp_site_entries_claimed_activity_idx
-  ON public.mmp_site_entries ((coalesce(main_activity, activity_at_site)))
-  WHERE public.superadmin_is_claimed_status(status);
-
-CREATE OR REPLACE FUNCTION public.superadmin_can_access_data_management()
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
-  SELECT auth.uid() IS NOT NULL
-    AND NOT EXISTS (SELECT 1 FROM page_access_overrides o
-      WHERE o.page_slug='data-management' AND o.user_id=auth.uid() AND o.is_blocked=true
-        AND (o.expires_at IS NULL OR o.expires_at > now()))
-    AND (
-      EXISTS (SELECT 1 FROM page_access_overrides o WHERE o.page_slug='data-management'
-        AND o.user_id=auth.uid() AND o.is_blocked=false
-        AND (o.expires_at IS NULL OR o.expires_at > now()))
-      OR EXISTS (SELECT 1 FROM profiles u WHERE u.id=auth.uid()
-        AND lower(coalesce(u.role,'')) IN ('superadmin','super_admin','admin','ict'))
-      OR EXISTS (SELECT 1 FROM page_role_configs c JOIN profiles u ON u.id=auth.uid()
-        WHERE c.page_slug='data-management'
-          AND lower(coalesce(u.role,''))=ANY(SELECT lower(x) FROM unnest(c.roles) x))
-    )
-$$;
-
+-- claimed_by is uuid; nullif(claimed_by, '') casts '' to uuid and aborts the feed.
 CREATE OR REPLACE FUNCTION public.superadmin_claimed_sites_query(
   p_global_search text DEFAULT NULL, p_site_search text DEFAULT NULL,
   p_status text DEFAULT NULL, p_state text DEFAULT NULL,
@@ -168,10 +113,3 @@ BEGIN
     'claimants',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',claimant_key,'name',claimant_name) ORDER BY claimant_name),'[]') FROM claimants)
   ) FROM (SELECT 1) one);
 END $$;
-
-REVOKE ALL ON FUNCTION public.superadmin_claimed_sites_query(text,text,text,text,text,text,uuid,text,boolean,integer,integer) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.superadmin_claimed_sites_filter_options(text,text,text,text,text,text,uuid,text,boolean) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.superadmin_claimed_sites_query(text,text,text,text,text,text,uuid,text,boolean,integer,integer) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.superadmin_claimed_sites_filter_options(text,text,text,text,text,text,uuid,text,boolean) TO authenticated;
-REVOKE ALL ON FUNCTION public.superadmin_can_access_data_management() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.superadmin_can_access_data_management() TO authenticated;
