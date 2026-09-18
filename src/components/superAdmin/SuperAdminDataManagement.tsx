@@ -108,6 +108,13 @@ interface ClaimedSiteData {
   mmp_name?: string;
 }
 
+interface ClaimantReplacementCandidate {
+  id: string;
+  display_name: string;
+  role: string;
+  state: string;
+}
+
 interface DispatchedSiteData {
   id: string;
   site_name: string;
@@ -551,7 +558,12 @@ export function SuperAdminDataManagement() {
   const [reassignClaimantTarget, setReassignClaimantTarget] = useState('');
   const [reassignClaimantReason, setReassignClaimantReason] = useState('');
   const [reassignClaimantIdempotencyKey, setReassignClaimantIdempotencyKey] = useState('');
+  const [reassignClaimantCandidates, setReassignClaimantCandidates] = useState<ClaimantReplacementCandidate[]>([]);
+  const [reassignClaimantCandidatesLoading, setReassignClaimantCandidatesLoading] = useState(false);
+  const [reassignClaimantCandidatesError, setReassignClaimantCandidatesError] = useState<string | null>(null);
+  const [reassignClaimantSearch, setReassignClaimantSearch] = useState('');
   const [reassignClaimantProcessing, setReassignClaimantProcessing] = useState(false);
+  const reassignClaimantLoadGenerationRef = useRef(0);
   const [showReturnToApprovedDialog, setShowReturnToApprovedDialog] = useState(false);
   const [reclaimAdvanceInfo, setReclaimAdvanceInfo] = useState<{ pending: any[]; disbursed: any[] } | null>(null);
   const [reclaimAdvanceLoading, setReclaimAdvanceLoading] = useState(false);
@@ -1130,19 +1142,39 @@ export function SuperAdminDataManagement() {
     }
   };
 
-  const openReassignClaimantDialog = (site: ClaimedSiteData) => {
+  const openReassignClaimantDialog = async (site: ClaimedSiteData) => {
+    const generation = ++reassignClaimantLoadGenerationRef.current;
     setReassignClaimantSite(site);
     setReassignClaimantTarget('');
     setReassignClaimantReason('');
     setReassignClaimantIdempotencyKey(crypto.randomUUID());
+    setReassignClaimantSearch('');
+    setReassignClaimantCandidates([]);
+    setReassignClaimantCandidatesError(null);
     setShowReassignClaimantDialog(true);
+    setReassignClaimantCandidatesLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('list_claimant_reassignment_candidates', {
+        p_site_entry_id: site.id,
+      });
+      if (error) throw error;
+      if (generation !== reassignClaimantLoadGenerationRef.current) return;
+      setReassignClaimantCandidates((data || []) as ClaimantReplacementCandidate[]);
+    } catch (error: any) {
+      if (generation !== reassignClaimantLoadGenerationRef.current) return;
+      setReassignClaimantCandidatesError(error?.message || 'Unable to load same-state claimant candidates.');
+    } finally {
+      if (generation === reassignClaimantLoadGenerationRef.current) {
+        setReassignClaimantCandidatesLoading(false);
+      }
+    }
   };
 
   const handleReassignClaimant = async () => {
     if (!reassignClaimantSite || !reassignClaimantTarget || reassignClaimantReason.trim().length < 5) return;
     setReassignClaimantProcessing(true);
     try {
-      const { error } = await supabase.rpc('reassign_site_claimant_rpc', {
+      const { error } = await supabase.rpc('reassign_site_claimant_with_eligibility_rpc', {
         p_site_entry_id: reassignClaimantSite.id,
         p_new_claimant_id: reassignClaimantTarget,
         p_reason: reassignClaimantReason.trim(),
@@ -2908,18 +2940,6 @@ export function SuperAdminDataManagement() {
                 </div>
               </div>
               
-              {/* Search by Site Name */}
-              <div className="mt-3 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by site name or code..."
-                  value={claimedSiteSearch}
-                  onChange={(e) => setClaimedSiteSearch(e.target.value)}
-                  className="pl-10"
-                  data-testid="input-claimed-site-search"
-                />
-              </div>
-
               {/* ── Unified Filter Claimed Sites panel ── */}
               {(() => {
                 const activeCount = [
@@ -2929,6 +2949,7 @@ export function SuperAdminDataManagement() {
                   localityFilter !== 'all',
                   activityFilter !== 'all',
                   claimedByFilter !== 'all',
+                  debouncedClaimedSiteSearch.trim().length > 0,
                   claimedNoCostFilter,
                 ].filter(Boolean).length;
                 const clearAll = () => {
@@ -2938,6 +2959,7 @@ export function SuperAdminDataManagement() {
                   setLocalityFilter('all');
                   setActivityFilter('all');
                   setClaimedByFilter('all');
+                  setClaimedSiteSearch('');
                   setClaimedNoCostFilter(false);
                 };
                 return (
@@ -2969,6 +2991,19 @@ export function SuperAdminDataManagement() {
 
                     {/* Filter grid: 2 cols mobile → 3 cols md */}
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      <div className="space-y-1 col-span-2 md:col-span-3">
+                        <Label className="text-[11px] font-medium text-blue-700 dark:text-blue-300">Site Name / Code</Label>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            placeholder="Filter by site name or code..."
+                            value={claimedSiteSearch}
+                            onChange={(e) => setClaimedSiteSearch(e.target.value)}
+                            className="pl-10 h-9 bg-background"
+                            data-testid="input-claimed-site-search"
+                          />
+                        </div>
+                      </div>
                       {/* MMP */}
                       <div className="space-y-1">
                         <Label className="text-[11px] font-medium text-blue-700 dark:text-blue-300">MMP</Label>
@@ -3784,7 +3819,10 @@ export function SuperAdminDataManagement() {
       </Tabs>
 
       <Dialog open={showReassignClaimantDialog} onOpenChange={(open) => {
-        if (!reassignClaimantProcessing) setShowReassignClaimantDialog(open);
+        if (!reassignClaimantProcessing) {
+          if (!open) reassignClaimantLoadGenerationRef.current += 1;
+          setShowReassignClaimantDialog(open);
+        }
       }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -3801,19 +3839,46 @@ export function SuperAdminDataManagement() {
               </div>
               <div className="space-y-2">
                 <Label>New claimant <span className="text-destructive">*</span></Label>
-                <Select value={reassignClaimantTarget} onValueChange={setReassignClaimantTarget}>
-                  <SelectTrigger><SelectValue placeholder="Select an active collector" /></SelectTrigger>
-                  <SelectContent>
-                    {users
-                      .filter((u: any) => u.id !== (reassignClaimantSite.effective_claimant_id
-                        || reassignClaimantSite.accepted_by || reassignClaimantSite.claimed_by)
-                        && u.is_active !== false
-                        && ['collector', 'enumerator', 'field enumerator', 'field_enumerator', 'datacollector', 'data collector', 'data_collector'].includes(String(u.role || '').toLowerCase()))
-                      .map((u: any) => (
-                        <SelectItem key={u.id} value={u.id}>{u.name || u.email || u.id}</SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                {reassignClaimantCandidatesLoading ? (
+                  <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-muted-foreground">
+                    <RefreshCw className="h-4 w-4 animate-spin" /> Loading same-state Data Collectors and Coordinators…
+                  </div>
+                ) : reassignClaimantCandidatesError ? (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    {reassignClaimantCandidatesError}
+                  </div>
+                ) : (
+                  <>
+                    <Input
+                      value={reassignClaimantSearch}
+                      onChange={(e) => setReassignClaimantSearch(e.target.value)}
+                      placeholder="Search candidate name, email, or role..."
+                      disabled={reassignClaimantProcessing}
+                      data-testid="input-reassign-claimant-search"
+                    />
+                    <Select value={reassignClaimantTarget} onValueChange={setReassignClaimantTarget}>
+                      <SelectTrigger><SelectValue placeholder="Select a same-state claimant" /></SelectTrigger>
+                      <SelectContent>
+                        {reassignClaimantCandidates
+                          .filter((candidate) => {
+                            const query = reassignClaimantSearch.trim().toLowerCase();
+                            return !query
+                              || `${candidate.display_name} ${candidate.role} ${candidate.state}`.toLowerCase().includes(query);
+                          })
+                          .map((candidate) => (
+                            <SelectItem key={candidate.id} value={candidate.id}>
+                              {candidate.display_name} · {candidate.role} · {candidate.state}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {reassignClaimantCandidates.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No active Data Collectors or Coordinators are assigned to this site’s state.
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="reassign-claimant-reason">Reason <span className="text-destructive">*</span></Label>
