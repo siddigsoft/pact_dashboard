@@ -1371,7 +1371,7 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
           </SelectContent>
         </Select>
         
-        <ReportExportGate resource="mmp">
+        <ReportExportGate resource="mmp" action="hub_report">
           <Button
             variant="outline"
             onClick={exportStatusReport}

@@ -11,8 +11,7 @@ import {
 import { format, differenceInDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
-import { getDownPaymentBalance, isDownPaymentSettledStatus } from '@/utils/downPaymentBalance';
-import { fetchPreFundSourcePaymentLinks } from '@/utils/preFundLinkage';
+import { useAuthorization } from '@/hooks/use-authorization';
 import {
   exportMmpStateReport,
   MmpReportData,
@@ -236,6 +235,8 @@ export default function MmpStateReport({
   open, onClose, stateName, rawEntries, coordinatorNames, advanceMap, mmpId, mmpName,
 }: MmpStateReportProps) {
   const { currentUser } = useUser();
+  const { checkPermission, accessManifestLoading } = useAuthorization();
+  const canUseStateReport = !accessManifestLoading && checkPermission('mmp', 'state_report');
   const [loading, setLoading]               = useState(false);
   const [auditLogs, setAuditLogs]           = useState<any[]>([]);
   const [advancesDetail, setAdvancesDetail] = useState<any[]>([]);
@@ -253,12 +254,103 @@ export default function MmpStateReport({
   const [expandedCollector, setExpandedCollector] = useState<string | null>(null);
   const [expandedActivityType, setExpandedActivityType] = useState<string | null>(null);
   const [expandedLocalities,   setExpandedLocalities]   = useState<Set<string>>(new Set());
+  const [authorizedEntries, setAuthorizedEntries] = useState<any[] | null>(null);
+  const [authorizedPayload, setAuthorizedPayload] = useState<any | null>(null);
+  const [authorizedContextKey, setAuthorizedContextKey] = useState('');
+  const [reportAccessLoading, setReportAccessLoading] = useState(false);
+  const [reportAccessError, setReportAccessError] = useState('');
+  const [supplementaryLoadError, setSupplementaryLoadError] = useState('');
+
+  // The coordinator summary is a convenience snapshot, not an authorization
+  // boundary. Re-fetch the state-scoped payload through the authoritative RPC
+  // before rendering or exporting any report data.
+  useEffect(() => {
+    setLoading(false);
+    setAuditLogs([]);
+    setAdvancesDetail([]);
+    setUserMap({});
+    setSiteCollectorMap({});
+    setSiteCollectorNameMap({});
+    setActorNameMap({});
+    setCostSubmissions([]);
+    setAdvancesByFile([]);
+    setCycleStatus('active');
+    setExporting(false);
+    setActiveTab('summary');
+    setExpandedCollector(null);
+    setExpandedActivityType(null);
+    setExpandedLocalities(new Set());
+    setAuthorizedEntries(null);
+    setAuthorizedPayload(null);
+    setAuthorizedContextKey('');
+    setReportAccessError('');
+    setSupplementaryLoadError('');
+    if (!open || !mmpId) {
+      setReportAccessLoading(false);
+      return;
+    }
+    if (accessManifestLoading) {
+      setReportAccessLoading(true);
+      return;
+    }
+    if (!canUseStateReport) {
+      setReportAccessLoading(false);
+      setReportAccessError('You do not have permission to view or export the State MMP Report.');
+      return;
+    }
+    let active = true;
+    setReportAccessLoading(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_mmp_report_payload' as any, {
+          p_mmp_id: mmpId,
+          p_report_kind: 'state_report',
+        } as any);
+        if (error) throw error;
+        if (!data || !Array.isArray((data as any).entries) ||
+            !Array.isArray((data as any).down_payments) ||
+            !Array.isArray((data as any).cost_submissions)) {
+          throw new Error('The authorized State MMP Report payload is incomplete.');
+        }
+        if (active) {
+          setAuthorizedPayload(data);
+          setAuthorizedEntries((data as any)?.entries ?? []);
+          setAuthorizedContextKey(`${mmpId}:${stateName}`);
+        }
+      } catch (error: any) {
+        if (active) {
+          setAuthorizedEntries([]);
+          setAuthorizedPayload(null);
+          setAuthorizedContextKey('');
+          setReportAccessError(error?.code === '42501'
+            ? 'You do not have permission to view or export the State MMP Report.'
+            : error?.message || 'The State MMP Report could not be loaded.');
+        }
+      } finally {
+        if (active) setReportAccessLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [open, mmpId, stateName, accessManifestLoading, canUseStateReport]);
+
+  const reportEntries = authorizedEntries ?? [];
+  const canExportAuthorizedReport = (
+    !accessManifestLoading &&
+    !reportAccessLoading &&
+    !reportAccessError &&
+    !supplementaryLoadError &&
+    canUseStateReport &&
+    !!authorizedPayload &&
+    authorizedContextKey === `${mmpId}:${stateName}` &&
+    !loading
+  );
 
   // ── Fetch supplementary data when modal opens ──────────────────────────────
   useEffect(() => {
-    if (!open || rawEntries.length === 0) return;
-    const siteIds = rawEntries.map((e: any) => e.id).filter(Boolean);
+    if (!open || reportAccessLoading || reportEntries.length === 0) return;
+    const siteIds = reportEntries.map((e: any) => e.id).filter(Boolean);
     if (siteIds.length === 0) return;
+    let active = true;
 
     // Helper: paginate a query builder past the server's 1000-row cap
     const fetchAllPages = async (builder: any): Promise<any[]> => {
@@ -267,7 +359,7 @@ export default function MmpStateReport({
       let from = 0;
       while (true) {
         const { data, error } = await builder.range(from, from + PAGE - 1);
-        if (error) { console.error('[MmpStateReport] page error:', error); break; }
+        if (error) throw error;
         if (data && data.length > 0) rows.push(...data);
         if (!data || data.length < PAGE) break;
         from += PAGE;
@@ -288,48 +380,10 @@ export default function MmpStateReport({
       return results.flat();
     };
 
-    // Fetch down-payment advances: try the SECURITY DEFINER RPC first (bypasses RLS),
-    // fall back to a direct paginated query, then fall back to the advanceMap prop.
-    const fetchAdvances = async (ids: string[]): Promise<any[]> => {
-      // 1. RPC — bypasses RLS, preferred path
-      const { data: rpcData, error: rpcErr } = await (supabase as any).rpc(
-        'get_advances_by_entry_ids',
-        { entry_ids: ids },
-      );
-      if (!rpcErr && rpcData && (rpcData as any[]).length > 0) return rpcData as any[];
-
-      // 2. Direct paginated query (subject to RLS — works when user has read access)
-      console.warn('[MmpStateReport] RPC get_advances_by_entry_ids unavailable, falling back:', rpcErr?.message);
-      const direct = await inChunks(
-        'down_payment_requests',
-        'id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,remaining_amount,requested_by,requested_at,hub_name,metadata',
-        'mmp_site_entry_id',
-        ids,
-      );
-      if (direct.length > 0) return direct;
-
-      // 3. Derive from the advanceMap prop already fetched by the parent
-      return Object.entries(advanceMap)
-        .filter(([entryId]) => ids.includes(entryId))
-        .map(([entryId, info]) => ({
-          id: info.id,
-          mmp_site_entry_id: entryId,
-          status: info.status,
-          requested_amount: info.requestedAmount,
-          approved_amount: info.approvedAmount,
-          total_paid_amount: info.totalPaid,
-          remaining_amount: Math.max(info.approvedAmount - info.totalPaid, 0),
-          requested_by: null,
-          requested_at: null,
-          hub_name: null,
-          metadata: {},
-        }));
-    };
-
     const run = async () => {
       setLoading(true);
       try {
-        const [logs, adv, entries, cycleRes, costSubsRes, advFileRes] = await Promise.all([
+        const [logs, entries, cycleRes] = await Promise.all([
           // Audit logs — paginate past the 1000-row server cap
           inChunks(
             'audit_logs',
@@ -338,8 +392,6 @@ export default function MmpStateReport({
             siteIds,
             q => q.eq('module', 'mmp').order('timestamp', { ascending: true })
           ),
-          // Down-payment advances (RPC → direct → advanceMap prop fallback)
-          fetchAdvances(siteIds),
           // Extra collector fields not in the context snapshot
           inChunks(
             'mmp_site_entries',
@@ -351,69 +403,31 @@ export default function MmpStateReport({
           mmpId
             ? supabase.from('mmp_files').select('cycle_status').eq('id', mmpId).single()
             : Promise.resolve({ data: null, error: null }),
-          // Cost submissions for this MMP
-          mmpId
-            ? supabase
-                .from('operational_cost_submissions')
-                .select('id,status,tier1_status,tier2_status,amount_cents,expense_category,description,created_at,request_title,submitted_by,hub_name')
-                .eq('mmp_file_id', mmpId)
-            : Promise.resolve({ data: [], error: null }),
-          // Down payments by mmp_file_id (more reliable than per-entry RLS)
-          mmpId
-            ? supabase
-                .from('down_payment_requests')
-                .select('id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,remaining_amount,hub_name,site_name,payment_type,created_at,metadata')
-                .eq('mmp_file_id', mmpId)
-            : Promise.resolve({ data: [], error: null }),
         ]);
+        if (!active) return;
         setAuditLogs(logs);
-        // Prefer file-level advance fetch (complete); fall back to entry-level fetch.
-        // Rebuild every financial amount from the same immutable Pre-Fund evidence
-        // used by the Down-Payment Tracker before any report aggregation occurs.
-        const advFile: any[] = (advFileRes as any).data || [];
-        const selectedAdvances = advFile.length > 0 ? advFile : adv;
-        const paymentLinks = await fetchPreFundSourcePaymentLinks(
-          'down_payment_requests',
-          selectedAdvances.map((row: any) => row.id).filter(Boolean),
-        );
+        // Financial rows must come exclusively from the authorized report RPC.
+        const selectedAdvances: any[] = authorizedPayload?.down_payments ?? [];
+        const authorizedCosts: any[] = authorizedPayload?.cost_submissions ?? [];
         const canonicalHubByEntry = new Map<string, string>(
-          rawEntries
+          reportEntries
             .map((entry: any) => [
               entry.id,
               cleanName(entry.hub_office || entry.hub_name || entry.hubName || ''),
             ] as const)
             .filter((entry): entry is readonly [string, string] => Boolean(entry[0] && entry[1])),
         );
-        const linksByRequest = new Map<string, typeof paymentLinks>();
-        paymentLinks.forEach(link => {
-          const rows = linksByRequest.get(link.sourceId) ?? [];
-          rows.push(link);
-          linksByRequest.set(link.sourceId, rows);
-        });
         const canonicalAdvances = selectedAdvances.map((row: any) => {
           const approvedAmount = Number(row.approved_amount);
-          const balance = getDownPaymentBalance({
-            status: row.status,
-            requestedAmount: Number(row.requested_amount) || 0,
-            approvedAmount: approvedAmount > 0 ? approvedAmount : undefined,
-            totalPaidAmount: Number(row.total_paid_amount) || 0,
-          }, linksByRequest.get(row.id) ?? []);
           return {
             ...row,
             hub_name: canonicalHubByEntry.get(row.mmp_site_entry_id) || row.hub_name,
-            status: isDownPaymentSettledStatus(row.status) && balance.remaining > 0
-              ? 'partially_paid'
-              : row.status,
-            approved_amount: balance.approved,
-            total_paid_amount: balance.paid,
-            remaining_amount: balance.remaining,
-            payment_evidence_source: balance.paymentBasis,
-            reconciliation_required: balance.reconciliationRequired,
+            approved_amount: approvedAmount,
           };
         });
-        setAdvancesByFile(advFile);
+        setAdvancesByFile(selectedAdvances);
         setAdvancesDetail(canonicalAdvances);
-        setCostSubmissions((costSubsRes as any).data || []);
+        setCostSubmissions(authorizedCosts);
 
         // Build siteId → collectorId map from accepted_by / claimed_by
         const isUuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -457,7 +471,7 @@ export default function MmpStateReport({
 
         // Collect all unique user IDs for name resolution
         const idSet = new Set<string>();
-        rawEntries.forEach((e: any) => {
+        reportEntries.forEach((e: any) => {
           const ad = e.additional_data || e.additionalData || {};
           [
             e.dispatched_by,   e.dispatchedBy,
@@ -481,7 +495,9 @@ export default function MmpStateReport({
           });
         });
         logs.forEach((l: any) => { if (l.actor_id) idSet.add(l.actor_id); });
-        adv.forEach((a: any)  => { if (a.requested_by) idSet.add(a.requested_by); });
+        (authorizedPayload?.down_payments ?? []).forEach((a: any) => {
+          if (a.requested_by) idSet.add(a.requested_by);
+        });
 
         // Build actor_id → actor_name map from audit logs.
         // This resolves names for users whose UUIDs are in accepted_by but who
@@ -501,15 +517,23 @@ export default function MmpStateReport({
           (profiles || []).forEach((p: any) => {
             map[p.id] = p.full_name || p.email || p.id.substring(0, 8);
           });
+          if (!active) return;
           setUserMap(map);
         }
+      } catch (error: any) {
+        if (!active) return;
+        setSupplementaryLoadError(error?.message || 'Authorized report details could not be loaded.');
+        setAuditLogs([]);
+        setAdvancesDetail([]);
+        setCostSubmissions([]);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
     run();
+    return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, rawEntries]);
+  }, [open, reportEntries, reportAccessLoading, authorizedPayload]);
 
   // ── Name resolution ────────────────────────────────────────────────────────
   const resolveName = (id: any): string => {
@@ -538,11 +562,11 @@ export default function MmpStateReport({
   // ── Derived: sites ─────────────────────────────────────────────────────────
   const sites = useMemo<ReportSiteRow[]>(() => {
     const isUuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return rawEntries.map((e: any) => {
+    return reportEntries.map((e: any) => {
       const ad     = e.additional_data || e.additionalData || {};
       const status = (e.status || '').toLowerCase().trim();
       const cat    = statusCategory(status);
-      const adv    = canonicalAdvanceMap[e.id] || advanceMap[e.id];
+      const adv    = canonicalAdvanceMap[e.id];
 
       const coordId = ad.assigned_to || e.forwarded_to_user_id || e.forwardedToUserId || '';
 
@@ -649,7 +673,7 @@ export default function MmpStateReport({
       };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawEntries, coordinatorNames, userMap, advanceMap, canonicalAdvanceMap, siteCollectorMap, siteCollectorNameMap, actorNameMap]);
+  }, [reportEntries, coordinatorNames, userMap, advanceMap, canonicalAdvanceMap, siteCollectorMap, siteCollectorNameMap, actorNameMap]);
 
   // ── Derived: coordinators ──────────────────────────────────────────────────
   const coordinatorRows = useMemo<ReportCoordinatorRow[]>(() => {
@@ -814,7 +838,7 @@ export default function MmpStateReport({
     const events: { milestone: string; dateTime: string }[] = [];
     // rawEntries may be snake_case (raw DB) or camelCase (via mapSiteEntry) — check both
     const allTs = (snake: string, camel: string) =>
-      rawEntries.map((e: any) => e[snake] || e[camel]).filter(Boolean).sort();
+    reportEntries.map((e: any) => e[snake] || e[camel]).filter(Boolean).sort();
     const first = (arr: string[]) => arr[0]              ? fmt(arr[0])              : '—';
     const last  = (arr: string[]) => arr[arr.length - 1] ? fmt(arr[arr.length - 1]) : '—';
     const dispatched = allTs('dispatched_at',    'dispatchedAt');
@@ -834,10 +858,14 @@ export default function MmpStateReport({
     }
     return events;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawEntries]);
+  }, [reportEntries]);
 
   // ── Export ─────────────────────────────────────────────────────────────────
   const handleExport = async () => {
+    if (!canExportAuthorizedReport) {
+      setReportAccessError('The authorized State MMP Report is still loading or is no longer available.');
+      return;
+    }
     setExporting(true);
     try {
       const reportData: MmpReportData = {
@@ -914,10 +942,10 @@ export default function MmpStateReport({
                   <Unlock className="h-3 w-3" /> Cycle Open
                 </Badge>
               )}
-              <ReportExportGate resource="mmp">
+              <ReportExportGate resource="mmp" action="state_report">
                 <Button
                   onClick={handleExport}
-                  disabled={loading || exporting}
+                  disabled={!canExportAuthorizedReport || exporting}
                   size="sm"
                   variant="outline"
                   className="gap-1.5 text-xs whitespace-nowrap"
@@ -941,6 +969,7 @@ export default function MmpStateReport({
           </div>
         </div>
 
+        {canExportAuthorizedReport && (<>
         {/* ── Quick-stat bar ── */}
         <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)', padding: '6px 20px', fontSize: 11, display: 'flex', flexWrap: 'wrap', gap: '4px 16px', backgroundColor: 'var(--muted)/0.3' }} className="bg-muted/30">
           {[
@@ -983,10 +1012,22 @@ export default function MmpStateReport({
             </button>
           ))}
         </div>
+        </>)}
 
         {/* ── Scrollable tab content ── */}
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-        {rawEntries.length === 0 ? (
+        {reportAccessError || supplementaryLoadError ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center text-muted-foreground py-20 px-6">
+            <ShieldAlert className="h-8 w-8 text-red-500" />
+            <p className="text-sm text-red-600 dark:text-red-400">{reportAccessError || supplementaryLoadError}</p>
+          </div>
+        ) : reportAccessLoading || loading || !canUseStateReport || !authorizedPayload ||
+          authorizedContextKey !== `${mmpId}:${stateName}` ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground py-20">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <p className="text-sm">{reportAccessLoading ? 'Checking State MMP Report access…' : 'Loading authorized report data…'}</p>
+          </div>
+        ) : reportEntries.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground py-20">
             <Loader2 className="h-8 w-8 animate-spin" />
             <p className="text-sm">Loading site data… please wait a moment then reopen the report.</p>

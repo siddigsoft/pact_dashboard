@@ -39,7 +39,7 @@ const REPORT_ROUTE_ALIASES: Array<{
   action?: ActionType;
   query?: RegExp;
 }> = [
-  { pattern: /^\/mmp\/[^/]+\/full-report\/?$/, registryRoute: '/mmp', action: 'export' },
+  { pattern: /^\/mmp\/[^/]+\/full-report\/?$/, registryRoute: '/mmp', action: 'full_report' },
   { pattern: /^\/accounting\/reports\/?$/, registryRoute: '/accounting', action: 'read' },
   { pattern: /^\/accounting\/donor-reports\/?$/, registryRoute: '/accounting', action: 'read' },
   { pattern: /^\/pre-funding\/report\/?$/, registryRoute: '/pre-funding', action: 'read' },
@@ -85,8 +85,8 @@ function registryPermission(route: string, action?: ActionType): RoutePermission
       .find(candidate => pathOnly(candidate.route) === pathOnly(route));
   if (!page) return null;
 
-  // Opening a report is a read operation.  MMP deliberately uses export:
-  // its registry action covers both opening and downloading its reports.
+  // Opening a report uses its dedicated report action, which also protects
+  // the report's download controls.
   const selected = action
     ? page.actions.find(candidate => candidate.action === action)
     : page.actions.find(candidate => candidate.action === 'read') ?? page.actions[0];

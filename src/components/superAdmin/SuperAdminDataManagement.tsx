@@ -411,6 +411,7 @@ export function SuperAdminDataManagement() {
   const [claimedHasMore, setClaimedHasMore] = useState(false);
   const [claimedLoadingMore, setClaimedLoadingMore] = useState(false);
   const [claimedServerOptions, setClaimedServerOptions] = useState<any | null>(null);
+  const claimedCursorRef = useRef<{ createdAt: string | null; id: string | null }>({ createdAt: null, id: null });
   const claimedRequestRef = useRef({ generation: 0, inFlight: false });
   const claimedPendingReloadRef = useRef(false);
   const claimedLatestQueryRef = useRef<any>(null);
@@ -841,6 +842,7 @@ export function SuperAdminDataManagement() {
       claimedRequestRef.current.generation += 1;
       setSelectedClaimedSiteIds(new Set());
       claimedNextOffsetRef.current = 0;
+      claimedCursorRef.current = { createdAt: null, id: null };
     }
     if (claimedRequestRef.current.inFlight) {
       if (!append) claimedPendingReloadRef.current = true;
@@ -867,7 +869,9 @@ export function SuperAdminDataManagement() {
         p_claimant_key: query.claimant,
         p_no_transport: query.noTransport,
         p_limit: CLAIMED_PAGE_SIZE,
-        p_offset: append ? claimedNextOffsetRef.current : 0,
+        p_offset: 0,
+        p_before_created_at: append ? claimedCursorRef.current.createdAt : null,
+        p_before_id: append ? claimedCursorRef.current.id : null,
       });
       if (result.error) throw result.error;
       if (generation !== claimedRequestRef.current.generation) return;
@@ -877,6 +881,10 @@ export function SuperAdminDataManagement() {
         claimedNextOffsetRef.current,
         Number(payload.next_offset) || (append ? claimedNextOffsetRef.current : rows.length),
       );
+      claimedCursorRef.current = {
+        createdAt: payload.next_before_created_at || null,
+        id: payload.next_before_id || null,
+      };
       const enriched = rows.map((site: any) => ({
         ...site,
         claimed_by_name: site.effective_claimant_name || site.accepted_by || site.claimed_by || 'Not assigned',

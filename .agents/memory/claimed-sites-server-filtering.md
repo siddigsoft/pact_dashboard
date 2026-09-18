@@ -7,4 +7,4 @@ Claimed Sites must load bounded server-filtered pages, not download the entire d
 
 **Why:** Client-side filtering loaded thousands of rows and delayed the page. Early server-pagination attempts produced stale pages, inconsistent options, former-claimant matches, and incorrect zero totals.
 
-**How to apply:** Keep global and site searches separate, escape LIKE literals identically, compute one effective claimant key, count before pagination, return a monotonic server offset/cursor, invalidate stale requests, and build each option list with all active predicates except its own dimension.
+**How to apply:** Keep global and site searches separate, escape LIKE literals identically, compute one effective claimant key, count before pagination, paginate with a `(created_at, id)` keyset cursor rather than a mutable offset, invalidate stale requests, and build each option list with all active predicates except its own dimension.

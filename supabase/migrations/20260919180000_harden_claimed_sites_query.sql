@@ -1,6 +1,8 @@
 -- Harden the claimed-site feed.  Keep status normalization in one place so
 -- this feed and its counts cannot drift from the UI's normalizeStatus rules.
 DROP FUNCTION IF EXISTS public.superadmin_claimed_sites_query(text,text,text,text,text,uuid,uuid,boolean,integer,integer);
+DROP FUNCTION IF EXISTS public.superadmin_claimed_sites_query(text,text,text,text,text,text,uuid,text,boolean,integer,integer);
+DROP FUNCTION IF EXISTS public.superadmin_claimed_sites_query(text,text,text,text,text,text,uuid,text,boolean,integer,integer,timestamptz,uuid);
 DROP FUNCTION IF EXISTS public.superadmin_claimed_sites_filter_options(text,text,text,text,uuid);
 CREATE OR REPLACE FUNCTION public.superadmin_claimed_status_key(v text)
 RETURNS text LANGUAGE sql IMMUTABLE AS $$
@@ -60,11 +62,13 @@ CREATE OR REPLACE FUNCTION public.superadmin_claimed_sites_query(
   p_locality text DEFAULT NULL, p_activity text DEFAULT NULL,
   p_mmp_file_id uuid DEFAULT NULL, p_claimant_key text DEFAULT NULL,
   p_no_transport boolean DEFAULT false, p_limit integer DEFAULT 200,
-  p_offset integer DEFAULT 0
+  p_offset integer DEFAULT 0, p_before_created_at timestamptz DEFAULT NULL,
+  p_before_id uuid DEFAULT NULL
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 DECLARE lim integer:=least(greatest(coalesce(p_limit,200),1),200);
         off integer:=greatest(coalesce(p_offset,0),0);
         rows jsonb; filtered bigint; total bigint;
+        next_created_at timestamptz; next_id uuid;
 BEGIN
   IF NOT public.superadmin_can_access_data_management() THEN RAISE EXCEPTION 'User is not authorized to query data management.'; END IF;
 
@@ -97,12 +101,27 @@ BEGIN
       AND (nullif(btrim(p_claimant_key),'') IS NULL OR b.claimant_key=p_claimant_key)
       AND (not coalesce(p_no_transport,false) OR b.transport_fee IS NULL OR b.transport_fee=0)
   ), counted AS (SELECT count(*) n FROM filtered),
-  page AS (SELECT f.* FROM filtered f ORDER BY f.created_at DESC NULLS LAST,f.id DESC LIMIT lim OFFSET off)
+  page AS (
+    SELECT f.* FROM filtered f
+    WHERE p_before_id IS NULL OR
+      (coalesce(f.created_at,'-infinity'::timestamptz),f.id)
+        < (coalesce(p_before_created_at,'-infinity'::timestamptz),p_before_id)
+    ORDER BY f.created_at DESC NULLS LAST,f.id DESC
+    LIMIT lim OFFSET CASE WHEN p_before_id IS NULL THEN off ELSE 0 END
+  )
   SELECT coalesce((SELECT jsonb_agg(to_jsonb(page) ORDER BY page.created_at DESC NULLS LAST,page.id DESC) FROM page),'[]'::jsonb),
-         (SELECT n FROM counted) INTO rows,filtered;
+          (SELECT n FROM counted) INTO rows,filtered;
+  IF jsonb_array_length(rows) > 0 THEN
+    next_id := (rows -> -1 ->> 'id')::uuid;
+    next_created_at := (rows -> -1 ->> 'created_at')::timestamptz;
+  END IF;
   SELECT count(*) INTO total FROM mmp_site_entries e WHERE public.superadmin_is_claimed_status(e.status);
-  RETURN jsonb_build_object('rows',rows,'filtered_count',filtered,'total_count',total,'offset',off,'next_offset',off+jsonb_array_length(rows),'limit',lim,
-    'has_more',off+jsonb_array_length(rows)<filtered);
+  RETURN jsonb_build_object(
+    'rows',rows,'filtered_count',filtered,'total_count',total,'offset',off,
+    'next_offset',off+jsonb_array_length(rows),'limit',lim,
+    'next_before_created_at',next_created_at,'next_before_id',next_id,
+    'has_more',jsonb_array_length(rows)=lim
+  );
 END $$;
 
 CREATE OR REPLACE FUNCTION public.superadmin_claimed_sites_filter_options(
@@ -169,9 +188,9 @@ BEGIN
   ) FROM (SELECT 1) one);
 END $$;
 
-REVOKE ALL ON FUNCTION public.superadmin_claimed_sites_query(text,text,text,text,text,text,uuid,text,boolean,integer,integer) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.superadmin_claimed_sites_query(text,text,text,text,text,text,uuid,text,boolean,integer,integer,timestamptz,uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.superadmin_claimed_sites_filter_options(text,text,text,text,text,text,uuid,text,boolean) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.superadmin_claimed_sites_query(text,text,text,text,text,text,uuid,text,boolean,integer,integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.superadmin_claimed_sites_query(text,text,text,text,text,text,uuid,text,boolean,integer,integer,timestamptz,uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.superadmin_claimed_sites_filter_options(text,text,text,text,text,text,uuid,text,boolean) TO authenticated;
 REVOKE ALL ON FUNCTION public.superadmin_can_access_data_management() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.superadmin_can_access_data_management() TO authenticated;

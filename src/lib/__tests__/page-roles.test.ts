@@ -81,7 +81,7 @@ describe('page access registry integrity', () => {
     });
     expect(resolveRouteAccessTarget('/mmp/abc123/full-report')).toEqual({
       slug: 'mmp-full-report',
-      routePermission: { resource: 'mmp', action: 'export' },
+      routePermission: { resource: 'mmp', action: 'full_report' },
     });
   });
 
@@ -148,10 +148,10 @@ describe('direct report route permissions', () => {
     mockedFrom.mockReset();
   });
 
-  it('resolves the MMP full report to the registry export permission', () => {
+  it('resolves the MMP full report to the canonical full-report permission', () => {
     expect(resolveRoutePermission('/mmp/abc123/full-report')).toEqual({
       resource: 'mmp',
-      action: 'export',
+      action: 'full_report',
     });
   });
 
@@ -325,7 +325,7 @@ describe('direct report route permissions', () => {
     expect(canSeeRoutePermission(requirement!, 'dataCollector')).toBe(false);
     expect(resolveResourcePermissionOverride(false, requirement!, [{
       resource: 'mmp',
-      action: 'export',
+      action: 'full_report',
       is_granted: true,
     }])).toBe(true);
   });
@@ -336,7 +336,7 @@ describe('direct report route permissions', () => {
     expect(canSeeRoutePermission(requirement!, 'supervisor')).toBe(true);
     expect(resolveResourcePermissionOverride(true, requirement!, [{
       resource: 'mmp',
-      action: 'export',
+      action: 'full_report',
       is_granted: false,
     }])).toBe(false);
   });
@@ -345,7 +345,7 @@ describe('direct report route permissions', () => {
     mockOverrideQueries({
       actionOverride: {
         resource: 'mmp',
-        action: 'export',
+        action: 'full_report',
         is_granted: false,
         expires_at: null,
       },
@@ -423,7 +423,7 @@ describe('direct report route permissions', () => {
     mockOverrideQueries({
       actionOverride: {
         resource: 'mmp',
-        action: 'export',
+        action: 'full_report',
         is_granted: true,
         expires_at: null,
       },
@@ -487,7 +487,7 @@ describe('direct report route permissions', () => {
     mockOverrideQueries({
       actionOverride: {
         resource: 'mmp',
-        action: 'export',
+        action: 'full_report',
         is_granted: false,
         expires_at: '2000-01-01T00:00:00.000Z',
       },

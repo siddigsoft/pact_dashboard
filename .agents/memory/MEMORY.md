@@ -67,12 +67,14 @@
 - [Incentive server authority](incentive-server-authority.md) — Bonus calculations and settlements must be database-authoritative, atomic, and fail closed on unresolved recipients.
 - [WFP-confirmed enumerator fees](wfp-confirmed-enumerator-fees.md) — Ordinary enumerator wallet credit and fee payment require WFP-confirmed site status; completion alone never pays.
 - [Report export server boundaries](report-export-server-boundaries.md) — Enforce export permission only at true file-producing backend boundaries; shared page-data RPCs must keep read authorization.
+- [MMP report-kind authorization](mmp-report-kind-authorization.md) — Full, state, and hub MMP reports use distinct actions and only render/export current scoped RPC payloads.
 - [MMP full-report scope performance](mmp-full-report-scope-performance.md) — Full-report row predicates must not repeat database-backed authorization checks for every site.
 - [Action permission integrity](action-permission-integrity.md) — Never advertise a Role Management action unless its control and handler enforce it; seed defaults to avoid accidental lockouts.
 - [Down Payment payment authorization](down-payment-payment-authorization.md) — Paying an approved advance requires mark_paid plus Pre-Fund use; approval alone never authorizes disbursement.
 - [Filter visibility controls](filter-visibility-controls.md) — Hidden optional filters must reset to neutral; visibility never replaces Data Scope, RLS, or export authorization.
 - [Access workspace inventory boundary](access-workspace-inventory-boundary.md) — The hybrid access workspace treats registries as editable metadata, never as proof of server enforcement.
 - [Access registry owner normalization](access-registry-owner-normalization.md) — Canonical owners may change, but persisted filter and column identities must remain runtime-compatible.
+- [Tab grants require parent access](tab-grants-parent-access.md) — Granting a hub tab must also grant its canonical parent page; explicit parent blocks still win.
 - [Full-page hub scroll ownership](full-page-hub-scroll-ownership.md) — Full-viewport hubs must opt in at the shell and keep exactly one content scroll owner.
 - [Data Management name resolution](data-management-name-resolution.md) — Resolve effective claimants and MMP labels in batches; never rely only on cached users or generated UUID labels.
 - [Claimant reassignment eligibility](claimant-reassignment-eligibility.md) — Replacement claimants are active same-state Data Collectors or Coordinators, enforced before financial transfer.

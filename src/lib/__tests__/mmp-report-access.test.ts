@@ -10,7 +10,7 @@ describe('MMP full report visibility', () => {
     expect(canShowFullMmpReport(false, false)).toBe(false);
   });
 
-  it('keeps supervisors on the separately scoped hub-report path', () => {
-    expect(canShowFullMmpReport(true, true)).toBe(false);
+  it('allows supervisors with the explicit full-report permission', () => {
+    expect(canShowFullMmpReport(true, true)).toBe(true);
   });
 });
