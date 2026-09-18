@@ -191,7 +191,7 @@ export function UnifiedAccessManager({ containerClassName }: { containerClassNam
                   { key: 'audit',        icon: FileText, label: 'Access Audit' },
                 ] as const).map(({ key, icon: Icon, label }) => (
                   <TabsTrigger key={key} value={key}
-                    className="h-9 shrink-0 rounded-none text-xs border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent gap-1.5">
+                    className="h-9 shrink-0 rounded-none px-3 text-xs gap-1.5 border-b-2 border-transparent text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-foreground">
                     <Icon className="h-3 w-3" />
                     {label}
                   </TabsTrigger>
