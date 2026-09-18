@@ -133,3 +133,17 @@ mtime_ms = 1789658934353
 storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:8061f5ee-0482-4ab7-b0dc-02ca73db7311/71486955-fa04-4617-a694-9bfdccdeae5f/4c1dfa8c-0eb9-4646-8a7b-6b74c9047d11"
 storage_version_token = "1789658967547918"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "2KqMsYoeBV33xLsS8qnsL"
+uri = "file://docs/incentive-bonuses-flow-and-calculations.md"
+type = "text"
+title = "Incentive Bonuses Flow and Calculations"
+description = "Focused process document covering qualification, coverage, fee pools, role formulas, recipient allocation, rounding, pre-approval, Cycle Close, Wallet and Payroll payment, and reversal."
+logical_id = "ad2ebed6-f75a-43f6-8c32-fe0d9f99c662"
+content_hash = "sha256:5b234659db540fc09ab7ad85f11fb9efd431ac9ba578a5352f71c68a1558bebf"
+size = 17480
+mtime_ms = 1789718512713
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:8061f5ee-0482-4ab7-b0dc-02ca73db7311/ad2ebed6-f75a-43f6-8c32-fe0d9f99c662/69eb6193-60cb-4516-aab6-b8412665e470"
+storage_version_token = "1789718531641632"
+content_type = "text/markdown"
