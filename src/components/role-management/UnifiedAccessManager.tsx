@@ -327,7 +327,7 @@ function EmptyState() {
 }
 
 function AccessLoadGate({ children }: { children: ReactNode }) {
-  const { loadError, loading, hasLoaded, refresh } = useSelectedUserAccess();
+  const { loadError, loadWarning, loading, hasLoaded, refresh } = useSelectedUserAccess();
 
   if (loadError && !loading && !hasLoaded) {
     return (
@@ -353,6 +353,12 @@ function AccessLoadGate({ children }: { children: ReactNode }) {
           <Button type="button" variant="outline" size="sm" className="h-7 gap-1" onClick={() => void refresh()}>
             <RefreshCw className="h-3 w-3" /> Retry
           </Button>
+        </div>
+      )}
+      {loadWarning && (
+        <div role="status" className="flex shrink-0 items-center gap-2 border-b border-amber-300/50 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          <span>{loadWarning}</span>
         </div>
       )}
       {children}

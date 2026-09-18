@@ -73,6 +73,7 @@
 - [Filter visibility controls](filter-visibility-controls.md) — Hidden optional filters must reset to neutral; visibility never replaces Data Scope, RLS, or export authorization.
 - [Access workspace inventory boundary](access-workspace-inventory-boundary.md) — The hybrid access workspace treats registries as editable metadata, never as proof of server enforcement.
 - [Access registry owner normalization](access-registry-owner-normalization.md) — Canonical owners may change, but persisted filter and column identities must remain runtime-compatible.
+- [Tab grants require parent access](tab-grants-parent-access.md) — Granting a hub tab must also grant its canonical parent page; explicit parent blocks still win.
 - [Full-page hub scroll ownership](full-page-hub-scroll-ownership.md) — Full-viewport hubs must opt in at the shell and keep exactly one content scroll owner.
 - [Data Management name resolution](data-management-name-resolution.md) — Resolve effective claimants and MMP labels in batches; never rely only on cached users or generated UUID labels.
 - [Claimant reassignment eligibility](claimant-reassignment-eligibility.md) — Replacement claimants are active same-state Data Collectors or Coordinators, enforced before financial transfer.

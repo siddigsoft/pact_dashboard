@@ -27,6 +27,7 @@ import { nextFilterOverride } from '@/lib/filter-visibility';
 interface SelectedUserAccessValue {
   loading: boolean;
   loadError: string | null;
+  loadWarning: string | null;
   hasLoaded: boolean;
   savingKey: string | null;
   pageOverrides: PageOverride[];
@@ -101,6 +102,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
 
   const [loading, setLoading]             = useState(true);
   const [loadError, setLoadError]         = useState<string | null>(null);
+  const [loadWarning, setLoadWarning]     = useState<string | null>(null);
   const [hasLoaded, setHasLoaded]         = useState(false);
   const hasLoadedRef = useRef(false);
   const loadSequence = useRef(0);
@@ -137,6 +139,15 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       || message.includes('schema cache') || message.includes('row-level security');
   }
 
+  function isOptionalRoleTabsError(error: any): boolean {
+    const message = String(error?.message ?? error ?? '').toLowerCase();
+    const referencesRoleTabs = message.includes('role_tab_configs');
+    const missingOrSchema = error?.code === '42P01' || error?.code === '42883'
+      || error?.code === 'PGRST202' || message.includes('does not exist')
+      || message.includes('could not find the table') || message.includes('schema cache');
+    return referencesRoleTabs && missingOrSchema;
+  }
+
   // React StrictMode runs an extra setup → cleanup → setup cycle in
   // development. Re-arm the guard on every setup or the second load treats the
   // mounted provider as stale forever and leaves every tab on its skeleton.
@@ -155,6 +166,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     // Keep the last good view usable while a manual refresh is in flight.
     setLoading(!hasLoadedRef.current);
     setLoadError(null);
+    setLoadWarning(null);
     try {
       const [pageRes, permRes, roleConfigRes, permissionRes, userRolesRes] = await bounded(Promise.all([
         bounded(supabase.from('page_access_overrides').select('*').eq('user_id', userId)),
@@ -194,9 +206,14 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
         bounded(supabase.from('data_scope_config').select('*').in('role', roleNames)),
       ]));
       if (!isCurrent()) return;
-      const configError = [roleTabsRes, userColumnsRes, roleColumnsRes, userFiltersRes, roleFiltersRes, userScopesRes, roleScopesRes].find(result => result.error)?.error;
+       const roleTabsOptional = Boolean(roleTabsRes.error && isOptionalRoleTabsError(roleTabsRes.error));
+       if (roleTabsRes.error && !roleTabsOptional) throw roleTabsRes.error;
+       const configError = [userColumnsRes, roleColumnsRes, userFiltersRes, roleFiltersRes, userScopesRes, roleScopesRes].find(result => result.error)?.error;
       if (configError) throw configError;
-      const tabRows = roleTabsRes.data ?? [];
+       const tabRows = roleTabsRes.data ?? [];
+       if (roleTabsOptional) {
+         setLoadWarning('Role tab defaults are unavailable until the access-baseline migration is applied. Individual page and tab overrides remain active.');
+       }
       const tabSlugs = new Set<string>(tabRows.map((row: any) => row.page_slug));
       const nextRoleTabBlocks = Object.fromEntries([...tabSlugs].map(slug => [
         slug,
@@ -318,7 +335,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       if (existing) {
         const { error } = await (supabase as any).from('filter_visibility_config').delete().eq('id', existing.id);
         if (error) throw error;
-      } else {
+       } else {
         const inheritedHidden = target === 'user'
           ? filterConfigs.some(row => row.role && effectiveRoleNames.includes(row.role) && row.filter_key === filterKey && row.is_hidden)
           : false;
@@ -398,7 +415,20 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
     const targets = expandRelatedPageSlugs(slug);
     const routePermissions = getPageRoutePermissions(targets);
     try {
-      if (intent === 'clear') {
+      if (slug.includes(':')) {
+        const { error } = await (supabase as any).rpc('toggle_user_tab_access', {
+          p_target_user_id: userId,
+          p_tab_slug: slug,
+          p_intent: intent,
+        });
+        if (error) throw error;
+        toast({
+          title: intent === 'grant' ? 'Tab and parent page granted' : intent === 'block' ? 'Tab blocked' : 'Tab override removed',
+          description: intent === 'grant'
+            ? 'The parent hub page was enabled so this tab is reachable.'
+            : intent === 'clear' ? 'The parent page was left unchanged.' : 'The tab is now hidden.',
+        });
+      } else if (intent === 'clear') {
         const { error } = await supabase
           .from('page_access_overrides')
           .delete()
@@ -695,7 +725,7 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
   }
 
   const value: SelectedUserAccessValue = {
-    loading, loadError, hasLoaded, savingKey,
+    loading, loadError, loadWarning, hasLoaded, savingKey,
     pageOverrides, permOverrides, columnConfigs, filterConfigs, dataScopeRows, scopePreview, scopePreviewError, effectiveRoleNames,
     pageOvMap, permOvMap,
     effectivePage, effectiveAction, explainPage, explainAction, effectiveFilter, explainFilter, toggleFilter,

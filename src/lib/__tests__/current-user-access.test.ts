@@ -62,6 +62,18 @@ describe('current user access manifest evaluator', () => {
     expect(manifestIsTabBlocked(context, 'accounting:coa')).toBe(true);
   });
 
+  it('allows an explicit tab grant when its parent page is accessible', () => {
+    const context = manifest({
+      roles: ['Admin'],
+      page_overrides: {
+        'admin-hub': { is_blocked: false },
+        'admin-hub:users': { is_blocked: false },
+      },
+    });
+    expect(manifestIsTabBlocked(context, 'admin-hub:users')).toBe(false);
+    expect(evaluateManifestRouteAccess(context, '/admin-hub', '?tab=users')).toBe(true);
+  });
+
   it('expires overrides at the timestamp and ignores invalid expiry values', () => {
     const instant = Date.parse('2026-09-16T12:00:00Z');
     expect(overrideIsActive({ expires_at: '2026-09-16T12:00:00Z' }, instant)).toBe(false);
