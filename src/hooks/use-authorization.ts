@@ -37,7 +37,7 @@ export const useAuthorization = () => {
   // The signed-in user's permissions and multi-role union come from one
   // server-derived source. View As deliberately remains a preview path; it
   // must not impersonate the target user's authenticated access context.
-  const { data: manifestData, isError: manifestError } = useCurrentUserAccessManifest(
+  const { data: manifestData, isError: manifestError, isLoading: manifestLoading } = useCurrentUserAccessManifest(
     !!currentUser?.id,
   );
 
@@ -600,6 +600,8 @@ export const useAuthorization = () => {
     // Use this for display labels and action-gate checks (show/hide logic).
     // Never use for DB writes — those should always record the real user's role.
     effectiveRole: (viewAsRole ?? currentUser?.role ?? null) as string | null,
+    accessManifestLoading: manifestLoading,
+    accessManifestError: manifestError,
   };
-  }, [currentUser, hasPermission, getUserPermissions, isSuperAdminUser, viewAsRoleRaw, viewAsModeRaw, viewAsUserIdRaw, currentAccessManifest]);
+  }, [currentUser, hasPermission, getUserPermissions, isSuperAdminUser, viewAsRoleRaw, viewAsModeRaw, viewAsUserIdRaw, currentAccessManifest, manifestLoading, manifestError]);
 };

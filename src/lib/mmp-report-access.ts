@@ -1,6 +1,6 @@
 export function canShowFullMmpReport(
-  isSupervisor: boolean,
+  _isSupervisor: boolean,
   hasFullReportPermission: boolean,
 ): boolean {
-  return !isSupervisor && hasFullReportPermission;
+  return hasFullReportPermission;
 }

@@ -10,7 +10,7 @@ import {
   Search, Shield, ChevronDown, ChevronRight, Loader2,
   Key, Columns, Eye, EyeOff, CheckCircle2, XCircle, MinusCircle, X,
   Users, Wallet, RotateCcw, Mail, ArrowLeftRight, RefreshCcw, Pencil, Trash2,
-  Settings2,
+  Settings2, FileText, MapPin, Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MODULE_REGISTRY, ModuleAction, ModuleDefinition, ModulePage } from '@/types/moduleRegistry';
@@ -75,16 +75,19 @@ const MMP_REPORT_BUTTONS = [
     action: 'full_report' as const,
     label: 'Full MMP Report',
     description: 'View and download the complete MMP status report as PDF or Excel.',
+    icon: FileText,
   },
   {
     action: 'state_report' as const,
     label: 'State MMP Report',
     description: 'View and download the state-scoped MMP status report as PDF or Excel.',
+    icon: MapPin,
   },
   {
     action: 'hub_report' as const,
-    label: 'Hub MMP Report',
-    description: 'View and download the assigned-hub MMP status report as PDF or Excel.',
+    label: 'Hub / Coordinator MMP Report',
+    description: 'View and download the assigned-hub or coordinator-scoped MMP status report as PDF or Excel.',
+    icon: Building2,
   },
 ];
 const MMP_REPORT_ACTIONS = new Set(MMP_REPORT_BUTTONS.map(({ action }) => action));
@@ -128,7 +131,7 @@ function MmpReportButtonsSection() {
               eff === 'role-yes' ? 'bg-blue-50/20' : 'opacity-40'
             )}>
               <StatusIcon eff={eff} small />
-              <Key className="h-3 w-3 text-muted-foreground shrink-0" />
+              <perm.icon className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
               <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1">
                 <span className="text-xs font-medium">{perm.label}</span>
                 <span className="basis-full text-[10px] leading-snug text-muted-foreground">{perm.description}</span>

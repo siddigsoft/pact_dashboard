@@ -10,8 +10,6 @@ import { useNavigate } from 'react-router-dom';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { canSeePageWithOverrides } from '@/lib/page-roles';
-import { canShowFullMmpReport } from '@/lib/mmp-report-access';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { BudgetStatusBadge } from '@/components/budget/BudgetStatusBadge';
 import ForwardToFOMDialog from './ForwardToFOMDialog';
@@ -80,7 +78,6 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const [renameMMPTarget, setRenameMMPTarget] = useState<MMPFile | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [isSavingRename, setIsSavingRename] = useState(false);
-  const [hubReportAllowed, setHubReportAllowed] = useState(false);
   const [fullReportOpen, setFullReportOpen] = useState(false);
   const [selectedMmpForReport, setSelectedMmpForReport] = useState<{
     id: string;
@@ -136,34 +133,14 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   // This report opens inside MMP Management. Its dedicated action permission
   // and secure report RPC are authoritative; a legacy page-role list must not
   // cancel an explicit user grant.
-  const canViewFullReport = canShowFullMmpReport(
-    isSupervisor,
-    checkPermission('mmp', 'full_report'),
-  );
-  const canViewHubReport = isSupervisor && checkPermission('mmp', 'hub_report') && hubReportAllowed;
-  // State Report is visible to FOM — same dialog, scoped label, red styling
-  const canViewStateReport = isFOM && checkPermission('mmp', 'state_report');
+  const canViewFullReport = checkPermission('mmp', 'full_report');
+  const canViewHubReport = checkPermission('mmp', 'hub_report');
+  const canViewStateReport = checkPermission('mmp', 'state_report');
 
   const openMmpReport = (mmp: MMPFile, kind: MmpReportKind) => {
     setSelectedMmpForReport({ id: mmp.id, name: mmp.name, kind });
     setFullReportOpen(true);
   };
-
-  useEffect(() => {
-    let active = true;
-    setHubReportAllowed(false);
-    if (!isSupervisor || !currentUser?.id) return () => { active = false; };
-
-    canSeePageWithOverrides('mmp-full-report', 'supervisor', currentUser.id)
-      .then(allowed => {
-        if (active) setHubReportAllowed(allowed);
-      })
-      .catch(() => {
-        if (active) setHubReportAllowed(false);
-      });
-
-    return () => { active = false; };
-  }, [isSupervisor, currentUser?.id]);
 
   // Initialize forwarded status from MMP workflow
   useEffect(() => {

@@ -509,11 +509,8 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
 
   const { createRequest, editRequest } = useDownPayment();
   const { currentUser } = useUser();
-  const { effectiveRole } = useAuthorization();
-
-  // Roles that may open the Operational Report
-  const REPORT_ROLES = new Set(['admin','Admin','superAdmin','super_admin','superadmin','SuperAdmin','fom','FOM','ict','ICT']);
-  const canAccessReport = REPORT_ROLES.has(effectiveRole || '');
+  const { checkPermission, accessManifestLoading } = useAuthorization();
+  const canAccessReport = !accessManifestLoading && checkPermission('mmp', 'state_report');
 
   const [fundDialog, setFundDialog] = useState<{ open: boolean; site: SiteStatusDetail | null; editMode: boolean; existingAdvance: AdvanceInfo | null }>({ open: false, site: null, editMode: false, existingAdvance: null });
   const [fundAmount, setFundAmount] = useState('');
@@ -1139,7 +1136,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                    {/* Report button — visible only to FOM / Admin / SuperAdmin */}
+                    {/* Report button — controlled by the canonical MMP state-report permission */}
                     {canAccessReport ? (
                       <TooltipProvider delayDuration={200}>
                         <Tooltip>
@@ -1164,7 +1161,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
                               <Shield className="h-3 w-3 text-purple-400" />
                               <span className="font-semibold">Operational Report</span>
                             </div>
-                            <span className="text-muted-foreground">Visible to FOM, Admin &amp; Super Admin only</span>
+                            <span className="text-muted-foreground">Requires the State MMP Report permission</span>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -1178,7 +1175,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="text-xs">
-                            Operational reports are available to FOM, Admin, and Super Admin
+                            Grant “State MMP Report” in Role Management to enable this report
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

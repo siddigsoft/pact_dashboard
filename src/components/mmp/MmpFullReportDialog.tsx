@@ -139,8 +139,8 @@ const clsCard: Record<EntryClass | 'total', { border: string; icon: string; num:
 };
 
 const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName, reportKind }: Props) => {
-  const { checkPermission } = useAuthorization();
-  const canUseMmpReports = checkPermission('mmp', reportKind);
+  const { checkPermission, accessManifestLoading } = useAuthorization();
+  const canUseMmpReports = !accessManifestLoading && checkPermission('mmp', reportKind);
   const reportTitle = reportKind === 'state_report'
     ? 'State MMP Status Report'
     : reportKind === 'hub_report'
@@ -166,6 +166,11 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName, reportKind }: Prop
   // ── Fetch ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!open || !mmpId) return;
+    if (accessManifestLoading) {
+      setLoading(true);
+      setAccessError('');
+      return;
+    }
     if (!canUseMmpReports) {
       setLoading(false);
       setFinanceLoading(false);
@@ -211,13 +216,15 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName, reportKind }: Prop
         setReportScope(payload.scope || {});
       } catch (error: any) {
         console.error('[MMP Report] secure report load failed:', error);
-        setAccessError(error?.message || 'You do not have access to this MMP report.');
+        setAccessError(error?.code === '42501'
+          ? `You do not have permission to open the ${reportKind.replace('_', ' ')}. Ask an administrator to grant the matching MMP Report permission.`
+          : error?.message || 'You do not have access to this MMP report.');
       } finally {
         setLoading(false);
         setFinanceLoading(false);
       }
     })();
-  }, [open, mmpId, canUseMmpReports, reportKind, loadAttempt]);
+  }, [open, mmpId, canUseMmpReports, reportKind, loadAttempt, accessManifestLoading]);
 
   // ── Derived stats ─────────────────────────────────────────────────────────
   const stats = useMemo(() => {

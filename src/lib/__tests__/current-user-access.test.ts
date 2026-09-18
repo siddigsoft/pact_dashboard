@@ -43,6 +43,24 @@ describe('current user access manifest evaluator', () => {
     expect(legacySurveyActionAllowed(context, 'create')).toBe(true);
   });
 
+  it.each(['full_report', 'state_report', 'hub_report'] as const)(
+    'uses the matching MMP report action for %s and lets an explicit block win',
+    action => {
+      const roleContext = manifest({
+        role_permissions: [{ resource: 'mmp', action }],
+      });
+      expect(manifestHasPermission(roleContext, 'mmp', action)).toBe(true);
+      expect(manifestHasPermission({
+        ...roleContext,
+        action_overrides: { [`mmp:${action}`]: { is_granted: false } },
+      }, 'mmp', action)).toBe(false);
+      expect(manifestHasPermission({
+        ...manifest(),
+        action_overrides: { [`mmp:${action}`]: { is_granted: true } },
+      }, 'mmp', action)).toBe(true);
+    },
+  );
+
   it('uses the same denial for direct URLs and pinned or favorite navigation candidates', () => {
     const context = manifest({ roles: ['Admin'], page_overrides: { reports: { is_blocked: true } },
       action_overrides: { 'reports:read': { is_granted: true } } });
