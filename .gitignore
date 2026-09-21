@@ -12,6 +12,23 @@ dist
 PACT_MOBILE
 dist-ssr
 *.local
+coverage/
+.vite/
+.playwright-cli/
+.codex_artifacts/
+
+# Flutter generated files
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/build/
+
+# Gradle generated files
+android/.gradle/
+android/build/
+android/app/build/
+android_fixes/.gradle/
+android_fixes/build/
 /.env
 /.env.local
 /.env.*.local
