@@ -50,9 +50,12 @@ export function buildPageRelatedGraph(): Record<string, string[]> {
     for (const other of related) addEdge(graph, slug, other);
   }
 
-  // Query-tab / hash PAGE_DEFS → hub parent
+  // Query-tab PAGE_DEFS → hub parent (e.g. finance-hub?tab=…).
+  // Hash-only destinations are independent capabilities (MMP Full Report uses
+  // /mmp#full-report as a deep-link marker) and must NOT cascade with the
+  // host page — otherwise removing report access also removes MMP Management.
   for (const page of PAGE_DEFS) {
-    if (!page.path.includes('?') && !page.path.includes('#')) continue;
+    if (!page.path.includes('?')) continue;
     const hubSlug = byPath.get(hubPathOf(page.path));
     if (hubSlug) addEdge(graph, page.slug, hubSlug);
   }
@@ -106,7 +109,8 @@ export function resolvePageToggleIntent(effect: AccessEffect): PageToggleIntent 
  */
 const PAGE_ACTION_GATES: Record<string, RoutePermission> = {
   mmp: { resource: 'mmp', action: 'read' },
-  'mmp-full-report': { resource: 'mmp', action: 'read' },
+  // Full Report is a report capability, not the MMP Management page gate.
+  'mmp-full-report': { resource: 'mmp', action: 'full_report' },
   'cost-submission': { resource: 'cost_submissions', action: 'read' },
   'cost-approval': { resource: 'cost_submissions', action: 'read' },
   'down-payment-approval': { resource: 'down_payments', action: 'read' },
@@ -123,9 +127,11 @@ export function getPageRoutePermissions(slugs: readonly string[]): RoutePermissi
     const page = PAGE_DEFS.find(candidate => candidate.slug === slug);
     if (!page) continue;
     const url = new URL(page.path, 'https://access.local');
+    // Prefer the slug-specific gate so deep-link pages (e.g. mmp-full-report)
+    // keep their own action even when the URL path matches a host page card.
     const permission =
-      resolveRoutePermission(url.pathname, url.search, url.hash) ??
       PAGE_ACTION_GATES[slug] ??
+      resolveRoutePermission(url.pathname, url.search, url.hash) ??
       null;
     if (!permission) continue;
     const key = `${permission.resource}:${permission.action}`;

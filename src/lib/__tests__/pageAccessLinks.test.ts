@@ -71,6 +71,27 @@ describe('related page access families', () => {
     );
   });
 
+  it('keeps MMP Management independent from MMP Full Report page access', async () => {
+    const { getPageRoutePermissions, expandRelatedPageSlugs: expand } = await import('@/lib/pageAccessLinks');
+
+    // Hash deep-link markers are not hub tabs — they must not cascade grants.
+    expect(getRelatedPageSlugs('mmp')).not.toContain('mmp-full-report');
+    expect(getRelatedPageSlugs('mmp-full-report')).not.toContain('mmp');
+    expect(expand('mmp-full-report')).toEqual(['mmp-full-report']);
+    expect(expand('mmp')).toEqual(['mmp']);
+
+    // Removing Full Report must clear only full_report, never mmp:read.
+    expect(getPageRoutePermissions(['mmp-full-report'])).toEqual([
+      { resource: 'mmp', action: 'full_report' },
+    ]);
+    expect(getPageRoutePermissions(['mmp'])).toEqual([
+      { resource: 'mmp', action: 'read' },
+    ]);
+    expect(getPageRoutePermissions(expand('mmp-full-report'))).not.toEqual(
+      expect.arrayContaining([{ resource: 'mmp', action: 'read' }]),
+    );
+  });
+
   it('maps cost submission, down payment, projects, and pre-funding grants to org-wide read actions', async () => {
     const { getPageRoutePermissions } = await import('@/lib/pageAccessLinks');
     expect(getPageRoutePermissions(['cost-submission'])).toEqual([
@@ -141,7 +162,9 @@ describe('exhaustive page access redirect coverage', () => {
   it('links every query-tab PAGE_DEF to its hub parent', () => {
     const missing: string[] = [];
     for (const page of PAGE_DEFS) {
-      if (!page.path.includes('?') && !page.path.includes('#')) continue;
+      // Query tabs cascade to hub parents. Hash-only destinations (e.g. MMP
+      // Full Report) are independent capabilities and must not auto-link.
+      if (!page.path.includes('?')) continue;
       const hubSlug = byPath[hubPathOf(page.path)];
       if (!hubSlug) {
         missing.push(`${page.slug} hub path ${hubPathOf(page.path)} has no PAGE_DEF`);

@@ -155,6 +155,17 @@ describe('direct report route permissions', () => {
     });
   });
 
+  it('resolves the MMP Full Report sidebar deep-link without inheriting mmp:read', () => {
+    expect(resolveRoutePermission('/mmp', '', '#full-report')).toEqual({
+      resource: 'mmp',
+      action: 'full_report',
+    });
+    expect(resolveRoutePermission('/mmp')).toEqual({
+      resource: 'mmp',
+      action: 'read',
+    });
+  });
+
   it('uses the report page read permission for direct report routes', () => {
     expect(resolveRoutePermission('/cost-submission/reports')).toEqual({
       resource: 'cost_submissions',
