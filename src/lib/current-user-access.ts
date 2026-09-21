@@ -1,4 +1,4 @@
-import { canSeePage, isProjectMembershipDetailPath, resolveRouteAccessTarget, type RoutePermission } from '@/lib/page-roles';
+import { canSeePage, isOwnUserProfilePath, isProjectMembershipDetailPath, resolveRouteAccessTarget, type RoutePermission } from '@/lib/page-roles';
 import { isSuperAdminRole } from '@/lib/effectiveAccess';
 import { ACCESS_TARGET_REGISTRY, getAccessTargetDependencies } from '@/lib/access-target-registry';
 import { PAGE_DEFS, type PageDef } from '@/lib/access-registry';
@@ -139,7 +139,10 @@ export function manifestHasExplicitActionGrant(
  *
  * Project membership detail (/projects/:id) is reachable with either org-wide
  * Projects or My Projects — so members can open their own project without the
- * org catalogue grant. Edit/create/team routes still require Projects. */
+ * org catalogue grant. Edit/create/team routes still require Projects.
+ *
+ * Own user profile (/users/:id matching manifest.user_id) is always reachable
+ * without User Management — even when the users page is explicitly blocked. */
 export function evaluateManifestRouteAccess(manifest: CurrentUserAccessManifest, pathname: string, search = '', hash = ''): boolean {
   const target = resolveRouteAccessTarget(pathname, search, hash);
   if (!target) return false;
@@ -150,6 +153,13 @@ export function evaluateManifestRouteAccess(manifest: CurrentUserAccessManifest,
     target.slug === 'projects' &&
     isProjectMembershipDetailPath(pathname) &&
     evaluateManifestPageAccess(manifest, 'my-projects').allowed
+  ) {
+    allowed = true;
+  }
+  if (
+    !allowed &&
+    target.slug === 'users' &&
+    isOwnUserProfilePath(pathname, manifest.user_id)
   ) {
     allowed = true;
   }

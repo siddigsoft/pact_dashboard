@@ -324,6 +324,20 @@ export function isProjectMembershipDetailPath(pathname: string): boolean {
 }
 
 /**
+ * True for /users/:id when :id equals userId (own profile).
+ * False for /users catalogue, missing userId, or a different user's id.
+ */
+export function isOwnUserProfilePath(
+  pathname: string,
+  userId: string | null | undefined,
+): boolean {
+  if (!userId) return false;
+  const cleanPath = splitLocation(pathname).pathname.replace(/\/$/, '') || '/';
+  const match = cleanPath.match(/^\/users\/([^/]+)$/);
+  return !!match && match[1] === userId;
+}
+
+/**
  * The single registry-derived description of a protected navigation target.
  *
  * Consumers should use this rather than resolving the page slug and the

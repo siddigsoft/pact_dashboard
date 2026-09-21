@@ -319,6 +319,31 @@ describe('current user access manifest evaluator', () => {
     )).toBe(false);
   });
 
+  it('lets any role open their own user profile without User Management', () => {
+    const ownId = '21602d5c-22ef-43e2-b178-606400d3b659';
+    const otherId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const context = manifest({
+      user_id: ownId,
+      roles: ['Supervisor'],
+      page_role_configs: {},
+      page_overrides: {},
+    });
+    expect(evaluateManifestRouteAccess(context, `/users/${ownId}`)).toBe(true);
+    expect(evaluateManifestRouteAccess(context, `/users/${otherId}`)).toBe(false);
+    expect(evaluateManifestRouteAccess(context, '/users')).toBe(false);
+  });
+
+  it('keeps own profile reachable when User Management is explicitly blocked', () => {
+    const ownId = '21602d5c-22ef-43e2-b178-606400d3b659';
+    const context = manifest({
+      user_id: ownId,
+      roles: ['Supervisor'],
+      page_overrides: { users: { is_blocked: true } },
+    });
+    expect(evaluateManifestRouteAccess(context, `/users/${ownId}`)).toBe(true);
+    expect(evaluateManifestRouteAccess(context, '/users')).toBe(false);
+  });
+
   it('does not open project detail from My Projects when that page is blocked', () => {
     const context = manifest({
       roles: ['Field Assistant'],

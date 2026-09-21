@@ -13,6 +13,7 @@ import {
   canSeeRoutePermission,
   canSeePageWithOverrides,
   canSeePageWithOverridesResult,
+  isOwnUserProfilePath,
   isProjectMembershipDetailPath,
   resolveResourcePermissionOverride,
   resolveRouteAccessTarget,
@@ -67,6 +68,16 @@ describe('page access registry integrity', () => {
     expect(isProjectMembershipDetailPath('/projects/create')).toBe(false);
     expect(isProjectMembershipDetailPath('/projects/660399f4-80a2-4642-8f66-9f1f245775e6/edit')).toBe(false);
     expect(isProjectMembershipDetailPath('/projects/660399f4-80a2-4642-8f66-9f1f245775e6/team')).toBe(false);
+  });
+
+  it('recognizes own user profile paths only when the path id matches', () => {
+    const id = '21602d5c-22ef-43e2-b178-606400d3b659';
+    expect(isOwnUserProfilePath(`/users/${id}`, id)).toBe(true);
+    expect(isOwnUserProfilePath(`/users/${id}/`, id)).toBe(true);
+    expect(isOwnUserProfilePath(`/users/${id}`, 'other-id')).toBe(false);
+    expect(isOwnUserProfilePath('/users', id)).toBe(false);
+    expect(isOwnUserProfilePath(`/users/${id}`, null)).toBe(false);
+    expect(isOwnUserProfilePath(`/users/${id}`, undefined)).toBe(false);
   });
 
   it('resolves query-tab definitions when query parameters are reordered', () => {

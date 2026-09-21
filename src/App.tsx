@@ -264,6 +264,7 @@ import {
   canSeePage,
   canSeePageWithOverridesResult,
   canSeeRoutePermission,
+  isOwnUserProfilePath,
   resolveRouteAccessTarget,
   getPageLabel,
   type RoutePermission,
@@ -379,12 +380,17 @@ const PageRouteGuardAsync = ({
 }) => {
   // Resolve role defaults and explicit overrides before mounting children so
   // a configured block never flashes or starts protected data queries.
+  const location = useLocation();
   const [status, setStatus] = useState<'ok' | 'checking' | 'denied'>('checking');
 
   useEffect(() => {
     setStatus('checking');
     if (!userId) {
       setStatus('denied');
+      return;
+    }
+    if (slug === 'users' && isOwnUserProfilePath(location.pathname, userId)) {
+      setStatus('ok');
       return;
     }
     canSeePageWithOverridesResult(
@@ -400,6 +406,7 @@ const PageRouteGuardAsync = ({
     slug,
     roleKey,
     userId,
+    location.pathname,
     routePermission?.resource,
     routePermission?.action,
     routeBaseline,
