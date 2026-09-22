@@ -893,6 +893,7 @@ export function SuperAdminDataManagement() {
         main_activity: site.main_activity || null,
         mmp_id: site.mmp_file_id,
       }));
+      // Paint the table immediately — filter dropdown options load in the background.
       setClaimedSites(prev => append
         ? [...prev, ...enriched.filter((row: any) => !prev.some(existing => existing.id === row.id))]
         : enriched);
@@ -900,7 +901,12 @@ export function SuperAdminDataManagement() {
       setClaimedTotalCount(Number(payload.total_count) || 0);
       setClaimedFeedLoaded(true);
       setClaimedHasMore(Boolean(payload.has_more));
-      const optionsResult = await supabase.rpc('superadmin_claimed_sites_filter_options', {
+      loadedTabsRef.current.add('claimed-sites');
+      endLoader('claimed-sites');
+      setLoadingClaimed(false);
+      setClaimedLoadingMore(false);
+
+      void supabase.rpc('superadmin_claimed_sites_filter_options', {
         p_global_search: query.globalSearch || null,
         p_site_search: query.siteSearch || null,
         p_status: query.status,
@@ -910,11 +916,18 @@ export function SuperAdminDataManagement() {
         p_mmp_file_id: query.mmp,
         p_claimant_key: query.claimant,
         p_no_transport: query.noTransport,
+      }).then((optionsResult) => {
+        if (!optionsResult.error && generation === claimedRequestRef.current.generation) {
+          setClaimedServerOptions(optionsResult.data);
+        }
       });
-      if (!optionsResult.error && generation === claimedRequestRef.current.generation) setClaimedServerOptions(optionsResult.data);
-      loadedTabsRef.current.add('claimed-sites');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load claimed sites:', error);
+      toast({
+        title: 'Failed to load claimed sites',
+        description: error?.message || 'The claimed-sites query did not complete. Try refreshing.',
+        variant: 'destructive',
+      });
     } finally {
       endLoader('claimed-sites');
       claimedRequestRef.current.inFlight = false;
@@ -931,9 +944,10 @@ export function SuperAdminDataManagement() {
     if (!beginLoader('dispatched-sites')) return;
     setLoadingDispatched(true);
     try {
-      const PAGE_SIZE = 1000;
+      const PAGE_SIZE = 500;
       let allDispatched: any[] = [];
       let from = 0;
+      let firstPagePainted = false;
       while (true) {
         const { data, error } = await supabase
           .from('mmp_site_entries')
@@ -943,6 +957,20 @@ export function SuperAdminDataManagement() {
           .range(from, from + PAGE_SIZE - 1);
         if (error) throw error;
         allDispatched = [...allDispatched, ...(data || [])];
+
+        // Paint the first page ASAP so the card leaves "Loading details…"
+        if (!firstPagePainted && allDispatched.length > 0) {
+          firstPagePainted = true;
+          const firstMmpIds = [...new Set(allDispatched.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
+          const firstMmpNames = await resolveMmpNames(firstMmpIds);
+          setDispatchedSites(allDispatched.map(site => ({
+            ...site,
+            dispatched_by_name: userMap.get(site.dispatched_by)?.name || 'Unknown',
+            main_activity: site.main_activity || site.activity_at_site || null,
+            mmp_name: firstMmpNames[site.mmp_file_id] || (site.mmp_file_id ? `MMP-${String(site.mmp_file_id).slice(0, 8).toUpperCase()}` : null),
+          })));
+        }
+
         if ((data || []).length < PAGE_SIZE) break;
         from += PAGE_SIZE;
       }
@@ -1087,14 +1115,15 @@ export function SuperAdminDataManagement() {
     loadQuickCounts(); // fast HEAD queries — populate stats card numbers immediately
   }, [canAccess, userMap]);
 
-  // Fallback: load a tab on-demand if it was somehow missed
+  // Fallback: load a tab on-demand if it was somehow missed.
+  // Claimed Sites has its own filter-driven effect below — do not also load here
+  // or every Claimed open fires the heavy RPC twice.
   useEffect(() => {
     if (!canAccess || userMap.size === 0) return;
     if (!loadedTabsRef.current.has(activeTab)) {
       if (activeTab === 'site-visits') loadSiteVisits();
       else if (activeTab === 'wallets') loadWallets();
       else if (activeTab === 'transactions') loadTransactions();
-      else if (activeTab === 'claimed-sites') loadClaimedSites();
       else if (activeTab === 'dispatched-sites') loadDispatchedSites();
       else if (activeTab === 'mmps') loadMMPs();
     }
