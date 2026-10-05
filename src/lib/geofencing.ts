@@ -1,6 +1,6 @@
-import { Geolocation, Position } from '@capacitor/geolocation';
-import { LocalNotifications } from '@capacitor/local-notifications';
 import { hapticPresets } from './haptics';
+
+type Position = GeolocationPosition;
 
 interface GeofenceRegion {
   id: string;
@@ -30,7 +30,7 @@ class GeofenceManager {
   private regions: Map<string, GeofenceRegion> = new Map();
   private activeRegions: Set<string> = new Set();
   private entryTimes: Map<string, number> = new Map();
-  private watchId: string | null = null;
+  private watchId: number | null = null;
   private checkInterval: NodeJS.Timeout | null = null;
   private lastPosition: Position | null = null;
   private listeners: Set<GeofenceCallback> = new Set();
@@ -125,27 +125,16 @@ class GeofenceManager {
 
   async startMonitoring(): Promise<boolean> {
     if (this.isMonitoring) return true;
+    if (!navigator.geolocation) {
+      console.warn('[Geofence] Geolocation not available');
+      return false;
+    }
 
     try {
-      const permission = await Geolocation.checkPermissions();
-      if (permission.location !== 'granted') {
-        const request = await Geolocation.requestPermissions();
-        if (request.location !== 'granted') {
-          console.warn('[Geofence] Location permission denied');
-          return false;
-        }
-      }
-
-      this.watchId = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, timeout: 10000 },
-        (position, err) => {
-          if (position) {
-            this.handlePositionUpdate(position);
-          }
-          if (err) {
-            console.error('[Geofence] Position error:', err);
-          }
-        }
+      this.watchId = navigator.geolocation.watchPosition(
+        (position) => this.handlePositionUpdate(position),
+        (err) => console.error('[Geofence] Position error:', err),
+        { enableHighAccuracy: true, timeout: 10000 }
       );
 
       this.checkInterval = setInterval(() => {
@@ -164,8 +153,8 @@ class GeofenceManager {
   }
 
   async stopMonitoring(): Promise<void> {
-    if (this.watchId) {
-      await Geolocation.clearWatch({ id: this.watchId });
+    if (this.watchId !== null) {
+      navigator.geolocation.clearWatch(this.watchId);
       this.watchId = null;
     }
 
@@ -249,32 +238,16 @@ class GeofenceManager {
 
   private async sendNotification(event: GeofenceEvent): Promise<void> {
     try {
-      const title = event.type === 'enter' 
-        ? `Arrived at ${event.region.name}` 
+      const title = event.type === 'enter'
+        ? `Arrived at ${event.region.name}`
         : `Left ${event.region.name}`;
-
       const body = event.type === 'enter'
         ? 'Tap to start your site visit'
         : 'Visit tracking has been paused';
 
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            id: Math.floor(Math.random() * 100000),
-            title,
-            body,
-            largeBody: body,
-            channelId: 'pact_notifications',
-            schedule: { at: new Date() },
-            extra: {
-              type: 'geofence',
-              event: event.type,
-              regionId: event.region.id,
-              regionName: event.region.name,
-            },
-          },
-        ],
-      });
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, { body, data: { type: 'geofence', event: event.type, regionId: event.region.id } });
+      }
     } catch (error) {
       console.error('[Geofence] Failed to send notification:', error);
     }

@@ -613,17 +613,10 @@ export function MobileSettingsScreen({
             onClick={() => {
               hapticPresets.buttonPress();
               updateBatteryOptimization({ hasSeenGuidance: true });
-              if (typeof window !== 'undefined' && 'Capacitor' in window) {
-                toast({
-                  title: "Battery Optimization",
-                  description: "Open your device Settings > Apps > PACT > Battery > Unrestricted to allow background GPS.",
-                });
-              } else {
-                toast({
-                  title: "Battery Optimization",
-                  description: "This feature is only available on the mobile app.",
-                });
-              }
+              toast({
+                title: "Battery Optimization",
+                description: "This setting applies on installed mobile apps only.",
+              });
             }}
           />
         </SettingsSection>

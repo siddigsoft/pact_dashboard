@@ -17,18 +17,10 @@ coverage/
 .playwright-cli/
 .codex_artifacts/
 
-# Flutter generated files
-mobile/.dart_tool/
-mobile/.flutter-plugins
-mobile/.flutter-plugins-dependencies
-mobile/build/
+# Flutter generated files (legacy — mobile app removed)
+# mobile/.dart_tool/
 
-# Gradle generated files
-android/.gradle/
-android/build/
-android/app/build/
-android_fixes/.gradle/
-android_fixes/build/
+# Editor / env
 /.env
 /.env.local
 /.env.*.local

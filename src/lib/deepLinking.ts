@@ -1,5 +1,3 @@
-import { App, URLOpenListenerEvent } from '@capacitor/app';
-
 type DeepLinkHandler = (path: string, params: URLSearchParams) => void;
 
 interface DeepLinkRoute {
@@ -14,22 +12,12 @@ class DeepLinkManager {
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
-
-    try {
-      App.addListener('appUrlOpen', (event: URLOpenListenerEvent) => {
-        this.handleDeepLink(event.url);
-      });
-
-      const launchUrl = await App.getLaunchUrl();
-      if (launchUrl?.url) {
-        this.handleDeepLink(launchUrl.url);
-      }
-
-      this.isInitialized = true;
-      console.log('[DeepLink] Manager initialized');
-    } catch (error) {
-      console.error('[DeepLink] Failed to initialize:', error);
+    // ponytail: web-only — no Capacitor App listener; SPA routes via react-router
+    if (typeof window !== 'undefined' && window.location.search.includes('deeplink=')) {
+      const target = new URLSearchParams(window.location.search).get('deeplink');
+      if (target) this.handleDeepLink(target);
     }
+    this.isInitialized = true;
   }
 
   registerRoute(pattern: RegExp, handler: DeepLinkRoute['handler']): void {

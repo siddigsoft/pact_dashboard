@@ -1,7 +1,5 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getMessaging, getToken, isSupported, Messaging, onMessage } from 'firebase/messaging';
-import { Capacitor } from '@capacitor/core';
-import { PushNotifications } from '@capacitor/push-notifications';
 import { supabase } from '@/integrations/supabase/client';
 import type { FirebaseConfig, FcmNotificationPayload } from '@/types/fcm';
 
@@ -17,14 +15,11 @@ class _FCMService {
   private app: FirebaseApp | null = null;
   private messaging: Messaging | null = null;
   private initialized = false;
-  private nativeListeners = false;
   private firebaseSWRegistration: ServiceWorkerRegistration | null = null;
 
   get platform(): Platform {
-    if (Capacitor.getPlatform() === 'android') return 'android';
-    if (Capacitor.getPlatform() === 'ios') return 'ios';
     return 'web';
-    }
+  }
 
   async init({ config, vapidKey, swRegistration }: InitOptions) {
     if (!this.initialized) {
@@ -34,24 +29,17 @@ class _FCMService {
         this.app = getApps()[0]!;
       }
 
-      if (this.platform === 'web') {
-        const supported = await isSupported().catch(() => false);
-        if (!supported) {
-          console.warn('[FCM] Web messaging is not supported in this browser');
-          this.initialized = true;
-          return;
-        }
-        this.messaging = getMessaging(this.app);
+      const supported = await isSupported().catch(() => false);
+      if (!supported) {
+        console.warn('[FCM] Web messaging is not supported in this browser');
+        this.initialized = true;
+        return;
+      }
+      this.messaging = getMessaging(this.app);
+      await this.initFirebaseServiceWorker(config, vapidKey);
 
-        // Initialize Firebase messaging service worker with config
-        await this.initFirebaseServiceWorker(config, vapidKey);
-
-        // Inform main SW of VAPID key for resubscribe events
-        if (swRegistration && vapidKey && 'active' in swRegistration) {
-          swRegistration.active?.postMessage({ type: 'SET_VAPID_KEY', key: vapidKey });
-        }
-      } else {
-        this.registerNativeListeners();
+      if (swRegistration && vapidKey && 'active' in swRegistration) {
+        swRegistration.active?.postMessage({ type: 'SET_VAPID_KEY', key: vapidKey });
       }
 
       this.initialized = true;
@@ -101,80 +89,29 @@ class _FCMService {
     }
   }
 
-  registerNativeListeners() {
-    if (this.platform === 'web' || this.nativeListeners) return;
-    this.nativeListeners = true;
-    PushNotifications.addListener('pushNotificationReceived', (notification: any) => {
-      try {
-        const data = notification?.data || {};
-        const title = notification?.title || data?.title || 'Notification';
-        const body = notification?.body || data?.body || '';
-        window.dispatchEvent(new CustomEvent('native-notification-received', { detail: { title, body, data } }));
-      } catch (_) {}
-    });
-    PushNotifications.addListener('pushNotificationActionPerformed', (action: any) => {
-      try {
-        const data = action?.notification?.data || {};
-        const url = data?.url || data?.link || '/notifications';
-        window.dispatchEvent(new CustomEvent('native-notification-action', { detail: { url, data } }));
-      } catch (_) {}
-    });
-  }
+  registerNativeListeners() {}
 
   async requestPermission(): Promise<NotificationPermission> {
-    if (this.platform === 'web') {
-      return await Notification.requestPermission();
-    }
-    // Native (Capacitor)
-    const permStatus = await PushNotifications.checkPermissions();
-    if (permStatus.receive !== 'granted') {
-      const asked = await PushNotifications.requestPermissions();
-      return asked.receive === 'granted' ? 'granted' : 'denied';
-    }
-    return 'granted';
+    return await Notification.requestPermission();
   }
 
   async getToken(options: { vapidKey?: string; swRegistration?: ServiceWorkerRegistration | null } = {}) {
-    if (this.platform === 'web') {
-      if (!this.messaging) return null;
-      try {
-        // Use Firebase messaging SW registration for FCM token binding
-        // This ensures background notifications are handled by the correct SW
-        const swReg = this.firebaseSWRegistration || options.swRegistration;
-        const token = await getToken(this.messaging, {
-          vapidKey: options.vapidKey,
-          serviceWorkerRegistration: swReg ?? undefined,
-        });
-        return token || null;
-      } catch (err) {
-        console.warn('[FCM] Failed to get web token:', err);
-        return null;
-      }
-    }
-
-    // Native (Android/iOS)
+    if (!this.messaging) return null;
     try {
-      return new Promise<string | null>(async (resolve) => {
-        const regSub = await PushNotifications.addListener('registration', (token: any) => {
-          regSub.remove();
-          errSub.remove();
-          resolve(token?.value ?? null);
-        });
-        const errSub = await PushNotifications.addListener('registrationError', (_error) => {
-          regSub.remove();
-          errSub.remove();
-          resolve(null);
-        });
-        await PushNotifications.register();
+      const swReg = this.firebaseSWRegistration || options.swRegistration;
+      const token = await getToken(this.messaging, {
+        vapidKey: options.vapidKey,
+        serviceWorkerRegistration: swReg ?? undefined,
       });
-    } catch (e) {
-      console.error('[FCM] Native getToken failed:', e);
+      return token || null;
+    } catch (err) {
+      console.warn('[FCM] Failed to get web token:', err);
       return null;
     }
   }
 
   onForegroundMessage(cb: (payload: FcmNotificationPayload) => void) {
-    if (this.platform !== 'web' || !this.messaging) return () => {};
+    if (!this.messaging) return () => {};
     const unsubscribe = onMessage(this.messaging, (payload) => {
       cb(payload as unknown as FcmNotificationPayload);
     });

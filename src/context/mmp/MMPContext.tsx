@@ -287,42 +287,22 @@ export const useMMPProvider = () => {
   // Data now refreshes only on user actions (button clicks, page loads, saves, etc.)
   // This improves performance significantly by avoiding the "Loading MMP file..." flash
   useEffect(() => {
-    let appStateListener: any = null;
-
     const handleOnline = () => {
-      // When coming back online after being offline, refresh once
       refreshMMPFiles();
     };
 
-    // Listen for online status to refresh after reconnecting
     window.addEventListener('online', handleOnline);
 
-    // For native mobile apps (Capacitor), listen to app becoming active after being backgrounded
-    const setupAppStateListener = async () => {
-      try {
-        if (typeof (window as any).Capacitor !== 'undefined') {
-          const { App } = await import('@capacitor/app');
-          
-          appStateListener = await App.addListener('appStateChange', ({ isActive }) => {
-            if (isActive && navigator.onLine) {
-              // Only refresh when app returns from background (mobile)
-              refreshMMPFiles();
-            }
-          });
-        }
-      } catch (error) {
-        console.debug('Capacitor App plugin not available');
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        refreshMMPFiles();
       }
     };
+    document.addEventListener('visibilitychange', onVisibility);
 
-    setupAppStateListener();
-
-    // Cleanup
     return () => {
-      if (appStateListener) {
-        appStateListener.remove();
-      }
       window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [refreshMMPFiles]);
 

@@ -25,20 +25,6 @@ const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const STORAGE_KEY = 'pact_app_update_check';
 
 async function getDeviceInfo(): Promise<{ platform: string; version: string; buildNumber: number }> {
-  try {
-    if (typeof (window as any).Capacitor !== 'undefined') {
-      const { App } = await import('@capacitor/app');
-      const info = await App.getInfo();
-      return {
-        platform: 'android',
-        version: info.version,
-        buildNumber: parseInt(info.build, 10),
-      };
-    }
-  } catch (error) {
-    console.warn('[AppUpdate] Failed to get native app info:', error);
-  }
-
   return {
     platform: 'web',
     version: CURRENT_VERSION,
@@ -128,26 +114,12 @@ export async function checkForUpdate(): Promise<{
 }
 
 export async function openAppStore(): Promise<void> {
-  try {
-    if (typeof (window as any).Capacitor !== 'undefined') {
-      const { App } = await import('@capacitor/app');
-      const info = await App.getInfo();
-      
-      const storeUrl = `https://play.google.com/store/apps/details?id=${info.id}`;
-      window.open(storeUrl, '_system');
-    }
-  } catch (error) {
-    console.error('[AppUpdate] Failed to open app store:', error);
-  }
+  // Web: no native store
 }
 
 export async function openDownloadUrl(url: string): Promise<void> {
   try {
-    if (typeof (window as any).Capacitor !== 'undefined') {
-      window.open(url, '_system');
-    } else {
-      window.open(url, '_blank');
-    }
+    window.open(url, '_blank');
   } catch (error) {
     console.error('[AppUpdate] Failed to open download URL:', error);
   }

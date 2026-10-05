@@ -96,34 +96,12 @@ async function generateDeviceFingerprint(): Promise<string> {
  * Get device information for trust verification
  */
 async function getDeviceInfo(): Promise<Partial<DeviceInfo>> {
-  let platform = 'web';
-  let model = 'unknown';
-  let osVersion = 'unknown';
-  
-  // Try to get native device info if available
-  if (typeof (window as any).Capacitor !== 'undefined') {
-    try {
-      const { Device } = await import('@capacitor/device');
-      const info = await Device.getInfo();
-      platform = info.platform;
-      model = info.model;
-      osVersion = info.osVersion;
-    } catch {
-      // Fallback to user agent parsing
-      const ua = navigator.userAgent;
-      if (/android/i.test(ua)) {
-        platform = 'android';
-      } else if (/iPad|iPhone|iPod/.test(ua)) {
-        platform = 'ios';
-      }
-    }
-  }
-  
+  const ua = navigator.userAgent;
   return {
-    platform,
-    model,
-    osVersion,
-    appVersion: '1.0.0', // Should be replaced with actual version
+    platform: 'web',
+    model: 'browser',
+    osVersion: ua,
+    appVersion: '1.0.0',
     screenResolution: `${window.screen.width}x${window.screen.height}`,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     language: navigator.language,

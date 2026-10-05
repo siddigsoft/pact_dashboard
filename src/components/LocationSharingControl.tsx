@@ -5,8 +5,6 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import FloatingToggle from './common/FloatingToggle';
 import { supabase } from '@/integrations/supabase/client';
-import { Capacitor } from '@capacitor/core';
-import { Geolocation, Position } from '@capacitor/geolocation';
 
 const LOCATION_UPDATE_INTERVAL = 30000; // 30 seconds
 
@@ -18,11 +16,10 @@ const LocationSharingControl = () => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   
-  const watchIdRef = useRef<string | null>(null);
+  const watchIdRef = useRef<number | null>(null);
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
 
-  // Initialize sharing state from current user
   useEffect(() => {
     if (currentUser) {
       const userIsSharing = currentUser.location?.isSharing === true || 
@@ -34,164 +31,88 @@ const LocationSharingControl = () => {
     };
   }, [currentUser?.id]);
 
-  // Function to check location permissions
   const checkLocationPermission = useCallback(async (): Promise<boolean> => {
     try {
-      if (Capacitor.isNativePlatform()) {
-        const permission = await Geolocation.checkPermissions();
-        if (permission.location !== 'granted') {
-          const request = await Geolocation.requestPermissions();
-          return request.location === 'granted';
-        }
-        return true;
-      } else {
-        // Web browser - check if geolocation is available
-        if (!navigator.geolocation) {
-          setError('Geolocation is not supported by your browser');
-          return false;
-        }
-        
-        // Try to get permission by requesting position
-        return new Promise((resolve) => {
-          navigator.geolocation.getCurrentPosition(
-            () => resolve(true),
-            (err) => {
-              if (err.code === err.PERMISSION_DENIED) {
-                setError('Location permission denied');
-              }
-              resolve(false);
-            },
-            { enableHighAccuracy: true, timeout: 5000 }
-          );
-        });
+      if (!navigator.geolocation) {
+        setError('Geolocation is not supported by your browser');
+        return false;
       }
+      return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          () => resolve(true),
+          (err) => {
+            if (err.code === err.PERMISSION_DENIED) setError('Location permission denied');
+            resolve(false);
+          },
+          { enableHighAccuracy: true, timeout: 5000 }
+        );
+      });
     } catch (err) {
       console.error('[LocationSharing] Permission check error:', err);
       return false;
     }
   }, []);
 
-  // Function to get current position
   const getCurrentPosition = useCallback(async (): Promise<{ lat: number; lng: number; accuracy: number } | null> => {
     try {
-      if (Capacitor.isNativePlatform()) {
-        const position = await Geolocation.getCurrentPosition({
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0,
-        });
-        return {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        };
-      } else {
-        return new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              resolve({
-                lat: position.coords.latitude,
-                lng: position.coords.longitude,
-                accuracy: position.coords.accuracy,
-              });
-            },
-            (err) => {
-              console.error('[LocationSharing] Get position error:', err);
-              reject(err);
-            },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-          );
-        });
-      }
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            resolve({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+            });
+          },
+          (err) => {
+            console.error('[LocationSharing] Get position error:', err);
+            reject(err);
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      });
     } catch (err) {
       console.error('[LocationSharing] Get current position error:', err);
       return null;
     }
   }, []);
 
-  // Start location tracking
   const startLocationTracking = useCallback(async () => {
     console.log('[LocationSharing] Starting location tracking...');
     setError(null);
     
-    // Get initial position
     const position = await getCurrentPosition();
     if (position && isMountedRef.current) {
-      console.log('[LocationSharing] Initial position:', position);
       await updateUserLocation(position.lat, position.lng, position.accuracy);
     }
     
-    // Set up watch for native platforms
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const id = await Geolocation.watchPosition(
-          { enableHighAccuracy: true },
-          async (pos, err) => {
-            if (err) {
-              console.error('[LocationSharing] Watch error:', err);
-              return;
-            }
-            if (pos && isMountedRef.current) {
-              console.log('[LocationSharing] Position update:', pos.coords);
-              await updateUserLocation(
-                pos.coords.latitude, 
-                pos.coords.longitude, 
-                pos.coords.accuracy
-              );
-            }
+    try {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        async (pos) => {
+          if (isMountedRef.current) {
+            await updateUserLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
           }
-        );
-        watchIdRef.current = id;
-      } catch (err) {
-        console.error('[LocationSharing] Watch setup error:', err);
-      }
-    } else {
-      // Web browser - use watchPosition
-      try {
-        const id = navigator.geolocation.watchPosition(
-          async (pos) => {
-            if (isMountedRef.current) {
-              console.log('[LocationSharing] Web position update:', pos.coords);
-              await updateUserLocation(
-                pos.coords.latitude,
-                pos.coords.longitude,
-                pos.coords.accuracy
-              );
-            }
-          },
-          (err) => console.error('[LocationSharing] Web watch error:', err),
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        );
-        watchIdRef.current = String(id);
-      } catch (err) {
-        console.error('[LocationSharing] Web watch setup error:', err);
-      }
+        },
+        (err) => console.error('[LocationSharing] Web watch error:', err),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    } catch (err) {
+      console.error('[LocationSharing] Web watch setup error:', err);
     }
     
-    // Also set up interval for periodic updates
     intervalIdRef.current = setInterval(async () => {
       if (isMountedRef.current) {
         const pos = await getCurrentPosition();
-        if (pos) {
-          await updateUserLocation(pos.lat, pos.lng, pos.accuracy);
-        }
+        if (pos) await updateUserLocation(pos.lat, pos.lng, pos.accuracy);
       }
     }, LOCATION_UPDATE_INTERVAL);
   }, [getCurrentPosition, updateUserLocation]);
 
-  // Stop location tracking
   const stopLocationTracking = useCallback(() => {
-    console.log('[LocationSharing] Stopping location tracking...');
-    
-    if (watchIdRef.current) {
-      if (Capacitor.isNativePlatform()) {
-        Geolocation.clearWatch({ id: watchIdRef.current });
-      } else {
-        navigator.geolocation.clearWatch(Number(watchIdRef.current));
-      }
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
-    
     if (intervalIdRef.current) {
       clearInterval(intervalIdRef.current);
       intervalIdRef.current = null;

@@ -295,17 +295,10 @@ export interface NotificationData {
   metadata?: Record<string, unknown>;
 }
 
-// Platform detection
-export const getPlatform = (): 'web' | 'mobile' | 'capacitor' => {
-  if (typeof window !== 'undefined') {
-    // Check for Capacitor
-    if ((window as any).Capacitor?.isNative) {
-      return 'capacitor';
-    }
-    // Check for mobile viewport
-    if (window.innerWidth <= 768) {
-      return 'mobile';
-    }
+// Platform detection (web app only — Capacitor removed)
+export const getPlatform = (): 'web' | 'mobile' => {
+  if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+    return 'mobile';
   }
   return 'web';
 };

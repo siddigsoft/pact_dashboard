@@ -63,7 +63,7 @@ export function MobileFullScreenSignature({
 }: MobileFullScreenSignatureProps) {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.dir() === 'rtl';
-  const { isNative, deviceInfo } = useDevice();
+  const { deviceInfo } = useDevice();
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -183,36 +183,8 @@ export function MobileFullScreenSignature({
   }, []);
 
   const handleBiometricVerification = async () => {
-    if (!isNative) {
-      setBiometricVerified(true);
-      return;
-    }
-
-    setIsVerifying(true);
-    try {
-      const { NativeBiometric } = await import('capacitor-native-biometric');
-      
-      const result = await NativeBiometric.isAvailable();
-      if (!result.isAvailable) {
-        setBiometricVerified(true);
-        return;
-      }
-
-      await NativeBiometric.verifyIdentity({
-        reason: 'Verify your identity to sign this document',
-        title: 'Biometric Verification',
-        subtitle: 'Use fingerprint or face recognition',
-        description: documentType ? `Signing: ${documentType}` : undefined,
-      });
-
-      hapticPresets.success();
-      setBiometricVerified(true);
-    } catch (error) {
-      console.error('Biometric verification failed:', error);
-      hapticPresets.error();
-    } finally {
-      setIsVerifying(false);
-    }
+    // Web: skip native biometric verification
+    setBiometricVerified(true);
   };
 
   const generateTypedSignature = (): string => {

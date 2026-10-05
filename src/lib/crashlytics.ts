@@ -1,14 +1,10 @@
 /**
  * Crash Reporting & Error Tracking Module
- * 
- * Uses @capacitor-firebase/crashlytics for native crash reporting on Android/iOS,
- * with Firebase Analytics as a fallback for web error tracking.
+ * Firebase Analytics for web error tracking.
  */
 
 let crashlyticsInitialized = false;
 let analyticsInstance: any = null;
-let isNativeApp = false;
-let nativeCrashlyticsAvailable = false;
 
 export interface CrashReport {
   message: string;
@@ -21,26 +17,9 @@ export async function initializeCrashlytics(): Promise<boolean> {
   if (crashlyticsInitialized) return true;
 
   try {
-    isNativeApp = typeof (window as any).Capacitor !== 'undefined' && 
-                  (window as any).Capacitor?.getPlatform?.() !== 'web';
-
-    if (isNativeApp) {
-      try {
-        const { FirebaseCrashlytics } = await import('@capacitor-firebase/crashlytics');
-        await FirebaseCrashlytics.setEnabled({ enabled: true });
-        nativeCrashlyticsAvailable = true;
-        const { crashed } = await FirebaseCrashlytics.didCrashOnPreviousExecution();
-        if (crashed) {
-          console.warn('[Crashlytics] App crashed on previous execution');
-        }
-      } catch (error) {
-        console.warn('[Crashlytics] Native Crashlytics not available:', error);
-      }
-    }
-
     try {
       const { firebaseConfig, isFirebaseConfigured } = await import('@/config/firebase');
-      
+
       if (!isFirebaseConfigured) {
         console.log('[Crashlytics] Firebase not configured - skipping Analytics initialization');
       } else {
@@ -51,7 +30,7 @@ export async function initializeCrashlytics(): Promise<boolean> {
         } else {
           app = getApp();
         }
-        
+
         if (app) {
           const { getAnalytics } = await import('firebase/analytics');
           analyticsInstance = getAnalytics(app);
@@ -71,17 +50,6 @@ export async function initializeCrashlytics(): Promise<boolean> {
 
 export async function setUser(userId: string, properties?: Record<string, string>): Promise<void> {
   try {
-    if (nativeCrashlyticsAvailable) {
-      const { FirebaseCrashlytics } = await import('@capacitor-firebase/crashlytics');
-      await FirebaseCrashlytics.setUserId({ userId });
-      
-      if (properties) {
-        for (const [key, value] of Object.entries(properties)) {
-          await FirebaseCrashlytics.setCustomKey({ key, value, type: 'string' });
-        }
-      }
-    }
-
     if (analyticsInstance) {
       const { setUserId, setUserProperties } = await import('firebase/analytics');
       setUserId(analyticsInstance, userId);
@@ -89,7 +57,6 @@ export async function setUser(userId: string, properties?: Record<string, string
         setUserProperties(analyticsInstance, properties);
       }
     }
-    // Intentionally not logging userId — avoid PII in browser console
   } catch (error) {
     console.error('[Crashlytics] Failed to set user:', error);
   }
@@ -99,33 +66,13 @@ export async function logCrash(error: Error, metadata?: Record<string, string | 
   console.error('[Crashlytics] Fatal error:', error.message, error.stack);
 
   try {
-    if (nativeCrashlyticsAvailable) {
-      const { FirebaseCrashlytics } = await import('@capacitor-firebase/crashlytics');
-      
-      if (metadata) {
-        for (const [key, value] of Object.entries(metadata)) {
-          await FirebaseCrashlytics.setCustomKey({ 
-            key, 
-            value: String(value), 
-            type: 'string' 
-          });
-        }
-      }
-      
-      await FirebaseCrashlytics.log({ message: `Fatal: ${error.name}: ${error.message}` });
-      
-      await FirebaseCrashlytics.recordException({ 
-        message: error.message,
-      });
-    }
-
     if (analyticsInstance) {
       const { logEvent } = await import('firebase/analytics');
       logEvent(analyticsInstance, 'exception', {
         description: `${error.name}: ${error.message}`,
         fatal: true,
         stack: error.stack?.substring(0, 500),
-        platform: isNativeApp ? 'native' : 'web',
+        platform: 'web',
         timestamp: new Date().toISOString(),
         ...metadata,
       });
@@ -136,37 +83,19 @@ export async function logCrash(error: Error, metadata?: Record<string, string | 
 }
 
 export async function logNonFatalError(
-  error: Error | string, 
+  error: Error | string,
   metadata?: Record<string, string | number | boolean>
 ): Promise<void> {
   const errorObj = typeof error === 'string' ? new Error(error) : error;
   console.warn('[Crashlytics] Non-fatal error:', errorObj.message);
 
   try {
-    if (nativeCrashlyticsAvailable) {
-      const { FirebaseCrashlytics } = await import('@capacitor-firebase/crashlytics');
-      
-      if (metadata) {
-        for (const [key, value] of Object.entries(metadata)) {
-          await FirebaseCrashlytics.setCustomKey({ 
-            key, 
-            value: String(value), 
-            type: 'string' 
-          });
-        }
-      }
-      
-      await FirebaseCrashlytics.recordException({ 
-        message: errorObj.message,
-      });
-    }
-
     if (analyticsInstance) {
       const { logEvent } = await import('firebase/analytics');
       logEvent(analyticsInstance, 'exception', {
         description: `${errorObj.name}: ${errorObj.message}`,
         fatal: false,
-        platform: isNativeApp ? 'native' : 'web',
+        platform: 'web',
         ...metadata,
       });
     }
@@ -181,11 +110,6 @@ export async function logBreadcrumb(
   data?: Record<string, string | number | boolean>
 ): Promise<void> {
   try {
-    if (nativeCrashlyticsAvailable) {
-      const { FirebaseCrashlytics } = await import('@capacitor-firebase/crashlytics');
-      await FirebaseCrashlytics.log({ message: `[${category}] ${message}` });
-    }
-
     if (analyticsInstance) {
       const { logEvent } = await import('firebase/analytics');
       logEvent(analyticsInstance, 'app_breadcrumb', {
@@ -202,12 +126,6 @@ export async function logBreadcrumb(
 
 export async function logScreenView(screenName: string, screenClass?: string): Promise<void> {
   try {
-    if (nativeCrashlyticsAvailable) {
-      const { FirebaseCrashlytics } = await import('@capacitor-firebase/crashlytics');
-      await FirebaseCrashlytics.log({ message: `Screen: ${screenName}` });
-      await FirebaseCrashlytics.setCustomKey({ key: 'current_screen', value: screenName, type: 'string' });
-    }
-
     if (analyticsInstance) {
       const { logEvent } = await import('firebase/analytics');
       logEvent(analyticsInstance, 'screen_view', {
@@ -225,11 +143,6 @@ export async function logCustomEvent(
   params?: Record<string, string | number | boolean>
 ): Promise<void> {
   try {
-    if (nativeCrashlyticsAvailable) {
-      const { FirebaseCrashlytics } = await import('@capacitor-firebase/crashlytics');
-      await FirebaseCrashlytics.log({ message: `Event: ${eventName} ${JSON.stringify(params || {})}` });
-    }
-
     if (analyticsInstance) {
       const { logEvent } = await import('firebase/analytics');
       logEvent(analyticsInstance, eventName, params);
@@ -251,7 +164,7 @@ export function setupGlobalErrorHandler(): void {
       column: colno || 0,
       handler: 'window.onerror',
     });
-    
+
     if (originalOnError) {
       return originalOnError(message, source, lineno, colno, error);
     }
@@ -260,11 +173,10 @@ export function setupGlobalErrorHandler(): void {
 
   const originalOnUnhandledRejection = window.onunhandledrejection;
   window.onunhandledrejection = (event) => {
-    const error = event.reason instanceof Error 
-      ? event.reason 
+    const error = event.reason instanceof Error
+      ? event.reason
       : new Error(String(event.reason));
 
-    // Chunk load failures are handled by setupChunkLoadRecovery — not app bugs.
     const msg = error.message ?? '';
     if (/loading chunk|failed to fetch dynamically imported module|importing a module script failed/i.test(msg)) {
       if (originalOnUnhandledRejection) {
@@ -272,18 +184,16 @@ export function setupGlobalErrorHandler(): void {
       }
       return;
     }
-    
+
     logNonFatalError(error, {
       handler: 'unhandledrejection',
     });
-    
+
     if (originalOnUnhandledRejection) {
       originalOnUnhandledRejection.call(window, event);
     }
   };
-
 }
-
 
 export async function recordApiError(
   endpoint: string,
@@ -332,28 +242,18 @@ export async function recordNetworkChange(
   });
 }
 
-export function getCrashlyticsStatus(): { 
+export function getCrashlyticsStatus(): {
   initialized: boolean;
   hasNativeCrashlytics: boolean;
   hasAnalytics: boolean;
   isNative: boolean;
 } {
-  return { 
+  return {
     initialized: crashlyticsInitialized,
-    hasNativeCrashlytics: nativeCrashlyticsAvailable,
+    hasNativeCrashlytics: false,
     hasAnalytics: analyticsInstance !== null,
-    isNative: isNativeApp,
+    isNative: false,
   };
 }
 
-export async function sendUnsentReports(): Promise<void> {
-  if (!nativeCrashlyticsAvailable) return;
-  
-  try {
-    const { FirebaseCrashlytics } = await import('@capacitor-firebase/crashlytics');
-    await FirebaseCrashlytics.sendUnsentReports();
-    console.log('[Crashlytics] Sent unsent reports');
-  } catch (error) {
-    console.error('[Crashlytics] Failed to send unsent reports:', error);
-  }
-}
+export async function sendUnsentReports(): Promise<void> {}

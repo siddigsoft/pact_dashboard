@@ -1,5 +1,3 @@
-import { Capacitor } from '@capacitor/core';
-
 export interface BiometricConfig {
   type: 'fingerprint' | 'face' | 'iris' | 'none';
   isAvailable: boolean;
@@ -12,131 +10,12 @@ export interface BiometricResult {
   type?: string;
 }
 
-// Check if biometric authentication is available
 export async function checkBiometricAvailability(): Promise<BiometricConfig> {
-  // Only available on native platforms
-  if (!Capacitor.isNativePlatform()) {
-    return { type: 'none', isAvailable: false, isEnrolled: false };
-  }
-
-  try {
-    // Check for Web Authentication API (for modern Android/iOS)
-    if (typeof window !== 'undefined' && window.PublicKeyCredential) {
-      // Check if platform authenticator is available (fingerprint/face)
-      const isAvailable = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-      
-      if (isAvailable) {
-        // Try to detect biometric type based on platform
-        const platform = Capacitor.getPlatform();
-        const type = platform === 'ios' ? 'face' : 'fingerprint';
-        
-        return {
-          type,
-          isAvailable: true,
-          isEnrolled: true, // Assume enrolled if available
-        };
-      }
-    }
-    
-    // Fallback: Check Android-specific biometric support
-    if (Capacitor.getPlatform() === 'android') {
-      return {
-        type: 'fingerprint',
-        isAvailable: true,
-        isEnrolled: true,
-      };
-    }
-    
-    // Fallback: Check iOS-specific Face ID/Touch ID
-    if (Capacitor.getPlatform() === 'ios') {
-      return {
-        type: 'face',
-        isAvailable: true,
-        isEnrolled: true,
-      };
-    }
-    
-    return { type: 'none', isAvailable: false, isEnrolled: false };
-  } catch (err) {
-    console.error('[BiometricAuth] Error checking availability:', err);
-    return { type: 'none', isAvailable: false, isEnrolled: false };
-  }
+  return { type: 'none', isAvailable: false, isEnrolled: false };
 }
 
-// Authenticate using biometrics (using WebAuthn/FIDO2)
-export async function authenticateWithBiometric(reason: string = 'Verify your identity'): Promise<BiometricResult> {
-  try {
-    if (!Capacitor.isNativePlatform()) {
-      return { success: false, error: 'Biometric authentication is only available on mobile devices' };
-    }
-
-    // Check if biometric is configured and available first
-    const config = await checkBiometricAvailability();
-    if (!config.isAvailable || !config.isEnrolled) {
-      return { success: false, error: 'Biometric authentication not available or not enrolled' };
-    }
-
-    // Try WebAuthn for biometric authentication (most secure method)
-    if (typeof window !== 'undefined' && window.PublicKeyCredential) {
-      try {
-        const challenge = new Uint8Array(32);
-        crypto.getRandomValues(challenge);
-        
-        // Attempt WebAuthn with platform authenticator (fingerprint/face)
-        const credential = await navigator.credentials.get({
-          publicKey: {
-            challenge: challenge,
-            timeout: 60000,
-            userVerification: 'required',
-            rpId: window.location.hostname,
-            allowCredentials: [], // Allow any registered credential
-          },
-        });
-        
-        if (credential) {
-          console.log('[BiometricAuth] WebAuthn authentication successful');
-          return { success: true, type: 'webauthn' };
-        }
-      } catch (webauthnErr: any) {
-        console.warn('[BiometricAuth] WebAuthn failed, falling back:', webauthnErr.name);
-        
-        // WebAuthn failed but not due to user cancellation
-        // This might happen if no credential was registered
-        if (webauthnErr.name !== 'NotAllowedError') {
-          // Continue to native prompt fallback below
-        } else {
-          // User cancelled - don't proceed with fallback
-          return { success: false, error: 'Authentication cancelled by user' };
-        }
-      }
-    }
-
-    // Note: For production, integrate @capacitor-fingerprint-auth or @nicotaing/capacitor-native-biometric
-    // The plugin would provide actual native biometric authentication
-    // Without the plugin, we return an error instead of simulating success
-    console.warn('[BiometricAuth] Native biometric plugin not available. Install @nicotaing/capacitor-native-biometric for full support.');
-    
-    // Return failure - do NOT simulate success without real verification
-    return { 
-      success: false, 
-      error: 'Native biometric authentication requires plugin installation. Please use PIN.' 
-    };
-  } catch (err: any) {
-    console.error('[BiometricAuth] Authentication error:', err);
-    
-    // Handle specific WebAuthn errors
-    if (err.name === 'NotAllowedError') {
-      return { success: false, error: 'Authentication cancelled or not allowed' };
-    }
-    if (err.name === 'SecurityError') {
-      return { success: false, error: 'Security error - please try again' };
-    }
-    if (err.name === 'NotSupportedError') {
-      return { success: false, error: 'Biometric authentication not supported on this device' };
-    }
-    
-    return { success: false, error: err.message || 'Authentication failed' };
-  }
+export async function authenticateWithBiometric(_reason: string = 'Verify your identity'): Promise<BiometricResult> {
+  return { success: false, error: 'Biometric authentication is only available on mobile devices' };
 }
 
 // PIN Authentication

@@ -1218,9 +1218,6 @@ const CoordinatorSites: FC = () => {
   };
 
   const handleVerifySite = async (siteId: string, notes?: string) => {
-    // Detect if running in Capacitor
-    const isCapacitor = typeof (window as any).Capacitor !== 'undefined';
-
     // ── Hard gate: state permit must be completed before CP verification ──
     const siteForPermitCheck = coordinatorSites.find(s => s.id === siteId);
     if (siteForPermitCheck) {
@@ -1250,7 +1247,7 @@ const CoordinatorSites: FC = () => {
         updateData.verification_notes = notes;
       }
 
-      console.log(`[VERIFY] Starting verification for site ${siteId}${isCapacitor ? ' (Capacitor)' : ' (Web)'}`);
+      console.log(`[VERIFY] Starting verification for site ${siteId}`);
       
       const { error, data } = await supabase
         .from('mmp_site_entries')
@@ -1426,9 +1423,7 @@ const CoordinatorSites: FC = () => {
         }
       }
       
-      // Log additional context for debugging
-      if (typeof (window as any).Capacitor !== 'undefined') {
-        console.error(`[VERIFY] Capacitor environment detected. Error details:`, {
+      console.error(`[VERIFY] Error details:`, {
           error: error?.message || error,
           code: error?.code,
           details: error?.details,
@@ -1436,7 +1431,6 @@ const CoordinatorSites: FC = () => {
           siteId,
           userId: currentUser?.id
         });
-      }
       
       toast({
         title: 'Error',

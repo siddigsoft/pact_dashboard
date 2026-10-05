@@ -15,12 +15,8 @@ verifyServiceWorkerFiles();
 setupChunkLoadRecovery();
 
 initCapacitor().then(async () => {
-  console.log('[PACT] Capacitor initialized');
-  
   await initializeCrashlytics();
   setupGlobalErrorHandler();
-  
-  console.log('[PACT] Error tracking configured');
 });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
