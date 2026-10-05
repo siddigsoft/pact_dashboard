@@ -132,7 +132,7 @@ function StatCard({
 export default function IncentivesOverviewPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAppContext();
+  const { currentUser: user } = useAppContext();
   const { hubs } = useLocationCtx();
   const { isSuperAdmin } = useAuthorization();
 
@@ -305,7 +305,7 @@ export default function IncentivesOverviewPage() {
                 Refresh
               </Button>
             )}
-            {isAdmin && (
+            {canSeeAll && (
               <Button variant="outline" size="sm" onClick={() => navigate('/mmp/incentive-settings')}>
                 <Settings2 className="h-3.5 w-3.5 mr-1.5" />
                 Incentive Settings
