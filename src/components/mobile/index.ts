@@ -8,7 +8,6 @@ export { MobileHomeGrid } from './MobileHomeGrid';
 export { MobilePageCard, MobileListItem as MobilePageListItem, MobileSection } from './MobilePageCard';
 
 // Layout Components
-export { MobileLayout, useMobileLayout } from './MobileLayout';
 export { MobileAppShell, useDiagnosticLogs, addDiagnosticLog, getDiagnosticLogs } from './MobileAppShell';
 export { PageTransition, FadeIn, StaggerChildren, StaggerItem, SlideIn, ScaleIn, AnimatedList, Collapse, Pulse, Shake } from './PageTransitions';
 
