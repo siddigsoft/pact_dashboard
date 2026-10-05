@@ -17,7 +17,8 @@ export interface QuickLink {
   roles?: string[];
 }
 
-const ALL_PAGES: QuickLink[] = [
+/** Canonical quick-link destinations used by hub headers. Keep paths aligned with App.tsx routes. */
+export const CONNECTED_QUICK_LINKS: QuickLink[] = [
   {
     id: "projects",
     label: "Projects",
@@ -65,7 +66,7 @@ const ALL_PAGES: QuickLink[] = [
   {
     id: "hr",
     label: "My Payroll",
-    url: "/hr-hub?tab=payslips",
+    url: "/hr?tab=payroll",
     icon: Banknote,
     color: "#D97706",
     light: "#FEF3C7",
@@ -116,7 +117,7 @@ const ALL_PAGES: QuickLink[] = [
   {
     id: "field-ops",
     label: "Field Ops",
-    url: "/field-ops-hub",
+    url: "/field-ops",
     icon: Map,
     color: "#15803d",
     light: "#DCFCE7",
@@ -124,7 +125,7 @@ const ALL_PAGES: QuickLink[] = [
   {
     id: "reports",
     label: "Reports",
-    url: "/reports",
+    url: "/analytics?tab=reports",
     icon: FileText,
     color: "#b45309",
     light: "#FEF3C7",
@@ -140,7 +141,7 @@ const ALL_PAGES: QuickLink[] = [
   {
     id: "accounting",
     label: "Accounting",
-    url: "/accounting-hub",
+    url: "/accounting",
     icon: BookOpen,
     color: "#1d4ed8",
     light: "#DBEAFE",
@@ -156,7 +157,7 @@ const ALL_PAGES: QuickLink[] = [
   {
     id: "analytics-hub",
     label: "Analytics",
-    url: "/analytics-hub",
+    url: "/analytics",
     icon: PieChart,
     color: "#7C3AED",
     light: "#EDE9FE",
@@ -172,6 +173,8 @@ const ALL_PAGES: QuickLink[] = [
     roles: ["super_admin", "superAdmin", "SuperAdmin", "admin", "Admin"],
   },
 ];
+
+const ALL_PAGES = CONNECTED_QUICK_LINKS;
 
 const PAGE_MAP = Object.fromEntries(ALL_PAGES.map(p => [p.id, p]));
 

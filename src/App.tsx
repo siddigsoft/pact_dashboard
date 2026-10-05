@@ -816,6 +816,11 @@ const AppRoutes = () => {
         <Route path="/recycle-bin" element={<SuperAdminRoute><RecycleBin /></SuperAdminRoute>} />
         <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
         <Route path="/accounting" element={<AccountingHub />} />
+        {/* Legacy misnamed hub URLs (ConnectedPagesBar / bookmarks) */}
+        <Route path="/accounting-hub" element={<Navigate to="/accounting" replace />} />
+        <Route path="/field-ops-hub" element={<Navigate to="/field-ops" replace />} />
+        <Route path="/analytics-hub" element={<Navigate to="/analytics" replace />} />
+        <Route path="/hr-hub" element={<Navigate to="/hr" replace />} />
         <Route path="/pre-funding" element={<PreFundingRoute><PageWrapper><PreFundingHub /></PageWrapper></PreFundingRoute>} />
         <Route path="/pre-funding/overview" element={<Navigate to="/pre-funding?tab=overview" replace />} />
         <Route path="/pre-funding/registry" element={<Navigate to="/pre-funding?tab=registry" replace />} />

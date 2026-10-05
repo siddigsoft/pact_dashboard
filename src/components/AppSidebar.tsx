@@ -589,30 +589,30 @@
 
     const isPreFundFinance = isSuperAdmin || isAdmin || isFinancialAdmin;
     if (isPreFundFinance) {
-      // Keep this list aligned with all eight tabs in PreFundingHub.
-      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding',                         Banknote,    1);
-      addPreFundItem('pre-funding-registry',  'Fund Registry',       '/pre-funding/registry',                FileText,    2);
-      addPreFundItem('pre-funding-approvals', 'Approval Flow',       '/pre-funding/approvals',               CheckSquare, 3);
-      addPreFundItem('pre-funding-recon',     'Reconciliation',      '/pre-funding/reconciliation',          Landmark,    4);
+      // Canonical URLs use /pre-funding?tab=… (path aliases still redirect in App.tsx).
+      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding?tab=overview',            Banknote,    1);
+      addPreFundItem('pre-funding-registry',  'Fund Registry',       '/pre-funding?tab=registry',            FileText,    2);
+      addPreFundItem('pre-funding-approvals', 'Approval Flow',       '/pre-funding?tab=approvals',           CheckSquare, 3);
+      addPreFundItem('pre-funding-recon',     'Reconciliation',      '/pre-funding?tab=reconciliation',      Landmark,    4);
       addPreFundItem('pre-funding-alloc',    'Allocation Dashboard', '/pre-funding?tab=allocations',        Users,       5);
-      addPreFundItem('pre-funding-settings',  'Settings',             '/pre-funding/settings',               Settings,    6);
-      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding/report',                 FileBarChart, 7);
+      addPreFundItem('pre-funding-settings',  'Settings',             '/pre-funding?tab=settings',            Settings,    6);
+      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding?tab=report',              FileBarChart, 7);
       addPreFundItem('pre-funding-distribute','Distribute Funds',     '/pre-funding?tab=distribute',         Wallet,       8);
     } else if (isCountryDirector) {
-      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding',                         Banknote,    1);
+      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding?tab=overview',            Banknote,    1);
       addPreFundItem('pre-funding-alloc',    'Allocation Dashboard', '/pre-funding?tab=allocations',        Users,       2);
       addPreFundItem('pre-funding-distribute','Distribute Funds',     '/pre-funding?tab=distribute',         Wallet,       3);
-      addPreFundItem('pre-funding-recon',     'Reconciliation',      '/pre-funding/reconciliation',          Landmark,    4);
-      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding/report',                 FileBarChart, 5);
+      addPreFundItem('pre-funding-recon',     'Reconciliation',      '/pre-funding?tab=reconciliation',      Landmark,    4);
+      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding?tab=report',              FileBarChart, 5);
     } else if (isCoordinator || isSupervisor || isFOM || isFundHolder || isAuditor) {
       // Non-finance users see the same scoped tabs that PreFundingHub allows.
-      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding',                         Banknote,    1);
+      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding?tab=overview',            Banknote,    1);
       if (isCoordinator || isSupervisor || isFOM) {
-        addPreFundItem('pre-funding-approvals', 'Approval Flow',     '/pre-funding/approvals',               CheckSquare, 2);
+        addPreFundItem('pre-funding-approvals', 'Approval Flow',     '/pre-funding?tab=approvals',           CheckSquare, 2);
       }
       addPreFundItem('pre-funding-alloc',    'Allocation Dashboard', '/pre-funding?tab=allocations',        Users,       3);
       addPreFundItem('pre-funding-distribute','Distribute Funds',     '/pre-funding?tab=distribute',         Wallet,       4);
-      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding/report',                 FileBarChart, 5);
+      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding?tab=report',              FileBarChart, 5);
     }
     if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
 
