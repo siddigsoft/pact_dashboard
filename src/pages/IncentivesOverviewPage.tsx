@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { useLocation as useLocationCtx } from '@/context/location/LocationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,7 +26,6 @@ interface MMPRow {
   name: string;
   mmp_id: string | null;
   hub_name: string | null;
-  hub_id: string | null;
   cycle_status: string | null;
   status: string;
   created_at: string;
@@ -133,7 +131,6 @@ export default function IncentivesOverviewPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser: user } = useAppContext();
-  const { hubs } = useLocationCtx();
   const { isSuperAdmin } = useAuthorization();
 
   const canSeeAll = isSuperAdmin();
@@ -158,7 +155,7 @@ export default function IncentivesOverviewPage() {
       let q = supabase
         .from('mmp_files')
         .select(`
-          id, name, mmp_id, hub_id, cycle_status, status, created_at, uploaded_at,
+          id, name, mmp_id, hub, cycle_status, status, created_at, uploaded_at,
           mmp_incentive_snapshots(
             id, status, total_bonus_cents, coordinator_count, supervisor_count,
             currency, pre_approved_at, approved_at
@@ -172,9 +169,10 @@ export default function IncentivesOverviewPage() {
       if (error) throw error;
 
       // Supabase returns the 1-to-1 relation as an array; unwrap to object or null
+      // mmp_files.hub is text (hub name), not a UUID hub_id
       const rows = (data ?? []).map((r: any) => ({
         ...r,
-        hub_name: hubs.find(hub => hub.id === r.hub_id)?.name ?? null,
+        hub_name: typeof r.hub === 'string' && r.hub.trim() ? r.hub : null,
         mmp_incentive_snapshots: Array.isArray(r.mmp_incentive_snapshots)
           ? (r.mmp_incentive_snapshots[0] ?? null)
           : (r.mmp_incentive_snapshots ?? null),
@@ -186,7 +184,7 @@ export default function IncentivesOverviewPage() {
     } finally {
       setLoadingMmps(false);
     }
-  }, [hubs, toast]);
+  }, [toast]);
 
   const fetchMyPayments = useCallback(async () => {
     if (!user?.id) return;
