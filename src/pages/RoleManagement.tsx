@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Shield, LayoutDashboard, GitCompareArrows, ScrollText } from 'lucide-react';
+import { ArrowLeft, Plus, Shield, LayoutDashboard } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -17,18 +16,12 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useApproval } from '@/context/approval/ApprovalContext';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
-import { normalizeRole } from '@/utils/roleMapping';
 import { SecurityOverview } from '@/components/role-management/SecurityOverview';
-import { RoleComparison } from '@/components/role-management/RoleComparison';
-import { getAccessInventory, getAccessInventoryIssues } from '@/lib/access-inventory';
-
-const accessInventory = getAccessInventory();
-const accessInventoryIssues = getAccessInventoryIssues();
 
 const RoleManagement = () => {
   const navigate = useNavigate();
-  const { currentUser, users, refreshUsers } = useAppContext();
-  const { canManageRoles: canManageRolesAuth, isSuperAdmin: isSuperAdminFn } = useAuthorization();
+  const { users, refreshUsers } = useAppContext();
+  const { canManageRoles: canManageRolesAuth } = useAuthorization();
   const { canBypassApproval, createApprovalRequest, hasPendingRequest } = useApproval();
   const { toast } = useToast();
   const {
@@ -41,7 +34,6 @@ const RoleManagement = () => {
     removeRoleFromUser,
     getUserRolesByUserId,
     fetchUserRoles,
-    fetchRoles,
   } = useRoleManagement();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -51,9 +43,7 @@ const RoleManagement = () => {
   const [cloneSourceRole, setCloneSourceRole] = useState<RoleWithPermissions | null>(null);
   const [activeRoleTab, setActiveRoleTab] = useState('overview');
 
-  // ── Access gates ─────────────────────────────────────────────────────────
   const canManageRoles = canManageRolesAuth();
-  const isSuperAdmin = isSuperAdminFn();
 
   if (!canManageRoles) {
     return (
@@ -94,14 +84,14 @@ const RoleManagement = () => {
     if (canBypassApproval()) {
       await deleteRole(roleId);
       toast({
-        title: "Role deleted",
+        title: 'Role deleted',
         description: `${roleToDelete.display_name || roleToDelete.name} has been deleted.`,
       });
     } else if (hasPendingRequest('role', roleId)) {
       toast({
-        title: "Request Pending",
-        description: "An approval request is already pending for this role.",
-        variant: "destructive"
+        title: 'Request Pending',
+        description: 'An approval request is already pending for this role.',
+        variant: 'destructive',
       });
     } else {
       const result = await createApprovalRequest({
@@ -109,18 +99,18 @@ const RoleManagement = () => {
         resourceType: 'role',
         resourceId: roleId,
         resourceName: roleToDelete.display_name || roleToDelete.name,
-        reason: `Delete role: ${roleToDelete.display_name || roleToDelete.name}`
+        reason: `Delete role: ${roleToDelete.display_name || roleToDelete.name}`,
       });
       if (result.success) {
         toast({
-          title: "Request Submitted",
-          description: "Your deletion request has been sent to SuperAdmin for approval.",
+          title: 'Request Submitted',
+          description: 'Your deletion request has been sent to SuperAdmin for approval.',
         });
       } else {
         toast({
-          title: "Request Failed",
-          description: result.error || "Failed to submit approval request.",
-          variant: "destructive"
+          title: 'Request Failed',
+          description: result.error || 'Failed to submit approval request.',
+          variant: 'destructive',
         });
       }
     }
@@ -143,18 +133,12 @@ const RoleManagement = () => {
   };
 
   const getAssignedUsers = (role: RoleWithPermissions) => {
-    // Normalize both sides to lowercase-alpha so PascalCase ('DataCollector')
-    // matches camelCase ('dataCollector') and snake_case ('data_collector').
     const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
     const roleNorm = norm(role.name);
 
     return users.filter(user => {
-      // 1. Canonical assignments always reference roles.id.
       const uroles = getUserRolesByUserId(user.id);
-      const inUserRolesTable = uroles.some(ur => ur.role_id === role.id);
-      if (inUserRolesTable) return true;
-
-      // 2. Fallback: match via profiles.role for users with no user_roles row
+      if (uroles.some(ur => ur.role_id === role.id)) return true;
       if (role.is_system_role && user.role) {
         return norm(user.role) === roleNorm;
       }
@@ -162,17 +146,10 @@ const RoleManagement = () => {
     });
   };
 
-  const getUnassignedUsers = (role: RoleWithPermissions) => {
-    const assignedUsers = getAssignedUsers(role);
-    return users.filter(user => !assignedUsers.some(assigned => assigned.id === user.id));
-  };
-
   const handleAssignRoleToUser = async (data: AssignRoleRequest): Promise<void> => {
     if (!selectedRole) return;
-
     const ok = await assignRoleToUser(data);
     if (!ok) return;
-
     await fetchUserRoles();
     await refreshUsers();
   };
@@ -193,17 +170,18 @@ const RoleManagement = () => {
 
   return (
     <div className="mx-auto w-full max-w-[1480px] space-y-5 p-3 sm:p-5 lg:p-7">
-      {/* Header */}
-      <div className="flex shrink-0 flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#18252b] text-amber-300 shadow-sm"><Shield className="h-5 w-5" /></div>
-            <div>
+      <div className="flex shrink-0 flex-col items-start justify-between gap-4 lg:flex-row lg:items-center">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#18252b] text-amber-300 shadow-sm">
+            <Shield className="h-5 w-5" />
+          </div>
+          <div>
             <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-800 dark:text-white">
               Security &amp; Access
             </h1>
-            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500">PACT programme control plane</p>
-            </div>
+            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500">
+              Role baselines
+            </p>
           </div>
         </div>
         <div className="flex w-full flex-wrap gap-2 lg:w-auto">
@@ -223,22 +201,21 @@ const RoleManagement = () => {
             data-testid="button-create-role"
             className="w-full sm:w-auto"
           >
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             <span>Create Role <span className="text-[10px] opacity-70">/ إنشاء دور</span></span>
           </Button>
         </div>
       </div>
 
-      {/* Tabbed content */}
       <Tabs value={activeRoleTab} onValueChange={setActiveRoleTab} className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mb-4 h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-[#fbfaf7] p-1">
-          <TabsTrigger value="overview" className="gap-2 text-xs" data-testid="tab-overview"><LayoutDashboard className="h-3.5 w-3.5" />Overview</TabsTrigger>
+          <TabsTrigger value="overview" className="gap-2 text-xs" data-testid="tab-overview">
+            <LayoutDashboard className="h-3.5 w-3.5" /> Overview
+          </TabsTrigger>
           <TabsTrigger value="roles" className="gap-2 text-xs" data-testid="tab-roles">
             <Shield className="h-4 w-4" />
             <span>Roles <span className="text-[10px] opacity-60">/ الأدوار</span></span>
           </TabsTrigger>
-          <TabsTrigger value="compare" className="gap-2 text-xs" data-testid="tab-compare"><GitCompareArrows className="h-3.5 w-3.5" />Compare</TabsTrigger>
-          <TabsTrigger value="governance" className="gap-2 text-xs" data-testid="tab-governance"><ScrollText className="h-3.5 w-3.5" />Registry review</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="m-0">
@@ -247,83 +224,20 @@ const RoleManagement = () => {
             activeRoleCount={roles.filter(r => r.is_active).length}
             userCount={users.length}
             assignmentCount={assignmentCount}
-            inventory={accessInventory}
-            inventoryIssueCount={accessInventoryIssues.length}
             onOpenPeople={() => navigate('/super-admin-hub?tab=user-access')}
             onOpenRoles={() => setActiveRoleTab('roles')}
-            onOpenGovernance={() => setActiveRoleTab('governance')}
           />
         </TabsContent>
 
-        <TabsContent value="compare" className="m-0"><RoleComparison roles={roles} /></TabsContent>
-        <TabsContent value="governance" className="m-0">
-          <Card className="border-slate-200/80 bg-[#fbfaf7] shadow-none">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><ScrollText className="h-4 w-4 text-slate-500" />Access registry review</CardTitle><p className="text-xs text-muted-foreground">Only targets with a named RPC, RLS policy, or server check are reported as verified. Registration and UI hiding are metadata only.</p></CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-200/70 py-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">Registered access targets</p>
-                  <p className="text-xs text-slate-500">
-                    {accessInventory.pages.length} pages · {accessInventory.tabs.length} tabs · {accessInventory.actions.length} actions · {accessInventory.filters.length} filters · {accessInventory.columns.length} columns
-                  </p>
-                </div>
-                <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">Metadata inventory</Badge>
-              </div>
-              <div className="flex items-center justify-between gap-4 border-b border-slate-200/70 py-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">Verified source boundaries</p>
-                  <p className="text-xs text-slate-500">
-                    {Object.values(accessInventory).flat().filter(item => item.serverEnforcement === 'verified').length} targets have concrete enforcement evidence.
-                  </p>
-                </div>
-                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">Source verified</Badge>
-              </div>
-              {Object.values(accessInventory).flat()
-                .filter(item => item.serverEnforcement === 'verified')
-                .map(item => (
-                  <div key={`verified:${item.key}`} className="flex items-center justify-between gap-4 border-b border-slate-200/70 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-700">{item.label}</p>
-                      <p className="truncate text-xs text-slate-500">{item.enforcementBoundary.toUpperCase()} · {item.enforcementOwner}</p>
-                      {item.enforcementEvidence && <p className="truncate font-mono text-[10px] text-slate-400">{item.enforcementEvidence}</p>}
-                    </div>
-                    <Badge variant="outline" className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-700">Verified</Badge>
-                  </div>
-                ))}
-              <div className="flex items-center justify-between gap-4 border-b border-slate-200/70 py-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">Sensitive columns without source evidence</p>
-                  <p className="text-xs text-slate-500">
-                    {accessInventory.columns.filter(item => item.sensitive && item.serverEnforcement !== 'verified').length} columns remain metadata-only until their query or RPC denies or projects them.
-                  </p>
-                </div>
-                <Badge variant="outline" className="shrink-0 border-amber-200 bg-amber-50 text-amber-700">Requires verification</Badge>
-              </div>
-              {accessInventoryIssues.length === 0 ? (
-                <div className="flex items-center justify-between py-3">
-                  <div><p className="text-sm font-medium text-slate-700">Registry mappings</p><p className="text-xs text-slate-500">No cross-registry mapping issues detected.</p></div>
-                  <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">No mapping drift</Badge>
-                </div>
-              ) : accessInventoryIssues.slice(0, 8).map(issue => (
-                <div key={`${issue.kind}:${issue.key}`} className="flex items-center justify-between gap-4 border-b border-slate-200/70 py-3 last:border-0">
-                  <div className="min-w-0"><p className="truncate text-sm font-medium text-slate-700">{issue.key}</p><p className="text-xs text-slate-500">{issue.message}</p></div>
-                  <Badge variant="outline" className="shrink-0 border-amber-200 bg-amber-50 text-amber-700">Needs mapping</Badge>
-                </div>
-              ))}
-              {accessInventoryIssues.length > 8 && <p className="text-xs text-slate-500">Plus {accessInventoryIssues.length - 8} additional mappings requiring review.</p>}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ── Tab 1: Roles ── */}
         <TabsContent value="roles" className="min-h-0 space-y-6">
           <div className="space-y-4">
             <div>
-              <h2 className="text-xl font-semibold">System Roles <span className="text-base font-normal text-muted-foreground" dir="rtl">/ الأدوار النظامية</span></h2>
+              <h2 className="text-xl font-semibold">
+                System Roles <span className="text-base font-normal text-muted-foreground" dir="rtl">/ الأدوار النظامية</span>
+              </h2>
               <p className="text-gray-500">Built-in roles with predefined permissions</p>
-              <p className="text-xs text-muted-foreground/70" dir="rtl">أدوار مدمجة بصلاحيات محددة مسبقاً</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {systemRoles.map(role => (
                 <RoleCard
                   key={role.id}
@@ -340,27 +254,27 @@ const RoleManagement = () => {
 
           <div className="space-y-4">
             <div>
-              <h2 className="text-xl font-semibold">Custom Roles <span className="text-base font-normal text-muted-foreground" dir="rtl">/ الأدوار المخصصة</span></h2>
+              <h2 className="text-xl font-semibold">
+                Custom Roles <span className="text-base font-normal text-muted-foreground" dir="rtl">/ الأدوار المخصصة</span>
+              </h2>
               <p className="text-gray-500">Organization-specific roles with custom permissions</p>
-              <p className="text-xs text-muted-foreground/70" dir="rtl">أدوار مخصصة للمؤسسة بصلاحيات محددة</p>
             </div>
             {customRoles.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Shield className="h-12 w-12 text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-1">No Custom Roles</h3>
-                  <p className="text-xs text-muted-foreground/70 mb-1" dir="rtl">لا توجد أدوار مخصصة</p>
-                  <p className="text-gray-500 text-center mb-4">
+                  <Shield className="mb-4 h-12 w-12 text-gray-400" />
+                  <h3 className="mb-1 text-lg font-medium text-gray-900">No Custom Roles</h3>
+                  <p className="mb-4 text-center text-gray-500">
                     Create custom roles to define specific permissions for your organization.
                   </p>
                   <Button onClick={() => setShowCreateDialog(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    <span>Create First Custom Role <span className="text-[10px] opacity-70">/ إنشاء أول دور مخصص</span></span>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create First Custom Role
                   </Button>
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {customRoles.map(role => (
                   <RoleCard
                     key={role.id}
@@ -376,10 +290,8 @@ const RoleManagement = () => {
             )}
           </div>
         </TabsContent>
-
       </Tabs>
 
-      {/* Dialogs */}
       <CreateRoleDialog
         open={showCreateDialog}
         onOpenChange={(isOpen) => {
@@ -411,7 +323,6 @@ const RoleManagement = () => {
         onRemoveRole={handleRemoveRoleFromUser}
         isLoading={isLoading}
       />
-
     </div>
   );
 };
