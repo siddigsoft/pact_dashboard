@@ -24,6 +24,13 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MODULE_REGISTRY } from '@/types/moduleRegistry';
+import { ACTIONS, RESOURCES, type ActionType, type ResourceType } from '@/types/roles';
+import {
+  buildCapabilityInventory,
+  getModuleRegistryCapabilityKeys,
+  inventoryHasPair,
+  inventoryKeys,
+} from '@/lib/capability-inventory';
 
 const SRC_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -150,5 +157,37 @@ describe('Unified Access Manager — permission registry coverage', () => {
       expect(exclusion.expression).toContain('checkPermission');
       expect(exclusion.reason.length).toBeGreaterThan(20);
     }
+  });
+});
+
+describe('Role Management matrix — capability inventory', () => {
+  it('makes every MODULE_REGISTRY pair grantable in the matrix inventory', () => {
+    const inventory = buildCapabilityInventory();
+    const missing = [...getModuleRegistryCapabilityKeys()].filter(key => {
+      const [resource, action] = key.split(':') as [ResourceType, ActionType];
+      return !inventoryHasPair(inventory, resource, action);
+    });
+    expect(missing).toEqual([]);
+  });
+
+  it('does not advertise the full RESOURCES × ACTIONS cartesian product', () => {
+    const inventory = buildCapabilityInventory();
+    const keys = inventoryKeys(inventory);
+    const cartesian = RESOURCES.length * ACTIONS.length;
+    expect(keys.size).toBeLessThan(cartesian);
+    expect(keys.size).toBe(getModuleRegistryCapabilityKeys().size);
+    // Resource-specific actions must not appear on unrelated resources.
+    expect(keys.has('users:full_report')).toBe(false);
+    expect(keys.has('users:mark_paid')).toBe(false);
+    expect(keys.has('mmp:full_report')).toBe(true);
+  });
+
+  it('can surface orphan live pairs without inventing unsupported matrix cells', () => {
+    const inventory = buildCapabilityInventory(
+      [{ resource: 'users', action: 'approve' }],
+      [],
+    );
+    expect(inventoryHasPair(inventory, 'users', 'approve')).toBe(true);
+    expect(inventoryHasPair(inventory, 'users', 'full_report')).toBe(false);
   });
 });

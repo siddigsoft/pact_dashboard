@@ -123,9 +123,12 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Edit Role: {role.display_name}</DialogTitle>
           <DialogDescription>
-            Update role information and permissions.
+            Role defaults live here. Per-user exceptions are under Super Admin → User Access.
           </DialogDescription>
         </DialogHeader>
+        <p className="text-xs text-muted-foreground -mt-2 mb-1">
+          Permissions, page defaults, and tab/column rules for this role save through Role Management only.
+        </p>
 
         {baselineError && <p role="alert" className="text-sm text-destructive">{baselineError}</p>}
         <Tabs defaultValue="general" className="w-full">

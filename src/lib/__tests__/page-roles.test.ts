@@ -121,26 +121,33 @@ describe('page access registry integrity', () => {
 function mockOverrideQueries({
   actionOverride = null,
   pageOverride = null,
+  roleConfig = null,
   actionError = null,
   pageError = null,
+  configError = null,
   actionThrows = false,
   pageThrows = false,
 }: {
   actionOverride?: Record<string, unknown> | null;
   pageOverride?: Record<string, unknown> | null;
+  roleConfig?: { roles: string[] } | null;
   actionError?: Record<string, unknown> | null;
   pageError?: Record<string, unknown> | null;
+  configError?: Record<string, unknown> | null;
   actionThrows?: boolean;
   pageThrows?: boolean;
 } = {}) {
   mockedFrom.mockImplementation(((table: string) => {
     const isActionOverride = table === 'user_permission_overrides';
     const isPageOverride = table === 'page_access_overrides';
+    const isRoleConfig = table === 'page_role_configs';
     const response = isActionOverride
       ? { data: actionOverride, error: actionError }
       : isPageOverride
         ? { data: pageOverride, error: pageError }
-        : { data: null, error: null };
+        : isRoleConfig
+          ? { data: roleConfig, error: configError }
+          : { data: null, error: null };
     const query: Record<string, unknown> = {
       select: () => query,
       eq: () => query,
@@ -439,6 +446,26 @@ describe('direct report route permissions', () => {
       requirement!,
       true,
     )).resolves.toEqual({ allowed: true });
+  });
+
+  it('lets page_role_configs win over hardcoded PAGE_DEFS roles', async () => {
+    // PAGE_DEFS.role-management includes admin; DB config can remove them.
+    expect(canSeePage('role-management', 'admin')).toBe(true);
+    mockOverrideQueries({
+      roleConfig: { roles: ['superAdmin'] },
+    });
+
+    await expect(canSeePageWithOverrides(
+      'role-management',
+      'admin',
+      'user-1',
+    )).resolves.toBe(false);
+
+    await expect(canSeePageWithOverrides(
+      'role-management',
+      'superAdmin',
+      'user-1',
+    )).resolves.toBe(true);
   });
 
   it('preserves an explicit action grant for a role-blocked report route', async () => {

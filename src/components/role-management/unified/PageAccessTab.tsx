@@ -4,8 +4,8 @@
  *
  * Two modes (toggle at toolbar):
  *  • By User  — current user-centric view (page list, expand for col/action detail)
- *  • By Page  — pick any page and see ALL users, their status, R/W/C/D controls,
- *               plus role-default editing via the page_role_configs table.
+ *  • By Page  — pick any page and see ALL users, their status, R/W/C/D controls.
+ *               Role page defaults are read-only here; edit them in Role Management.
  */
 import { useState, useMemo, useEffect } from 'react';
 import { evaluateManifestPageAccess, overrideIsActive, type CurrentUserAccessManifest } from '@/lib/current-user-access';
@@ -16,16 +16,16 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Search, ChevronRight, ChevronDown, Loader2, Shield,
   Eye, EyeOff, X, Key, Columns, ArrowRight,
-  Users, LayoutDashboard, Pencil, Check, Filter,
+  Users, LayoutDashboard, Filter,
   Lock, Unlock, UserCheck, UserX, Info,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
-  PAGE_DEFS, PAGE_GROUPS, PAGE_ROLE_ALL_OPTIONS, ROLE_LABELS, ROLE_COLORS,
+  PAGE_DEFS, PAGE_GROUPS, ROLE_LABELS, ROLE_COLORS,
   getRoleCode, hasDefaultAccess, getAccessStatus,
   parsePermissions, DEFAULT_PERMS, PERM_DEFS,
   type Perms, type AccessStatus,
@@ -34,7 +34,6 @@ import { COLUMN_REGISTRY, columnStorageSlug } from '@/lib/column-registry';
 import { useSelectedUserAccess } from '@/context/role-management/SelectedUserAccessContext';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
-import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { TabProps } from './types';
 import { expandRelatedPageSlugs, getRelatedPageSlugs } from '@/lib/pageAccessLinks';
 import { getMmpDisplayLabel } from '@/lib/mmp-display';
@@ -300,13 +299,8 @@ interface PageAccessTabProps extends TabProps {
 
 export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, userId, initialPageSlug }: PageAccessTabProps) {
   const { currentUser } = useAppContext();
-  const { roles: managedRoles } = useRoleManagement();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const pageRoleOptions = useMemo(() => Array.from(new Set([
-    ...PAGE_ROLE_ALL_OPTIONS,
-    ...managedRoles.filter(role => role.is_active).map(role => role.name),
-  ])), [managedRoles]);
 
   // ── Context (By-User mode) ────────────────────────────────────────────────
   const {
@@ -339,8 +333,6 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
   const [byPageUserSearch,  setByPageUserSearch]  = useState('');
   const [byPageStatusFilter,setByPageStatusFilter]= useState<ByPageStatusFilter>('all');
   const [pageGroupExpanded, setPageGroupExpanded] = useState<Set<string>>(new Set(PAGE_GROUPS.slice(0, 4)));
-  const [rolePopoverOpen,   setRolePopoverOpen]   = useState(false);
-  const [savingRoles,       setSavingRoles]       = useState(false);
   const [savingByPageId,    setSavingByPageId]    = useState<string | null>(null);
 
   // ── By-Page queries (only active when needed) ─────────────────────────────
@@ -520,20 +512,8 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
     } finally { setSavingByPageId(null); }
   }
 
-  async function saveRoleConfig(slug: string, roles: string[]) {
-    setSavingRoles(true);
-    try {
-      await supabase.from('page_role_configs').upsert(
-        { page_slug: slug, roles, updated_by: currentUser?.id, updated_at: new Date().toISOString() },
-        { onConflict: 'page_slug' }
-      );
-      refetchRoleConfigs();
-      qc.invalidateQueries({ queryKey: ['bp-role-configs'] });
-      toast({ title: 'Default access updated', description: `Roles saved for ${pageDisplayLabel(selectedPage, userRole)}.` });
-    } catch (e: any) {
-      toast({ title: 'Error saving roles', description: e.message, variant: 'destructive' });
-    } finally { setSavingRoles(false); }
-  }
+  // Role page defaults are owned by Role Management (upsert_role_access).
+  // Unified Access only shows them read-only for context.
 
   // ── By-User helpers ───────────────────────────────────────────────────────
   const userColMap = useMemo(() =>
@@ -742,75 +722,26 @@ export function PageAccessTab({ userRole, isSelectedSuperAdmin, onTabChange, use
                   </div>
                 </div>
 
-                {/* Role defaults row */}
+                {/* Role defaults — read-only; edit in Role Management */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-muted-foreground shrink-0">Default access:</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">Role default:</span>
                   {effectiveRoles.map(r => (
-                    <button key={r}
-                      onClick={() => saveRoleConfig(selectedPage.slug, effectiveRoles.filter(x => x !== r))}
-                      disabled={savingRoles}
-                      title={`Remove ${r === 'all' ? 'Everyone' : ROLE_LABELS[r] ?? r}`}
-                      className={cn('group flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full transition-opacity',
-                        r === 'all' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' :
-                        r === '!dataCollector' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' :
-                        cn(ROLE_COLORS[r] ?? 'bg-slate-100 text-slate-500', 'hover:opacity-80')
+                    <span key={r}
+                      className={cn('flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full',
+                        r === 'all' ? 'bg-blue-100 text-blue-700' :
+                        r === '!dataCollector' ? 'bg-orange-100 text-orange-700' :
+                        (ROLE_COLORS[r] ?? 'bg-slate-100 text-slate-500')
                       )}>
                       {r === 'all' ? 'Everyone' : r === '!dataCollector' ? 'All except DC' : ROLE_LABELS[r] ?? r}
-                      <X className="h-2 w-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
+                    </span>
                   ))}
-
-                  <Popover open={rolePopoverOpen} onOpenChange={setRolePopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <button className="flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground border border-dashed transition-colors">
-                        <Pencil className="h-2 w-2" /> Edit
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-68 p-3">
-                      <div className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
-                        <Shield className="h-3.5 w-3.5 text-[#1D3461]" /> Edit default access roles
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mb-2.5">
-                        Toggle which roles have default access to <span className="font-medium">{pageDisplayLabel(selectedPage, userRole)}</span>.
-                        Changes are saved immediately.
-                      </p>
-                      <div className="flex flex-wrap gap-1 mb-2.5">
-                        {pageRoleOptions.map(r => {
-                          const active = effectiveRoles.includes(r);
-                          return (
-                            <button key={r} disabled={savingRoles}
-                              onClick={() => {
-                                const next = active ? effectiveRoles.filter(x => x !== r) : [...effectiveRoles, r];
-                                saveRoleConfig(selectedPage.slug, next);
-                              }}
-                              className={cn(
-                                'flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full border transition-all',
-                                active
-                                  ? cn('border-transparent', r === 'all' ? 'bg-blue-100 text-blue-700' : ROLE_COLORS[r] ?? 'bg-slate-100 text-slate-500')
-                                  : 'bg-background border-dashed text-muted-foreground hover:bg-muted'
-                              )}>
-                              {active && <Check className="h-2 w-2" />}
-                              {r === 'all' ? 'Everyone' : ROLE_LABELS[r] ?? r}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {roleConfigs[selectedPage.slug] && (
-                        <button disabled={savingRoles}
-                          onClick={() => {
-                            supabase.from('page_role_configs').delete().eq('page_slug', selectedPage.slug).then(() => {
-                              refetchRoleConfigs();
-                              qc.invalidateQueries({ queryKey: ['bp-role-configs'] });
-                              toast({ title: 'Reset to defaults', description: `${pageDisplayLabel(selectedPage, userRole)} reverted to built-in roles.` });
-                            });
-                          }}
-                          className="w-full text-[9px] text-muted-foreground hover:text-destructive text-center py-0.5 transition-colors">
-                          Reset to built-in defaults
-                        </button>
-                      )}
-                      {savingRoles && <p className="text-[9px] text-center text-muted-foreground mt-1 animate-pulse">Saving…</p>}
-                    </PopoverContent>
-                  </Popover>
+                  <Link
+                    to="/role-management"
+                    className="flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-dashed hover:bg-muted/80 hover:text-foreground transition-colors"
+                    title="Role page defaults are edited in Role Management"
+                  >
+                    <Shield className="h-2 w-2" /> Edit in Role Management
+                  </Link>
                 </div>
 
                 {/* Status filter chips */}
@@ -1179,14 +1110,15 @@ function ByUserBody({
                             </div>
                           )}
 
-                          {/* Role-defaults footer — always visible when row is expanded */}
+                          {/* Role-defaults footer — Role Management owns baselines */}
                           <div className="px-3 py-2 flex items-center gap-1.5 bg-slate-50/60 dark:bg-slate-900/20 border-t">
                             <Shield className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground flex-1">Want to change which roles can see this page by default?</span>
-                            <button onClick={e => { e.stopPropagation(); onSwitchToByPage(page.slug); }}
+                            <span className="text-[10px] text-muted-foreground flex-1">Role page defaults are managed in Role Management. Per-user grants/blocks stay here.</span>
+                            <Link to="/role-management"
+                              onClick={e => e.stopPropagation()}
                               className="flex items-center gap-0.5 text-[9px] text-primary hover:underline shrink-0">
-                              Edit role defaults <ArrowRight className="h-2.5 w-2.5" />
-                            </button>
+                              Open Role Management <ArrowRight className="h-2.5 w-2.5" />
+                            </Link>
                           </div>
                         </div>
                       )}

@@ -188,11 +188,17 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
           display_name: roleData.display_name ?? existingRole.display_name,
           description: roleData.description ?? existingRole.description ?? '',
           is_active: roleData.is_active ?? existingRole.is_active,
-          permissions: (roleData.permissions ?? existingRole.permissions ?? []).map((permission) => ({
-            resource: permission.resource,
-            action: permission.action,
-            conditions: (permission as { conditions?: unknown }).conditions ?? null,
-          })),
+          permissions: (roleData.permissions ?? existingRole.permissions ?? []).map((permission) => {
+            const previous = existingRole.permissions?.find(
+              (item) => item.resource === permission.resource && item.action === permission.action,
+            );
+            return {
+              resource: permission.resource,
+              action: permission.action,
+              conditions: (permission as { conditions?: unknown }).conditions
+                ?? previous?.conditions ?? null,
+            };
+          }),
           ...(roleData.page_slugs ? { page_slugs: roleData.page_slugs } : {}),
           ...(roleData.tab_rules ? { tab_rules: roleData.tab_rules } : {}),
           ...(roleData.column_rules ? { column_rules: roleData.column_rules } : {}),

@@ -484,6 +484,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         actions: [
           { key: 'pre_funding:read', label: 'View Pre-Funding', description: 'See pre-fund requests and releases', resource: 'pre_funding', action: 'read' },
           { key: 'pre_funding:create', label: 'Create Pre-Fund Request', description: 'Submit a pre-funding request', resource: 'pre_funding', action: 'create' },
+          { key: 'pre_funding:update', label: 'Edit Pre-Fund', description: 'Adjust pre-fund balances or correct linked disbursements', resource: 'pre_funding', action: 'update' },
           { key: 'pre_funding:approve', label: 'Approve Pre-Fund Release', description: 'Approve a fund release', resource: 'pre_funding', action: 'approve' },
           { key: 'pre_funding:use_for_payment', label: 'Use Pre-Fund for Payment', description: 'Debit an eligible shared Pre-Fund while recording a payment', resource: 'pre_funding', action: 'use_for_payment' },
           { key: 'pre_funding:export', label: 'Export Pre-Funding Report', description: 'Download pre-funding data', resource: 'pre_funding', action: 'export' },
