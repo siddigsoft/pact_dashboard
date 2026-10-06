@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Users, Shield, FlaskConical, KeyRound, LayoutDashboard, GitCompareArrows, ScrollText } from 'lucide-react';
+import { ArrowLeft, Plus, Shield, FlaskConical, LayoutDashboard, GitCompareArrows, ScrollText } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -13,7 +13,6 @@ import { CreateRoleDialog } from '@/components/role-management/CreateRoleDialog'
 import { EditRoleDialog } from '@/components/role-management/EditRoleDialog';
 import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignment';
 import { PermissionTester } from '@/components/role-management/PermissionTester';
-import { UnifiedAccessManager } from '@/components/role-management/UnifiedAccessManager';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest } from '@/types/roles';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -196,10 +195,7 @@ const RoleManagement = () => {
   const assignmentCount = users.reduce((count, user) => count + getUserRolesByUserId(user.id).length, 0);
 
   return (
-    <div className={activeRoleTab === 'access-manager'
-      ? 'mx-auto flex h-[calc(100dvh-7rem)] min-h-0 w-full max-w-none flex-col gap-3 overflow-hidden p-2 sm:p-3'
-      : 'mx-auto w-full max-w-[1480px] space-y-5 p-3 sm:p-5 lg:p-7'
-    }>
+    <div className="mx-auto w-full max-w-[1480px] space-y-5 p-3 sm:p-5 lg:p-7">
       {/* Header */}
       <div className="flex shrink-0 flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
@@ -250,14 +246,10 @@ const RoleManagement = () => {
       <Tabs value={activeRoleTab} onValueChange={setActiveRoleTab} className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mb-4 h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-[#fbfaf7] p-1">
           <TabsTrigger value="overview" className="gap-2 text-xs" data-testid="tab-overview"><LayoutDashboard className="h-3.5 w-3.5" />Overview</TabsTrigger>
-          <TabsTrigger value="access-manager" className="gap-2 text-xs" data-testid="tab-people"><Users className="h-3.5 w-3.5" />People &amp; access</TabsTrigger>
-          {/* Tab 1: Roles */}
           <TabsTrigger value="roles" className="gap-2 text-xs" data-testid="tab-roles">
             <Shield className="h-4 w-4" />
             <span>Roles <span className="text-[10px] opacity-60">/ الأدوار</span></span>
           </TabsTrigger>
-
-          {/* Tab 2: Unified Access Control */}
           <TabsTrigger value="compare" className="gap-2 text-xs" data-testid="tab-compare"><GitCompareArrows className="h-3.5 w-3.5" />Compare</TabsTrigger>
           <TabsTrigger value="governance" className="gap-2 text-xs" data-testid="tab-governance"><ScrollText className="h-3.5 w-3.5" />Registry review</TabsTrigger>
         </TabsList>
@@ -270,7 +262,10 @@ const RoleManagement = () => {
             assignmentCount={assignmentCount}
             inventory={accessInventory}
             inventoryIssueCount={accessInventoryIssues.length}
-            onOpenPeople={() => setActiveRoleTab('access-manager')} onOpenRoles={() => setActiveRoleTab('roles')} onOpenGovernance={() => setActiveRoleTab('governance')} />
+            onOpenPeople={() => navigate('/super-admin-hub?tab=user-access')}
+            onOpenRoles={() => setActiveRoleTab('roles')}
+            onOpenGovernance={() => setActiveRoleTab('governance')}
+          />
         </TabsContent>
 
         <TabsContent value="compare" className="m-0"><RoleComparison roles={roles} /></TabsContent>
@@ -393,48 +388,6 @@ const RoleManagement = () => {
               </div>
             )}
           </div>
-        </TabsContent>
-
-        <TabsContent
-          value="access-manager"
-          className="m-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background p-0 data-[state=inactive]:hidden"
-        >
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-card px-3 py-2 shadow-sm sm:px-5">
-            <div className="flex min-w-0 items-center gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setActiveRoleTab('overview')}
-                className="shrink-0 gap-1.5"
-                aria-label="Back to role management"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                  <span className="hidden sm:inline">Workspace overview</span>
-              </Button>
-              <div className="min-w-0">
-                <h1 className="flex items-center gap-2 truncate text-base font-bold sm:text-xl">
-                  <KeyRound className="h-5 w-5 shrink-0 text-blue-600" />
-                  People &amp; effective access
-                </h1>
-                <p className="hidden truncate text-xs text-muted-foreground sm:block">
-                   Resolve pages, tabs, actions, reports, columns, data scope, and user exceptions
-                </p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setShowPermissionTester(true)}
-              className="gap-1.5"
-            >
-              <FlaskConical className="h-4 w-4" />
-              <span className="hidden sm:inline">Test Permissions</span>
-              <span className="sm:hidden">Test</span>
-            </Button>
-          </div>
-          <UnifiedAccessManager containerClassName="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background sm:flex-row" />
         </TabsContent>
 
       </Tabs>

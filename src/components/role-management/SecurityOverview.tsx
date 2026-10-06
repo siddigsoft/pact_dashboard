@@ -121,7 +121,7 @@ export function SecurityOverview({
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
-        <ActionCard title="People & effective access" detail="Inspect a person’s resolved access and exceptions." onClick={onOpenPeople} />
+        <ActionCard title="User exceptions" detail="Per-person grants and blocks live in Super Admin → Users." onClick={onOpenPeople} />
         <ActionCard title="Roles & policy baseline" detail="Edit the reusable access contract for a role." onClick={onOpenRoles} />
         <ActionCard title="Governance inventory" detail="Review registered targets and unresolved mappings." onClick={onOpenGovernance} />
       </div>
