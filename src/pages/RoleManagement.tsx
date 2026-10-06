@@ -5,15 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Shield, FlaskConical, LayoutDashboard, GitCompareArrows, ScrollText } from 'lucide-react';
+import { ArrowLeft, Plus, Shield, LayoutDashboard, GitCompareArrows, ScrollText } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
 import { CreateRoleDialog } from '@/components/role-management/CreateRoleDialog';
 import { EditRoleDialog } from '@/components/role-management/EditRoleDialog';
 import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignment';
-import { PermissionTester } from '@/components/role-management/PermissionTester';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest } from '@/types/roles';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useApproval } from '@/context/approval/ApprovalContext';
@@ -49,7 +47,6 @@ const RoleManagement = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showUserAssignment, setShowUserAssignment] = useState(false);
-  const [showPermissionTester, setShowPermissionTester] = useState(false);
   const [selectedRole, setSelectedRole] = useState<RoleWithPermissions | null>(null);
   const [cloneSourceRole, setCloneSourceRole] = useState<RoleWithPermissions | null>(null);
   const [activeRoleTab, setActiveRoleTab] = useState('overview');
@@ -219,16 +216,6 @@ const RoleManagement = () => {
           >
             <ArrowLeft className="h-4 w-4" />
             Administration Hub
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowPermissionTester(true)}
-            data-testid="button-open-permission-tester"
-            className="w-full gap-1.5 sm:w-auto"
-          >
-            <FlaskConical className="h-4 w-4" />
-            <span>Test Permissions <span className="text-muted-foreground text-[10px]">/ اختبار الصلاحيات</span></span>
           </Button>
           <Button
             size="sm"
@@ -425,25 +412,6 @@ const RoleManagement = () => {
         isLoading={isLoading}
       />
 
-      {/* Permission Tester Dialog — now has a real trigger button */}
-      <Dialog open={showPermissionTester} onOpenChange={setShowPermissionTester}>
-        <DialogContent className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[85vh] overflow-y-auto p-0">
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                  <FlaskConical className="h-5 w-5 text-blue-600" />
-                  Permission Tester <span className="text-base font-normal text-muted-foreground" dir="rtl">/ اختبار الصلاحيات</span>
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Simulate any user's effective permissions including overrides</p>
-                <p className="text-xs text-muted-foreground/70" dir="rtl">محاكاة صلاحيات أي مستخدم بما في ذلك التجاوزات</p>
-              </div>
-              <Button variant="outline" onClick={() => setShowPermissionTester(false)}>Close</Button>
-            </div>
-            <PermissionTester />
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
