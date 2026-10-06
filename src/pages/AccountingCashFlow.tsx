@@ -11,7 +11,6 @@ import { Loader2, Activity, Download, RefreshCw, ChevronDown, ChevronRight } fro
 import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportStandardExcel } from '@/utils/standardExcelExport';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, Legend } from 'recharts';
 import jsPDF from 'jspdf';
@@ -275,11 +274,6 @@ export default function AccountingCashFlow() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Cash Flow Statement"
-        description="Shows cash inflows and outflows for the selected period, classified into Operating (revenue & expense accounts), Investing (asset accounts), and Financing (liability & equity accounts). Based on posted journal entries. Click any section header to expand or collapse."
-        descriptionAr="تُظهر التدفقات النقدية الداخلة والخارجة للفترة المحددة مصنفةً إلى: تشغيلية (إيرادات ومصروفات)، واستثمارية (أصول)، وتمويلية (التزامات وحقوق ملكية). مبنية على القيود المحاسبية المرحّلة."
-      />
 
       {error && <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">{error}</div>}
 

@@ -5,7 +5,6 @@ import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useAppContext } from '@/context/AppContext';
 import { isToday, isYesterday, isThisWeek, format, subDays, startOfDay, differenceInMinutes } from 'date-fns';
 import { Bell, TrendingUp, Clock, AlertCircle, CheckCircle2, BarChart3, PieChart, Activity, Eye, EyeOff, Zap, Timer, ShieldAlert } from 'lucide-react';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 export default function NotificationAnalytics() {
   const { notifications } = useNotifications();
@@ -130,11 +129,6 @@ export default function NotificationAnalytics() {
 
   return (
     <div className="space-y-6 p-6" data-testid="notification-analytics-page">
-      <PageInfoBanner
-        title="Notification Analytics"
-        description="Monitor notification delivery rates, read rates, and response times"
-        descriptionAr="مراقبة معدلات تسليم الإشعارات ومعدلات القراءة وأوقات الاستجابة"
-      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[

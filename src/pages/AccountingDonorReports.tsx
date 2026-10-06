@@ -17,7 +17,6 @@ import {
 import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, Legend } from 'recharts';
 import { useDonorReportsQuery } from '@/hooks/useAccountingQueries';
@@ -143,16 +142,6 @@ export default function AccountingDonorReports() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1100px]">
-      <PageInfoBanner
-        title="Donor-Restricted Fund Reporting"
-        description="Track revenue and expenditure by fund type (unrestricted, donor-restricted, board-designated, quasi-endowment). Includes inter-fund elimination analysis for consolidated reporting."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Tag Journal Lines',       description: 'Each journal line is tagged to a specific donor fund.' },
-          { step: 2, role: 'Finance Admin', action: 'Review Fund Activity',    description: 'Monitor income and expenditure per fund in real time.' },
-          { step: 3, role: 'Finance Admin', action: 'Check Restrictions',      description: 'Verify spend aligns with donor-imposed restriction type.' },
-          { step: 4, role: 'Finance Admin', action: 'Generate Eliminations',   description: 'Inter-fund transfers are eliminated for consolidated reporting.' },
-        ]}
-      />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

@@ -21,7 +21,6 @@ import { format } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -278,11 +277,6 @@ export default function AccountingCostAllocation() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Cost Allocation"
-        description="Define overhead pools with a source GL account and target accounts. Run Allocation securely validates the current fiscal period, posts a balanced allocation journal, and records the run only after posting succeeds."
-        descriptionAr="تعريف مجمعات التكاليف غير المباشرة وتوزيعها على الحسابات المستهدفة مع ترحيل قيود اليومية تلقائياً."
-      />
 
       {migrationNeeded ? MIGRATION_NOTICE : loading ? (
         <PageLoader compact />

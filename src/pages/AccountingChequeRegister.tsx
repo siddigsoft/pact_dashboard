@@ -20,7 +20,6 @@ import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -225,16 +224,6 @@ export default function AccountingChequeRegister() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1200px]">
-      <PageInfoBanner
-        title="Cheque & Payment Register"
-        description="Track all outgoing payments — cheques, bank transfers, cash, and mobile money. Link payments to AP invoices and bank accounts for full reconciliation."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Create Payment',          description: 'Record a cheque or payment against an AP invoice.' },
-          { step: 2, role: 'Finance Admin', action: 'Issue & Authorize',       description: 'Authorised signatory approves and issues the cheque.' },
-          { step: 3, role: 'Finance Admin', action: 'Present to Bank',         description: 'Cheque is presented to the bank for clearance.' },
-          { step: 4, role: 'System',        action: 'Update Status',           description: 'Status updated to Cleared, Bounced or Voided based on bank confirmation.' },
-        ]}
-      />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

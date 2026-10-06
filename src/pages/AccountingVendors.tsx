@@ -17,7 +17,6 @@ import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -203,11 +202,6 @@ export default function AccountingVendors() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Vendor Registry"
-        description="Central register of all suppliers, consultants, service providers, and NGO partners. Each vendor can be linked to a GL payables account so journal entries are tagged automatically. Run supabase/vendors_migration.sql first to create the required tables."
-        descriptionAr="سجل مركزي لجميع الموردين والمستشارين ومزودي الخدمات وشركاء المنظمات. يمكن ربط كل مورد بحساب دفع في دفتر الأستاذ العام لتصنيف القيود المحاسبية تلقائياً."
-      />
 
       {error && <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">{error}</div>}
 

@@ -10,7 +10,6 @@ import { Bell, Mail, Smartphone, Volume2, VolumeX, Moon, Clock, Save, RotateCcw,
 import { useDoNotDisturb } from '@/hooks/use-do-not-disturb';
 import { useNotificationSound } from '@/hooks/use-notification-sound';
 import { toast } from '@/hooks/toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface CategoryPreference {
   inApp: boolean;
@@ -88,11 +87,6 @@ export default function NotificationPreferences() {
 
   return (
     <div className="space-y-6 p-6 max-w-4xl mx-auto" data-testid="notification-preferences-page">
-      <PageInfoBanner
-        title="Notification Preferences"
-        description="Customize how and when you receive notifications"
-        descriptionAr="تخصيص كيفية ووقت تلقي الإشعارات"
-      />
 
       <Card>
         <CardHeader>

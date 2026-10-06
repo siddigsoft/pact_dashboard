@@ -32,7 +32,6 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 export default function WalletReports() {
@@ -344,23 +343,6 @@ export default function WalletReports() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Wallet Reports - Financial Analytics"
-        description="This page shows REPORTS and ANALYTICS for all wallets across the organization. It tracks wallet balances, earnings from site visits, withdrawals, and per-user performance. Use this page for auditing, compliance checks, and understanding financial patterns across teams."
-        descriptionAr="تعرض هذه الصفحة التقارير والتحليلات لجميع المحافظ عبر المنظمة. تتتبع أرصدة المحافظ والأرباح من زيارات المواقع والسحوبات والأداء لكل مستخدم. استخدم هذه الصفحة للتدقيق والتحقق من الامتثال وفهم الأنماط المالية عبر الفرق."
-        workflowSteps={[
-          { step: 1, role: 'Field Staff', action: 'Complete site visits', description: 'Data collectors complete site visits and fees are credited to their wallets.' },
-          { step: 2, role: 'System', action: 'Credits wallets', description: 'The system automatically calculates fees (enumerator + transport) and credits wallets upon site visit completion.' },
-          { step: 3, role: 'Field Staff', action: 'Request withdrawals', description: 'Team members request withdrawals from their wallets when needed.' },
-          { step: 4, role: 'Finance Admin', action: 'Reviews reports here', description: 'All wallet activity is summarized on this page for tracking, auditing, and export.' },
-        ]}
-        workflowStepsAr={[
-          { step: 1, role: 'موظف ميداني', action: 'إكمال زيارات المواقع', description: 'يكمل جامعو البيانات زيارات المواقع ويتم إضافة الرسوم إلى محافظهم.' },
-          { step: 2, role: 'النظام', action: 'يضيف للمحافظ', description: 'يحسب النظام تلقائياً الرسوم (رسوم العداد + النقل) ويضيفها للمحافظ عند إكمال زيارة الموقع.' },
-          { step: 3, role: 'موظف ميداني', action: 'يطلب السحب', description: 'يطلب أعضاء الفريق السحب من محافظهم عند الحاجة.' },
-          { step: 4, role: 'مدير المالية', action: 'يراجع التقارير هنا', description: 'تُلخَّص جميع أنشطة المحافظ في هذه الصفحة للتتبع والتدقيق والتصدير.' },
-        ]}
-      />
 
       {/* Wallet Overview KPIs */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

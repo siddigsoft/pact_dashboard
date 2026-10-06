@@ -27,7 +27,6 @@ import {
   Calendar, Building2, User, CheckCircle2, XCircle, BarChart3,
   Filter, X, Database, Globe,
 } from 'lucide-react';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
@@ -1261,25 +1260,6 @@ export default function DownPaymentApproval() {
         </Button>
       </div>
 
-      <PageInfoBanner
-        title="Down-Payment Approval - Transportation Advances"
-        description="This page handles TRANSPORTATION ADVANCE requests -- money given to field staff BEFORE they do their work, to cover travel costs for site visits. This is DIFFERENT from Tier 1/Tier 2 Approvals, which handle wallet withdrawals (money already earned). Advances approved here are automatically deducted later when the site visit fee is credited to the staff member's wallet, so there is no double-paying."
-        descriptionAr="تتعامل هذه الصفحة مع طلبات السلف المسبقة للنقل -- أموال تُعطى للموظفين الميدانيين قبل قيامهم بالعمل لتغطية تكاليف التنقل للزيارات الميدانية."
-        workflowSteps={[
-          { step: 1, role: 'Data Collector', action: 'Requests travel advance', description: 'A field staff member requests upfront money for transportation before going on a site visit.' },
-          { step: 2, role: 'Supervisor', action: 'Reviews request (Tier 1)', description: 'Supervisor reviews and approves or rejects the advance request.' },
-          { step: 3, role: 'Admin', action: 'Authorizes payment (Tier 2)', description: 'Admin or Finance Admin approves the advance amount and authorizes payment.' },
-          { step: 4, role: 'Finance Admin', action: 'Sends advance', description: 'Finance sends the advance money to the staff member.' },
-          { step: 5, role: 'System', action: 'Auto-deducts when work is done', description: 'When the site visit fee is credited, the advance is automatically subtracted.' },
-        ]}
-        workflowStepsAr={[
-          { step: 1, role: 'جامع بيانات', action: 'يطلب سلفة نقل', description: 'يطلب الموظف الميداني أموالاً مقدمة لتغطية تكاليف النقل.' },
-          { step: 2, role: 'المشرف', action: 'يراجع الطلب (المستوى الأول)', description: 'يراجع المشرف ويوافق أو يرفض.' },
-          { step: 3, role: 'المدير', action: 'يعتمد الصرف (المستوى الثاني)', description: 'يوافق المدير على مبلغ السلفة.' },
-          { step: 4, role: 'مدير المالية', action: 'يُرسل السلفة', description: 'يرسل المبلغ للموظف.' },
-          { step: 5, role: 'النظام', action: 'يخصم تلقائياً', description: 'تُخصم السلفة تلقائياً عند إضافة أتعاب الزيارة.' },
-        ]}
-      />
 
       {/* ── Duplicate active-advance warning banner ── */}
       {isAdmin && duplicateSites.length > 0 && !duplicateBannerDismissed && (

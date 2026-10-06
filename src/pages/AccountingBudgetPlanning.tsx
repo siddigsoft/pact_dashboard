@@ -17,7 +17,6 @@ import {
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format, parseISO } from 'date-fns';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { exportToExcel } from '@/utils/report-export';
@@ -484,16 +483,6 @@ export default function AccountingBudgetPlanning() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1200px]">
-      <PageInfoBanner
-        title="Budget Planning"
-        description="Set and manage budget targets for each account per fiscal period and fund. Budget lines feed directly into the Budget vs Actual variance analysis."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Select Period & Fund',    description: 'Choose the fiscal period and fund to plan against.' },
-          { step: 2, role: 'Finance Admin', action: 'Enter Budget Targets',    description: 'Set budget amounts per GL account line.' },
-          { step: 3, role: 'Finance Admin', action: 'Save & Submit',           description: 'Budget lines are saved and submitted for approval.' },
-          { step: 4, role: 'Finance Admin', action: 'Track vs Actual',         description: 'Monitor spend against plan in the Budget vs Actual report.' },
-        ]}
-      />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

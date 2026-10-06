@@ -15,7 +15,6 @@ import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { getDefaultAccountingPeriod } from '@/lib/accountingReporting';
 import { AccountingReportReadiness } from '@/components/accounting/AccountingReportReadiness';
 import { calculateBalanceSheet, statementNetBalance } from '@/lib/accountingStatements';
@@ -360,11 +359,6 @@ export default function AccountingFinancialStatements() {
         </Button>
       </div>
 
-      <PageInfoBanner
-        title="Financial Statements"
-        description="Generates the Income Statement (Revenue - Expenses = Net Surplus/Deficit) and Balance Sheet (Assets = Liabilities + Net Assets) for a selected fiscal period and fund scope. Both statements can be exported as PDF or CSV for donor and audit reports."
-        descriptionAr="يولّد قائمة الدخل (الإيرادات - المصروفات = صافي الفائض/العجز) والميزانية العمومية (الأصول = الالتزامات + صافي الأصول) للفترة المالية ونطاق الصندوق المحددين. يمكن تصدير كلتا القائمتين كـ PDF أو CSV لتقارير المانحين والمراجعة."
-      />
 
       {/* Filters */}
       <Card className="mb-4">

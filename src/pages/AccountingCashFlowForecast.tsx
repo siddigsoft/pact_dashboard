@@ -14,7 +14,6 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid,
 } from 'recharts';
@@ -249,11 +248,6 @@ export default function AccountingCashFlowForecast() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Cash Flow Forecast"
-        description="12-month rolling projection built from actual bank balances, 6-month average inflows/outflows, open purchase orders (spread over 4 months), and open encumbrances (spread over 3 months). Projections are indicative — apply manual adjustments in your budget system for precision."
-        descriptionAr="توقع دوار لمدة 12 شهرًا مبني على أرصدة البنوك الفعلية ومتوسط التدفقات الداخلة والخارجة خلال 6 أشهر."
-      />
 
       {missingTables.length > 0 && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/10 p-3 flex items-start gap-2">

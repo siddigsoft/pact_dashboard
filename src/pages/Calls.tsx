@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -275,11 +274,6 @@ const Calls = () => {
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950 overflow-hidden" data-testid="calls-page">
       <div className="px-6 pt-4 shrink-0">
-        <PageInfoBanner
-          title="Calls"
-          description="Voice and video calls with anyone in the platform. Pick a contact, dial, and the call rings on their device (web + mobile). All calls are logged with date, duration, and participants for follow-up. Use the call analytics page (admin only) to see call volume by team, missed-call rates, and connection quality."
-          descriptionAr="مكالمات صوتية ومرئية مع أي شخص في المنصة. اختر جهة اتصال واتصل، وستصدر المكالمة رنينًا على جهازه (الويب + الجوال). تُسجَّل جميع المكالمات بالتاريخ والمدة والمشاركين للمتابعة. استخدم صفحة تحليلات المكالمات (للمسؤولين فقط) لرؤية حجم المكالمات حسب الفريق ومعدلات المكالمات الفائتة وجودة الاتصال."
-        />
       </div>
 
       {/* Page Header */}

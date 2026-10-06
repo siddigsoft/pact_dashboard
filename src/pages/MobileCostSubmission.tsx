@@ -35,7 +35,6 @@ import { SignatureConfirmationModal } from "@/components/signatures/SignatureCon
 import type { SignatureMethod } from "@/types/signature";
 import { generateApprovalCertificatePdf, generateApprovalCertificateBase64 } from "@/utils/approvalCertificatePdf";
 import { exportSubmissionsToExcel, exportSubmissionsToPDF, exportOutstandingToExcel, exportOutstandingToPDF, exportReconciledToExcel, exportReconciledToPDF } from "@/utils/costSubmissionExport";
-import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import { EmailNotificationService } from "@/services/email-notification.service";
 import { NotificationTriggerService } from "@/services/NotificationTriggerService";
 import { dispatchNotification } from '@/lib/notify';
@@ -1126,23 +1125,6 @@ const MobileCostSubmission = () => {
         </AlertDialog>
 
         {expenseMode === 'operational' && (<>
-        <PageInfoBanner
-          title="Cost Submission - Operational Expenses"
-          description="Submit operational costs for reimbursement. Each submission goes through a two-tier approval before the amount is credited."
-          descriptionAr="قدم التكاليف التشغيلية للاسترداد. كل طلب يمر بموافقة على مستويين قبل إضافة المبلغ."
-          workflowSteps={[
-            { step: 1, role: 'Field Staff', action: 'Submits expense', description: 'Fill in cost details and submit.' },
-            { step: 2, role: 'Supervisor', action: 'Reviews (Tier 1)', description: 'Supervisor approves or rejects.' },
-            { step: 3, role: 'Admin', action: 'Final approval (Tier 2)', description: 'Admin gives final approval with signature.' },
-            { step: 4, role: 'System', action: 'Credits wallet', description: 'Amount added to your wallet.' },
-          ]}
-          workflowStepsAr={[
-            { step: 1, role: 'موظف ميداني', action: 'يقدم المصروف', description: 'املأ التفاصيل وأرسل.' },
-            { step: 2, role: 'المشرف', action: 'يراجع (المستوى 1)', description: 'المشرف يوافق أو يرفض.' },
-            { step: 3, role: 'المدير', action: 'الموافقة النهائية (المستوى 2)', description: 'المدير يوافق بالتوقيع.' },
-            { step: 4, role: 'النظام', action: 'يُضيف للمحفظة', description: 'يُضاف المبلغ لمحفظتك.' },
-          ]}
-        />
 
         <div className="grid grid-cols-2 gap-2 mt-3">
           <MobileStatsCard title="Pending" value={submissionStats.pending} subtitle="Awaiting review" icon={<Clock className="h-4 w-4" />} variant="compact" />

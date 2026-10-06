@@ -13,7 +13,6 @@ import { Loader2, RefreshCw, Download, AlertTriangle, CheckCircle2, RotateCcw } 
 import { format, differenceInMonths, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
@@ -192,7 +191,6 @@ export default function AccountingDepreciationRun() {
         </div>
       </div>
 
-      <PageInfoBanner title="Depreciation Run" description="Uses straight-line depreciation: (Cost − Salvage) ÷ Useful Life Months per asset. Click 'Run Depreciation' to post a batch journal entry for the current period. Fully depreciated assets (elapsed ≥ life) are excluded automatically." descriptionAr="يستخدم طريقة القسط الثابت: (التكلفة − قيمة الإنقاذ) ÷ العمر الإنتاجي بالأشهر. انقر لتشغيل جدولة الاستهلاك." />
 
       {migrationNeeded ? MIGRATION_NOTICE : loading ? (
         <PageLoader compact />

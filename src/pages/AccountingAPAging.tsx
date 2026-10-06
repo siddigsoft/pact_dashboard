@@ -12,7 +12,6 @@ import { format, differenceInDays } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { PageLoader } from '@/components/ui/page-loader';
 import { useApAgingQuery } from '@/hooks/useAccountingQueries';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
@@ -300,11 +299,6 @@ export default function AccountingAPAging() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="AP Aging Report"
-        description="Shows outstanding vendor balances grouped by how overdue they are relative to each vendor's payment terms. Red rows have amounts outstanding 90+ days. Requires vendors to be tagged on journal entry lines. Run supabase/vendors_migration.sql if the vendor column is missing."
-        descriptionAr="يُظهر أرصدة الموردين المستحقة مصنفةً حسب مدة التأخر عن تواريخ الاستحقاق. الصفوف الحمراء تحتوي على مبالغ متأخرة أكثر من 90 يوماً."
-      />
 
       {error && (
         <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">

@@ -12,7 +12,6 @@ import { Loader2, Building2, RefreshCw, Download, AlertTriangle } from 'lucide-r
 import { format, startOfYear, endOfYear, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import {
@@ -164,7 +163,6 @@ export default function AccountingConsolidation() {
         </div>
       </div>
 
-      <PageInfoBanner title="Financial Consolidation" description="Aggregates posted GL entries across all entities (countries/branches). Accounts scoped to a country are grouped as that entity; unscoped accounts appear as 'Unassigned'. Inter-entity Eliminations flags accounts used by 2+ entities — post manual elimination journal entries to remove double-counting." descriptionAr="يجمع قيود دفتر الأستاذ العام عبر جميع الكيانات ويحدد معاملات البنود البينية للإلغاء." />
 
       {error && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/10 p-3 flex items-start gap-2">

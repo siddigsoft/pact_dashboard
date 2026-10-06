@@ -20,7 +20,6 @@ import { exportToExcel } from '@/utils/report-export';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface ExchangeRate {
@@ -174,16 +173,6 @@ export default function AccountingMultiCurrency() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1100px]">
-      <PageInfoBanner
-        title="Multi-Currency & Exchange Rates"
-        description="Maintain historical exchange rate tables for all currency pairs. Rates are used for journal revaluation, AP invoice conversion, and multi-currency reporting."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Add Exchange Rate',       description: 'Enter the exchange rate between two currencies.' },
-          { step: 2, role: 'Finance Admin', action: 'Set Effective Date',      description: 'Specify the date from which the rate is valid.' },
-          { step: 3, role: 'System',        action: 'Apply Rate',              description: 'Rate is automatically applied when posting multi-currency transactions.' },
-          { step: 4, role: 'Finance Admin', action: 'Period-End Revaluation',  description: 'Run period-end revaluation to adjust foreign currency balances.' },
-        ]}
-      />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

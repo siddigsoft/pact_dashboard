@@ -22,7 +22,6 @@ import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -221,16 +220,6 @@ export default function AccountingTaxManagement() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1100px]">
-      <PageInfoBanner
-        title="Tax Management"
-        description="Define tax codes (VAT, WHT, customs) with rates and GL account mappings. Tax codes are applied to AP invoices and purchase orders for automatic tax calculation and reporting."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Define Tax Codes',        description: 'Create tax codes with rates, types and applicable countries.' },
-          { step: 2, role: 'Finance Admin', action: 'Map to GL Account',       description: 'Link each tax code to a dedicated GL liability account.' },
-          { step: 3, role: 'System',        action: 'Apply Tax',               description: 'Tax codes are automatically applied when entering invoices or POs.' },
-          { step: 4, role: 'Finance Admin', action: 'Generate Tax Report',     description: 'Run tax reports by period for compliance filing.' },
-        ]}
-      />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

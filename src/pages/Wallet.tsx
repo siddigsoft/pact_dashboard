@@ -55,7 +55,6 @@ import {
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import { DEFAULT_CURRENCY } from '@/types/wallet';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { WalletSignatureIntegration } from '@/components/wallet/WalletSignatureIntegration';
 import { StatusHistoryPanel } from '@/components/audit/StatusHistoryPanel';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
@@ -507,25 +506,6 @@ const WalletPage = () => {
       </div>
 
       <div className="relative space-y-6 p-3 sm:p-4 md:p-6 lg:p-8">
-        <PageInfoBanner
-          title="My Wallet - Your Earnings & Withdrawals"
-          description="This is YOUR personal wallet showing money you have EARNED from completed site visits, approved cost submissions, and retainer payments. From here you can request to WITHDRAW your earned funds. This is DIFFERENT from cost submissions (requesting reimbursement for expenses you spent -- use the Cost Submission page) and transportation advances (getting money upfront before a trip -- use the Down-Payment Approval page). Withdrawals requested here go through Tier 1 (Supervisor) and Tier 2 (Admin) approvals before Finance releases the payment."
-          descriptionAr="هذه هي محفظتك الشخصية التي تعرض الأموال التي كسبتها من الزيارات الميدانية المكتملة، وطلبات التكاليف المعتمدة، ومدفوعات المكافآت الشهرية. من هنا يمكنك طلب سحب أموالك المكتسبة. هذه الصفحة مختلفة عن طلبات التكاليف (طلب استرداد المصاريف التي أنفقتها -- استخدم صفحة تقديم التكاليف) وعن السلف المسبقة للنقل (الحصول على أموال مقدماً قبل الرحلة -- استخدم صفحة الموافقة على الدفعات المقدمة). طلبات السحب المقدمة هنا تمر عبر الموافقة الأولى (المشرف) والموافقة الثانية (المدير) قبل أن يقوم قسم المالية بصرف الدفعة."
-          workflowSteps={[
-            { step: 1, role: 'System', action: 'Credits your wallet', description: 'Money is added to your wallet when site visit fees are paid, cost submissions are approved, or retainers are processed.' },
-            { step: 2, role: 'Field Staff', action: 'Requests withdrawal (YOU ARE HERE)', description: 'You request to withdraw funds from your wallet balance to your bank account or mobile wallet.' },
-            { step: 3, role: 'Supervisor', action: 'Approves (Tier 1)', description: 'Your supervisor reviews the withdrawal request on the Tier 1 Approvals page.' },
-            { step: 4, role: 'Admin', action: 'Authorizes (Tier 2)', description: 'Admin gives final authorization on the Tier 2 Approvals page.' },
-            { step: 5, role: 'Finance Admin', action: 'Sends payment', description: 'Finance releases the money to you on the Finance Processing page.' },
-          ]}
-          workflowStepsAr={[
-            { step: 1, role: 'النظام', action: 'يُضيف رصيداً لمحفظتك', description: 'تُضاف الأموال إلى محفظتك عند صرف أتعاب الزيارات الميدانية، أو اعتماد طلبات التكاليف، أو معالجة المكافآت الشهرية.' },
-            { step: 2, role: 'موظف ميداني', action: 'يطلب السحب (أنت هنا)', description: 'تقوم بطلب سحب الأموال من رصيد محفظتك إلى حسابك البنكي أو محفظتك الإلكترونية.' },
-            { step: 3, role: 'المشرف', action: 'يوافق (المستوى الأول)', description: 'يراجع مشرفك طلب السحب في صفحة الموافقات - المستوى الأول.' },
-            { step: 4, role: 'المدير', action: 'يعتمد (المستوى الثاني)', description: 'يمنح المدير الاعتماد النهائي في صفحة الموافقات - المستوى الثاني.' },
-            { step: 5, role: 'مدير المالية', action: 'يُرسل الدفعة', description: 'يقوم قسم المالية بصرف الأموال لك عبر صفحة المعالجة المالية.' },
-          ]}
-        />
 
         {/* Cyber Header */}
         <div className="relative">

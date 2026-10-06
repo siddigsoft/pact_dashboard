@@ -18,7 +18,6 @@ import { exportToExcel } from '@/utils/report-export';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Vendor { id: string; vendor_code: string | null; name_en: string; vendor_type: string }
@@ -237,7 +236,6 @@ export default function AccountingPurchaseOrders() {
         </div>
       </div>
 
-      <PageInfoBanner title="Purchase Orders" description="Manage the full procurement lifecycle — draft → submit → approve → order → receive → complete. Approvers can approve or reject submitted POs. Requires supabase/purchase_orders_migration.sql to activate." descriptionAr="إدارة دورة المشتريات الكاملة من المسودة حتى الإتمام. يحتاج إلى تنفيذ purchase_orders_migration.sql." />
 
       {error && <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">{error}</div>}
 

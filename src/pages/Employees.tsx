@@ -34,7 +34,6 @@ import { useUser } from "@/context/user/UserContext";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { usePageManageOverride } from "@/hooks/usePageManageOverride";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
-import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import {
   exportStaffToExcel, exportStaffToPDF, exportStaffToCSV, type ExportProfile,
 } from "@/utils/staffDirectoryExport";
@@ -2435,11 +2434,6 @@ export default function Employees() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 space-y-5">
-        <PageInfoBanner
-          title="Employees"
-          description="Your full workforce registry, split into two tracks. Staff tab shows salary employees with their base salary, gross pay, and payroll account — sourced live from Payroll Admin. Field Team tab shows retainer-based field workers with classification level, monthly retainer amount, and last payment date — sourced live from Retainer Management. Both tabs share the same filters. Click any row to open the employee detail panel, which includes a Compensation section showing the full salary breakdown or retainer configuration. The workforce cost cards at the top show your live monthly salary commitment, retainer commitment, and combined cost. Bank Accounts tab shows the full account registry for payment processing. Financial Overview shows monthly activity across transportation advances, cost submissions, and withdrawal requests."
-          descriptionAr="سجل القوى العاملة الكامل، مقسم إلى مسارين: الموظفون (براتب) وفريق الميدان (مكافأة). انقر على أي صف لعرض تفاصيل الموظف وقسم التعويضات. بطاقات التكلفة أعلاه تعرض الالتزامات الشهرية الحية."
-        />
 
         {/* ── Stats ── */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

@@ -18,7 +18,6 @@ import { format, parseISO, differenceInMonths, addMonths } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
@@ -465,11 +464,6 @@ export default function AccountingFixedAssets() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Fixed Assets Register"
-        description="Track organizational assets with automatic depreciation calculation (straight-line or declining balance). Book value updates in real time. Run supabase/fixed_assets_migration.sql to activate this page."
-        descriptionAr="تتبع أصول المنظمة مع احتساب الاستهلاك تلقائياً (القسط الثابت أو المتناقص). تتحدث القيمة الدفترية في الوقت الفعلي."
-      />
 
       {error && <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">{error}</div>}
 

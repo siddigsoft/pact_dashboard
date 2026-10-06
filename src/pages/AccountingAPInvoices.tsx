@@ -20,7 +20,6 @@ import { format, parseISO, differenceInDays } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -254,18 +253,6 @@ export default function AccountingAPInvoices() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1200px]">
-      <PageInfoBanner
-        title="AP Invoices"
-        description="Manage accounts payable invoices. Invoices go through matching (PO + GRN), approval, GL posting, and payment. 3-way matching ensures invoice integrity before payment."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Create Invoice',          description: 'Enter vendor invoice details and link to PO and GRN.' },
-          { step: 2, role: 'Finance Admin', action: 'Submit',                  description: 'Submit invoice for 3-way match verification.' },
-          { step: 3, role: 'System',        action: '3-Way Match',             description: 'System verifies PO, GRN and invoice quantities and amounts align.' },
-          { step: 4, role: 'Finance Admin', action: 'Finance Approval',        description: 'Finance team approves the matched invoice.' },
-          { step: 5, role: 'System',        action: 'Post to GL',              description: 'Invoice is automatically journalised to the general ledger.' },
-          { step: 6, role: 'Finance Admin', action: 'Record Payment',          description: 'Payment is recorded and a cheque or transfer is issued.' },
-        ]}
-      />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

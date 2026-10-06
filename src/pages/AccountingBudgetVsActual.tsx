@@ -15,7 +15,6 @@ import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import jsPDF from 'jspdf';
@@ -340,11 +339,6 @@ export default function AccountingBudgetVsActual() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Budget vs. Actual"
-        description="Compare approved budgets to actual expenditure by account. Click the pencil icon on any row to set or update the budget amount inline. Rows with no budget show actual spend only. Red rows are over budget (>100%). Amber rows are approaching budget (≥85%). Run supabase/budget_lines_migration.sql first if the budget column shows errors."
-        descriptionAr="قارن الميزانيات المعتمدة بالإنفاق الفعلي حسب الحساب. انقر على أيقونة القلم في أي صف لتعيين مبلغ الميزانية أو تحديثه. الصفوف الحمراء تجاوزت الميزانية (>100%). الصفوف الكهرمانية تقترب من الميزانية (≥85%)."
-      />
 
       {/* Filters */}
       <Card className="mb-4">

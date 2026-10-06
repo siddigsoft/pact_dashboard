@@ -19,7 +19,6 @@ import {
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
 import { exportToExcel } from '@/utils/report-export';
 import jsPDF from 'jspdf';
@@ -424,11 +423,6 @@ export default function AccountingGrants() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Grant Tracking"
-        description="Monitor donor grants: awarded vs spent vs remaining, burn rate, expiry, and reporting milestones. Click any grant row to record expenses and manage milestone submissions."
-        descriptionAr="مراقبة المنح: المبلغ الممنوح مقابل المنفق والمتبقي ومعدل الصرف والمراحل."
-      />
 
       {migrationNeeded ? MIGRATION_NOTICE : (
         <>

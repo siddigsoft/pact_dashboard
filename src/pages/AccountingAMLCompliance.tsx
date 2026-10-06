@@ -23,7 +23,6 @@ import { format, parseISO, subMonths, differenceInDays } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -442,11 +441,6 @@ export default function AccountingAMLCompliance() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="AML & Compliance Monitoring"
-        description="Automatically flags posted journal entries that match suspicious-activity patterns: large transactions, near-threshold amounts (structuring risk), round-number transactions, and unusual frequency. Use the Watchlist tab to manage sanctioned entities and counterparties."
-        descriptionAr="يرصد تلقائياً القيود المشبوهة: المعاملات الكبيرة، المبالغ القريبة من العتبة (خطر التجزئة)، والمبالغ الكاملة. استخدم قائمة المراقبة لإدارة الأطراف المقيدة."
-      />
 
       {noDataTable && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/10 p-3 flex items-start gap-2">

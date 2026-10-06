@@ -16,7 +16,6 @@ import {
   normalBalanceFromLedgerNet,
 } from '@/lib/accountingBalances';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import {
   useGlBootstrapQuery,
   useGlLedgerQuery,
@@ -218,11 +217,6 @@ export default function AccountingGeneralLedger() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="General Ledger"
-        description="Shows every posted transaction for a selected account within a fiscal period, with a running balance column. Select an account and period, then click Run Ledger. Use the CSV export for reconciliation or auditor requests."
-        descriptionAr="يعرض كل معاملة مرحّلة لحساب محدد خلال فترة مالية مع عمود الرصيد الجاري. اختر الحساب والفترة ثم انقر 'تشغيل دفتر الأستاذ'. استخدم تصدير CSV للتسوية أو طلبات المراجعين."
-      />
 
       {/* Filters */}
       <Card className="mb-4">

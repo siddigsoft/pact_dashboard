@@ -19,7 +19,6 @@ import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { PageLoader } from '@/components/ui/page-loader';
 import { useBudgetEncumbranceQuery } from '@/hooks/useAccountingQueries';
@@ -170,16 +169,6 @@ export default function AccountingBudgetEncumbrance() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1100px]">
-      <PageInfoBanner
-        title="Budget Encumbrance & Commitment Accounting"
-        description="Track budget commitments from Purchase Requisitions and Purchase Orders before they become actual expenses. Encumbrances reduce the available budget to prevent overspending."
-        workflowSteps={[
-          { step: 1, role: 'System',        action: 'Encumbrance Opens',       description: 'Budget is reserved automatically when a PR or PO is approved.' },
-          { step: 2, role: 'System',        action: 'Budget Check',            description: 'System verifies remaining budget before committing funds.' },
-          { step: 3, role: 'System',        action: 'Encumbrance Liquidated',  description: 'Reservation is released when the matching AP invoice is posted.' },
-          { step: 4, role: 'System',        action: 'Post Expense to GL',      description: 'Final expense hits the general ledger via the GL Bridge.' },
-        ]}
-      />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
