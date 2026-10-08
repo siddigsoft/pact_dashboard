@@ -137,7 +137,6 @@ const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
 
 const DataExportCenter = lazy(() => import('./pages/DataExportCenter'));
-const EquipmentPage = lazy(() => import('./pages/Equipment'));
 const MonitoringForm = lazy(() => import('./pages/MonitoringForm'));
 const CRMPartners = lazy(() => import('./pages/CRMPartners'));
 const CRMDashboard = lazy(() => import('./pages/CRMDashboard'));
