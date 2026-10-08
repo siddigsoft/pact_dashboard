@@ -26,23 +26,6 @@ export function columnStorageSlug(page: PageColumnDef): string {
 
 export const COLUMN_REGISTRY: PageColumnDef[] = [
   {
-    pageSlug: 'site-visits',
-    pageLabel: 'Site Visits',
-    columns: [
-      { key: 'name',            label: 'Site Name' },
-      { key: 'hub',             label: 'Hub' },
-      { key: 'state',           label: 'State' },
-      { key: 'locality',        label: 'Locality' },
-      { key: 'collector',       label: 'Collector' },
-      { key: 'claimed_by',      label: 'Claimed By' },
-      { key: 'transport_fee',   label: 'Transport Fee',   sensitive: true },
-      { key: 'enumerator_fee',  label: 'Enumerator Fee',  sensitive: true },
-      { key: 'verified_by',     label: 'Verified By' },
-      { key: 'status',          label: 'Status' },
-      { key: 'date',            label: 'Visit Date' },
-    ],
-  },
-  {
     pageSlug: 'hr-hub:payroll-admin',
     storageSlug: 'payroll-admin',
     pageLabel: 'HR Hub · Payroll Admin',

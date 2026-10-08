@@ -170,7 +170,7 @@ const CreateSiteVisitUrgent = () => {
           <CardContent>
             <Button
               variant="outline"
-              onClick={() => navigate('/site-visits')}
+              onClick={() => navigate('/field-ops')}
               className="w-full"
             >
               Return to Site Visits
@@ -255,7 +255,7 @@ const CreateSiteVisitUrgent = () => {
           }
         );
         setTimeout(() => {
-          navigate('/site-visits');
+          navigate('/field-ops');
         }, 1500);
       } else {
         throw new Error("Failed to create site visit");

@@ -1402,7 +1402,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                           <Activity className="h-3 w-3 text-violet-500" />
                           {relatedSiteVisits.length} site visits linked
                         </span>
-                        <button onClick={() => navigate('/site-visits')}
+                        <button onClick={() => navigate('/field-ops')}
                           className="text-[9px] text-violet-500 hover:underline flex items-center gap-0.5">
                           View <ExternalLink className="h-2.5 w-2.5" />
                         </button>

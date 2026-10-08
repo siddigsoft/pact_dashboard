@@ -64,7 +64,7 @@ export const SiteVisitReminders: React.FC<SiteVisitRemindersProps> = ({
   };
   
   const handleViewAll = () => {
-    navigate("/site-visits");
+    navigate("/field-ops");
     onClose();
   };
   

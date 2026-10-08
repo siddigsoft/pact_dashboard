@@ -843,7 +843,6 @@
     const pendingTier2CostCount = counts.pendingTier2Cost;
     const pendingFinanceCount = counts.pendingFinanceDp;
     const unreadNotifCount = counts.unreadNotifications;
-    const openIncidentCount = counts.openIncidents;
     const pendingVerificationCount = counts.pendingVerification;
     const pendingWalletCount = counts.pendingWallet;
     const myTasksOverdueCount = counts.myTasksOverdue;
@@ -1424,9 +1423,6 @@
                   return <NavCountBadge count={pendingFinanceCount} className={BADGE_ACTION} testId="badge-finance-approval-count" />;
                 case 'notifications':
                   return <NavCountBadge count={unreadNotifCount} className={BADGE_INFO} testId="badge-notifications-unread-count" />;
-                case 'incident-reports':
-                case 'safety-hub':
-                  return <NavCountBadge count={openIncidentCount} className={BADGE_ACTION} testId="badge-incident-count" />;
                 case 'my-wallet':
                   return <NavCountBadge count={pendingWalletCount} className={BADGE_ACTION} testId="badge-wallet-pending-count" />;
                 case 'my-tasks':

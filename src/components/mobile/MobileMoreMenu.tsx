@@ -50,7 +50,6 @@ const menuSections: MenuSection[] = [
     title: 'Core Features',
     items: [
       { id: 'dashboard', icon: Home, label: 'Dashboard', path: '/dashboard', description: 'Overview and stats' },
-      { id: 'site-visits', icon: MapPin, label: 'Site Visits', path: '/site-visits', description: 'Manage field visits' },
       { id: 'field-team', icon: Map, label: 'Field Team Map', path: '/field-team', description: 'Live team locations' },
       { id: 'chat', icon: MessageSquare, label: 'Team Chat', path: '/chat', description: 'Messages and calls' },
       { id: 'notifications', icon: Bell, label: 'Notifications', path: '/notifications', description: 'All alerts' },

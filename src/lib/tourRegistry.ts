@@ -395,7 +395,7 @@ export const TOUR_REGISTRY: TourDef[] = [
       {
         popover: {
           title: 'Field operations in one hub',
-          description: "Field Ops Hub centralises everything for field teams: team management, site visits, incident reports, equipment tracking, and the live coverage map.",
+          description: "Field Ops Hub centralises field team work: monitoring forms, coverage map, team roster, and field maps.",
         },
       },
       {
@@ -412,35 +412,6 @@ export const TOUR_REGISTRY: TourDef[] = [
           title: 'Sub-page selector',
           description: "This dropdown shows all pages in the active section. Use it to jump between, for example, Site Visits and Monitoring Form without leaving the hub.",
           side: 'bottom',
-        },
-      },
-    ],
-  },
-
-  {
-    slug: 'site-visits',
-    label: 'Site Visits',
-    steps: [
-      {
-        popover: {
-          title: 'Site visit records',
-          description: "Site Visits is the audit log of every data collection visit — timestamps, GPS coordinates, photos, and verification status.",
-        },
-      },
-      {
-        element: 'input[placeholder*="earch" i], input[type="search"]',
-        popover: {
-          title: 'Search visits',
-          description: "Filter by site name, collector, date range, or verification status. Use the hub filter to narrow to your area of responsibility.",
-          side: 'bottom',
-        },
-      },
-      {
-        element: 'table',
-        popover: {
-          title: 'Visit rows',
-          description: "Click a visit to open its detail — submitted data, photos, GPS point on a map, and coordinator review status. You can verify or flag visits from here.",
-          side: 'top',
         },
       },
     ],
@@ -466,33 +437,6 @@ export const TOUR_REGISTRY: TourDef[] = [
         popover: {
           title: 'Submitting data',
           description: "Fill in all required fields (marked with *), attach photos if needed, then tap Submit. The data is saved immediately and enters the coordinator verification queue.",
-        },
-      },
-    ],
-  },
-
-  {
-    slug: 'safety-hub',
-    label: 'Safety Hub',
-    steps: [
-      {
-        popover: {
-          title: 'Safety & incident management',
-          description: "Safety Hub tracks all incident reports, safety scores per hub, and corrective actions. Use it to identify recurring issues and ensure field staff safety.",
-        },
-      },
-      {
-        element: '[role="tablist"]',
-        popover: {
-          title: 'Safety tabs',
-          description: "Switch between Incidents (the log), Safety Scores (hub rankings), and Corrective Actions (follow-up tasks from past incidents).",
-          side: 'bottom',
-        },
-      },
-      {
-        popover: {
-          title: 'Reporting an incident',
-          description: "Click + New Incident to file a report. Incidents are categorised by severity and automatically notify the relevant field manager.",
         },
       },
     ],

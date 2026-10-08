@@ -294,7 +294,7 @@ const AdvancedMap = () => {
             asChild
             data-testid="link-site-visits"
           >
-            <Link to="/site-visits">
+            <Link to="/field-ops">
               <MapPin className="h-4 w-4 mr-1" />
               Site Visits
             </Link>

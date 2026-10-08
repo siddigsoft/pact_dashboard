@@ -35,7 +35,7 @@ const DEFAULT_ACTIONS: QuickAction[] = [
     icon: <MapPin className="w-5 h-5" />,
     label: 'Start Visit',
     description: 'Begin a site visit',
-    route: '/site-visits',
+    route: '/site-visits/create',
     variant: 'primary',
   },
   {

@@ -42,18 +42,8 @@ export const HUB_TAB_REGISTRY: HubDef[] = [
         sectionId: 'monitoring',
         sectionLabel: 'Monitoring',
         tabs: [
-          { tabId: 'site-visits', label: 'Site Visits', description: 'Plan and manage field site visits.' },
           { tabId: 'monitoring-form', label: 'Monitoring Form', description: 'Submit structured monitoring data for a site visit.' },
           { tabId: 'coverage-map', label: 'MMP Coverage Map', description: 'Map MMP site coverage and completion status.' },
-        ],
-      },
-      {
-        sectionId: 'safety',
-        sectionLabel: 'Safety & Assets',
-        tabs: [
-          { tabId: 'safety-hub', label: 'Safety Hub', description: 'Review safety alerts and field staff check-ins.' },
-          { tabId: 'incident-reports', label: 'Incident Reports', description: 'Log and follow up on field incidents.' },
-          { tabId: 'equipment', label: 'Equipment Tracking', description: 'Track equipment assigned to field teams.' },
         ],
       },
       {

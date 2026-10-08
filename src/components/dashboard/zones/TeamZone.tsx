@@ -238,7 +238,7 @@ export const TeamZone: React.FC = () => {
             <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">{unassignedSiteCount} site{unassignedSiteCount !== 1 ? 's' : ''} without an assigned enumerator</span>
             <span className="text-xs text-amber-700 dark:text-amber-300 block">These sites are at risk of being missed this cycle. Assign team members now.</span>
           </div>
-          <Button size="sm" variant="outline" className="shrink-0 border-amber-400 text-amber-800 dark:text-amber-300 text-xs hover:bg-amber-100 dark:hover:bg-amber-950" onClick={() => navigate('/site-visits')} data-testid="button-view-unassigned">
+          <Button size="sm" variant="outline" className="shrink-0 border-amber-400 text-amber-800 dark:text-amber-300 text-xs hover:bg-amber-100 dark:hover:bg-amber-950" onClick={() => navigate('/field-ops')} data-testid="button-view-unassigned">
             Assign Now
           </Button>
         </div>

@@ -100,7 +100,7 @@ const SiteVisitDetail = () => {
       setIsDeleting(true);
       const ok = await deleteSiteVisit(siteVisit.id);
       if (ok) {
-        navigate('/site-visits');
+        navigate('/field-ops');
       }
     } finally {
       setIsDeleting(false);
@@ -242,7 +242,7 @@ const SiteVisitDetail = () => {
           <p className="text-muted-foreground text-sm">
             The site visit you're looking for doesn't exist or has been removed.
           </p>
-          <Button onClick={() => navigate('/site-visits')} className="mt-4">
+          <Button onClick={() => navigate('/field-ops')} className="mt-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Site Visits
           </Button>
@@ -265,7 +265,7 @@ const SiteVisitDetail = () => {
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => navigate('/site-visits')}
+            onClick={() => navigate('/field-ops')}
             data-testid="button-back"
           >
             <ArrowLeft className="h-5 w-5" />

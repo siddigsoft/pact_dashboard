@@ -27,7 +27,7 @@ const CreateSiteVisit = () => {
           <CardContent>
             <Button
               variant="outline"
-              onClick={() => navigate('/site-visits')}
+              onClick={() => navigate('/field-ops')}
               className="w-full"
             >
               Return to Site Visits
@@ -44,7 +44,7 @@ const CreateSiteVisit = () => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate("/site-visits")}
+          onClick={() => navigate("/field-ops")}
           className="mr-2"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />

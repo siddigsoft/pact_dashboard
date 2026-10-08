@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import { COLUMN_REGISTRY, columnStorageSlug } from '@/lib/column-registry';
 
 const COLUMN_CONSUMER_BY_STORAGE_SLUG: Record<string, string> = {
-  'site-visits': 'src/pages/SiteVisits.tsx',
   'payroll-admin': 'src/pages/PayrollAdmin.tsx',
   employees: 'src/pages/Employees.tsx',
   users: 'src/pages/Users.tsx',

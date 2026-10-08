@@ -57,7 +57,7 @@ const NotFound = () => {
     } else if (location.pathname.startsWith('/users/')) {
       navigate("/users");
     } else if (location.pathname.startsWith('/site-visits/')) {
-      navigate("/site-visits");
+      navigate("/field-ops");
     } else if (location.pathname.startsWith('/field-team/')) {
       navigate("/field-team");
     } else if (location.pathname.startsWith('/mmp/verify/')) {

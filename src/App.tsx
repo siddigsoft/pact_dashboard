@@ -52,7 +52,6 @@ const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const EditProject = lazy(() => import('./pages/EditProject'));
 const ProjectTeamManagement = lazy(() => import('./pages/ProjectTeamManagement'));
 const Settings = lazy(() => import('./pages/Settings'));
-const SiteVisits = lazy(() => import('./pages/SiteVisits'));
 const SiteVisitDetail = lazy(() => import('./pages/SiteVisitDetail'));
 const EditSiteVisit = lazy(() => import('./pages/EditSiteVisit'));
 const CreateSiteVisit = lazy(() => import('./pages/CreateSiteVisit'));
@@ -138,8 +137,6 @@ const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
 
 const DataExportCenter = lazy(() => import('./pages/DataExportCenter'));
-const SafetyHub = lazy(() => import('./pages/SafetyHub'));
-const IncidentReports = lazy(() => import('./pages/IncidentReports'));
 const EquipmentPage = lazy(() => import('./pages/Equipment'));
 const MonitoringForm = lazy(() => import('./pages/MonitoringForm'));
 const CRMPartners = lazy(() => import('./pages/CRMPartners'));
@@ -699,7 +696,7 @@ const AppRoutes = () => {
         <Route path="/mobile-cost-submission" element={<MobileCostSubmission />} />
         {/* ── Field Ops Hub ── */}
         <Route path="/field-ops" element={<FieldOpsHub />} />
-        <Route path="/site-visits" element={<SiteVisits />} />
+        <Route path="/site-visits" element={<Navigate to="/field-ops" replace />} />
         <Route path="/site-visits/create" element={<CreateSiteVisit />} />
         <Route path="/site-visits/create/mmp" element={<CreateSiteVisitMMP />} />
         <Route path="/site-visits/create/mmp/:id" element={<CreateSiteVisitMMPDetail />} />
@@ -761,9 +758,9 @@ const AppRoutes = () => {
         <Route path="/mobile-call-scheduling" element={<Navigate to="/super-admin-hub?tab=mobile-call-scheduling" replace />} />
         <Route path="/mobile-document-sync" element={<Navigate to="/super-admin-hub?tab=mobile-document-sync" replace />} />
         <Route path="/reconciliation-dashboard" element={<Navigate to="/finance-hub?tab=reconciliation" replace />} />
-        <Route path="/safety-hub" element={<Navigate to="/field-ops?tab=safety-hub" replace />} />
-        <Route path="/incident-reports" element={<Navigate to="/field-ops?tab=incident-reports" replace />} />
-        <Route path="/equipment" element={<Navigate to="/field-ops?tab=equipment" replace />} />
+        <Route path="/safety-hub" element={<Navigate to="/field-ops" replace />} />
+        <Route path="/incident-reports" element={<Navigate to="/field-ops" replace />} />
+        <Route path="/equipment" element={<Navigate to="/field-ops" replace />} />
         <Route path="/monitoring-form" element={<Navigate to="/field-ops?tab=monitoring-form" replace />} />
         <Route path="/coverage-map" element={<Navigate to="/field-ops?tab=coverage-map" replace />} />
         <Route path="/field-operation-manager" element={<Navigate to="/field-ops?tab=field-operation-manager" replace />} />

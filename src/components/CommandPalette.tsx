@@ -71,12 +71,8 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'Surveys', url: '/surveys', icon: ClipboardList, group: 'Planning & Setup', keywords: ['survey', 'questionnaire', 'form'] },
 
   // ── Field Operations ───────────────────────────────────────────────────────
-  { title: 'Site Visits', url: '/site-visits', icon: ClipboardList, group: 'Field Operations', keywords: ['visit', 'field'] },
   { title: 'Create Site Visit', url: '/site-visits/create', icon: ClipboardList, group: 'Field Operations', keywords: ['new visit'] },
   { title: 'Field Team', url: '/field-team', icon: Activity, group: 'Field Operations', keywords: ['team', 'map'] },
-  { title: 'Safety Hub', url: '/safety-hub', icon: Shield, group: 'Field Operations', keywords: ['safety', 'incident', 'risk'] },
-  { title: 'Equipment Tracking', url: '/equipment', icon: Package, group: 'Field Operations', keywords: ['equipment', 'asset', 'device'] },
-
   // ── Verification ───────────────────────────────────────────────────────────
   { title: 'Site Verification', url: '/coordinator/sites', icon: CheckCircle, group: 'Verification', keywords: ['verify', 'coordinator'] },
   { title: 'Coordinator Dashboard', url: '/coordinator-dashboard', icon: CheckCircle, group: 'Verification', keywords: ['coordinator'] },

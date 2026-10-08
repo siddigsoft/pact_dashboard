@@ -200,8 +200,6 @@ describe('exhaustive page access redirect coverage', () => {
       { slug: 'portfolio', mustInclude: ['programme-hub'] },
       { slug: 'users', mustInclude: ['admin-hub'] },
       { slug: 'role-management', mustInclude: ['admin-hub'] },
-      { slug: 'safety-hub', mustInclude: ['field-ops'] },
-      { slug: 'equipment', mustInclude: ['field-ops'] },
       { slug: 'wallet-reports', mustInclude: ['finance-hub'] },
       { slug: 'payroll', mustInclude: ['hr-hub'] },
       { slug: 'audit-logs', mustInclude: ['sa-audit-logs', 'super-admin-hub'] },

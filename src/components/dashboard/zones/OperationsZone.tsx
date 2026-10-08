@@ -456,7 +456,7 @@ export const OperationsZone: React.FC = () => {
   const handleCardClick = (cardType: MetricCardType) => {
     switch (cardType) {
       case 'total':
-        navigate('/site-visits');
+        navigate('/field-ops');
         break;
       case 'completed':
         navigate('/site-visits?status=completed');
@@ -474,7 +474,7 @@ export const OperationsZone: React.FC = () => {
         navigate('/site-visits?status=completed');
         break;
       default:
-        navigate('/site-visits');
+        navigate('/field-ops');
     }
   };
 

@@ -2,26 +2,19 @@ import { Suspense } from 'react';
 import { lazyWithRetry as lazy } from '@/lib/chunk-load-recovery';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Loader2, ClipboardList, ClipboardCheck, Shield, AlertTriangle,
-  Package, Activity, Map, MapPin, Compass, Info,
+  Loader2, ClipboardList, ClipboardCheck, Activity, Map, MapPin, Compass,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
-import { cn } from '@/lib/utils';
 
-const SiteVisitsPanel         = lazy(() => import('./SiteVisits'));
 const MonitoringFormPanel     = lazy(() => import('./MonitoringForm'));
 const CoverageMapPanel        = lazy(() => import('./CoverageMap'));
-const SafetyHubPanel          = lazy(() => import('./SafetyHub'));
-const IncidentReportsPanel    = lazy(() => import('./IncidentReports'));
-const EquipmentPanel          = lazy(() => import('./Equipment'));
 const FieldTeamPanel          = lazy(() => import('./FieldTeam'));
 const AdvancedMapPanel        = lazy(() => import('./AdvancedMap'));
 const FieldOpManagerPanel     = lazy(() => import('./FieldOperationManager'));
 
-type FOSection = 'monitoring' | 'safety' | 'teams';
+type FOSection = 'monitoring' | 'teams';
 type FOTab =
-  | 'site-visits' | 'monitoring-form' | 'coverage-map'
-  | 'safety-hub' | 'incident-reports' | 'equipment'
+  | 'monitoring-form' | 'coverage-map'
   | 'field-team' | 'map' | 'field-operation-manager';
 
 interface TabDef { id: FOTab; label: string; icon: React.ElementType; description: string }
@@ -30,12 +23,8 @@ interface SectionDef { id: FOSection; label: string; icon: React.ElementType; co
 const SECTIONS: SectionDef[] = [
   {
     id: 'monitoring', label: 'Monitoring', icon: ClipboardList, color: '#0284c7',
-    description: 'Plan and record field monitoring activities — site visits, data collection forms, and MMP coverage tracking.',
+    description: 'Plan and record field monitoring activities — data collection forms and MMP coverage tracking.',
     tabs: [
-      {
-        id: 'site-visits', label: 'Site Visits', icon: ClipboardList,
-        description: 'View, plan, and manage all field site visits — filter by status, cycle, or location; track completion and data collector assignments.',
-      },
       {
         id: 'monitoring-form', label: 'Monitoring Form', icon: ClipboardCheck,
         description: 'Submit structured monitoring data for a site visit — answer indicator questions, attach photos, record observations, and save offline.',
@@ -43,24 +32,6 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'coverage-map', label: 'MMP Coverage Map', icon: MapPin,
         description: 'Visual map overlay showing MMP site coverage status — completed, pending, and uncovered sites for the active cycle across all locations.',
-      },
-    ],
-  },
-  {
-    id: 'safety', label: 'Safety & Assets', icon: Shield, color: '#dc2626',
-    description: 'Monitor field safety alerts, log incidents, and track equipment issued to field teams.',
-    tabs: [
-      {
-        id: 'safety-hub', label: 'Safety Hub', icon: Shield,
-        description: 'Real-time safety dashboard — active alerts, security advisories, check-in status for deployed staff, and emergency contact directory.',
-      },
-      {
-        id: 'incident-reports', label: 'Incident Reports', icon: AlertTriangle,
-        description: 'Log, review, and follow up on field incidents — accidents, security events, or operational disruptions — with severity ratings and response tracking.',
-      },
-      {
-        id: 'equipment', label: 'Equipment Tracking', icon: Package,
-        description: 'Manage field equipment inventory — track assignments, condition, maintenance schedules, and return status for all assets issued to field staff.',
       },
     ],
   },
@@ -85,15 +56,11 @@ const SECTIONS: SectionDef[] = [
 ];
 
 const ALL_TABS = SECTIONS.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id, sectionColor: s.color })));
-const DEFAULT_TAB: FOTab = 'site-visits';
+const DEFAULT_TAB: FOTab = 'monitoring-form';
 
 const PanelMap: Record<FOTab, React.LazyExoticComponent<any>> = {
-  'site-visits': SiteVisitsPanel,
   'monitoring-form': MonitoringFormPanel,
   'coverage-map': CoverageMapPanel,
-  'safety-hub': SafetyHubPanel,
-  'incident-reports': IncidentReportsPanel,
-  'equipment': EquipmentPanel,
   'field-team': FieldTeamPanel,
   'map': AdvancedMapPanel,
   'field-operation-manager': FieldOpManagerPanel,
@@ -127,7 +94,7 @@ export default function FieldOpsHub() {
   return (
     <HubLayout
       title="Field Operations Hub"
-      subtitle="Monitoring · Safety · Teams & Maps"
+      subtitle="Monitoring · Teams & Maps"
       hubIcon={Compass}
       sections={SECTIONS}
       activeSectionId={activeSection.id}
