@@ -149,7 +149,6 @@ export default function CRMHub() {
       activeSectionId={activeSection?.id ?? null}
       activeTabId={activeTab}
       activeTabDescription={activeTabDef?.description ?? null}
-      quickLinks={['dashboard', 'projects', 'communication', 'my-tasks']}
       tourSlug="crm"
       onSectionClick={id => setTab(id as CRMTab)}
       onTabClick={id => setTab(id as CRMTab)}

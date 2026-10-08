@@ -26,7 +26,6 @@ import ProjectList from '@/components/project/ProjectList';
 import ProjectBoardView from '@/components/project/ProjectBoardView';
 import ProjectTimelineView from '@/components/project/ProjectTimelineView';
 import { useProjectContext } from '@/context/project/ProjectContext';
-import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useUser } from '@/context/user/UserContext';
@@ -229,9 +228,6 @@ const ProjectsPage = () => {
           )}
         </div>
       </div>
-
-      {/* Quick Navigation */}
-      <ConnectedPagesBar exclude="projects" include={['analytics', 'portfolio']} />
 
       {/* Condensed Statistics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">

@@ -172,6 +172,27 @@ export function evaluateManifestRouteAccess(manifest: CurrentUserAccessManifest,
   return !tab || !manifestIsTabBlocked(manifest, tab.slug);
 }
 
+/** Hub roots whose in-module tabs are reached from HubLayout, not the sidebar. */
+const HUB_NAV_ROOTS = new Set([
+  '/finance-hub',
+  '/accounting',
+  '/pre-funding',
+  '/hr',
+  '/programme-hub',
+  '/field-ops',
+  '/crm',
+  '/communication-hub',
+  '/analytics',
+  '/admin-hub',
+  '/super-admin-hub',
+]);
+
+/** True when path is a hub `?tab=` leaf — sidebar shows the hub door only. */
+export function isHubTabNavigationPath(path: string): boolean {
+  if (!path.includes('?tab=')) return false;
+  return HUB_NAV_ROOTS.has(path.split('?')[0]);
+}
+
 /** Registry-driven navigation for a signed-in user. Personal preferences can
  * only remove or reorder these pages; they cannot create an access grant. */
 export function getManifestNavigationPages(manifest: CurrentUserAccessManifest): PageDef[] {
@@ -181,6 +202,8 @@ export function getManifestNavigationPages(manifest: CurrentUserAccessManifest):
     // re-admit a page that is explicitly blocked on its canonical identity.
     if (!evaluateManifestPageAccess(manifest, page.slug).allowed) return [];
     const path = PAGE_ACCESS_REDIRECTS.find(redirect => redirect.fromPath === page.path)?.toPath ?? page.path;
+    // Sidebar is cross-app only — hub tabs are navigated inside HubLayout.
+    if (isHubTabNavigationPath(path)) return [];
     const url = new URL(path, 'https://access.invalid');
     if (destinations.has(path) || !evaluateManifestRouteAccess(manifest, url.pathname, url.search, url.hash)) return [];
     destinations.add(path);

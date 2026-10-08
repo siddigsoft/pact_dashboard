@@ -171,19 +171,14 @@ const RoleManagement = () => {
   return (
     <div className="mx-auto w-full max-w-[1480px] space-y-5 p-3 sm:p-5 lg:p-7">
       <div className="flex shrink-0 flex-col items-start justify-between gap-4 lg:flex-row lg:items-center">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#18252b] text-amber-300 shadow-sm">
-            <Shield className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-800 dark:text-white">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-800 dark:text-white">
               Security &amp; Access
             </h1>
-            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500">
+            <p className="text-xs text-slate-500">
               Role baselines
             </p>
           </div>
-        </div>
         <div className="flex w-full flex-wrap gap-2 lg:w-auto">
           <Button
             type="button"

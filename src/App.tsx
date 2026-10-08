@@ -40,7 +40,6 @@ const Calls = lazy(() => import('./pages/Calls'));
 const CallAnalytics = lazy(() => import('./pages/CallAnalytics'));
 const Chat = lazy(() => import('./pages/Chat'));
 const FieldTeam = lazy(() => import('./pages/FieldTeam'));
-const Finance = lazy(() => import('./pages/Finance'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Projects = lazy(() => import('./pages/Projects'));
 const ProjectAnalytics = lazy(() => import('./pages/ProjectAnalytics'));
@@ -637,7 +636,7 @@ const AppRoutes = () => {
         <Route path="/communication-hub" element={<CommunicationHub />} />
         <Route path="/call-analytics" element={<CallAnalytics />} />
         <Route path="/field-team" element={<Navigate to="/field-ops?tab=field-team" replace />} />
-        <Route path="/finance" element={<Finance />} />
+        <Route path="/finance" element={<Navigate to="/finance-hub" replace />} />
         <Route path="/financial-operations" element={<Navigate to="/finance-hub?tab=financial-ops" replace />} />
         <Route path="/data-visibility" element={<Navigate to="/analytics?tab=data-visibility" replace />} />
         <Route path="/chat" element={<Navigate to="/communication-hub?tab=chat" replace />} />
@@ -816,7 +815,7 @@ const AppRoutes = () => {
         <Route path="/recycle-bin" element={<SuperAdminRoute><RecycleBin /></SuperAdminRoute>} />
         <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
         <Route path="/accounting" element={<AccountingHub />} />
-        {/* Legacy misnamed hub URLs (ConnectedPagesBar / bookmarks) */}
+        {/* Legacy misnamed hub URLs (bookmarks / old links) */}
         <Route path="/accounting-hub" element={<Navigate to="/accounting" replace />} />
         <Route path="/field-ops-hub" element={<Navigate to="/field-ops" replace />} />
         <Route path="/analytics-hub" element={<Navigate to="/analytics" replace />} />

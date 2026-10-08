@@ -14,7 +14,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
-import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -284,8 +283,6 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
   return (
     <div className={cn('min-h-screen bg-[#f5f7fa] dark:bg-[#0d1117]', embedded && 'min-h-0')}>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 space-y-5">
-
-        {!embedded && <ConnectedPagesBar exclude="hr" />}
 
         {/* Page header */}
         {!embedded && (

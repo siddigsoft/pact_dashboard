@@ -5,7 +5,6 @@ import {
   CheckSquare, ClipboardList, Settings, Activity, Info,
   ChevronRight, ChevronDown,
 } from 'lucide-react';
-import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { cn } from '@/lib/utils';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
@@ -152,16 +151,16 @@ export default function AdminHub() {
 
       {/* ── Sticky composite header ── */}
       <div
-        className="sticky top-0 z-30 shadow-2xl"
+        className="sticky top-0 z-30 shadow-sm"
         style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 60%, #0f2240 100%)' }}
       >
 
-        {/* ── Level 1: Hub identity + quick nav ── */}
+        {/* ── Level 1: Hub identity ── */}
         <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-4 border-b border-white/10">
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
-              style={{ background: activeSection?.color ?? '#3b82f6', boxShadow: `0 0 16px ${(activeSection?.color ?? '#3b82f6')}55` }}
+              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: activeSection?.color ?? '#3b82f6' }}
             >
               {activeSection ? (
                 <activeSection.icon className="h-4.5 w-4.5 text-white" style={{ width: 18, height: 18 }} />
@@ -191,9 +190,6 @@ export default function AdminHub() {
                 {visibleSections.length === 0 && <span className="opacity-60">No accessible sections</span>}
               </div>
             </div>
-          </div>
-          <div className="hidden md:block shrink-0">
-            <ConnectedPagesBar pages={['dashboard', 'my-tasks', 'hr', 'projects']} />
           </div>
         </div>
 

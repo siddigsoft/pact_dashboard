@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { ConnectedPagesBar } from './connected-pages-bar';
 import { TourButton } from '@/components/onboarding/TourButton';
 
 export interface HubSection {
@@ -28,7 +27,6 @@ interface HubLayoutProps {
   activeSectionId: string | null;
   activeTabId: string | null;
   activeTabDescription: string | null;
-  quickLinks: string[];
   onSectionClick: (firstTabId: string) => void;
   onTabClick: (tabId: string) => void;
   children: React.ReactNode;
@@ -42,7 +40,7 @@ interface HubLayoutProps {
 export function HubLayout({
   title, subtitle, hubIcon: HubIcon,
   sections, activeSectionId, activeTabId, activeTabDescription,
-  quickLinks, onSectionClick, onTabClick,
+  onSectionClick, onTabClick,
   children, overviewContent, tourSlug, fullPage = false,
 }: HubLayoutProps) {
   const activeSection = sections.find(s => s.id === activeSectionId) ?? null;
@@ -76,16 +74,16 @@ export function HubLayout({
 
       {/* ── Sticky composite header ── */}
       <div
-        className="sticky top-0 z-30 shadow-2xl"
+        className="sticky top-0 z-30 shadow-sm"
         style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 60%, #0f2240 100%)' }}
       >
 
-        {/* ── Level 1: Hub identity + quick nav ── */}
+        {/* ── Level 1: Hub identity ── */}
         <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-4 border-b border-white/10">
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg transition-all duration-300"
-              style={{ background: accent, boxShadow: `0 0 16px ${accent}55` }}
+              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: accent }}
             >
               <HubIcon style={{ width: 18, height: 18, color: 'white' }} />
             </div>
@@ -107,10 +105,11 @@ export function HubLayout({
               </div>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-2 shrink-0">
-            {tourSlug && <TourButton slug={tourSlug} variant="inline" />}
-            <ConnectedPagesBar pages={quickLinks} />
-          </div>
+          {tourSlug && (
+            <div className="hidden md:flex items-center gap-2 shrink-0">
+              <TourButton slug={tourSlug} variant="inline" />
+            </div>
+          )}
         </div>
 
         {/* ── Level 2: Section tabs ── */}
@@ -203,11 +202,10 @@ export function HubLayout({
             {/* ── Dropdown panel ── */}
             {dropOpen && (
               <div
-                className="absolute top-full left-4 right-4 mt-1 rounded-xl border shadow-2xl overflow-hidden z-50"
+                className="absolute top-full left-4 right-4 mt-1 rounded-xl border shadow-xl overflow-hidden z-50"
                 style={{
                   background: 'linear-gradient(135deg, #0d1f3c 0%, #0f2240 100%)',
                   borderColor: `${accent}35`,
-                  boxShadow: `0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px ${accent}25`,
                 }}
               >
                 {/* Panel header */}

@@ -124,8 +124,6 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin','financialAdmin','auditor','fom','countryDirector','seniorOperationsLead'], note:'Unified hub: financial ops, wallets admin, advances report' },
   { slug:'finance-subscriptions', label:'Subscriptions',         path:'/finance-hub?tab=subscriptions', icon:CreditCard, group:'Finance',
     roles:['superAdmin','admin','financialAdmin','auditor'] },
-  { slug:'finance',             label:'Finance (Legacy)',        path:'/finance',                icon:Banknote, group:'Finance',
-    roles:['superAdmin','admin','financialAdmin','auditor'], note:'Legacy finance page; most functionality moved to Finance Hub' },
   { slug:'mobile-cost-submission', label:'Mobile Cost Submission', path:'/mobile-cost-submission', icon:Smartphone, group:'Finance',
     roles:['superAdmin','admin','supervisor','fom','coordinator','dataCollector'] },
   { slug:'budget-requests',     label:'Budget Requests',        path:'/budget-requests',        icon:DollarSign, group:'Finance',

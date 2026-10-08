@@ -107,6 +107,7 @@ export const PAGE_ACCESS_REDIRECTS: PageAccessRedirect[] = [
   { fromPath: '/finance/audit-trail', toPath: '/accounting?tab=finance-audit-trail' },
   { fromPath: '/finance/down-payments', toPath: '/down-payment-approval' },
   { fromPath: '/finance/operational-costs', toPath: '/cost-approval' },
+  { fromPath: '/finance', toPath: '/finance-hub' },
   { fromPath: '/financial-operations', toPath: '/finance-hub?tab=financial-ops' },
   { fromPath: '/headcount-planning', toPath: '/hr?tab=headcount' },
   { fromPath: '/hr/eosb', toPath: '/hr?tab=eosb' },

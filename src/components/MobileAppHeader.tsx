@@ -252,7 +252,7 @@ const MobileAppHeader = ({
               { id: 'cost-submission', icon: Receipt, title: 'Submit Costs', url: '/cost-submission', priority: 2 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead']) ? [
-              { id: 'finance', icon: DollarSign, title: 'Finance Overview', url: '/finance', priority: 3 }
+              { id: 'finance', icon: DollarSign, title: 'Finance Hub', url: '/finance-hub', priority: 3 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)']) ? [
               { id: 'financial-ops', icon: TrendingUp, title: 'Financial Operations', url: '/financial-operations', priority: 4 }

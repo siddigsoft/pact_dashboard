@@ -11,7 +11,6 @@ const COLUMN_CONSUMER_BY_STORAGE_SLUG: Record<string, string> = {
   'admin-wallets': 'src/pages/AdminWallets.tsx',
   'cost-submission': 'src/pages/CostSubmission.tsx',
   'transaction-scanner': 'src/pages/TransactionScanner.tsx',
-  'finance-hub': 'src/pages/Finance.tsx',
   'accounting-general-ledger': 'src/pages/AccountingGeneralLedger.tsx',
   'accounting-journals': 'src/pages/AccountingJournals.tsx',
   'down-payment-approval': 'src/pages/DownPaymentApproval.tsx',

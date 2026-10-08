@@ -75,7 +75,7 @@ const menuSections: MenuSection[] = [
       { id: 'wallet', icon: Wallet, label: 'My Wallet', path: '/wallet', description: 'Balance and transactions' },
       { id: 'cost-submission', icon: Receipt, label: 'Submit Costs', path: '/cost-submission', description: 'Expense submissions',
         roles: ['SuperAdmin', 'Admin', 'DataCollector', 'Coordinator', 'Supervisor'] },
-      { id: 'finance', icon: DollarSign, label: 'Finance Overview', path: '/finance', description: 'Financial dashboard',
+      { id: 'finance', icon: DollarSign, label: 'Finance Hub', path: '/finance-hub', description: 'Financial dashboard',
         roles: ['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead'] },
       { id: 'financial-ops', icon: TrendingUp, label: 'Financial Operations', path: '/financial-operations', description: 'Advanced finance',
         roles: ['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)'] },

@@ -220,7 +220,6 @@ export default function SuperAdminHub() {
       activeSectionId={activeSection?.id ?? null}
       activeTabId={activeTab}
       activeTabDescription={activeSection ? activeTabDef.description : null}
-      quickLinks={['dashboard', 'admin', 'my-tasks']}
       tourSlug="super-admin-hub"
       fullPage
       onSectionClick={id => setTab(id as SATab)}

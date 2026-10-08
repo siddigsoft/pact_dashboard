@@ -130,19 +130,6 @@ export const COLUMN_REGISTRY: PageColumnDef[] = [
     ],
   },
   {
-    pageSlug: 'finance-hub',
-    pageLabel: 'Finance Hub',
-    columns: [
-      { key: 'project',     label: 'Project / Hub' },
-      { key: 'inflow',      label: 'Inflow',            sensitive: true },
-      { key: 'outflow',     label: 'Outflow',           sensitive: true },
-      { key: 'net',         label: 'Net Balance',       sensitive: true },
-      { key: 'budget',      label: 'Budget Amount',     sensitive: true },
-      { key: 'fund_source', label: 'Fund Source' },
-      { key: 'allocation',  label: 'Allocation Amount', sensitive: true },
-    ],
-  },
-  {
     pageSlug: 'accounting:ledger',
     storageSlug: 'accounting-general-ledger',
     pageLabel: 'Accounting · General Ledger',

@@ -12,7 +12,6 @@
     Link2,
     Database,
     ClipboardList,
-    Copy,
     LogOut,
     LayoutDashboard,
     ChevronUp,
@@ -20,7 +19,6 @@
     ShieldCheck,
     Network,
     Calendar,
-    CalendarOff,
     Archive,
     CreditCard,
     DollarSign,
@@ -50,43 +48,19 @@
     Mail,
     Smartphone,
     HelpCircle,
-    PenTool,
-    PhoneCall,
-    RefreshCw,
-    Megaphone,
-    ScanLine,
-    Siren,
-    Shuffle,
     AlertTriangle,
-    Package,
     HeartPulse,
-    Heart,
-    ShieldAlert,
     RotateCcw,
     CheckSquare,
     Handshake,
     FolderOpen,
     Compass,
-    Lock,
     Inbox,
-    FileBarChart,
-    CalendarCheck,
     Sparkles,
-    FilePlus,
     Wallet,
-    Clock,
-    Landmark,
-    Settings2,
-    Zap,
-    ShoppingCart,
     ArrowLeftRight,
-    PiggyBank,
-    Search,
-    GraduationCap,
+    Settings2,
     Layers,
-    FileDown,
-    Languages,
-    Webhook,
     X as XIcon,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
@@ -139,7 +113,7 @@
   import { getMmpDisplayLabel } from "@/lib/mmp-display";
   import { useViewAs } from "@/context/ViewAsContext";
   import { useCurrentUserAccessManifest } from "@/hooks/useCurrentUserAccessManifest";
-  import { evaluateManifestPageAccess, manifestHasPermission, getManifestNavigationPages } from "@/lib/current-user-access";
+  import { evaluateManifestPageAccess, manifestHasPermission, getManifestNavigationPages, isHubTabNavigationPath } from "@/lib/current-user-access";
   import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
   import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
   import { CSS } from '@dnd-kit/utilities';
@@ -147,20 +121,13 @@
   import { toast } from "@/hooks/use-toast";
   import { cn } from "@/lib/utils";
 
-  /** Groups with many links â€” collapsed by default to reduce visual clutter */
+  /** Groups with many links — collapsed by default to reduce visual clutter */
   const DENSE_COLLAPSED_BY_DEFAULT = new Set([
     // section parents
     'workspace-parent', 'programme-parent', 'comms-parent', 'fieldops-parent',
     'coordination-parent', 'hr-parent', 'crm-parent', 'surveys-parent',
     'analytics-parent', 'admin-parent', 'help-parent', 'superadmin-parent',
     'super-admin',
-    'finance-accounting',
-    'finance-accounting-ops',
-    'finance-accounting-p2p',
-    'finance-accounting-controls',
-    'finance-accounting-advanced',
-    'finance-hub-operations',
-    'finance-hub-reports',
     'finance-reports',
     'finance-management',
     'admin',
@@ -394,8 +361,6 @@
         programme.push({ id: 'programme-hub', title: 'Programme Hub', url: '/programme-hub', icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
       if (!isHidden('/projects'))
         programme.push({ id: 'projects', title: 'Projects', url: '/projects', icon: FolderOpen, priority: 2, isPinned: isPinned('/projects') });
-      if (!isHidden('/portfolio') && !isHidden('/programme-hub'))
-        programme.push({ id: 'portfolio', title: 'Portfolio', url: '/programme-hub?tab=portfolio', icon: LayoutDashboard, priority: 3, isPinned: isPinned('/programme-hub?tab=portfolio') });
       if (programme.length)
         groups.push({ id: 'programme-planning', label: 'Planning', order: 2.1, items: programme, parentGroup: 'programme' } as any);
 
@@ -547,172 +512,55 @@
     }
     if (approvalItems.length) groups.push({ id: 'finance-approvals', label: "Approvals", order: 5.2, items: approvalItems, parentGroup: 'finance' } as any);
 
-    // ── Finance Hub — 2 sections mirroring FinanceHub page ───────────────────
+    // ── Finance Hub — single door; tabs live inside the hub ──────────────────
     const finHubAccess = isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM || isCountryDirector || isSeniorManagement;
     if (finHubAccess && !isHidden('/finance-hub')) {
-      // ── 1. Operations ─────────────────────────────────────────────────────
-      const fhOpsItems: MenuGroup['items'] = [];
-      fhOpsItems.push({ id: 'finance-hub-home',         title: 'Finance Hub',          url: '/finance-hub',                        icon: LayoutDashboard, priority: 1, isPinned: isPinned('/finance-hub') });
-      fhOpsItems.push({ id: 'finance-hub-budget',       title: 'Budget',               url: '/finance-hub?tab=budget',             icon: DollarSign,      priority: 2, isPinned: isPinned('/finance-hub?tab=budget') });
-      fhOpsItems.push({ id: 'finance-hub-fin-ops',      title: 'Financial Operations', url: '/finance-hub?tab=financial-ops',      icon: Activity,        priority: 3, isPinned: isPinned('/finance-hub?tab=financial-ops') });
-      fhOpsItems.push({ id: 'finance-hub-wallets',      title: 'Wallets Admin',        url: '/finance-hub?tab=admin-wallets',      icon: CreditCard,      priority: 4, isPinned: isPinned('/finance-hub?tab=admin-wallets') });
-      fhOpsItems.push({ id: 'finance-hub-recon',        title: 'Reconciliation',       url: '/finance-hub?tab=reconciliation',     icon: RefreshCw,       priority: 5, isPinned: isPinned('/finance-hub?tab=reconciliation') });
-      fhOpsItems.push({ id: 'finance-hub-subscriptions',title: 'Subscriptions',        url: '/finance-hub?tab=subscriptions',      icon: Layers,          priority: 6, isPinned: isPinned('/finance-hub?tab=subscriptions') });
-      groups.push({ id: 'finance-hub-operations', label: 'Finance Hub', order: 5.3, items: fhOpsItems, parentGroup: 'finance' } as any);
-
-      // ── 2. Reports ────────────────────────────────────────────────────────
-      const fhReportItems: MenuGroup['items'] = [];
-      fhReportItems.push({ id: 'finance-hub-wallet-rpt',    title: 'Wallet Reports',            url: '/finance-hub?tab=wallet-reports',      icon: BarChart3,     priority: 1, isPinned: isPinned('/finance-hub?tab=wallet-reports') });
-      fhReportItems.push({ id: 'finance-hub-advance-rpt',   title: 'Transport Advance Report',  url: '/finance-hub?tab=advance-report',      icon: ClipboardList, priority: 2, isPinned: isPinned('/finance-hub?tab=advance-report') });
-      fhReportItems.push({ id: 'finance-hub-dup-payments',  title: 'Duplicate Payments',        url: '/finance-hub?tab=duplicate-payments',  icon: Copy,          priority: 3, isPinned: isPinned('/finance-hub?tab=duplicate-payments') });
-      fhReportItems.push({ id: 'finance-hub-cost-pred',     title: 'Cost Predictions',          url: '/finance-hub?tab=cost-predictions',    icon: TrendingUp,    priority: 4, isPinned: isPinned('/finance-hub?tab=cost-predictions') });
-      fhReportItems.push({ id: 'finance-hub-fx',            title: 'Exchange Rates',            url: '/finance-hub?tab=exchange-rates',      icon: ArrowLeftRight,priority: 5, isPinned: isPinned('/finance-hub?tab=exchange-rates') });
-      fhReportItems.push({ id: 'finance-hub-salary-rpt',    title: 'Salary & Retainer Report',  url: '/finance-hub?tab=salary-retainer',     icon: Users,         priority: 6, isPinned: isPinned('/finance-hub?tab=salary-retainer') });
-      fhReportItems.push({ id: 'finance-hub-month-end',     title: 'Month-End Summary',         url: '/finance-hub?tab=month-end',           icon: CalendarCheck, priority: 7, isPinned: isPinned('/finance-hub?tab=month-end') });
-      fhReportItems.push({ id: 'finance-hub-field-pay',     title: 'Field Payments Centre',     url: '/field-payments',                      icon: Receipt,       priority: 8, isPinned: isPinned('/field-payments') });
-      groups.push({ id: 'finance-hub-reports', label: 'Finance Reports', order: 5.31, items: fhReportItems, parentGroup: 'finance' } as any);
+      groups.push({
+        id: 'finance-hub-group',
+        label: 'Finance Hub',
+        order: 5.3,
+        items: [{ id: 'finance-hub-home', title: 'Finance Hub', url: '/finance-hub', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/finance-hub') }],
+        parentGroup: 'finance',
+      } as any);
     }
 
-    // ── Pre-Funding module ────────────────────────────────────────────
-    const preFundItems: MenuGroup['items'] = [];
-    const addPreFundItem = (
-      id: string,
-      title: string,
-      url: string,
-      icon: any,
-      priority: number,
-    ) => {
-      if (!isHidden(url)) {
-        preFundItems.push({ id, title, url, icon, priority, isPinned: isPinned(url) });
-      }
-    };
-
-    const isPreFundFinance = isSuperAdmin || isAdmin || isFinancialAdmin;
-    if (isPreFundFinance) {
-      // Canonical URLs use /pre-funding?tab=… (path aliases still redirect in App.tsx).
-      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding?tab=overview',            Banknote,    1);
-      addPreFundItem('pre-funding-registry',  'Fund Registry',       '/pre-funding?tab=registry',            FileText,    2);
-      addPreFundItem('pre-funding-approvals', 'Approval Flow',       '/pre-funding?tab=approvals',           CheckSquare, 3);
-      addPreFundItem('pre-funding-recon',     'Reconciliation',      '/pre-funding?tab=reconciliation',      Landmark,    4);
-      addPreFundItem('pre-funding-alloc',    'Allocation Dashboard', '/pre-funding?tab=allocations',        Users,       5);
-      addPreFundItem('pre-funding-settings',  'Settings',             '/pre-funding?tab=settings',            Settings,    6);
-      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding?tab=report',              FileBarChart, 7);
-      addPreFundItem('pre-funding-distribute','Distribute Funds',     '/pre-funding?tab=distribute',         Wallet,       8);
-    } else if (isCountryDirector) {
-      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding?tab=overview',            Banknote,    1);
-      addPreFundItem('pre-funding-alloc',    'Allocation Dashboard', '/pre-funding?tab=allocations',        Users,       2);
-      addPreFundItem('pre-funding-distribute','Distribute Funds',     '/pre-funding?tab=distribute',         Wallet,       3);
-      addPreFundItem('pre-funding-recon',     'Reconciliation',      '/pre-funding?tab=reconciliation',      Landmark,    4);
-      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding?tab=report',              FileBarChart, 5);
-    } else if (isCoordinator || isSupervisor || isFOM || isFundHolder || isAuditor) {
-      // Non-finance users see the same scoped tabs that PreFundingHub allows.
-      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding?tab=overview',            Banknote,    1);
-      if (isCoordinator || isSupervisor || isFOM) {
-        addPreFundItem('pre-funding-approvals', 'Approval Flow',     '/pre-funding?tab=approvals',           CheckSquare, 2);
-      }
-      addPreFundItem('pre-funding-alloc',    'Allocation Dashboard', '/pre-funding?tab=allocations',        Users,       3);
-      addPreFundItem('pre-funding-distribute','Distribute Funds',     '/pre-funding?tab=distribute',         Wallet,       4);
-      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding?tab=report',              FileBarChart, 5);
+    // ── Pre-Funding — single door; tabs live inside the hub ──────────────────
+    const canSeePreFunding =
+      isSuperAdmin || isAdmin || isFinancialAdmin || isCountryDirector ||
+      isCoordinator || isSupervisor || isFOM || isFundHolder || isAuditor;
+    if (canSeePreFunding && !isHidden('/pre-funding')) {
+      groups.push({
+        id: 'finance-prefunding',
+        label: 'Pre-Funding',
+        order: 5.45,
+        items: [{ id: 'pre-funding', title: 'Pre-Funding', url: '/pre-funding', icon: Banknote, priority: 1, isPinned: isPinned('/pre-funding') }],
+        parentGroup: 'finance',
+      } as any);
     }
-    if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
 
-    // ── Accounting module — 5 sections mirroring AccountingHub ───────────────
-    // Keep navigation aligned with the Accounting route's read gate. Individual
-    // panels continue to enforce their own action-level permissions.
+    // ── Accounting — single door; tabs live inside the hub ───────────────────
     const acctAccess = isSuperAdmin || isAdmin || isFinance || isFinancialAdmin || isAccountant || isAuditor;
-    const acctAuditAccess = acctAccess;
-
-    if (acctAccess) {
-      // ── 1. Core Ledger ──────────────────────────────────────────────────────
-      const coreItems: MenuGroup['items'] = [];
-      if (!isHidden('/accounting'))                    coreItems.push({ id: 'accounting-hub',         title: 'Accounting Hub',       url: '/accounting',                          icon: LayoutDashboard, priority: 1,  isPinned: isPinned('/accounting') });
-      if (!isHidden('/accounting/journals'))           coreItems.push({ id: 'accounting-journals',    title: 'Journal Entries',      url: '/accounting?tab=journals',             icon: Receipt,         priority: 2,  isPinned: isPinned('/accounting?tab=journals') });
-      if (!isHidden('/accounting/coa'))                coreItems.push({ id: 'accounting-coa',         title: 'Chart of Accounts',    url: '/accounting?tab=coa',                  icon: BarChart3,       priority: 3,  isPinned: isPinned('/accounting?tab=coa') });
-      if (!isHidden('/accounting/trial-balance'))      coreItems.push({ id: 'accounting-trial-bal',   title: 'Trial Balance',        url: '/accounting?tab=trial-balance',        icon: TrendingUp,      priority: 4,  isPinned: isPinned('/accounting?tab=trial-balance') });
-      if (!isHidden('/accounting/ledger'))             coreItems.push({ id: 'accounting-ledger',      title: 'General Ledger',       url: '/accounting?tab=ledger',               icon: BookOpen,        priority: 5,  isPinned: isPinned('/accounting?tab=ledger') });
-      if (!isHidden('/accounting/reports'))            coreItems.push({ id: 'accounting-reports',     title: 'Reports & Statements', url: '/accounting?tab=reports',              icon: FileText,        priority: 6,  isPinned: isPinned('/accounting?tab=reports') });
-      if (!isHidden('/accounting/fiscal-years'))       coreItems.push({ id: 'accounting-fiscal-yrs',  title: 'Fiscal Years',         url: '/accounting?tab=fiscal-years',         icon: Calendar,        priority: 7,  isPinned: isPinned('/accounting?tab=fiscal-years') });
-      if (!isHidden('/accounting/search'))             coreItems.push({ id: 'accounting-search',      title: 'Quick Search',         url: '/accounting?tab=search',               icon: Search,          priority: 8,  isPinned: isPinned('/accounting?tab=search') });
-      if (coreItems.length) groups.push({ id: 'finance-accounting-core', label: 'Core Ledger', order: 5.50, items: coreItems, parentGroup: 'accounting' } as any);
-
-      // ── 2. Financial Operations ─────────────────────────────────────────────
-      const finOpsItems: MenuGroup['items'] = [];
-      if (!isHidden('/accounting/bank-recon'))         finOpsItems.push({ id: 'accounting-bank-recon',    title: 'Bank Reconciliation',  url: '/accounting?tab=bank-recon',           icon: Landmark,    priority: 1,  isPinned: isPinned('/accounting?tab=bank-recon') });
-      if (!isHidden('/accounting/budget-planning'))    finOpsItems.push({ id: 'accounting-budget-plan',   title: 'Budget Planning',      url: '/accounting?tab=budget-planning',      icon: PiggyBank,   priority: 2,  isPinned: isPinned('/accounting?tab=budget-planning') });
-      if (!isHidden('/accounting/budget-variance'))    finOpsItems.push({ id: 'accounting-budget-var',    title: 'Budget vs Actual',     url: '/accounting?tab=budget-variance',      icon: BarChart3,   priority: 3,  isPinned: isPinned('/accounting?tab=budget-variance') });
-      if (!isHidden('/accounting/annual-budget'))      finOpsItems.push({ id: 'accounting-annual-bud',    title: 'Annual Budget',        url: '/accounting?tab=annual-budget',        icon: PiggyBank,   priority: 4,  isPinned: isPinned('/accounting?tab=annual-budget') });
-      if (!isHidden('/accounting/cash-flow'))          finOpsItems.push({ id: 'accounting-cash-flow',     title: 'Cash Flow',            url: '/accounting?tab=cash-flow',            icon: TrendingUp,  priority: 5,  isPinned: isPinned('/accounting?tab=cash-flow') });
-      if (!isHidden('/accounting/cash-flow-forecast')) finOpsItems.push({ id: 'accounting-cashflow-fc',  title: 'Cash Flow Forecast',   url: '/accounting?tab=cash-flow-forecast',   icon: TrendingUp,  priority: 6,  isPinned: isPinned('/accounting?tab=cash-flow-forecast') });
-      if (!isHidden('/accounting/fixed-assets'))       finOpsItems.push({ id: 'accounting-fixed-assets',  title: 'Fixed Assets',         url: '/accounting?tab=fixed-assets',         icon: Package,     priority: 7,  isPinned: isPinned('/accounting?tab=fixed-assets') });
-      if (!isHidden('/accounting/gl-bridge'))          finOpsItems.push({ id: 'accounting-gl-bridge',     title: 'GL Bridge Engine',     url: '/accounting?tab=gl-bridge',            icon: Zap,         priority: 8,  isPinned: isPinned('/accounting?tab=gl-bridge') });
-      if (!isHidden('/accounting/bank-statement-import')) finOpsItems.push({ id: 'accounting-bank-import', title: 'Bank Statement Import', url: '/accounting?tab=bank-statement-import', icon: Landmark,  priority: 9,  isPinned: isPinned('/accounting?tab=bank-statement-import') });
-      if (finOpsItems.length) groups.push({ id: 'finance-accounting-ops', label: 'Financial Operations', order: 5.51, items: finOpsItems, parentGroup: 'accounting' } as any);
-
-      // ── 3. Procurement & P2P ────────────────────────────────────────────────
-      const p2pItems: MenuGroup['items'] = [];
-      if (!isHidden('/accounting/vendors'))                 p2pItems.push({ id: 'accounting-vendors',      title: 'Vendor Registry',         url: '/accounting?tab=vendors',               icon: Building2,    priority: 1, isPinned: isPinned('/accounting?tab=vendors') });
-      if (!isHidden('/accounting/purchase-requisitions'))   p2pItems.push({ id: 'accounting-pr',           title: 'Purchase Requisitions',   url: '/accounting?tab=purchase-requisitions', icon: Receipt,      priority: 2, isPinned: isPinned('/accounting?tab=purchase-requisitions') });
-      if (!isHidden('/accounting/purchase-orders'))         p2pItems.push({ id: 'accounting-po',           title: 'Purchase Orders',         url: '/accounting?tab=purchase-orders',       icon: ShoppingCart, priority: 3, isPinned: isPinned('/accounting?tab=purchase-orders') });
-      if (!isHidden('/accounting/grn'))                     p2pItems.push({ id: 'accounting-grn',          title: 'Goods Receipt Notes',     url: '/accounting?tab=grn',                   icon: Package,      priority: 4, isPinned: isPinned('/accounting?tab=grn') });
-      if (!isHidden('/accounting/ap-invoices'))              p2pItems.push({ id: 'accounting-ap-inv',       title: 'AP Invoices',             url: '/accounting?tab=ap-invoices',           icon: FileText,     priority: 5, isPinned: isPinned('/accounting?tab=ap-invoices') });
-      if (!isHidden('/accounting/cheque-register'))          p2pItems.push({ id: 'accounting-cheque',       title: 'Cheque Register',         url: '/accounting?tab=cheque-register',       icon: CreditCard,   priority: 6, isPinned: isPinned('/accounting?tab=cheque-register') });
-      if (!isHidden('/accounting/ap-aging'))                 p2pItems.push({ id: 'accounting-ap-aging',     title: 'AP Aging',                url: '/accounting?tab=ap-aging',              icon: Clock,        priority: 7, isPinned: isPinned('/accounting?tab=ap-aging') });
-      if (!isHidden('/accounting/expense-reports'))          p2pItems.push({ id: 'accounting-exp-reports',  title: 'Expense Reports',         url: '/accounting?tab=expense-reports',       icon: Receipt,      priority: 8, isPinned: isPinned('/accounting?tab=expense-reports') });
-      if (p2pItems.length) groups.push({ id: 'finance-accounting-p2p', label: 'Procurement & P2P', order: 5.52, items: p2pItems, parentGroup: 'accounting' } as any);
-
-      // ── 4. Controls & Compliance ────────────────────────────────────────────
-      const controlsItems: MenuGroup['items'] = [];
-      if (!isHidden('/accounting/period-close'))        controlsItems.push({ id: 'accounting-period-close', title: 'Period Close',         url: '/accounting?tab=period-close',         icon: Lock,           priority: 1, isPinned: isPinned('/accounting?tab=period-close') });
-      if (!isHidden('/accounting/budget-encumbrance'))  controlsItems.push({ id: 'accounting-encumbrance',  title: 'Budget Encumbrance',   url: '/accounting?tab=budget-encumbrance',   icon: Wallet,         priority: 2, isPinned: isPinned('/accounting?tab=budget-encumbrance') });
-      if (!isHidden('/accounting/funds'))               controlsItems.push({ id: 'accounting-funds',         title: 'Funds',                url: '/accounting?tab=funds',                icon: Landmark,       priority: 3, isPinned: isPinned('/accounting?tab=funds') });
-      if (!isHidden('/accounting/multi-currency'))      controlsItems.push({ id: 'accounting-multi-curr',   title: 'Multi-Currency',        url: '/accounting?tab=multi-currency',       icon: ArrowLeftRight, priority: 4, isPinned: isPinned('/accounting?tab=multi-currency') });
-      if (!isHidden('/accounting/tax'))                 controlsItems.push({ id: 'accounting-tax',           title: 'Tax Management',       url: '/accounting?tab=tax',                  icon: Receipt,        priority: 5, isPinned: isPinned('/accounting?tab=tax') });
-      if (!isHidden('/accounting/analytic-plans'))      controlsItems.push({ id: 'accounting-analytic',      title: 'Analytic Plans',       url: '/accounting?tab=analytic-plans',       icon: BarChart3,      priority: 6, isPinned: isPinned('/accounting?tab=analytic-plans') });
-      if (acctAuditAccess && !isHidden('/accounting/donor-reports')) controlsItems.push({ id: 'accounting-donor', title: 'Donor Fund Reports', url: '/accounting?tab=donor-reports',  icon: Heart,          priority: 7, isPinned: isPinned('/accounting?tab=donor-reports') });
-      if (!isHidden('/accounting/sod'))                 controlsItems.push({ id: 'accounting-sod',           title: 'Segregation of Duties',url: '/accounting?tab=sod',                  icon: ShieldCheck,    priority: 8, isPinned: isPinned('/accounting?tab=sod') });
-      if (!isHidden('/accounting/aml'))                 controlsItems.push({ id: 'accounting-aml',           title: 'AML & Compliance',     url: '/accounting?tab=aml',                  icon: ShieldAlert,    priority: 9, isPinned: isPinned('/accounting?tab=aml') });
-      if (controlsItems.length) groups.push({ id: 'finance-accounting-controls', label: 'Controls & Compliance', order: 5.53, items: controlsItems, parentGroup: 'accounting' } as any);
-
-      // ── 5. Advanced & Reporting ─────────────────────────────────────────────
-      const advancedItems: MenuGroup['items'] = [];
-      if (!isHidden('/accounting/grants'))             advancedItems.push({ id: 'accounting-grants',       title: 'Grant Tracking',       url: '/accounting?tab=grants',               icon: Award,       priority: 1, isPinned: isPinned('/accounting?tab=grants') });
-      if (!isHidden('/accounting/cost-allocation'))    advancedItems.push({ id: 'accounting-cost-alloc',  title: 'Cost Allocation',      url: '/accounting?tab=cost-allocation',      icon: Zap,         priority: 2, isPinned: isPinned('/accounting?tab=cost-allocation') });
-      if (!isHidden('/accounting/consolidation'))      advancedItems.push({ id: 'accounting-consolidate', title: 'Consolidation',        url: '/accounting?tab=consolidation',        icon: Building2,   priority: 3, isPinned: isPinned('/accounting?tab=consolidation') });
-      if (!isHidden('/accounting/gl-audit'))           advancedItems.push({ id: 'accounting-gl-audit',    title: 'GL Bridge Audit',      url: '/accounting?tab=gl-audit',             icon: Activity,    priority: 4, isPinned: isPinned('/accounting?tab=gl-audit') });
-      if (!isHidden('/accounting/finance-audit-trail'))advancedItems.push({ id: 'accounting-audit-trail', title: 'Finance Audit Trail',  url: '/accounting?tab=finance-audit-trail',  icon: ScrollText,  priority: 5, isPinned: isPinned('/accounting?tab=finance-audit-trail') });
-      if (!isHidden('/accounting/intercompany'))       advancedItems.push({ id: 'accounting-intercompany',title: 'Intercompany',         url: '/accounting?tab=intercompany',         icon: ArrowLeftRight, priority: 6, isPinned: isPinned('/accounting?tab=intercompany') });
-      if (!isHidden('/accounting/settings'))           advancedItems.push({ id: 'accounting-settings',    title: 'Accounting Settings',  url: '/accounting?tab=settings',             icon: Settings,    priority: 7, isPinned: isPinned('/accounting?tab=settings') });
-      if (advancedItems.length) groups.push({ id: 'finance-accounting-advanced', label: 'Advanced & Reporting', order: 5.54, items: advancedItems, parentGroup: 'accounting' } as any);
+    if (acctAccess && !isHidden('/accounting')) {
+      groups.push({
+        id: 'finance-accounting',
+        label: 'Accounting',
+        order: 5.50,
+        items: [{ id: 'accounting-hub', title: 'Accounting', url: '/accounting', icon: BookOpen, priority: 1, isPinned: isPinned('/accounting') }],
+        parentGroup: 'accounting',
+      } as any);
     }
 
-    // â”€â”€ 7. HR & People â€” logical flow: Employees â†’ Payroll â†’ Retainer â†’ Leave â†’ Analytics â†’ My Payslip â”€â”€
+    // ── HR & People — Employees (standalone) + HR Hub (tabs inside hub) ──────
     const hrItems: MenuGroup['items'] = [];
-    const hrAdminAccess = isSuperAdmin || isAdmin || isFinancialAdmin || isSeniorManagement;
     const hrStrictAccess = isSuperAdmin || isAdmin;
-    // 1. Employees — admin & super admin only
     if (!isHidden('/employees') && hrStrictAccess) {
       hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 1, isPinned: isPinned('/employees') });
     }
-    // 2. HR Hub — full hub with all sections (admin only)
-    if (!isHidden('/hr') && hrAdminAccess) {
+    // One HR entry for anyone who can open /hr (self-service tabs live in the hub)
+    if (!isHidden('/hr')) {
       hrItems.push({ id: 'hr-hub', title: "HR Hub", url: "/hr", icon: Briefcase, priority: 2, isPinned: isPinned('/hr') });
     }
-    // 3. My Payslip — personal payslip for every staff member
-    if (!isHidden('/hr')) {
-      hrItems.push({ id: 'my-payslip', title: "My Payslip", url: "/hr?tab=payroll", icon: Receipt, priority: 3, isPinned: false });
-    }
-    // 4. Leave Requests — all staff submit; admins approve
-    if (!isHidden('/hr')) {
-      hrItems.push({ id: 'leave-requests', title: "Leave Requests", url: "/hr?tab=leave-requests", icon: CalendarOff, priority: 4, isPinned: false });
-    }
-    // 5. Timesheet — daily work log for all staff
-    if (!isHidden('/hr')) {
-      hrItems.push({ id: 'timesheet', title: "Timesheet", url: "/hr?tab=timesheet", icon: ClipboardCheck, priority: 5, isPinned: false });
-    }
-    const hrAdminItems = hrItems.filter(i => ['employees','hr-hub'].includes(i.id));
-    const hrSelfItems  = hrItems.filter(i => ['my-payslip','leave-requests','timesheet'].includes(i.id));
-    if (hrAdminItems.length) groups.push({ id: 'hr-admin',        label: 'People Management', order: 5.61, items: hrAdminItems, parentGroup: 'hr' } as any);
-    if (hrSelfItems.length)  groups.push({ id: 'hr-self-service', label: 'My HR',             order: 5.62, items: hrSelfItems,  parentGroup: 'hr' } as any);
+    if (hrItems.length) groups.push({ id: 'hr-admin', label: 'People', order: 5.61, items: hrItems, parentGroup: 'hr' } as any);
 
     // â”€â”€ 8. CRM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const crmItems: MenuGroup['items'] = [];
@@ -1161,7 +1009,7 @@
       const isSMTUser = smtCandidates.some(r => /^(smt)$/i.test(String(r ?? '').trim()));
       const SMT_ALLOW = new Set([
         '/dashboard', '/my-tasks', '/my-projects', '/calendar', '/notifications',
-        '/programme-hub', '/projects', '/portfolio', '/programme-hub?tab=portfolio',
+        '/programme-hub', '/projects', '/portfolio',
       ]);
       const isSmtAllowedUrl = (url: string) =>
         SMT_ALLOW.has(url) || SMT_ALLOW.has(url.split('?')[0]);
@@ -1226,6 +1074,7 @@
         for (const [slug, configuredRoles] of Object.entries(sidebarRoleConfigs)) {
           const pageDef = getPageDefinition(slug);
           if (!pageDef || !isAllowedPage(slug, pageDef.path)) continue;
+          if (isHubTabNavigationPath(pageDef.path)) continue;
           if (isSMTUser && !isSmtAllowedUrl(pageDef.path)) continue;
           const alreadyExists = groups.some(group => group.items.some(item => item.url === pageDef.path));
           if (!alreadyExists) {
@@ -1252,6 +1101,9 @@
           if (isBlocked) {
             // Remove this item from whichever group contains it
             groups.forEach(g => { g.items = g.items.filter(item => item.url !== pageDef.path); });
+          } else if (isHubTabNavigationPath(pageDef.path)) {
+            // Hub tabs stay inside HubLayout — do not inject as sidebar leaves
+            continue;
           } else {
             // Ensure this item exists in its group (add if missing)
             const navigationGroup = getPageNavigationGroup(pageDef.group);
