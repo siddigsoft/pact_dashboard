@@ -2,33 +2,21 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Shield, 
-  Server, 
-  CheckCircle2, 
-  Activity,
-  Lock,
-  Zap,
-  Users
-} from "lucide-react";
 import AuthForm from "@/components/auth/AuthForm";
 import { useAppContext } from "@/context/AppContext";
-import { Badge } from "@/components/ui/badge";
-import { LoadingBadge } from "@/components/ui/loading-badge";
 import PactLogo from "@/assets/logo.png";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogFooter, 
-  DialogHeader, 
-  DialogTitle 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useDevice } from "@/hooks/use-device";
@@ -41,10 +29,10 @@ const Auth = () => {
   const forceWebSignup = searchParams.get("view") === "signup";
   const initialTab = forceWebSignup ? "signup" : searchParams.get("tab") ?? "login";
   const showTabs = !forceWebSignup;
-  const headingTitle = forceWebSignup ? "Create Account" : "Welcome Back";
-  const headingDescription = forceWebSignup 
-    ? "Create your field operations account"
-    : "Sign in to access your field operations dashboard";
+  const headingTitle = forceWebSignup ? "Create Account" : "Sign in";
+  const headingDescription = forceWebSignup
+    ? "Create your PACT account"
+    : "Use your work email to continue";
   const navigate = useNavigate();
   const [resendLoading, setResendLoading] = useState(false);
 
@@ -80,245 +68,93 @@ const Auth = () => {
     }
   }, [authReady, currentUser, navigate, searchParams]);
 
-  const securityFeatures = [
-    { 
-      icon: Shield, 
-      label: "Enterprise Security", 
-      description: "Enterprise-Grade Protection",
-      color: "text-blue-500 dark:text-blue-400"
-    },
-    { 
-      icon: Lock, 
-      label: "Encrypted Data", 
-      description: "Advanced Encryption",
-      color: "text-orange-500 dark:text-orange-400"
-    },
-    { 
-      icon: Server, 
-      label: "99.9% Uptime", 
-      description: "Guaranteed Availability",
-      color: "text-purple-500 dark:text-purple-400"
-    },
-    { 
-      icon: Zap, 
-      label: "Real-time Sync", 
-      description: "Instant Data Updates",
-      color: "text-green-500 dark:text-green-400"
-    }
-  ];
-
-  const platformStats = [
-    { label: "Active Users", value: "10K+", icon: Users },
-    { label: "Uptime", value: "99.9%", icon: Activity },
-    { label: "Protected", value: "Secure", icon: Shield }
-  ];
-
-  // Show mobile auth screen for mobile devices
   if (isMobileView && !isDeviceLoading && !forceWebSignup) {
     return <MobileAuthScreen />;
   }
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center p-4">
-      {/* Animated Background Layer */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-orange-500/5 to-purple-500/5 dark:from-blue-600/10 dark:via-orange-600/10 dark:to-purple-600/10" />
-      <div className="absolute inset-0">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/20 dark:bg-blue-600/20 rounded-full blur-3xl animate-blob" />
-        <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-orange-500/20 dark:bg-orange-600/20 rounded-full blur-3xl animate-blob animation-delay-2000" />
-        <div className="absolute bottom-0 left-1/2 w-96 h-96 bg-purple-500/20 dark:bg-purple-600/20 rounded-full blur-3xl animate-blob animation-delay-4000" />
-      </div>
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="flex flex-col items-center text-center mb-8">
+          <img
+            src={PactLogo}
+            alt="PACT"
+            className="h-12 w-12 mb-3"
+            data-testid="img-auth-logo"
+          />
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">
+            PACT
+          </h1>
+          <p className="text-sm text-foreground/70 mt-1 max-w-xs">
+            Programme operations console for field and finance work
+          </p>
+        </div>
 
-      {/* Main Auth Container */}
-      <div className="relative z-10 w-full max-w-6xl">
-        <Card className="overflow-hidden border-2 shadow-2xl" data-testid="card-auth-container">
-          <div className="grid lg:grid-cols-2">
-            {/* Left Hero Column - Compact */}
-            <div className="hidden lg:flex flex-col justify-between p-8 bg-gradient-to-br from-muted/50 to-muted/30 border-r">
-              <div className="space-y-6">
-                {/* Logo & Branding */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <img 
-                      src={PactLogo} 
-                      alt="PACT Logo" 
-                      className="h-12 w-12"
-                      data-testid="img-auth-logo"
-                    />
-                    <div>
-                      <h2 className="text-xl font-bold tracking-tight">PACT Command Center</h2>
-                      <p className="text-xs text-muted-foreground">
-                        Field Operations Command Center
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <Badge 
-                    variant="secondary" 
-                    className="gap-1.5 text-xs"
-                    data-testid="badge-system-status"
-                  >
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                    All Systems Operational
-                  </Badge>
-                </div>
+        <Card className="border border-border shadow-sm" data-testid="card-auth-container">
+          <div className="p-6 sm:p-8">
+            <CardHeader className="space-y-1 text-center px-0 pb-5">
+              <CardTitle className="text-lg font-semibold tracking-tight" data-testid="heading-auth-title">
+                {headingTitle}
+              </CardTitle>
+              <CardDescription className="text-sm text-foreground/70" data-testid="text-auth-description">
+                {headingDescription}
+              </CardDescription>
+            </CardHeader>
 
-                {/* Platform Stats */}
-                <div className="grid grid-cols-3 gap-3 py-4 border-y">
-                  {platformStats.map((stat, index) => {
-                    const Icon = stat.icon;
-                    return (
-                      <div 
-                        key={index}
-                        className="text-center space-y-0.5"
-                        data-testid={`stat-${stat.label.toLowerCase().replace(/\s+/g, '-')}`}
-                      >
-                        <Icon className="w-3.5 h-3.5 mx-auto text-muted-foreground" />
-                        <p className="text-lg font-bold">{stat.value}</p>
-                        <p className="text-[10px] text-muted-foreground">{stat.label}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Security Features */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-primary" />
-                    Enterprise-Grade Security
-                  </h3>
-                  
-                  <div className="grid grid-cols-2 gap-2">
-                    {securityFeatures.map((feature, index) => {
-                      const Icon = feature.icon;
-                      return (
-                        <div 
-                          key={index}
-                          className="p-3 rounded-md border bg-card hover-elevate"
-                          data-testid={`feature-${feature.label.toLowerCase().replace(/\s+/g, '-')}`}
-                        >
-                          <div className="flex flex-col items-center text-center gap-1.5">
-                            <div className={`p-1.5 rounded-md bg-muted ${feature.color}`}>
-                              <Icon className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold">{feature.label}</p>
-                              <p className="text-[10px] text-muted-foreground leading-tight">
-                                {feature.description}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Right Auth Form Column - Compact */}
-            <div className="p-6 md:p-8 flex flex-col justify-center">
-              {/* Mobile Logo */}
-              <div className="lg:hidden flex flex-col items-center mb-6">
-                <img 
-                  src={PactLogo} 
-                  alt="PACT Logo" 
-                  className="h-12 w-12 mb-3"
-                  data-testid="img-auth-logo-mobile"
-                />
-                <Badge 
-                  variant="secondary" 
-                  className="gap-1.5 text-xs"
-                  data-testid="badge-system-status-mobile"
+            <div className="w-full">
+              {showTabs ? (
+                <Tabs
+                  key={initialTab}
+                  defaultValue={initialTab}
+                  className="space-y-4 w-full"
                 >
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                  System Operational
-                </Badge>
-              </div>
-
-              <CardHeader className="space-y-1 text-center px-0 pb-4">
-                <CardTitle className="text-xl font-bold tracking-tight" data-testid="heading-auth-title">
-                  {headingTitle}
-                </CardTitle>
-                <CardDescription className="text-sm" data-testid="text-auth-description">
-                  {headingDescription}
-                </CardDescription>
-              </CardHeader>
-
-              <div className="w-full">
-                {showTabs ? (
-                  <Tabs 
-                    key={initialTab}
-                    defaultValue={initialTab}
-                    className="space-y-4 w-full"
+                  <TabsList
+                    className="grid w-full grid-cols-2 h-9"
+                    data-testid="tabs-auth"
                   >
-                    <TabsList 
-                      className="grid w-full grid-cols-2 h-9"
-                      data-testid="tabs-auth"
-                    >
-                      <TabsTrigger value="login" className="text-sm" data-testid="tab-login">
-                        Login
-                      </TabsTrigger>
-                      <TabsTrigger value="signup" className="text-sm" data-testid="tab-signup">
-                        Sign Up
-                      </TabsTrigger>
-                    </TabsList>
-                    
-                    <TabsContent value="login" data-testid="content-login">
-                      <AuthForm mode="login" />
-                    </TabsContent>
-                    
-                    <TabsContent value="signup" data-testid="content-signup">
-                      <AuthForm mode="signup" />
-                    </TabsContent>
-                  </Tabs>
-                ) : (
-                  <div className="space-y-4" data-testid="content-signup">
+                    <TabsTrigger value="login" className="text-sm" data-testid="tab-login">
+                      Login
+                    </TabsTrigger>
+                    <TabsTrigger value="signup" className="text-sm" data-testid="tab-signup">
+                      Sign Up
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="login" data-testid="content-login">
+                    <AuthForm mode="login" />
+                  </TabsContent>
+
+                  <TabsContent value="signup" data-testid="content-signup">
                     <AuthForm mode="signup" />
-                    <div className="text-center text-sm text-muted-foreground">
-                      <span>Already have an account? </span>
-                      <button
-                        type="button"
-                        onClick={() => navigate("/auth")}
-                        className="text-primary font-semibold hover:underline"
-                        data-testid="link-signin-from-signup"
-                      >
-                        Sign in
-                      </button>
-                    </div>
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <div className="space-y-4" data-testid="content-signup">
+                  <AuthForm mode="signup" />
+                  <div className="text-center text-sm text-muted-foreground">
+                    <span>Already have an account? </span>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/auth")}
+                      className="text-primary font-semibold hover:underline"
+                      data-testid="link-signin-from-signup"
+                    >
+                      Sign in
+                    </button>
                   </div>
-                )}
-              </div>
-
-              {/* Help Text */}
-              <div className="mt-6 text-center text-xs text-muted-foreground">
-                <p>
-                  Protected by enterprise-grade security.
-                  <br />
-                  <a 
-                    href="#" 
-                    className="text-primary hover:underline"
-                    data-testid="link-auth-help"
-                  >
-                    Need help?
-                  </a>
-                </p>
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </Card>
 
-        {/* Footer */}
-        <div className="mt-6 text-center text-sm text-muted-foreground">
-          <p data-testid="text-auth-footer">
-            &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
-          </p>
-        </div>
+        <p className="mt-6 text-center text-sm text-foreground/60" data-testid="text-auth-footer">
+          &copy; {new Date().getFullYear()} PACT Consultancy
+        </p>
       </div>
 
-      {/* Email Verification Modal - UNCHANGED */}
-      <Dialog 
-        open={emailVerificationPending} 
+      <Dialog
+        open={emailVerificationPending}
         onOpenChange={(open) => { if (!open) clearEmailVerificationNotice(); }}
       >
         <DialogContent data-testid="dialog-verification">
@@ -329,7 +165,7 @@ const Auth = () => {
             <DialogDescription data-testid="text-verification-description">
               {verificationEmail ? (
                 <>
-                  We found an account for <strong>{verificationEmail}</strong>, but the email is not verified yet. 
+                  We found an account for <strong>{verificationEmail}</strong>, but the email is not verified yet.
                   Check your inbox and spam folder for a verification email.
                 </>
               ) : (
@@ -343,8 +179,8 @@ const Auth = () => {
             You can request another verification link if needed.
           </div>
           <DialogFooter>
-            <Button 
-              variant="secondary" 
+            <Button
+              variant="secondary"
               onClick={() => clearEmailVerificationNotice()}
               data-testid="button-verification-close"
             >

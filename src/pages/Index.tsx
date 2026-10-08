@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,7 +19,7 @@ import {
   BarChart3,
   FileCheck,
   Radio,
-  Loader2
+  Loader2,
 } from "lucide-react";
 
 interface KPIStats {
@@ -37,7 +37,6 @@ const Index = () => {
   const navigate = useNavigate();
   const [isNavigating, setIsNavigating] = useState(false);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [stats, setStats] = useState<KPIStats>({
     liveSites: 0,
     activeTeams: 0,
@@ -48,11 +47,9 @@ const Index = () => {
     tasksCompletedTrend: 0,
     efficiencyTrend: 0,
   });
-  const navigationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { currentUser, authReady } = useAppContext();
 
-  // If user is already logged in, skip the landing page and go straight to dashboard
   useEffect(() => {
     if (authReady && currentUser) {
       navigate("/dashboard", { replace: true });
@@ -60,39 +57,15 @@ const Index = () => {
   }, [authReady, currentUser, navigate]);
 
   useEffect(() => {
-    // Fetch real stats from database
     fetchDashboardStats();
-
-    // Update time every second
-    const timeInterval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    // Cleanup timeout on unmount
-    return () => {
-      if (navigationTimeoutRef.current) {
-        clearTimeout(navigationTimeoutRef.current);
-      }
-      clearInterval(timeInterval);
-    };
   }, []);
 
   const fetchDashboardStats = async () => {
     setIsLoadingStats(true);
     try {
-      // ── Task #53: the landing page is publicly reachable, so we can't rely
-      //    on the viewer's RLS view of `mmp_site_entries` / `profiles` —
-      //    anonymous visitors would see zeros across the board.
-      //
-      //    Instead we call a SECURITY DEFINER RPC (`public_landing_kpis`)
-      //    that returns ONLY the aggregated numbers, granted to the `anon`
-      //    role. The aggregation logic in the RPC mirrors the previous JS
-      //    here line-for-line (status normalization, LIVE/DONE sets, 30d
-      //    windows, efficiency formula, active-teams heuristic) so the
-      //    displayed numbers are identical for logged-in vs anonymous users.
-      //    See supabase/migrations/20260426_public_landing_kpis_rpc.sql.
-      const { data, error } = await supabase.rpc('public_landing_kpis');
-
+      // Public landing KPIs via SECURITY DEFINER RPC (anon-safe aggregates).
+      // See supabase/migrations/20260426_public_landing_kpis_rpc.sql.
+      const { data, error } = await supabase.rpc("public_landing_kpis");
       if (error) throw error;
 
       const k = (data ?? {}) as Partial<{
@@ -107,19 +80,17 @@ const Index = () => {
       }>;
 
       setStats({
-        liveSites:           Number(k.live_sites ?? 0),
-        activeTeams:         Number(k.active_teams ?? 0),
-        tasksCompleted:      Number(k.tasks_completed ?? 0),
-        efficiency:          Number(k.efficiency ?? 0),
-        liveSitesTrend:      Number(k.live_sites_trend ?? 0),
-        activeTeamsTrend:    Number(k.active_teams_trend ?? 0),
+        liveSites: Number(k.live_sites ?? 0),
+        activeTeams: Number(k.active_teams ?? 0),
+        tasksCompleted: Number(k.tasks_completed ?? 0),
+        efficiency: Number(k.efficiency ?? 0),
+        liveSitesTrend: Number(k.live_sites_trend ?? 0),
+        activeTeamsTrend: Number(k.active_teams_trend ?? 0),
         tasksCompletedTrend: Number(k.tasks_completed_trend ?? 0),
-        efficiencyTrend:     Number(k.efficiency_trend ?? 0),
+        efficiencyTrend: Number(k.efficiency_trend ?? 0),
       });
     } catch (error) {
-      // One-time console.error, then fall back to zeros so the strip never
-      // gets stuck on "..." or breaks the layout.
-      console.error('Error fetching dashboard stats:', error);
+      console.error("Error fetching dashboard stats:", error);
       setStats({
         liveSites: 0,
         activeTeams: 0,
@@ -137,16 +108,11 @@ const Index = () => {
 
   const handleGetStarted = () => {
     setIsNavigating(true);
-    // Add a smooth transition delay
-    navigationTimeoutRef.current = setTimeout(() => {
-      navigate("/auth");
-    }, 800);
+    navigate("/auth");
   };
 
   const formatNumber = (num: number): string => {
-    if (num >= 1000) {
-      return num.toLocaleString();
-    }
+    if (num >= 1000) return num.toLocaleString();
     return num.toString();
   };
 
@@ -156,34 +122,34 @@ const Index = () => {
   };
 
   const kpiData = [
-    { 
-      icon: Activity, 
-      label: "Live Sites", 
-      value: isLoadingStats ? "..." : formatNumber(stats.liveSites), 
+    {
+      icon: Activity,
+      label: "Live Sites",
+      value: isLoadingStats ? "…" : formatNumber(stats.liveSites),
       trend: formatTrend(stats.liveSitesTrend),
-      isPositive: stats.liveSitesTrend >= 0
+      isPositive: stats.liveSitesTrend >= 0,
     },
-    { 
-      icon: Users, 
-      label: "Active Teams", 
-      value: isLoadingStats ? "..." : formatNumber(stats.activeTeams), 
+    {
+      icon: Users,
+      label: "Active Teams",
+      value: isLoadingStats ? "…" : formatNumber(stats.activeTeams),
       trend: formatTrend(stats.activeTeamsTrend),
-      isPositive: stats.activeTeamsTrend >= 0
+      isPositive: stats.activeTeamsTrend >= 0,
     },
-    { 
-      icon: CheckCircle2, 
-      label: "Tasks Completed", 
-      value: isLoadingStats ? "..." : formatNumber(stats.tasksCompleted), 
+    {
+      icon: CheckCircle2,
+      label: "Tasks Completed",
+      value: isLoadingStats ? "…" : formatNumber(stats.tasksCompleted),
       trend: formatTrend(stats.tasksCompletedTrend),
-      isPositive: stats.tasksCompletedTrend >= 0
+      isPositive: stats.tasksCompletedTrend >= 0,
     },
-    { 
-      icon: TrendingUp, 
-      label: "Efficiency", 
-      value: isLoadingStats ? "..." : `${stats.efficiency}%`, 
+    {
+      icon: TrendingUp,
+      label: "Efficiency",
+      value: isLoadingStats ? "…" : `${stats.efficiency}%`,
       trend: formatTrend(stats.efficiencyTrend),
-      isPositive: stats.efficiencyTrend >= 0
-    }
+      isPositive: stats.efficiencyTrend >= 0,
+    },
   ];
 
   const workflows = [
@@ -192,220 +158,121 @@ const Index = () => {
       title: "Plan & Upload",
       description: "Upload Monthly Monitoring Plans and assign to projects",
       icon: FileCheck,
-      color: "text-blue-500 dark:text-blue-400"
     },
     {
       step: "02",
       title: "Coordinate Teams",
       description: "Assign site visits to field teams with real-time tracking",
       icon: MapPin,
-      color: "text-orange-500 dark:text-orange-400"
     },
     {
       step: "03",
       title: "Monitor & Report",
       description: "Track progress and generate comprehensive analytics",
       icon: BarChart3,
-      color: "text-purple-500 dark:text-purple-400"
-    }
+    },
   ];
 
   const features = [
     { icon: Zap, label: "Real-time Updates", description: "Live data synchronization" },
     { icon: Shield, label: "Enterprise Security", description: "Enterprise-grade protection" },
     { icon: Radio, label: "Always Connected", description: "99.9% uptime SLA" },
-    { icon: Clock, label: "24/7 Support", description: "Round-the-clock assistance" }
+    { icon: Clock, label: "24/7 Support", description: "Round-the-clock assistance" },
   ];
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Loading Overlay */}
+    <div className="min-h-screen bg-background flex flex-col">
       {isNavigating && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-lg"
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background"
           data-testid="overlay-loading-navigation"
         >
-          <div className="flex flex-col items-center gap-8">
-            {/* PACT Logo with subtle pulse */}
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-orange-500/20 to-purple-500/20 dark:from-blue-400/20 dark:via-orange-400/20 dark:to-purple-400/20 rounded-full blur-xl animate-pulse" />
-              <img 
-                src={PactLogo} 
-                alt="PACT" 
-                className="h-28 w-28 md:h-32 md:w-32 relative z-10 drop-shadow-lg object-contain"
-                style={{ imageRendering: 'crisp-edges' }}
-              />
-            </div>
-
-            {/* Modern Gradient Spinner */}
-            <div className="relative w-20 h-20">
-              {/* Background rings */}
-              <div className="absolute inset-0 rounded-full border-4 border-muted/20" />
-              {/* Animated gradient ring */}
-              <div className="absolute inset-0 rounded-full border-4 border-transparent bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-padding animate-spin" 
-                   style={{ 
-                     maskImage: 'linear-gradient(transparent 50%, black 50%)',
-                     WebkitMaskImage: 'linear-gradient(transparent 50%, black 50%)'
-                   }}
-              />
-              {/* Center gradient glow */}
-              <div className="absolute inset-2 rounded-full bg-gradient-to-r from-blue-500/10 via-orange-500/10 to-purple-500/10 dark:from-blue-400/10 dark:via-orange-400/10 dark:to-purple-400/10 animate-pulse" />
-            </div>
-
-            {/* Brand Gradient Text */}
-            <div className="text-center space-y-2">
-              <h2 
-                className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent"
-                data-testid="text-loading-title"
-              >
-                Initializing PACT
-              </h2>
-              <p 
-                className="text-lg font-semibold bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent"
-                data-testid="text-loading-subtitle"
-              >
-                Command Center
-              </p>
-              <p className="text-sm text-muted-foreground pt-2" data-testid="text-loading-message">
-                Preparing your workspace...
-              </p>
-            </div>
+          <div className="flex flex-col items-center gap-4">
+            <img src={PactLogo} alt="PACT" className="h-16 w-16 object-contain" />
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <p className="text-sm text-foreground/70" data-testid="text-loading-message">
+              Opening sign in…
+            </p>
           </div>
         </div>
       )}
 
-      {/* Animated Background Layer */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-orange-500/5 to-purple-500/5 dark:from-blue-600/10 dark:via-orange-600/10 dark:to-purple-600/10" />
-      <div className="absolute inset-0">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/20 dark:bg-blue-600/20 rounded-full blur-3xl animate-blob" />
-        <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-orange-500/20 dark:bg-orange-600/20 rounded-full blur-3xl animate-blob animation-delay-2000" />
-        <div className="absolute bottom-0 left-1/2 w-96 h-96 bg-purple-500/20 dark:bg-purple-600/20 rounded-full blur-3xl animate-blob animation-delay-4000" />
-      </div>
+      <main className="flex-1">
+        <section className="container mx-auto px-4 pt-16 pb-12 md:pt-20 md:pb-14">
+          <div className="max-w-3xl mx-auto text-center space-y-6">
+            <img
+              src={PactLogo}
+              alt="PACT Logo"
+              data-testid="img-logo"
+              className="h-20 w-20 md:h-28 md:w-28 mx-auto object-contain"
+            />
 
-      <div className="relative z-10">
-        {/* Hero Section - Full Width */}
-        <section className="container mx-auto px-4 pt-16 pb-12 md:pt-24 md:pb-16">
-          <div className="max-w-4xl mx-auto text-center space-y-6">
-            {/* Logo & Status Badge */}
-            <div className="flex flex-col items-center gap-4">
-              <img
-                src={PactLogo}
-                alt="PACT Logo"
-                data-testid="img-logo"
-                className="h-24 w-24 md:h-32 md:w-32 lg:h-40 lg:w-40 object-contain drop-shadow-lg"
-                style={{ imageRendering: 'crisp-edges' }}
-              />
-              <Badge 
-                variant="secondary" 
-                className="gap-1.5 text-xs"
-                data-testid="badge-status"
-              >
-                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                System Operational
-              </Badge>
-            </div>
-
-            {/* Hero Headline */}
-            <div className="space-y-4">
-              <h1 
-                className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight"
+            <div className="space-y-3">
+              <h1
+                className="text-3xl md:text-4xl lg:text-5xl font-semibold tracking-tight text-foreground"
                 data-testid="heading-hero"
               >
-                <span className="bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent">
-                  Command Center
-                </span>
+                Command Center
                 <br />
-                <span className="text-foreground">
-                  for Field Operations
-                </span>
+                for Field Operations
               </h1>
-              
-              <p 
-                className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed"
+              <p
+                className="text-base md:text-lg text-foreground/70 max-w-2xl mx-auto leading-relaxed"
                 data-testid="text-hero-description"
               >
-                Real-time monitoring, seamless coordination, and data-driven insights 
-                for enterprise field teams. The PACT Workflow Platform transforms 
+                Real-time monitoring, seamless coordination, and data-driven insights
+                for enterprise field teams. The PACT Workflow Platform transforms
                 how you manage operations.
               </p>
             </div>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 justify-center items-center pt-2">
-              <Button
-                size="lg"
-                onClick={handleGetStarted}
-                disabled={isNavigating}
-                data-testid="button-get-started"
-                className="gap-2"
-              >
-                {isNavigating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    Get Started
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {/* Digital Clock */}
-            <div className="flex flex-col items-center gap-2 pt-4" data-testid="clock-container">
-              <div className="font-mono text-3xl md:text-4xl font-bold tracking-wider">
-                {currentTime.toLocaleTimeString('en-US', { 
-                  hour: '2-digit', 
-                  minute: '2-digit',
-                  second: '2-digit',
-                  hour12: false 
-                })}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {currentTime.toLocaleTimeString('en-US', { 
-                  hour: '2-digit', 
-                  minute: '2-digit',
-                  hour12: true 
-                })}
-              </div>
-              <p className="text-base font-medium text-muted-foreground">
-                {currentTime.toLocaleDateString('en-US', { 
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long', 
-                  day: 'numeric'
-                })}
-              </p>
-            </div>
+            <Button
+              size="lg"
+              onClick={handleGetStarted}
+              disabled={isNavigating}
+              data-testid="button-get-started"
+              className="gap-2"
+            >
+              {isNavigating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading…
+                </>
+              ) : (
+                <>
+                  Get Started
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </Button>
           </div>
         </section>
 
-        {/* Live KPI Ribbon */}
-        <section className="border-y bg-muted/30 backdrop-blur-sm">
-          <div className="container mx-auto px-4 py-4">
+        <section className="border-y bg-muted/40">
+          <div className="container mx-auto px-4 py-5">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {kpiData.map((kpi, index) => {
+              {kpiData.map((kpi) => {
                 const Icon = kpi.icon;
                 return (
-                  <div 
-                    key={index}
+                  <div
+                    key={kpi.label}
                     className="flex flex-col items-center gap-1"
-                    data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s+/g, '-')}`}
+                    data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s+/g, "-")}`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <Icon className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-xl md:text-2xl font-semibold">{kpi.value}</span>
+                      <Icon className="w-4 h-4 text-foreground/70" />
+                      <span className="text-xl md:text-2xl font-semibold tabular-nums text-foreground">
+                        {kpi.value}
+                      </span>
                     </div>
                     <div className="text-center flex items-center gap-1.5">
-                      <p className="text-xs text-muted-foreground">{kpi.label}</p>
-                      <Badge 
-                        variant="secondary" 
-                        className={`text-[10px] px-1.5 py-0 ${
-                          kpi.isPositive 
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                      <p className="text-xs text-foreground/65">{kpi.label}</p>
+                      <Badge
+                        variant="secondary"
+                        className={`text-[10px] px-1.5 py-0 tabular-nums ${
+                          kpi.isPositive
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                         }`}
                       >
                         {kpi.trend}
@@ -418,46 +285,37 @@ const Index = () => {
           </div>
         </section>
 
-        {/* Workflow Timeline */}
         <section className="container mx-auto px-4 py-10 md:py-14">
           <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-8">
-              <Badge variant="secondary" className="mb-3 text-xs" data-testid="badge-how-it-works">
+            <div className="text-center mb-8 space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-foreground/60" data-testid="badge-how-it-works">
                 How It Works
-              </Badge>
-              <h2 
-                className="text-2xl md:text-3xl font-semibold mb-2"
+              </p>
+              <h2
+                className="text-2xl md:text-3xl font-semibold text-foreground"
                 data-testid="heading-workflow"
               >
                 Streamlined Workflow in 3 Steps
               </h2>
-              <p className="text-muted-foreground text-sm">
+              <p className="text-sm text-foreground/70">
                 From planning to execution, manage your entire operation seamlessly
               </p>
             </div>
 
             <div className="grid md:grid-cols-3 gap-4">
-              {workflows.map((workflow, index) => {
+              {workflows.map((workflow) => {
                 const Icon = workflow.icon;
                 return (
-                  <Card 
-                    key={index}
-                    className="relative"
-                    data-testid={`card-workflow-${workflow.step}`}
-                  >
-                    <CardContent className="p-4">
+                  <Card key={workflow.step} data-testid={`card-workflow-${workflow.step}`}>
+                    <CardContent className="p-5">
                       <div className="flex flex-col items-center text-center space-y-3">
-                        <div className={`p-3 rounded-full bg-muted ${workflow.color}`}>
+                        <div className="p-3 rounded-md bg-muted text-foreground">
                           <Icon className="w-5 h-5" />
                         </div>
                         <div className="space-y-1.5">
-                          <Badge variant="outline" className="font-mono text-[10px] px-1.5">
-                            {workflow.step}
-                          </Badge>
-                          <h3 className="text-base font-medium">
-                            {workflow.title}
-                          </h3>
-                          <p className="text-xs text-muted-foreground leading-relaxed">
+                          <p className="font-mono text-[11px] text-foreground/60">{workflow.step}</p>
+                          <h3 className="text-base font-medium text-foreground">{workflow.title}</h3>
+                          <p className="text-xs text-foreground/70 leading-relaxed">
                             {workflow.description}
                           </p>
                         </div>
@@ -470,24 +328,23 @@ const Index = () => {
           </div>
         </section>
 
-        {/* Features Grid */}
-        <section className="border-y bg-muted/20">
+        <section className="border-y bg-muted/30">
           <div className="container mx-auto px-4 py-8">
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto">
-              {features.map((feature, index) => {
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+              {features.map((feature) => {
                 const Icon = feature.icon;
                 return (
-                  <div 
-                    key={index}
+                  <div
+                    key={feature.label}
                     className="flex flex-col items-center text-center gap-2"
-                    data-testid={`feature-${feature.label.toLowerCase().replace(/\s+/g, '-')}`}
+                    data-testid={`feature-${feature.label.toLowerCase().replace(/\s+/g, "-")}`}
                   >
-                    <div className="p-2 rounded-md bg-background border">
-                      <Icon className="w-4 h-4 text-primary" />
+                    <div className="p-2 rounded-md bg-background border border-border">
+                      <Icon className="w-4 h-4 text-foreground" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{feature.label}</p>
-                      <p className="text-xs text-muted-foreground">{feature.description}</p>
+                      <p className="text-sm font-medium text-foreground">{feature.label}</p>
+                      <p className="text-xs text-foreground/70">{feature.description}</p>
                     </div>
                   </div>
                 );
@@ -495,47 +352,52 @@ const Index = () => {
             </div>
           </div>
         </section>
+      </main>
 
-        {/* Footer */}
-        <footer className="border-t bg-muted/10">
-          <div className="container mx-auto px-4 py-8">
-            <div className="mb-6 text-center max-w-3xl mx-auto">
-              <img src={PactLogo} alt="PACT" className="h-10 w-10 mb-4 mx-auto" width={40} height={40} loading="lazy" />
-              <h3 className="text-base font-medium mb-2">Built for the Field, Designed for Reliability</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed mb-4">
-                The <strong className="text-foreground">PACT Command Center Platform</strong> delivers powerful capabilities across web and mobile applications, 
-                ensuring seamless operations whether you're in the office or in the field.
-              </p>
-              <div className="text-left space-y-3 max-w-2xl mx-auto">
-                <div>
-                  <h4 className="text-xs font-medium text-foreground mb-1">Web Platform</h4>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    The web-based <strong className="text-foreground">Command Center</strong> provides comprehensive oversight with 
-                    <strong className="text-foreground"> real-time dashboard analytics</strong>, 
-                    <strong className="text-foreground"> role-based access control</strong>, and 
-                    <strong className="text-foreground"> live team tracking</strong>. 
-                    Upload and manage Monthly Monitoring Plans, assign site visits to field teams, monitor progress with visual workflows, 
-                    and generate detailed reports.
-                  </p>
-                </div>
-                <div>
-                  <h4 className="text-xs font-medium text-foreground mb-1">Mobile Application</h4>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    The mobile application empowers field teams with <strong className="text-foreground">full offline functionality</strong> - 
-                    capture site visits, update data, and complete tasks even without internet connectivity. 
-                    All changes automatically <strong className="text-foreground">sync when back online</strong>, ensuring no data is ever lost.
-                  </p>
-                </div>
+      <footer className="border-t">
+        <div className="container mx-auto px-4 py-8">
+          <div className="mb-6 text-center max-w-3xl mx-auto">
+            <img src={PactLogo} alt="PACT" className="h-10 w-10 mb-4 mx-auto" width={40} height={40} loading="lazy" />
+            <h3 className="text-base font-medium mb-2 text-foreground">
+              Built for the Field, Designed for Reliability
+            </h3>
+            <p className="text-xs text-foreground/70 leading-relaxed mb-4">
+              The <strong className="text-foreground font-medium">PACT Command Center Platform</strong> delivers
+              powerful capabilities across web and mobile applications, ensuring seamless operations
+              whether you&apos;re in the office or in the field.
+            </p>
+            <div className="text-left space-y-3 max-w-2xl mx-auto">
+              <div>
+                <h4 className="text-xs font-medium text-foreground mb-1">Web Platform</h4>
+                <p className="text-xs text-foreground/70 leading-relaxed">
+                  The web-based <strong className="text-foreground font-medium">Command Center</strong> provides
+                  comprehensive oversight with{" "}
+                  <strong className="text-foreground font-medium">real-time dashboard analytics</strong>,{" "}
+                  <strong className="text-foreground font-medium">role-based access control</strong>, and{" "}
+                  <strong className="text-foreground font-medium">live team tracking</strong>. Upload and manage
+                  Monthly Monitoring Plans, assign site visits to field teams, monitor progress with visual
+                  workflows, and generate detailed reports.
+                </p>
+              </div>
+              <div>
+                <h4 className="text-xs font-medium text-foreground mb-1">Mobile Application</h4>
+                <p className="text-xs text-foreground/70 leading-relaxed">
+                  The mobile application empowers field teams with{" "}
+                  <strong className="text-foreground font-medium">full offline functionality</strong>: capture
+                  site visits, update data, and complete tasks even without internet connectivity. All changes
+                  automatically <strong className="text-foreground font-medium">sync when back online</strong>,
+                  ensuring no data is ever lost.
+                </p>
               </div>
             </div>
-            <div className="border-t pt-4 text-center">
-              <p className="text-xs text-muted-foreground" data-testid="text-copyright">
-                &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
-              </p>
-            </div>
           </div>
-        </footer>
-      </div>
+          <div className="border-t pt-4 text-center">
+            <p className="text-xs text-foreground/60" data-testid="text-copyright">
+              &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };
