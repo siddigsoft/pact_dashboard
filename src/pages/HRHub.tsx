@@ -105,7 +105,7 @@ const SECTIONS: SectionDef[] = [
   {
     id: 'people', label: 'People & Development', icon: Users, adminOnly: true,
     tabs: [
-      { id: 'performance', label: 'Performance Reviews',   icon: TrendingUp,    adminOnly: true,  description: 'Manage staff performance review cycles — set objectives, record mid-year check-ins, and finalise annual ratings with narrative feedback.' },
+      { id: 'performance', label: 'Performance Reviews',   icon: TrendingUp,    adminOnly: true,  description: 'Manage staff performance review cycles: set objectives, record mid-year check-ins, and finalise annual ratings with narrative feedback.' },
       { id: 'training',    label: 'Training & Certs',      icon: GraduationCap, adminOnly: false, description: 'Log training courses completed, track professional certifications and expiry dates, and plan upcoming development activities per staff member.' },
       { id: 'contracts',   label: 'Contract Renewals',     icon: FileText,      adminOnly: true,  description: 'Track employment contract end dates, flag those approaching expiry, and process renewal offers or issue non-renewal notices in time.' },
       { id: 'positions',   label: 'Positions & Vacancies', icon: Briefcase,     adminOnly: false, description: 'Manage the approved position register, track open vacancies against the org structure, and link positions to departments and salary grades.' },
@@ -229,7 +229,6 @@ export default function HRHub() {
 
   const allTabs = SECTIONS.flatMap(s => s.tabs);
   const activeTabDef = allTabs.find(t => t.id === tab) ?? allTabs[0];
-  const accent = SECTION_ACCENT[section];
 
   return (
     <HubLayout

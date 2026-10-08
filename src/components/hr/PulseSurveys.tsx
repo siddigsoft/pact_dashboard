@@ -24,7 +24,6 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid,
 } from 'recharts';
 import { exportToExcel } from '@/utils/report-export';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 type QuestionType = 'rating' | 'nps' | 'text' | 'yes_no';
@@ -135,10 +134,9 @@ function isSurveyOpen(s: PulseSurvey): boolean {
 }
 
 export default function PulseSurveys() {
-  const { checkPermission } = useAuthorization();
+  const { checkPermission, hasAnyRole } = useAuthorization();
   const canExport = checkPermission('pulse_surveys', 'export');
   const { currentUser } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
   const { toast } = useToast();
   const qc = useQueryClient();
   const isAdmin = hasAnyRole(['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin', 'hr', 'hr_manager']);

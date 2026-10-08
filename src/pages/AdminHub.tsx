@@ -1,11 +1,10 @@
-import { Suspense, lazy, useState, useRef, useEffect, useMemo } from 'react';
+import { Suspense, lazy, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Loader2, Users, Shield, Building2, Award, DollarSign,
-  CheckSquare, ClipboardList, Settings, Activity, Info,
-  ChevronRight, ChevronDown,
+  CheckSquare, ClipboardList, Settings, Activity,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { HubLayout } from '@/components/ui/hub-layout';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 const UsersPanel              = lazy(() => import('./Users'));
@@ -48,23 +47,23 @@ const SECTIONS: SectionDef[] = [
     tabs: [
       { id: 'classifications',      label: 'Classifications',     icon: Award,        description: 'Manage data collector and staff classification levels — define grade names, criteria, and the classification hierarchy used across modules.' },
       { id: 'classification-fees',  label: 'Classification Fees', icon: DollarSign,   description: 'Set daily or per-visit fee rates per classification level — used to calculate transportation advances and cost submissions.' },
-      { id: 'task-admin',           label: 'Task Admin',          icon: CheckSquare,  description: 'Admin overview of all tasks across the organisation — bulk-assign, manage templates, set recurring rules, and view payroll-ready completion data.' },
-      { id: 'project-flow-stages',  label: 'Project Flow Stages', icon: ClipboardList,description: 'Configure lifecycle stages for each project type — add, rename, or reorder stages and set which are mandatory or skippable.' },
+      { id: 'task-admin',           label: 'Task Admin',          icon: CheckSquare,  description: 'Administer task templates and assignments used across the organisation.' },
+      { id: 'project-flow-stages',  label: 'Project Flow Stages', icon: Activity,     description: 'Configure project workflow stages and transitions.' },
     ],
   },
   {
     id: 'system', label: 'System', icon: Settings,
-    color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)',
-    description: 'System-wide settings, compliance monitoring, and platform performance dashboards.',
+    color: '#64748b', bg: 'rgba(100,116,139,0.12)',
+    description: 'System settings, audit, and monitoring.',
     tabs: [
-      { id: 'settings',         label: 'Settings',          icon: Settings, description: 'Global platform settings — notification channels, integration configs, branding, language defaults, and system-wide behaviour toggles.' },
-      { id: 'audit-compliance', label: 'Audit & Compliance', icon: Shield,   description: 'Review compliance status — flag overdue approvals, missing documentation, and policy violations with severity ratings and resolution tracking.' },
-      { id: 'system-monitoring',label: 'System Monitoring',  icon: Activity, description: 'Live platform health — active user sessions, API response times, background job queues, error rates, and recent system events.' },
+      { id: 'settings',           label: 'Settings',           icon: Settings, description: 'Organisation-wide application settings.' },
+      { id: 'audit-compliance',   label: 'Audit & Compliance', icon: Shield,   description: 'Review audit trails and compliance controls.' },
+      { id: 'system-monitoring',  label: 'System Monitoring',  icon: Activity, description: 'Operational health and monitoring dashboards.' },
     ],
   },
 ];
 
-const ALL_TABS = SECTIONS.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id, sectionColor: s.color })));
+const ALL_TABS = SECTIONS.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id })));
 const DEFAULT_TAB: AdminTab = 'users';
 
 const PanelMap: Record<AdminTab, React.LazyExoticComponent<any>> = {
@@ -102,7 +101,7 @@ export default function AdminHub() {
     [isTabBlocked],
   );
   const visibleAllTabs = useMemo(() =>
-    visibleSections.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id, sectionColor: s.color }))),
+    visibleSections.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id }))),
     [visibleSections],
   );
 
@@ -113,239 +112,48 @@ export default function AdminHub() {
 
   useEffect(() => {
     if (activeTab !== 'role-management') return;
-    // Role Management is a dense, full-page security workspace. Do not nest it
-    // beneath the Administration Hub's three navigation levels.
     localStorage.setItem('hub_last_tab_admin', 'users');
     navigate('/role-management', { replace: true });
   }, [activeTab, navigate]);
 
   const activeTabDef = ALL_TABS.find(t => t.id === activeTab) ?? ALL_TABS[0];
-  // Never fall back to the unfiltered SECTIONS catalog. That made blocked/loading
-  // hubs show clickable tabs that could not become the active panel.
   const activeSection = visibleSections.find(s => s.id === activeTabDef.sectionId) ?? visibleSections[0] ?? null;
 
-  const setTab = (tab: AdminTab) => {
-    localStorage.setItem('hub_last_tab_admin', tab);
+  const setTab = (tab: string) => {
+    const nextTab = tab as AdminTab;
+    localStorage.setItem('hub_last_tab_admin', nextTab);
     const next = new URLSearchParams(params);
-    next.set('tab', tab);
+    next.set('tab', nextTab);
     setParams(next, { replace: true });
   };
 
   const Panel = activeTab in PanelMap ? PanelMap[activeTab] : null;
 
-  const [dropOpen, setDropOpen] = useState(false);
-  const dropRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDropOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  useEffect(() => { setDropOpen(false); }, [activeSection?.id]);
+  if (!activeSection) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
+        <Shield className="h-8 w-8 opacity-40" />
+        <p>No Administration Hub pages are available for your access profile.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
-
-      {/* ── Sticky composite header ── */}
-      <div
-        className="sticky top-0 z-30 shadow-sm"
-        style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 60%, #0f2240 100%)' }}
-      >
-
-        {/* ── Level 1: Hub identity ── */}
-        <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-4 border-b border-white/10">
-          <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: activeSection?.color ?? '#3b82f6' }}
-            >
-              {activeSection ? (
-                <activeSection.icon className="h-4.5 w-4.5 text-white" style={{ width: 18, height: 18 }} />
-              ) : (
-                <Users className="h-4.5 w-4.5 text-white" style={{ width: 18, height: 18 }} />
-              )}
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-[17px] font-bold text-white tracking-tight leading-tight">
-                Administration Hub
-              </h1>
-              <div className="flex items-center gap-1 mt-0.5 text-[11px] text-gray-400">
-                {visibleSections.map((s, i) => (
-                  <span key={s.id} className="flex items-center gap-1">
-                    {i > 0 && <ChevronRight className="h-2.5 w-2.5 opacity-40" />}
-                    <span
-                      className={cn(
-                        'transition-colors',
-                        activeSection?.id === s.id ? 'font-semibold' : 'opacity-60'
-                      )}
-                      style={activeSection?.id === s.id ? { color: s.color } : {}}
-                    >
-                      {s.label}
-                    </span>
-                  </span>
-                ))}
-                {visibleSections.length === 0 && <span className="opacity-60">No accessible sections</span>}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Level 2: Section tabs ── */}
-        <div className="px-5 pt-3 flex items-end gap-1.5">
-          {visibleSections.map(s => {
-            const isActive = activeSection?.id === s.id;
-            return (
-              <button
-                key={s.id}
-                onClick={() => setTab(s.tabs[0].id)}
-                className={cn(
-                  'group relative flex items-center gap-2 px-4 pt-2.5 pb-3 rounded-t-xl text-sm font-semibold',
-                  'transition-all duration-150 border border-b-0',
-                  isActive
-                    ? 'text-white border-white/15'
-                    : 'text-gray-400 border-transparent hover:text-gray-200 hover:border-white/10',
-                )}
-                style={isActive
-                  ? { backgroundColor: s.bg, borderColor: `${s.color}40` }
-                  : { backgroundColor: 'transparent' }
-                }
-              >
-                {/* active bottom-colour accent */}
-                {isActive && (
-                  <span
-                    className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full"
-                    style={{ backgroundColor: s.color }}
-                  />
-                )}
-                <s.icon
-                  className="h-4 w-4 transition-colors"
-                  style={isActive ? { color: s.color } : {}}
-                />
-                <span>{s.label}</span>
-                <span
-                  className={cn(
-                    'ml-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold px-1',
-                    isActive ? 'text-white' : 'text-gray-500 bg-white/5'
-                  )}
-                  style={isActive ? { backgroundColor: `${s.color}55`, color: s.color } : {}}
-                >
-                  {s.tabs.length}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* ── Level 3: Sub-tab dropdown ── */}
-        {activeSection && (
-        <div
-          className="relative px-4 py-2 border-t flex items-center gap-3"
-          style={{ borderColor: `${activeSection.color}30`, backgroundColor: `${activeSection.color}0a` }}
-          ref={dropRef}
-        >
-          {/* Dropdown trigger */}
-          <button
-            onClick={() => setDropOpen(v => !v)}
-            className={cn(
-              'flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all duration-150 border min-w-0 flex-1 max-w-sm',
-              dropOpen
-                ? 'bg-white/10 border-white/20 text-white'
-                : 'bg-white/5 border-white/10 text-gray-200 hover:bg-white/8 hover:text-white',
-            )}
-          >
-            <activeTabDef.icon className="h-4 w-4 shrink-0" style={{ color: activeSection.color }} />
-            <span className="truncate">{activeTabDef.label}</span>
-            <ChevronDown className={cn('h-4 w-4 shrink-0 ml-auto opacity-60 transition-transform duration-150', dropOpen && 'rotate-180')} />
-          </button>
-
-          {/* Position counter */}
-          <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-400 shrink-0">
-            <span className="px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${activeSection.color}22`, color: activeSection.color }}>
-              {activeSection.tabs.findIndex(t => t.id === activeTab) + 1} / {activeSection.tabs.length}
-            </span>
-            <span className="opacity-50">{activeSection.label}</span>
-          </div>
-
-          {/* Dropdown panel */}
-          {dropOpen && (
-            <div
-              className="absolute top-full left-4 right-4 mt-1 rounded-xl border shadow-2xl overflow-hidden z-50"
-              style={{
-                background: 'linear-gradient(135deg, #0d1f3c 0%, #0f2240 100%)',
-                borderColor: `${activeSection.color}35`,
-                boxShadow: `0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px ${activeSection.color}25`,
-              }}
-            >
-              <div
-                className="px-4 py-2.5 border-b flex items-center gap-2"
-                style={{ borderColor: `${activeSection.color}25`, backgroundColor: `${activeSection.color}12` }}
-              >
-                <activeSection.icon className="h-4 w-4 shrink-0" style={{ color: activeSection.color }} />
-                <span className="text-[12px] font-bold text-white tracking-wide">{activeSection.label}</span>
-                <span className="ml-auto text-[10px] text-gray-400">{activeSection.tabs.length} pages</span>
-              </div>
-              <div className="p-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                {activeSection.tabs.map(tab => {
-                  const isActive = activeTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => { setTab(tab.id); setDropOpen(false); }}
-                      className={cn(
-                        'flex items-start gap-2 px-3 py-2.5 rounded-lg text-left transition-all duration-100',
-                        isActive ? 'text-white' : 'text-gray-400 hover:text-gray-100 hover:bg-white/5',
-                      )}
-                      style={isActive ? { backgroundColor: `${activeSection.color}28`, outline: `1px solid ${activeSection.color}50` } : {}}
-                    >
-                      <tab.icon className="h-4 w-4 shrink-0 mt-0.5" style={{ color: isActive ? activeSection.color : undefined, opacity: isActive ? 1 : 0.55 }} />
-                      <span className="text-[12px] font-medium leading-tight">{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-        )}
-      </div>
-
-      {/* ── Description strip ── */}
-      {activeSection && (
-      <div
-        className="flex items-start gap-3 px-5 py-2.5 border-b border-l-[3px]"
-        style={{
-          borderLeftColor: activeSection.color,
-          backgroundColor: `${activeSection.color}08`,
-          borderBottomColor: `${activeSection.color}20`,
-        }}
-      >
-        <Info
-          className="h-4 w-4 mt-0.5 shrink-0"
-          style={{ color: activeSection.color }}
-        />
-        <p className="text-[12.5px] text-muted-foreground leading-relaxed">
-          {activeTabDef.description}
-        </p>
-      </div>
-      )}
-
-      {/* ── Page content ── */}
-      <div className="flex-1">
-        {!activeSection || !Panel ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
-            <Shield className="h-8 w-8 opacity-40" />
-            <p>No Administration Hub pages are available for your access profile.</p>
-          </div>
-        ) : (
-          <Suspense fallback={<Spinner />}>
-            <Panel />
-          </Suspense>
-        )}
-      </div>
-    </div>
+    <HubLayout
+      title="Administration Hub"
+      subtitle="People · Organisation · System"
+      hubIcon={Settings}
+      sections={visibleSections}
+      activeSectionId={activeSection.id}
+      activeTabId={activeTab}
+      activeTabDescription={activeTabDef.description}
+      tourSlug="admin-hub"
+      onSectionClick={id => setTab(id)}
+      onTabClick={id => setTab(id)}
+    >
+      <Suspense fallback={<Spinner />}>
+        {Panel ? <Panel /> : null}
+      </Suspense>
+    </HubLayout>
   );
 }

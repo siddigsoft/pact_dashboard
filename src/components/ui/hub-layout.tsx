@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { TourButton } from '@/components/onboarding/TourButton';
 
 export interface HubSection {
@@ -45,12 +45,10 @@ export function HubLayout({
 }: HubLayoutProps) {
   const activeSection = sections.find(s => s.id === activeSectionId) ?? null;
   const activeTab = activeSection?.tabs.find(t => t.id === activeTabId) ?? null;
-  const accent = activeSection?.color ?? sections[0]?.color ?? '#3b82f6';
 
   const [dropOpen, setDropOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
@@ -61,7 +59,6 @@ export function HubLayout({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Close dropdown when section changes
   useEffect(() => { setDropOpen(false); }, [activeSectionId]);
 
   const handleTabSelect = (tabId: string) => {
@@ -72,173 +69,141 @@ export function HubLayout({
   return (
     <div className={fullPage ? 'flex h-full min-h-0 flex-col overflow-hidden bg-background' : 'flex flex-col min-h-screen bg-background'}>
 
-      {/* ── Sticky composite header ── */}
-      <div
-        className="sticky top-0 z-30 shadow-sm"
-        style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 60%, #0f2240 100%)' }}
-      >
+      {/* Sticky hub chrome: light institutional toolbar with readable contrast */}
+      <header className="sticky top-0 z-30 border-b border-border bg-card">
 
-        {/* ── Level 1: Hub identity ── */}
-        <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-4 border-b border-white/10">
-          <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: accent }}
-            >
-              <HubIcon style={{ width: 18, height: 18, color: 'white' }} />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-[17px] font-bold text-white tracking-tight leading-tight">{title}</h1>
-              <div className="flex items-center gap-1 mt-0.5 text-[11px] text-gray-400 flex-wrap">
-                {sections.map((s, i) => (
-                  <span key={s.id} className="flex items-center gap-1">
-                    {i > 0 && <ChevronRight className="h-2.5 w-2.5 opacity-30" />}
-                    <span
-                      className="transition-colors"
-                      style={activeSectionId === s.id ? { color: s.color, fontWeight: 600 } : { opacity: 0.5 }}
-                    >
-                      {s.label}
-                    </span>
-                  </span>
-                ))}
-                {sections.length === 0 && <span className="opacity-50">{subtitle}</span>}
+        {/* Identity + sections */}
+        <div className="px-4 sm:px-5 pt-3.5 pb-0 flex flex-col gap-2.5">
+          <div className="flex items-center justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <HubIcon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-lg font-semibold text-foreground tracking-tight leading-tight truncate">
+                  {title}
+                </h1>
+                {subtitle && (
+                  <p className="text-xs text-foreground/65 truncate mt-0.5">{subtitle}</p>
+                )}
               </div>
             </div>
+            {tourSlug && (
+              <div className="hidden sm:flex shrink-0">
+                <TourButton slug={tourSlug} variant="inline" />
+              </div>
+            )}
           </div>
-          {tourSlug && (
-            <div className="hidden md:flex items-center gap-2 shrink-0">
-              <TourButton slug={tourSlug} variant="inline" />
-            </div>
+
+          {sections.length > 0 && (
+            <nav
+              id="tour-hub-sections"
+              className="flex items-end gap-0.5 overflow-x-auto scrollbar-none -mb-px"
+              aria-label="Hub sections"
+            >
+              {sections.map(s => {
+                const isActive = activeSectionId === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => onSectionClick(s.tabs[0]?.id)}
+                    className={cn(
+                      'relative flex items-center gap-1.5 px-3 py-2.5 text-[13px] whitespace-nowrap shrink-0',
+                      'border-b-2 transition-colors duration-150',
+                      isActive
+                        ? 'border-foreground text-foreground font-semibold'
+                        : 'border-transparent text-foreground/70 font-medium hover:text-foreground',
+                    )}
+                  >
+                    <s.icon className={cn('h-3.5 w-3.5 shrink-0', isActive ? 'opacity-90' : 'opacity-75')} />
+                    <span>{s.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
           )}
         </div>
 
-        {/* ── Level 2: Section tabs ── */}
-        <div id="tour-hub-sections" className="px-5 pt-3 flex items-end gap-1.5 overflow-x-auto scrollbar-none">
-          {sections.map(s => {
-            const isActive = activeSectionId === s.id;
-            const bg = s.bg ?? `${s.color}1e`;
-            return (
-              <button
-                key={s.id}
-                onClick={() => onSectionClick(s.tabs[0]?.id)}
-                className={cn(
-                  'group relative flex items-center gap-2 px-4 pt-2.5 pb-3 rounded-t-xl text-sm font-semibold whitespace-nowrap',
-                  'transition-all duration-150 border border-b-0 shrink-0',
-                  isActive
-                    ? 'text-white border-white/15'
-                    : 'text-gray-400 border-transparent hover:text-gray-200 hover:border-white/10',
-                )}
-                style={isActive ? { backgroundColor: bg, borderColor: `${s.color}40` } : {}}
-              >
-                {isActive && (
-                  <span
-                    className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full"
-                    style={{ backgroundColor: s.color }}
-                  />
-                )}
-                <s.icon className="h-4 w-4 transition-colors shrink-0" style={isActive ? { color: s.color } : {}} />
-                <span>{s.label}</span>
-                <span
-                  className={cn(
-                    'ml-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold px-1',
-                    isActive ? '' : 'text-gray-500 bg-white/5',
-                  )}
-                  style={isActive ? { backgroundColor: `${s.color}44`, color: s.color } : {}}
-                >
-                  {s.tabs.length}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* ── Level 3: Sub-tab dropdown bar ── */}
+        {/* In-section page picker */}
         {activeSection && (
           <div
             id="tour-hub-tab-bar"
-            className="relative px-4 py-2 border-t flex items-center gap-3"
-            style={{ borderColor: `${accent}30`, backgroundColor: `${accent}0a` }}
+            className="relative px-4 sm:px-5 py-2.5 border-t border-border bg-muted flex items-center gap-2.5"
             ref={dropRef}
           >
-            {/* Dropdown trigger button */}
+            <span className="hidden sm:inline text-xs font-medium text-foreground/70 shrink-0">
+              Page
+            </span>
             <button
+              type="button"
               onClick={() => setDropOpen(v => !v)}
+              aria-expanded={dropOpen}
+              aria-haspopup="listbox"
+              aria-label="Select hub page"
               className={cn(
-                'flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all duration-150 border min-w-0 flex-1 max-w-sm',
-                dropOpen
-                  ? 'bg-white/10 border-white/20 text-white'
-                  : 'bg-white/5 border-white/10 text-gray-200 hover:bg-white/8 hover:text-white',
+                'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold transition-colors duration-150',
+                'border border-foreground/20 bg-card text-foreground shadow-sm min-w-0 flex-1 max-w-md',
+                'hover:border-foreground/35 hover:bg-background',
+                dropOpen && 'border-foreground/40 ring-2 ring-foreground/10',
               )}
             >
               {activeTab ? (
                 <>
-                  <activeTab.icon className="h-4 w-4 shrink-0" style={{ color: accent }} />
+                  <activeTab.icon className="h-4 w-4 shrink-0 text-foreground/80" />
                   <span className="truncate">{activeTab.label}</span>
                 </>
               ) : (
                 <>
-                  <activeSection.icon className="h-4 w-4 shrink-0 opacity-50" />
-                  <span className="text-gray-400">Select a page…</span>
+                  <activeSection.icon className="h-4 w-4 shrink-0 text-foreground/80" />
+                  <span className="text-foreground/70 font-medium">Select a page</span>
                 </>
               )}
               <ChevronDown
-                className={cn('h-4 w-4 shrink-0 ml-auto transition-transform duration-150 opacity-60', dropOpen && 'rotate-180')}
+                className={cn(
+                  'h-4 w-4 shrink-0 ml-auto text-foreground/70 transition-transform duration-150',
+                  dropOpen && 'rotate-180',
+                )}
               />
             </button>
 
-            {/* Tab count + current position pill */}
             {activeTab && (
-              <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-400 shrink-0">
-                <span
-                  className="px-2 py-1 rounded-full font-medium"
-                  style={{ backgroundColor: `${accent}22`, color: accent }}
-                >
-                  {(activeSection.tabs.findIndex(t => t.id === activeTabId) + 1)} / {activeSection.tabs.length}
-                </span>
-                <span className="opacity-50">{activeSection.label}</span>
-              </div>
+              <span className="hidden sm:inline text-xs font-medium text-foreground/60 tabular-nums shrink-0">
+                {(activeSection.tabs.findIndex(t => t.id === activeTabId) + 1)} of {activeSection.tabs.length}
+              </span>
             )}
 
-            {/* ── Dropdown panel ── */}
             {dropOpen && (
               <div
-                className="absolute top-full left-4 right-4 mt-1 rounded-xl border shadow-xl overflow-hidden z-50"
-                style={{
-                  background: 'linear-gradient(135deg, #0d1f3c 0%, #0f2240 100%)',
-                  borderColor: `${accent}35`,
-                }}
+                role="listbox"
+                className="absolute top-full left-4 right-4 sm:left-5 sm:right-auto sm:min-w-[20rem] sm:max-w-lg mt-1 rounded-md border border-foreground/15 bg-popover text-popover-foreground shadow-md overflow-hidden z-50"
               >
-                {/* Panel header */}
-                <div
-                  className="px-4 py-2.5 border-b flex items-center gap-2"
-                  style={{ borderColor: `${accent}25`, backgroundColor: `${accent}12` }}
-                >
-                  <activeSection.icon className="h-4 w-4 shrink-0" style={{ color: accent }} />
-                  <span className="text-[12px] font-bold text-white tracking-wide">{activeSection.label}</span>
-                  <span className="ml-auto text-[10px] text-gray-400">{activeSection.tabs.length} pages</span>
+                <div className="px-3 py-2 border-b border-border flex items-center gap-2 bg-muted">
+                  <activeSection.icon className="h-3.5 w-3.5 shrink-0 text-foreground/70" />
+                  <span className="text-[12px] font-semibold text-foreground">{activeSection.label}</span>
+                  <span className="ml-auto text-[10px] font-medium text-foreground/60 tabular-nums">
+                    {activeSection.tabs.length}
+                  </span>
                 </div>
-
-                {/* Tab grid */}
-                <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-[55vh] overflow-y-auto">
+                <div className="p-1.5 grid grid-cols-1 sm:grid-cols-2 gap-0.5 max-h-[50vh] overflow-y-auto">
                   {activeSection.tabs.map(tab => {
                     const isActive = activeTabId === tab.id;
                     return (
                       <button
                         key={tab.id}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
                         onClick={() => handleTabSelect(tab.id)}
                         className={cn(
-                          'flex items-start gap-2 px-3 py-2.5 rounded-lg text-left transition-all duration-100 group',
+                          'flex items-center gap-2 px-2.5 py-2 rounded-md text-left text-[13px] transition-colors duration-150',
                           isActive
-                            ? 'text-white'
-                            : 'text-gray-400 hover:text-gray-100 hover:bg-white/5',
+                            ? 'bg-accent text-accent-foreground font-semibold'
+                            : 'text-foreground/80 font-medium hover:bg-muted hover:text-foreground',
                         )}
-                        style={isActive ? { backgroundColor: `${accent}28`, outline: `1px solid ${accent}50` } : {}}
                       >
-                        <tab.icon
-                          className="h-4 w-4 shrink-0 mt-0.5"
-                          style={{ color: isActive ? accent : undefined, opacity: isActive ? 1 : 0.55 }}
-                        />
-                        <span className="text-[12px] font-medium leading-tight">{tab.label}</span>
+                        <tab.icon className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                        <span className="leading-snug">{tab.label}</span>
                       </button>
                     );
                   })}
@@ -247,24 +212,20 @@ export function HubLayout({
             )}
           </div>
         )}
-      </div>
+      </header>
 
-      {/* ── Description strip ── */}
       {activeTabDescription && !dropOpen && (
-        <div
-          className="flex items-start gap-3 px-5 py-2 border-b border-l-[3px] text-[12px] text-muted-foreground"
-          style={{ borderLeftColor: accent, backgroundColor: `${accent}08`, borderBottomColor: `${accent}20` }}
-        >
-          <p className="leading-relaxed">{activeTabDescription}</p>
+        <div className="px-4 sm:px-5 py-2.5 border-b border-border bg-background">
+          <p className="text-[13px] text-foreground/75 leading-relaxed max-w-3xl">
+            {activeTabDescription}
+          </p>
         </div>
       )}
 
-      {/* ── Overview landing (when no tab selected) ── */}
       {!activeTabId && overviewContent && (
         <div className={fullPage ? 'min-h-0 flex-1 overflow-y-auto' : 'flex-1'}>{overviewContent}</div>
       )}
 
-      {/* ── Page content ── */}
       {activeTabId && (
         <div className={fullPage ? 'min-h-0 flex-1 overflow-y-auto' : 'flex-1'}>{children}</div>
       )}
