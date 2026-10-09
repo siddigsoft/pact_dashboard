@@ -11,10 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CreateRoleRequest, ResourceType, ActionType, RoleWithPermissions } from '@/types/roles';
 import { roleTemplates, permissionPresets, getCategoryColor, RoleTemplate } from '@/constants/roleTemplates';
-import { RoleBaselineAccessEditor } from './RoleBaselineAccessEditor';
 import { PermissionManager } from './PermissionManager';
-import { RoleBaselineAccess } from '@/types/roles';
-import { supabase } from '@/integrations/supabase/client';
 import { getGrantablePageGroups } from '@/lib/access-registry';
 import { withPageDefaultPermissions } from '@/lib/page-default-permissions';
 import {
@@ -22,14 +19,13 @@ import {
   Wand2, ListChecks, Star, Info, ChevronLeft, ChevronRight, Check,
 } from 'lucide-react';
 
-type WizardStep = 'template' | 'details' | 'pages' | 'actions' | 'baseline' | 'assign' | 'review';
+type WizardStep = 'template' | 'details' | 'pages' | 'actions' | 'assign' | 'review';
 
 const STEPS: Array<{ id: WizardStep; label: string }> = [
   { id: 'template', label: 'Template' },
   { id: 'details', label: 'Role details' },
   { id: 'pages', label: 'Page access' },
   { id: 'actions', label: 'Actions' },
-  { id: 'baseline', label: 'Tabs, columns & scope' },
   { id: 'assign', label: 'Assign users' },
   { id: 'review', label: 'Review & save' },
 ];
@@ -62,9 +58,6 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
   cloneSourceRole,
   users = [],
 }) => {
-  const [baseline, setBaseline] = useState<RoleBaselineAccess>({ tab_rules: [], column_rules: [] });
-  const [allowCostScope, setAllowCostScope] = useState(false);
-  useEffect(() => { if (open) { supabase.rpc('workspace_check_super_admin').then(({ data }) => setAllowCostScope(data === true)); } }, [open]);
   const [step, setStep] = useState<WizardStep>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<RoleTemplate | null>(null);
   const [formData, setFormData] = useState({ name: '', display_name: '', description: '' });
@@ -111,7 +104,6 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
   }, [cloneSourceRole, open]);
 
   const resetDialogState = () => {
-    setBaseline({ tab_rules: [], column_rules: [] });
     setStep('template');
     setSelectedTemplate(null);
     setFormData({ name: '', display_name: '', description: '' });
@@ -225,16 +217,15 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
         setError('Select at least one action permission.');
         return;
       }
-      setStep('baseline');
+      setStep('assign');
       return;
     }
-    if (step === 'baseline') { setStep('assign'); return; }
     if (step === 'assign') { setStep('review'); return; }
   };
 
   const goBack = () => {
     setError(null);
-    const order: WizardStep[] = ['template', 'details', 'pages', 'actions', 'baseline', 'assign', 'review'];
+    const order: WizardStep[] = ['template', 'details', 'pages', 'actions', 'assign', 'review'];
     const idx = order.indexOf(step);
     if (idx > 0) setStep(order[idx - 1]);
   };
@@ -250,7 +241,6 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
     }
 
     const payload: CreateRoleRequest = {
-      ...baseline,
       name: formData.name.trim(),
       display_name: formData.display_name.trim(),
       description: formData.description.trim(),
@@ -469,8 +459,6 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                   </div>
                 )}
 
-                {step === 'baseline' && <RoleBaselineAccessEditor value={baseline} onChange={setBaseline} allowCostScope={allowCostScope} />}
-
                 {step === 'assign' && (
                   <div className="space-y-4">
                     <p className="text-sm text-muted-foreground">
@@ -522,7 +510,6 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                         ))}
                       </CardContent>
                     </Card>
-                    <Card><CardHeader><CardTitle className="text-base">Tabs, columns & scope</CardTitle></CardHeader><CardContent className="text-sm">{baseline.tab_rules?.filter(rule => rule.is_blocked).length ?? 0} hidden tabs · {baseline.column_rules?.filter(rule => rule.is_hidden).length ?? 0} hidden columns · Cost scope: {baseline.cost_scope?.mode ?? 'application default'}</CardContent></Card>
                     <Card>
                       <CardHeader><CardTitle className="text-base">Users ({assignUserIds.length})</CardTitle></CardHeader>
                       <CardContent className="text-sm">
