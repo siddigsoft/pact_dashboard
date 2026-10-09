@@ -66,9 +66,23 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
   const [selectedPermissions, setSelectedPermissions] = useState<{ resource: ResourceType; action: ActionType }[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const pageGroups = useMemo(() => getGrantablePageGroups(), []);
+  const [pageSearch, setPageSearch] = useState('');
+  const visiblePageGroups = useMemo(() => {
+    const q = pageSearch.trim().toLowerCase();
+    if (!q) return pageGroups;
+    return pageGroups
+      .map(([group, groupPages]) => [
+        group,
+        group.toLowerCase().includes(q)
+          ? groupPages
+          : groupPages.filter(page => page.label.toLowerCase().includes(q) || page.slug.toLowerCase().includes(q)),
+      ] as [string, typeof groupPages])
+      .filter(([, groupPages]) => groupPages.length > 0);
+  }, [pageGroups, pageSearch]);
 
   useEffect(() => {
     if (role) {
+      setPageSearch('');
       setFormData({
         display_name: role.display_name,
         description: role.description || '',
@@ -187,8 +201,20 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
             {baselineLoading ? <p className="text-sm">Loading access defaults…</p> : !baselineError && <>
               <h3 className="font-semibold">Page access</h3>
               <p className="text-sm text-muted-foreground">Selected pages grant this role access in navigation and routes. All defaults save together.</p>
+              <div className="sticky top-0 z-10 bg-background py-2">
+                <Input
+                  type="search"
+                  placeholder="Search pages by name, slug, or group…"
+                  value={pageSearch}
+                  onChange={e => setPageSearch(e.target.value)}
+                  data-testid="input-role-page-search"
+                />
+              </div>
               <div className="space-y-3">
-                {pageGroups.map(([group, groupPages]) => (
+                {visiblePageGroups.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No pages match “{pageSearch}”.</p>
+                )}
+                {visiblePageGroups.map(([group, groupPages]) => (
                   <Card key={group}>
                     <CardHeader className="py-3">
                       <div className="flex items-center justify-between gap-2">
