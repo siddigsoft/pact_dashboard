@@ -66,11 +66,11 @@ const DEFAULT_INCENTIVE_CONFIGS: Omit<GlobalRoleRow, 'dbId'>[] = [
 ];
 
 export default function IncentiveSettingsPage() {
-  const { isSuperAdmin } = useAuthorization();
+  const { isSuperAdmin, checkPermission } = useAuthorization();
   const { hubs, hubStates } = useLocationCtx();
   const { toast } = useToast();
   const [language, setLanguage] = useState<PageLanguage>(() => getCurrentLanguage() === 'ar' ? 'ar' : 'en');
-  const allowed = isSuperAdmin();
+  const allowed = isSuperAdmin() || checkPermission('incentives', 'update');
   const [section, setSection] = useState<'reports' | 'settings'>('reports');
   const [loading, setLoading] = useState(true);
   const [settingsError, setSettingsError] = useState('');

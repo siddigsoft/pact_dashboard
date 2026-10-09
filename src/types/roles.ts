@@ -133,6 +133,7 @@ export type ResourceType =
   | 'pre_funding'
   | 'procurement'
   | 'fixed_assets'
+  | 'incentives'
   // HR
   | 'hr'
   | 'payroll'
@@ -200,7 +201,7 @@ export const RESOURCES: ResourceType[] = [
   'projects', 'portfolio', 'analytics', 'mmp', 'site_visits', 'hub_operations',
   'safety', 'incidents', 'equipment', 'coverage_map',
   'finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions',
-  'pre_funding', 'procurement', 'fixed_assets',
+  'pre_funding', 'procurement', 'fixed_assets', 'incentives',
   'hr', 'payroll', 'salary_advances', 'leave', 'benefits', 'succession', 'pulse_surveys', 'hr_analytics',
   'surveys', 'tasks', 'notifications', 'broadcast', 'whatsapp', 'calendar',
   'signatures', 'integrations', 'transactions', 'chat',
@@ -227,7 +228,7 @@ export const RESOURCE_LABELS: Record<ResourceType, string> = {
   safety: 'Safety Hub', incidents: 'Incident Reports', equipment: 'Equipment', coverage_map: 'Coverage Map',
   finances: 'Finances', wallets: 'Wallets', accounting: 'Accounting',
   down_payments: 'Down Payments', cost_submissions: 'Cost Submissions',
-  pre_funding: 'Pre-Funding', procurement: 'Procurement (P2P)', fixed_assets: 'Fixed Assets',
+  pre_funding: 'Pre-Funding', procurement: 'Procurement (P2P)', fixed_assets: 'Fixed Assets', incentives: 'Incentives',
   hr: 'HR Hub', payroll: 'Payroll', salary_advances: 'Salary Advances', leave: 'Leave Management',
   benefits: 'Benefits Enrollment', succession: 'Succession Planning', pulse_surveys: 'Pulse Surveys',
   hr_analytics: 'HR Analytics',

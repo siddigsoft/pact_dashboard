@@ -391,12 +391,6 @@ export const useAuthorization = () => {
     return checkPermission('crm', 'create') || checkPermission('crm', 'update');
   };
 
-  // ── Safety & Incidents ──────────────────────────────────────────────────
-  const canReportIncident = (): boolean => {
-    if (isSuperAdmin()) return true;
-    return checkPermission('incidents', 'create');
-  };
-
   // ── Tasks ───────────────────────────────────────────────────────────────
   const canAssignTasks = (): boolean => {
     if (isSuperAdmin()) return true;
@@ -562,8 +556,6 @@ export const useAuthorization = () => {
 
     // Field ops
     canViewAllSiteVisits,
-    canReportIncident,
-
     // HR
     canManageHR,
     canManagePayroll,

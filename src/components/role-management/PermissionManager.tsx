@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -24,6 +25,21 @@ import {
   inventoryPairCount,
   type CapabilityPair,
 } from '@/lib/capability-inventory';
+import { MODULE_REGISTRY } from '@/types/moduleRegistry';
+
+const PAGES_BY_RESOURCE: Map<string, string[]> = (() => {
+  const map = new Map<string, Set<string>>();
+  for (const mod of MODULE_REGISTRY) {
+    for (const page of mod.pages) {
+      for (const act of page.actions) {
+        const set = map.get(act.resource) ?? new Set<string>();
+        set.add(page.page);
+        map.set(act.resource, set);
+      }
+    }
+  }
+  return new Map([...map].map(([resource, pages]) => [resource, [...pages].sort()]));
+})();
 
 // ── Domain definitions ────────────────────────────────────────────────────────
 
@@ -48,10 +64,10 @@ const DOMAIN_GROUPS: DomainGroup[] = [
   {
     label: 'Programme Management',
     labelAr: 'إدارة البرامج',
-    description: 'Projects, MMP, site visits, portfolio, analytics, field operations',
+    description: 'Projects, MMP, site visits, portfolio, analytics, field operations, coverage map',
     color: 'indigo',
     icon: <FolderKanban className="h-4 w-4" />,
-    resources: ['projects', 'portfolio', 'analytics', 'mmp', 'site_visits', 'hub_operations', 'safety', 'incidents', 'equipment', 'coverage_map'],
+    resources: ['projects', 'portfolio', 'analytics', 'mmp', 'site_visits', 'hub_operations', 'coverage_map'],
   },
   {
     label: 'Finance & Accounting',
@@ -59,7 +75,7 @@ const DOMAIN_GROUPS: DomainGroup[] = [
     description: 'Budgets, wallets, cost submissions, down payments, accounting, procurement, fixed assets',
     color: 'green',
     icon: <DollarSign className="h-4 w-4" />,
-    resources: ['finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions', 'pre_funding', 'procurement', 'fixed_assets', 'transactions'],
+    resources: ['finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions', 'pre_funding', 'procurement', 'fixed_assets', 'transactions', 'incentives'],
   },
   {
     label: 'HR & People',
@@ -153,6 +169,11 @@ function ResourceRow({
             {RESOURCE_LABELS[resource] ?? resource}
           </Label>
         </div>
+        {(PAGES_BY_RESOURCE.get(resource)?.length ?? 0) > 0 && (
+          <p className="flex-1 min-w-0 px-3 text-[11px] text-muted-foreground truncate" title={PAGES_BY_RESOURCE.get(resource)!.join(', ')}>
+            Pages: {PAGES_BY_RESOURCE.get(resource)!.join(', ')}
+          </p>
+        )}
         <Badge variant="outline" className="text-xs tabular-nums">
           {count}/{actions.length}
         </Badge>
@@ -198,6 +219,7 @@ function DomainSection({
   onToggle,
   onSelectAll,
   disabled,
+  forceOpen = false,
 }: {
   group: DomainGroup;
   inventory: Map<ResourceType, ActionType[]>;
@@ -205,8 +227,10 @@ function DomainSection({
   onToggle: (resource: ResourceType, action: ActionType) => void;
   onSelectAll: (resource: ResourceType) => void;
   disabled: boolean;
+  forceOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
+  const [openState, setOpen] = useState(true);
+  const open = openState || forceOpen;
   const colors = DOMAIN_COLORS[group.color];
 
   const resources = group.resources.filter(r => (inventory.get(r)?.length ?? 0) > 0);
@@ -313,6 +337,30 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
     [orphanPairs],
   );
 
+  const [search, setSearch] = useState('');
+  const query = search.trim().toLowerCase();
+
+  // Matches keep the full action list per resource so row counts and select-all stay accurate.
+  const visibleInventory = useMemo(() => {
+    if (!query) return inventory;
+    const matches = (text: string | undefined) => !!text && text.toLowerCase().includes(query);
+    const out = new Map<ResourceType, ActionType[]>();
+    for (const group of DOMAIN_GROUPS) {
+      const groupHit = matches(group.label) || matches(group.labelAr) || matches(group.description);
+      for (const resource of group.resources) {
+        const actions = inventory.get(resource);
+        if (!actions?.length) continue;
+        const hit = groupHit
+          || matches(resource)
+          || matches(RESOURCE_LABELS[resource])
+          || (PAGES_BY_RESOURCE.get(resource) ?? []).some(matches)
+          || actions.some(a => matches(a) || matches(ACTION_LABELS[a]));
+        if (hit) out.set(resource, actions);
+      }
+    }
+    return out;
+  }, [inventory, query]);
+
   const handleToggle = (resource: ResourceType, action: ActionType) => {
     const key = `${resource}:${action}`;
     const next = new Set(selected);
@@ -411,16 +459,30 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
         </Alert>
       )}
 
+      <div className="sticky top-0 z-10 bg-background py-2">
+        <Input
+          type="search"
+          placeholder="Search by page, area, resource, or action (e.g. Incentives, MMP, approve)…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          data-testid="input-permission-search"
+        />
+      </div>
+
       <div className="space-y-3">
+        {query && visibleInventory.size === 0 && (
+          <p className="text-sm text-muted-foreground">No permissions match “{search}”.</p>
+        )}
         {DOMAIN_GROUPS.map(group => (
           <DomainSection
             key={group.label}
             group={group}
-            inventory={inventory}
+            inventory={visibleInventory}
             selected={selected}
             onToggle={handleToggle}
             onSelectAll={handleSelectAll}
             disabled={isLoading || saving}
+            forceOpen={!!query}
           />
         ))}
       </div>

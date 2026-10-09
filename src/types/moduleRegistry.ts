@@ -87,16 +87,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         ],
       },
       {
-        page: 'Audit & Security',
-        route: '/audit',
-        description: 'System audit logs, login analytics, hierarchy changes',
-        actions: [
-          { key: 'audit_logs:read', label: 'View Audit Logs', description: 'Read system audit trail', resource: 'audit_logs', action: 'read' },
-          { key: 'audit_logs:export', label: 'Export Audit Logs', description: 'Download audit logs as Excel', resource: 'audit_logs', action: 'export' },
-          { key: 'audit_logs:restore', label: 'Restore Deleted Records', description: 'Un-delete soft-deleted data', resource: 'audit_logs', action: 'restore', isSuperAdminOnly: true },
-        ],
-      },
-      {
         page: 'Super Admin Hub',
         route: '/super-admin-hub',
         description: 'System-level controls, super admin management, advanced overrides',
@@ -493,7 +483,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       },
       {
         page: 'Transaction Scanner',
-        route: '/transactions',
+        route: '/super-admin-hub?tab=transaction-scanner',
         description: 'AI-powered OCR for transaction screenshots',
         actions: [
           { key: 'transactions:read', label: 'View Transactions', description: 'See scanned transaction records', resource: 'transactions', action: 'read' },
@@ -1249,21 +1239,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'site_visits:read',   label: 'View Monitoring Form', description: 'Access the monitoring form interface',     resource: 'site_visits', action: 'read' },
           { key: 'site_visits:create', label: 'Submit Monitoring Form', description: 'Fill in and submit a monitoring form',   resource: 'site_visits', action: 'create' },
           { key: 'site_visits:update', label: 'Edit Draft Form',       description: 'Update a saved draft monitoring form',    resource: 'site_visits', action: 'update' },
-          { key: 'incidents:read', label: 'View Incidents', description: 'See all incident reports', resource: 'incidents', action: 'read' },
-          { key: 'incidents:create', label: 'Report Incident', description: 'Submit a new incident report', resource: 'incidents', action: 'create' },
-          { key: 'incidents:update', label: 'Update Incident', description: 'Modify an existing incident record', resource: 'incidents', action: 'update' },
-          { key: 'incidents:delete', label: 'Delete Incident', description: 'Remove an incident report', resource: 'incidents', action: 'delete', isDestructive: true },
-          { key: 'incidents:export', label: 'Export Incident Report', description: 'Download incident data', resource: 'incidents', action: 'export' },
-          { key: 'safety:read', label: 'View Safety Info', description: 'Access safety information', resource: 'safety', action: 'read' },
-          { key: 'safety:update', label: 'Update Safety Status', description: 'Post safety updates and alerts', resource: 'safety', action: 'update' },
-          { key: 'safety:create', label: 'Create Safety Alert', description: 'Issue a new safety alert', resource: 'safety', action: 'create' },
-          { key: 'safety:export', label: 'Export Safety Report', description: 'Download safety status report', resource: 'safety', action: 'export' },
-          { key: 'equipment:read', label: 'View Equipment', description: 'Browse equipment registry', resource: 'equipment', action: 'read' },
-          { key: 'equipment:create', label: 'Add Equipment', description: 'Register new equipment', resource: 'equipment', action: 'create' },
-          { key: 'equipment:update', label: 'Update Equipment', description: 'Edit equipment records', resource: 'equipment', action: 'update' },
-          { key: 'equipment:assign', label: 'Assign Equipment', description: 'Assign equipment to a staff member', resource: 'equipment', action: 'assign' },
-          { key: 'equipment:delete', label: 'Remove Equipment', description: 'Delete an equipment record', resource: 'equipment', action: 'delete', isDestructive: true },
-          { key: 'equipment:export', label: 'Export Equipment', description: 'Download equipment registry to Excel', resource: 'equipment', action: 'export' },
         ],
       },
       {
@@ -1318,8 +1293,11 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     color: 'sky',
     description: 'Personal dashboard, project list, and user workspace',
     pages: [
-      { page: 'My Incentives', route: '/incentives', description: 'View personal incentive records', actions: [
-        { key: 'mmp:read', label: 'View Incentives', description: 'Read incentive records', resource: 'mmp', action: 'read' },
+      { page: 'My Incentives', route: '/incentives', description: 'Incentive overview — own payments, or all MMP incentives with permission', actions: [
+        { key: 'incentives:read', label: 'View All Incentives', description: 'See incentive snapshots and payments for all staff', resource: 'incentives', action: 'read' },
+      ] },
+      { page: 'Incentive Settings', route: '/mmp/incentive-settings', description: 'Incentive rules, hub overrides, and incentive reports', actions: [
+        { key: 'incentives:update', label: 'Manage Incentive Settings', description: 'Edit incentive percentages, thresholds, and hub overrides', resource: 'incentives', action: 'update', isAdminOnly: true },
       ] },
 
       {

@@ -131,9 +131,9 @@ export default function IncentivesOverviewPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser: user } = useAppContext();
-  const { isSuperAdmin } = useAuthorization();
+  const { isSuperAdmin, checkPermission } = useAuthorization();
 
-  const canSeeAll = isSuperAdmin();
+  const canSeeAll = isSuperAdmin() || checkPermission('incentives', 'read');
   const canSeeOwn = false;
 
   // ── Data ──────────────────────────────────────────────────────────────────
