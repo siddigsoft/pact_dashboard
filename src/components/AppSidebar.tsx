@@ -407,10 +407,6 @@
     if (canSeeProgrammeHub && !isHidden('/programme-hub')) {
       planningItems.push({ id: 'programme-hub', title: "Programme Hub", url: "/programme-hub", icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
     }
-    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isProjectManager || isSeniorManagement)) {
-      const mmpTitle = getMmpDisplayLabel(defaultRole, roles, isSuperAdmin);
-      planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
-    }
     const canSeeFieldDataHub = isSuperAdmin || isAdmin || isICT || isFOM || isDataTeam || isProjectManager || isCountryDirector || isSeniorManagement;
     if (canSeeFieldDataHub && !isHidden('/field-data')) {
       planningItems.push({ id: 'field-data-hub', title: "Field Data Hub", url: "/field-data", icon: Layers, priority: 3, isPinned: isPinned('/field-data') });
@@ -430,11 +426,15 @@
     if (incentiveItems.length) groups.push({ id: 'incentives-main', label: 'Bonuses', order: 2.15, items: incentiveItems, parentGroup: 'incentives' } as any);
 
     // â”€â”€ 4. Field Operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // ── Field Ops Hub (replaces 9 flat items) ─────────────────────────────────
+    // ── Field Ops: hub + MMP (all sites / monitoring plans) ───────────────────
     const fieldOpsItems: MenuGroup['items'] = [];
     const canSeeFieldOps = isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataCollector || isDataTeam || perms.siteVisits || perms.fieldTeam;
     if (canSeeFieldOps && !isHidden('/field-ops')) {
       fieldOpsItems.push({ id: 'field-ops-hub', title: "Field Ops Hub", url: "/field-ops", icon: Compass, priority: 1, isPinned: isPinned('/field-ops') });
+    }
+    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isProjectManager || isSeniorManagement)) {
+      const mmpTitle = getMmpDisplayLabel(defaultRole, roles, isSuperAdmin);
+      fieldOpsItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'fieldops-ops', label: 'Operations', order: 4.1, items: fieldOpsItems, parentGroup: 'fieldops' } as any);
 
@@ -651,9 +651,21 @@
     const isSidebarCollapsed = state === 'collapsed';
     const { isSuperAdmin: realIsSuperAdmin } = useSuperAdmin();
     const { viewAs, setViewAs, clearViewAs, openPickerRequest, clearOpenPickerRequest } = useViewAs();
-    // When in view-as mode, override SA flag and treat current roles as the viewed role only
-    const isSuperAdmin = viewAs ? (viewAs.role === 'superAdmin' || viewAs.role === 'super_admin') : realIsSuperAdmin;
     const { userSettings, updateMenuPreferences, menuPreferences: contextMenuPrefs } = useSettings();
+
+    const effectiveAccessUserId = viewAs?.mode === 'user' ? viewAs.userId : (viewAs ? undefined : currentUser?.id);
+    // Fetch whenever the super_admins table flag is off so a profile-role
+    // Super Admin (not yet in super_admins) still gets a real SA nav.
+    const { data: currentAccessManifest } = useCurrentUserAccessManifest(
+      !!currentUser?.id && !viewAs && !realIsSuperAdmin,
+    );
+    // Match useAuthorization: table SA OR assigned/profile superAdmin role.
+    const isSuperAdmin = viewAs
+      ? (viewAs.role === 'superAdmin' || viewAs.role === 'super_admin')
+      : (realIsSuperAdmin || (currentAccessManifest?.roles ?? []).some(r => {
+          const n = String(r ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          return n === 'superadmin';
+        }));
 
     // View As picker state
     const [viewAsOpen, setViewAsOpen] = useState(false);
@@ -690,14 +702,6 @@
       openViewAsDialog();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openPickerRequest]);
-
-    const effectiveAccessUserId = viewAs?.mode === 'user' ? viewAs.userId : (viewAs ? undefined : currentUser?.id);
-    // For the signed-in user, access inputs arrive from one server-derived
-    // endpoint. View As intentionally retains the admin-only fallback queries:
-    // a preview must never pretend to be another user's authenticated session.
-    const { data: currentAccessManifest } = useCurrentUserAccessManifest(
-      !!currentUser?.id && !viewAs && !isSuperAdmin,
-    );
 
     // Fetch this user's page_access_overrides so that manually granted pages
     // appear in the sidebar even when the role-based check would deny them.

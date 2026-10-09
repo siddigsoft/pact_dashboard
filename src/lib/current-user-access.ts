@@ -58,16 +58,23 @@ export function evaluateManifestPageAccess(
   slug: string,
   routePermission?: RoutePermission | null,
 ): ManifestAccessDecision {
-  const configuredRoles = manifest.page_role_configs[slug];
-  const roleBaseline = routePermission
-    ? false
-    : manifest.roles.some(role => canSeePage(slug, role, configuredRoles));
-
   const pageOverride = manifest.page_overrides[slug];
   if (manifestPageHasExplicitDenial(manifest, slug) ||
     getAccessTargetDependencies(slug).some(parent => manifestPageHasExplicitDenial(manifest, parent))) {
     return { allowed: false, source: 'page_override' };
   }
+
+  // Profile / assigned Super Admin matches canSeePage() and the route guard:
+  // allow every page that is not explicitly blocked, including action-gated
+  // destinations (e.g. /mmp → mmp:read via the reports directory map).
+  if (manifest.roles.some(isSuperAdminRole)) {
+    return { allowed: true, source: 'role_baseline' };
+  }
+
+  const configuredRoles = manifest.page_role_configs[slug];
+  const roleBaseline = routePermission
+    ? false
+    : manifest.roles.some(role => canSeePage(slug, role, configuredRoles));
 
   if (routePermission) {
     const override = manifest.action_overrides[`${routePermission.resource}:${routePermission.action}`];
