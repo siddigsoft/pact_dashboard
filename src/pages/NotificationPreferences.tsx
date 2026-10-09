@@ -48,7 +48,30 @@ const DEFAULT_PREFERENCES: NotificationPreferencesState = {
 const loadPreferences = (): NotificationPreferencesState => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return { ...DEFAULT_PREFERENCES, ...JSON.parse(stored) };
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const savedCategories = parsed.categories && typeof parsed.categories === 'object' && !Array.isArray(parsed.categories)
+          ? parsed.categories
+          : {};
+        return {
+          categories: Object.fromEntries(CATEGORIES.map(({ key }) => [
+            key,
+            { ...DEFAULT_PREFERENCES.categories[key], ...(
+              savedCategories[key] && typeof savedCategories[key] === 'object' && !Array.isArray(savedCategories[key])
+                ? savedCategories[key]
+                : {}
+            ) },
+          ])),
+          digestFrequency: ['none', 'daily', 'weekly'].includes(parsed.digestFrequency)
+            ? parsed.digestFrequency
+            : DEFAULT_PREFERENCES.digestFrequency,
+          cleanupThresholdDays: [7, 14, 30, 60, 90].includes(parsed.cleanupThresholdDays)
+            ? parsed.cleanupThresholdDays
+            : DEFAULT_PREFERENCES.cleanupThresholdDays,
+        };
+      }
+    }
   } catch {}
   return DEFAULT_PREFERENCES;
 };
