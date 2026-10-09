@@ -35,13 +35,15 @@ interface HubLayoutProps {
   tourSlug?: string;
   /** Use the viewport-filling shell only for hubs that explicitly opt in. */
   fullPage?: boolean;
+  /** Apply the PACT navy/orange treatment to this hub only. */
+  brandAccent?: boolean;
 }
 
 export function HubLayout({
   title, subtitle, hubIcon: HubIcon,
   sections, activeSectionId, activeTabId, activeTabDescription,
   onSectionClick, onTabClick,
-  children, overviewContent, tourSlug, fullPage = false,
+  children, overviewContent, tourSlug, fullPage = false, brandAccent = false,
 }: HubLayoutProps) {
   const activeSection = sections.find(s => s.id === activeSectionId) ?? null;
   const activeTab = activeSection?.tabs.find(t => t.id === activeTabId) ?? null;
@@ -70,13 +72,13 @@ export function HubLayout({
     <div className={fullPage ? 'flex h-full min-h-0 flex-col overflow-hidden bg-background' : 'flex flex-col min-h-screen bg-background'}>
 
       {/* Sticky hub chrome: light institutional toolbar with readable contrast */}
-      <header className="sticky top-0 z-30 border-b border-border bg-card">
+      <header className={cn('sticky top-0 z-30 border-b border-border', brandAccent ? 'bg-[#F7F8FB] dark:bg-slate-950' : 'bg-card')}>
 
         {/* Identity + sections */}
         <div className="px-4 sm:px-5 pt-3.5 pb-0 flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-3 min-w-0">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md', brandAccent ? 'bg-[#273677] text-white dark:bg-[#AAB7EC] dark:text-slate-950' : 'bg-primary text-primary-foreground')}>
                 <HubIcon className="h-4 w-4" />
               </div>
               <div className="min-w-0">
@@ -112,7 +114,9 @@ export function HubLayout({
                       'relative flex items-center gap-1.5 px-3 py-2.5 text-[13px] whitespace-nowrap shrink-0',
                       'border-b-2 transition-colors duration-150',
                       isActive
-                        ? 'border-foreground text-foreground font-semibold'
+                        ? brandAccent
+                          ? 'border-[#273677] text-[#273677] font-semibold dark:border-[#AAB7EC] dark:text-[#AAB7EC]'
+                          : 'border-foreground text-foreground font-semibold'
                         : 'border-transparent text-foreground/70 font-medium hover:text-foreground',
                     )}
                   >
@@ -129,7 +133,7 @@ export function HubLayout({
         {activeSection && (
           <div
             id="tour-hub-tab-bar"
-            className="relative px-4 sm:px-5 py-2.5 border-t border-border bg-muted flex items-center gap-2.5"
+            className={cn('relative px-4 sm:px-5 py-2.5 border-t border-border flex items-center gap-2.5', brandAccent ? 'bg-[#EFF1F7] dark:bg-slate-900' : 'bg-muted')}
             ref={dropRef}
           >
             <span className="hidden sm:inline text-xs font-medium text-foreground/70 shrink-0">
@@ -143,14 +147,14 @@ export function HubLayout({
               aria-label="Select hub page"
               className={cn(
                 'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold transition-colors duration-150',
-                'border border-foreground/20 bg-card text-foreground shadow-sm min-w-0 flex-1 max-w-md',
-                'hover:border-foreground/35 hover:bg-background',
-                dropOpen && 'border-foreground/40 ring-2 ring-foreground/10',
+                'border bg-card text-foreground shadow-sm min-w-0 flex-1 max-w-md',
+                brandAccent ? 'border-[#273677]/30 hover:border-[#273677]/60 dark:border-[#AAB7EC]/40' : 'border-foreground/20 hover:border-foreground/35 hover:bg-background',
+                dropOpen && (brandAccent ? 'border-[#273677] ring-2 ring-[#273677]/15 dark:border-[#AAB7EC]' : 'border-foreground/40 ring-2 ring-foreground/10'),
               )}
             >
               {activeTab ? (
                 <>
-                  <activeTab.icon className="h-4 w-4 shrink-0 text-foreground/80" />
+                  <activeTab.icon className={cn('h-4 w-4 shrink-0', brandAccent ? 'text-[#273677] dark:text-[#AAB7EC]' : 'text-foreground/80')} />
                   <span className="truncate">{activeTab.label}</span>
                 </>
               ) : (
@@ -168,7 +172,7 @@ export function HubLayout({
             </button>
 
             {activeTab && (
-              <span className="hidden sm:inline text-xs font-medium text-foreground/60 tabular-nums shrink-0">
+              <span className={cn('hidden sm:inline text-xs font-medium tabular-nums shrink-0', brandAccent ? 'text-[#B94B13] dark:text-orange-300' : 'text-foreground/60')}>
                 {(activeSection.tabs.findIndex(t => t.id === activeTabId) + 1)} of {activeSection.tabs.length}
               </span>
             )}
@@ -198,7 +202,9 @@ export function HubLayout({
                         className={cn(
                           'flex items-center gap-2 px-2.5 py-2 rounded-md text-left text-[13px] transition-colors duration-150',
                           isActive
-                            ? 'bg-accent text-accent-foreground font-semibold'
+                            ? brandAccent
+                              ? 'bg-[#273677]/10 text-[#273677] font-semibold dark:bg-[#AAB7EC]/15 dark:text-[#AAB7EC]'
+                              : 'bg-accent text-accent-foreground font-semibold'
                             : 'text-foreground/80 font-medium hover:bg-muted hover:text-foreground',
                         )}
                       >

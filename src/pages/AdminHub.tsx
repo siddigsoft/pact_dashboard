@@ -140,6 +140,7 @@ export default function AdminHub() {
 
   return (
     <HubLayout
+      brandAccent
       title="Administration Hub"
       subtitle="People · Organisation · System"
       hubIcon={Settings}
