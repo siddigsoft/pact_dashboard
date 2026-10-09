@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useViewAs } from '@/context/ViewAsContext';
 import type { CurrentUserAccessManifest } from '@/lib/current-user-access';
 
 export type { CurrentUserAccessManifest } from '@/lib/current-user-access';
@@ -21,12 +22,30 @@ const EMPTY_MANIFEST: CurrentUserAccessManifest = {
  * useUser) so providers that sit above AppContext can still read grants.
  * The RPC always returns the authenticated session's context — userId is only
  * for cache keys and identity mismatch checks.
+ *
+ * While a Super Admin "Preview as Role / User" is active, this returns the
+ * server-evaluated manifest for the previewed role or user instead, so every
+ * consumer (sidebar, route guard, permission checks) previews real access.
  */
 export function useAccessManifestForUserId(userId: string | undefined, enabled: boolean) {
   const queryClient = useQueryClient();
+  const { viewAs } = useViewAs();
+  const preview = useQuery({
+    queryKey: ['access-manifest-preview', viewAs?.mode, viewAs?.role, viewAs?.userId],
+    enabled: !!viewAs && !!userId,
+    staleTime: 30_000,
+    queryFn: async (): Promise<CurrentUserAccessManifest> => {
+      const { data, error } = await (supabase as any).rpc('get_access_context_preview',
+        viewAs?.mode === 'user' && viewAs.userId
+          ? { p_user_id: viewAs.userId }
+          : { p_role_name: viewAs?.role });
+      if (error) throw error;
+      return { ...EMPTY_MANIFEST, ...(data ?? {}) } as CurrentUserAccessManifest;
+    },
+  });
   const query = useQuery({
     queryKey: ['current-user-access-manifest', userId],
-    enabled: enabled && !!userId,
+    enabled: enabled && !!userId && !viewAs,
     staleTime: 30_000,
     refetchInterval: enabled ? 30_000 : false,
     queryFn: async (): Promise<CurrentUserAccessManifest> => {
@@ -62,6 +81,8 @@ export function useAccessManifestForUserId(userId: string | undefined, enabled: 
     }, Math.min(Math.max(1, Math.min(...expiries) - Date.now()), 2_147_483_647));
     return () => clearTimeout(timeout);
   }, [enabled, userId, query.data, queryClient]);
+
+  if (viewAs) return { ...preview, data: preview.isError ? undefined : preview.data };
 
   // Disabled preview observers must not expose the real user's cached grants.
   // A failed refresh also cannot silently keep rendering stale capabilities.

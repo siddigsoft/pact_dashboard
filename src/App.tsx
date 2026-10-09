@@ -254,15 +254,9 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { useFCM } from './hooks/useFCM';
 import { useAuthorization } from './hooks/use-authorization';
 import { useCurrentUserAccessManifest } from './hooks/useCurrentUserAccessManifest';
-import { useViewAs } from './context/ViewAsContext';
 import {
-  canSeePage,
-  canSeePageWithOverridesResult,
-  canSeeRoutePermission,
-  isOwnUserProfilePath,
   resolveRouteAccessTarget,
   getPageLabel,
-  type RoutePermission,
 } from './lib/page-roles';
 import { evaluateManifestRouteAccess } from './lib/current-user-access';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
@@ -345,87 +339,13 @@ const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// ── Universal Page Route Guard ────────────────────────────────────────────────
-// Single component that enforces PAGE_DEFS access rules for every protected
-// route.  Two enforcement layers:
-//   1. Synchronous role check via canSeePage()  (instant, no DB call)
-//   2. Async per-user override via canSeePageWithOverrides()  (DB override set
-//      by Security Panel — blocks even role-allowed users if admin blocked them)
-// SuperAdmin always bypasses both layers.
-//
-// Dynamic segments (e.g. /mmp/abc123/edit) are resolved to their parent slug
-// (/mmp) via resolveSlug(), so new sub-routes are automatically protected.
-//
-// New pages: add an entry to PAGE_DEFS in PageAccessControl.tsx — the guard
-// and the Security Panel both read from there automatically.
-const PageRouteGuardAsync = ({
-  slug,
-  roleKey,
-  userId,
-  children,
-  routePermission,
-  routeBaseline,
-}: {
-  slug: string;
-  roleKey: string;
-  userId: string | null | undefined;
-  children: React.ReactNode;
-  routePermission?: RoutePermission | null;
-  routeBaseline?: boolean;
-}) => {
-  // Resolve role defaults and explicit overrides before mounting children so
-  // a configured block never flashes or starts protected data queries.
-  const location = useLocation();
-  const [status, setStatus] = useState<'ok' | 'checking' | 'denied'>('checking');
-
-  useEffect(() => {
-    setStatus('checking');
-    if (!userId) {
-      setStatus('denied');
-      return;
-    }
-    if (slug === 'users' && isOwnUserProfilePath(location.pathname, userId)) {
-      setStatus('ok');
-      return;
-    }
-    canSeePageWithOverridesResult(
-      slug,
-      roleKey ? roleKey.split('|') : [],
-      userId,
-      routePermission ?? undefined,
-      routeBaseline,
-    ).then(({ allowed }) => {
-      setStatus(allowed ? 'ok' : 'denied');
-    });
-  }, [
-    slug,
-    roleKey,
-    userId,
-    location.pathname,
-    routePermission?.resource,
-    routePermission?.action,
-    routeBaseline,
-  ]);
-
-  if (status === 'denied') {
-    return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
-  }
-  if (status === 'checking') {
-    // Show nothing (blank) while we verify the grant — avoids a flash of
-    // content that would immediately be replaced by "Access Restricted".
-    return null;
-  }
-  return <>{children}</>;
-};
-
 const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { currentUser } = useAppContext();
-  const { isSuperAdmin, checkPermission } = useAuthorization();
-  const { viewAs } = useViewAs();
+  const { isSuperAdmin } = useAuthorization();
   const viewingAsSuperAdmin = isSuperAdmin();
   const { data: currentAccessManifest, isLoading: isManifestLoading, isError: isManifestError } = useCurrentUserAccessManifest(
-    !!currentUser?.id && !viewAs && !viewingAsSuperAdmin,
+    !!currentUser?.id && !viewingAsSuperAdmin,
   );
 
   // SuperAdmin bypasses all page-level checks
@@ -440,50 +360,24 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   // Public routes sit outside this tree. Protected routes need a registered
   // target; a missing definition must not become an authorization exemption.
   if (!target) return <PageAccessDenied reason="role" />;
-  const { slug, routePermission } = target;
+  const { slug } = target;
 
-  // Normal navigation is evaluated exclusively from the server-derived
-  // manifest. Do not silently fall back to profile roles or browser-side
-  // override queries: a missing/failed manifest must not create a bypass.
-  if (!viewAs) {
-    if (isManifestLoading) return null;
-    if (isManifestError || !currentAccessManifest) {
-      return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
-    }
-    const allowed = evaluateManifestRouteAccess(
-      currentAccessManifest,
-      location.pathname,
-      location.search,
-      location.hash,
-    );
-    return allowed
-      ? <>{children}</>
-      : <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
+  // Navigation is evaluated exclusively from the server-derived manifest
+  // (the previewed target's manifest during View As). A missing/failed
+  // manifest must not create a bypass.
+  if (isManifestLoading) return null;
+  if (isManifestError || !currentAccessManifest) {
+    return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
   }
-
-  // View As is an administrator preview, not another authenticated session.
-  // It intentionally retains the admin-only lookup path until the server can
-  // issue an evaluated manifest for an impersonated target.
-  const guardRoles = Array.from(new Set([
-    viewAs.role,
-  ].filter((roleName): roleName is string => Boolean(roleName))));
-  const roleAllowed = routePermission
-    ? checkPermission(routePermission.resource, routePermission.action) ||
-      guardRoles.some(roleName => canSeeRoutePermission(routePermission, roleName))
-    : guardRoles.some(roleName => canSeePage(slug, roleName));
-
-  return (
-    <PageRouteGuardAsync
-      key={`${slug}:${guardRoles.join(',')}:${viewAs.userId ?? currentUser?.id ?? ''}:${routePermission?.resource ?? ''}:${routePermission?.action ?? ''}`}
-      slug={slug}
-      roleKey={guardRoles.join('|')}
-      userId={viewAs.mode === 'user' ? viewAs.userId : undefined}
-      routePermission={routePermission}
-      routeBaseline={routePermission ? roleAllowed : undefined}
-    >
-      {children}
-    </PageRouteGuardAsync>
+  const allowed = evaluateManifestRouteAccess(
+    currentAccessManifest,
+    location.pathname,
+    location.search,
+    location.hash,
   );
+  return allowed
+    ? <>{children}</>
+    : <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
 };
 
 // Notification display component

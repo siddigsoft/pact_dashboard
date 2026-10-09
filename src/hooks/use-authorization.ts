@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useAppContext } from '@/context/AppContext';
-import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { ResourceType, ActionType } from '@/types/roles';
 import { normalizeRole } from '@/utils/roleMapping';
@@ -10,8 +9,7 @@ import { legacySurveyActionAllowed, manifestHasExplicitActionGrant, manifestHasP
 
 export const useAuthorization = () => {
   const { currentUser } = useAppContext();
-  const { hasPermission, getUserPermissions } = useRoleManagement();
-  
+
   let isSuperAdminUser = false;
   try {
     const superAdminContext = useSuperAdmin();
@@ -21,27 +19,23 @@ export const useAuthorization = () => {
   }
 
   let viewAsRoleRaw: string | null = null;
-  let viewAsModeRaw: 'role' | 'user' | null = null;
-  let viewAsUserIdRaw: string | null = null;
   try {
     const viewAsCtx = useViewAs();
     viewAsRoleRaw = viewAsCtx?.viewAs?.role ?? null;
-    viewAsModeRaw = viewAsCtx?.viewAs?.mode ?? null;
-    viewAsUserIdRaw = viewAsCtx?.viewAs?.userId ?? null;
   } catch {
     viewAsRoleRaw = null;
-    viewAsModeRaw = null;
-    viewAsUserIdRaw = null;
   }
 
   // The signed-in user's permissions and multi-role union come from one
-  // server-derived source. View As deliberately remains a preview path; it
-  // must not impersonate the target user's authenticated access context.
+  // server-derived source. During View As the hook returns the server-evaluated
+  // preview manifest for the target role/user (Super Admin only, read-only).
   const { data: manifestData, isError: manifestError, isLoading: manifestLoading } = useCurrentUserAccessManifest(
     !!currentUser?.id,
   );
 
-  const currentAccessManifest = !manifestError && manifestData?.user_id === currentUser?.id ? manifestData : undefined;
+  const currentAccessManifest = !manifestError && (viewAsRoleRaw || manifestData?.user_id === currentUser?.id)
+    ? manifestData
+    : undefined;
 
   // Everything below is memoized so every returned function keeps a stable
   // identity between renders. Without this, `hasAnyRole` etc. get a new
@@ -49,25 +43,12 @@ export const useAuthorization = () => {
   // re-fires on every render (OperationsZone previously looped infinitely,
   // flooding the DB with hundreds of thousands of queries).
   return useMemo(() => {
-  let viewAsRole = viewAsRoleRaw;
-  let viewAsMode = viewAsModeRaw;
-  let viewAsUserId = viewAsUserIdRaw;
-
   // SECURITY GUARD: viewAs must only be honoured for real SuperAdmins.
   // If a previous SA session left 'pact-view-as' in sessionStorage, a non-SA
   // user who opens the app would inherit the wrong role and lose visibility of
   // their own data (e.g. FOM seeing 0 cost submissions).
-  // Validate against the REAL profile roles — never through viewAs itself.
-  if (viewAsRole && currentUser) {
-    const realRoles = currentAccessManifest?.roles ?? [];
-    const isRealSA =
-      realRoles.some(r => normalizeRole(r) === 'superAdmin') || isSuperAdminUser;
-    if (!isRealSA) {
-      viewAsRole = null;
-      viewAsMode = null;
-      viewAsUserId = null;
-    }
-  }
+  // The preview manifest itself is server-gated to Super Admins.
+  const viewAsRole = viewAsRoleRaw && currentUser && !isSuperAdminUser ? null : viewAsRoleRaw;
 
   /**
    * Check if the current user is a SuperAdmin (highest role with all permissions)
@@ -109,12 +90,6 @@ export const useAuthorization = () => {
   const checkPermission = (resource: ResourceType, action: ActionType): boolean => {
     if (!currentUser) return false;
     if (isSuperAdmin()) return true;
-    if (viewAsRole) {
-      if (viewAsMode === 'user' && viewAsUserId) {
-        return hasPermission(viewAsUserId, resource, action);
-      }
-      return false;
-    }
     if (!currentAccessManifest) return false;
     // Legacy survey managers predate the role-permission registry. Preserve
     // their four lifecycle capabilities, but let an active user-level deny
@@ -127,7 +102,7 @@ export const useAuthorization = () => {
 
   /** Active user override grant only — excludes role-default permissions. */
   const hasExplicitActionGrant = (resource: ResourceType, action: ActionType): boolean => {
-    if (!currentUser || viewAsRole) return false;
+    if (!currentUser) return false;
     return currentAccessManifest
       ? manifestHasExplicitActionGrant(currentAccessManifest, resource, action)
       : false;
@@ -169,7 +144,6 @@ export const useAuthorization = () => {
    */
   const getCurrentUserPermissions = () => {
     if (!currentUser) return [];
-    if (viewAsRole) return viewAsMode === 'user' && viewAsUserId ? getUserPermissions(viewAsUserId) : [];
     return (currentAccessManifest?.role_permissions ?? []).filter(permission =>
       manifestHasPermission(currentAccessManifest!, permission.resource, permission.action));
   };
@@ -595,5 +569,5 @@ export const useAuthorization = () => {
     accessManifestLoading: manifestLoading,
     accessManifestError: manifestError,
   };
-  }, [currentUser, hasPermission, getUserPermissions, isSuperAdminUser, viewAsRoleRaw, viewAsModeRaw, viewAsUserIdRaw, currentAccessManifest, manifestLoading, manifestError]);
+  }, [currentUser, isSuperAdminUser, viewAsRoleRaw, currentAccessManifest, manifestLoading, manifestError]);
 };

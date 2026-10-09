@@ -657,7 +657,7 @@
     // Fetch whenever the super_admins table flag is off so a profile-role
     // Super Admin (not yet in super_admins) still gets a real SA nav.
     const { data: currentAccessManifest } = useCurrentUserAccessManifest(
-      !!currentUser?.id && !viewAs && !realIsSuperAdmin,
+      !!currentUser?.id && (!!viewAs || !realIsSuperAdmin),
     );
     // Match useAuthorization: table SA OR assigned/profile superAdmin role.
     const isSuperAdmin = viewAs
@@ -675,6 +675,21 @@
     const [viewAsUserSelected, setViewAsUserSelected] = useState<{ id: string; full_name: string; role: string } | null>(null);
     const [viewAsUsers, setViewAsUsers] = useState<{ id: string; full_name: string; email: string; role: string }[]>([]);
     const [viewAsUsersLoading, setViewAsUsersLoading] = useState(false);
+
+    const { data: activeRoles = [] } = useQuery({
+      queryKey: ['view-as-active-roles'],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('roles')
+          .select('name, display_name, description')
+          .eq('is_active', true)
+          .order('display_name');
+        if (error) throw error;
+        return (data ?? []) as { name: string; display_name: string | null; description: string | null }[];
+      },
+      enabled: realIsSuperAdmin && viewAsOpen,
+      staleTime: 60_000,
+    });
 
     // Check if non-super-admin user has been explicitly granted monitoring page access
     // Uses a SECURITY DEFINER RPC to bypass RLS (direct table query blocked for non-admins)
@@ -977,9 +992,9 @@
     // reference every render, making menuGroups and the useEffect(menuGroups)
     // fire on every render, creating a continuous sidebar flicker.
     const menuGroups = useMemo(() => {
-      // Signed-in navigation has one registry/evaluator. Workflow role checks
-      // below are retained solely for the separate administrator preview.
-      if (!viewAs && !isSuperAdmin) {
+      // Navigation (including View As previews) has one registry/evaluator,
+      // fed by the signed-in or previewed manifest.
+      if (!isSuperAdmin) {
         if (!currentAccessManifest) return [];
         const groups: Array<MenuGroup & { parentGroup: string }> = [];
         for (const page of getManifestNavigationPages(currentAccessManifest)) {
@@ -1722,6 +1737,16 @@
             ],
           },
         ];
+        const listedRoles = new Set(VIEW_AS_ROLE_GROUPS.flatMap(group => group.roles.map(r => r.value)));
+        const otherRoles = activeRoles
+          .filter(r => !listedRoles.has(r.name) && r.name !== 'superAdmin')
+          .map(r => ({ value: r.name, label: r.display_name || r.name, desc: r.description || 'Custom role' }));
+        if (otherRoles.length) {
+          VIEW_AS_ROLE_GROUPS.push({ label: 'Other Roles', color: 'text-slate-700 dark:text-slate-300', roles: otherRoles });
+        }
+        const roleLabelByValue = Object.fromEntries(
+          VIEW_AS_ROLE_GROUPS.flatMap(group => group.roles.map(r => [r.value, r.label])),
+        ) as Record<string, string>;
 
         const ROLE_BADGE_COLOR: Record<string, string> = {
           datacollector: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -1889,12 +1914,7 @@
                     disabled={viewAsTab === 'role' ? !viewAsRoleSelected : !viewAsUserSelected}
                     onClick={() => {
                       if (viewAsTab === 'role' && viewAsRoleSelected) {
-                        const label = {
-                          dataCollector: 'Data Collector', coordinator: 'Coordinator', supervisor: 'Supervisor',
-                          fom: 'Field Ops Manager', countryDirector: 'Country Director', dataTeam: 'Data Team',
-                          financialAdmin: 'Financial Admin', auditor: 'Financial Auditor',
-                          projectManager: 'Project Manager', admin: 'Admin', ict: 'ICT', employee: 'Employee',
-                        }[viewAsRoleSelected] ?? viewAsRoleSelected;
+                        const label = roleLabelByValue[viewAsRoleSelected] ?? viewAsRoleSelected;
                         setViewAs({ mode: 'role', role: viewAsRoleSelected, displayName: label });
                       } else if (viewAsTab === 'user' && viewAsUserSelected) {
                         setViewAs({ mode: 'user', role: viewAsUserSelected.role, userId: viewAsUserSelected.id, displayName: viewAsUserSelected.full_name });
