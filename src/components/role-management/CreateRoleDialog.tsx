@@ -227,7 +227,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
       permissions: withPageDefaultPermissions(permissionList, pageSlugList) as typeof permissionList,
       page_slugs: pageSlugList,
       assign_user_ids: assignUserIds,
-      set_as_primary: true, // one role per person Ã¢ÂÂ assignment replaces any prior role
+      set_as_primary: true, // one role per person — assignment replaces any prior role
       reason: 'Created via staged Role Management wizard',
     };
 
@@ -262,7 +262,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
             Create Custom Role
           </DialogTitle>
           <DialogDescription>
-            Role details ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Page access ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Action permissions ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Assign users ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Review and save
+            Role details → Page access → Action permissions → Assign users → Review and save
           </DialogDescription>
           <div className="flex flex-wrap gap-2 pt-2">
             {STEPS.map((s, i) => (
@@ -482,7 +482,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                       <CardContent className="text-sm space-y-1">
                         <div><strong>Name:</strong> {formData.name.trim()}</div>
                         <div><strong>Display:</strong> {formData.display_name.trim()}</div>
-                        <div><strong>Description:</strong> {formData.description.trim() || 'ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ'}</div>
+                        <div><strong>Description:</strong> {formData.description.trim() || '—'}</div>
                       </CardContent>
                     </Card>
                     <Card>
@@ -501,7 +501,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                         ))}
                       </CardContent>
                     </Card>
-                    <Card><CardHeader><CardTitle className="text-base">Tabs, columns & scope</CardTitle></CardHeader><CardContent className="text-sm">{baseline.tab_rules?.filter(rule => rule.is_blocked).length ?? 0} hidden tabs ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ· {baseline.column_rules?.filter(rule => rule.is_hidden).length ?? 0} hidden columns ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ· Cost scope: {baseline.cost_scope?.mode ?? 'application default'}</CardContent></Card>
+                    <Card><CardHeader><CardTitle className="text-base">Tabs, columns & scope</CardTitle></CardHeader><CardContent className="text-sm">{baseline.tab_rules?.filter(rule => rule.is_blocked).length ?? 0} hidden tabs · {baseline.column_rules?.filter(rule => rule.is_hidden).length ?? 0} hidden columns · Cost scope: {baseline.cost_scope?.mode ?? 'application default'}</CardContent></Card>
                     <Card>
                       <CardHeader><CardTitle className="text-base">Users ({assignUserIds.length})</CardTitle></CardHeader>
                       <CardContent className="text-sm">
@@ -545,7 +545,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                     </Button>
                   ) : (
                     <Button type="button" disabled={isLoading} onClick={handleSave} className="min-h-11" data-testid="button-create-role-submit">
-                      {isLoading ? 'SavingÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¦' : 'Save role'}
+                      {isLoading ? 'Saving…' : 'Save role'}
                     </Button>
                   )}
                 </div>
