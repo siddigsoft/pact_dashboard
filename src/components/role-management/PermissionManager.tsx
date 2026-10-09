@@ -302,13 +302,21 @@ function DomainSection({
 
 interface PermissionManagerProps {
   role: RoleWithPermissions;
-  onUpdatePermissions: (roleId: string, permissions: { resource: ResourceType; action: ActionType }[]) => Promise<boolean>;
+  onUpdatePermissions?: (roleId: string, permissions: { resource: ResourceType; action: ActionType }[]) => Promise<boolean>;
+  /** Controlled mode (e.g. create wizard): every change is reported here and no save buttons are shown. */
+  onChange?: (permissions: { resource: ResourceType; action: ActionType }[]) => void;
   isLoading?: boolean;
 }
+
+const toPermissionList = (keys: Set<string>) => Array.from(keys).map(key => {
+  const [resource, action] = key.split(':') as [ResourceType, ActionType];
+  return { resource, action };
+});
 
 export const PermissionManager: React.FC<PermissionManagerProps> = ({
   role,
   onUpdatePermissions,
+  onChange,
   isLoading = false,
 }) => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -361,12 +369,17 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
     return out;
   }, [inventory, query]);
 
+  const commit = (next: Set<string>) => {
+    setSelected(next);
+    if (onChange) onChange(toPermissionList(next));
+    else setHasChanges(true);
+  };
+
   const handleToggle = (resource: ResourceType, action: ActionType) => {
     const key = `${resource}:${action}`;
     const next = new Set(selected);
     if (next.has(key)) next.delete(key); else next.add(key);
-    setSelected(next);
-    setHasChanges(true);
+    commit(next);
   };
 
   const handleSelectAll = (resource: ResourceType) => {
@@ -385,8 +398,7 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
     const next = new Set(selected);
     if (allSelected) keys.forEach(k => next.delete(k));
     else keys.forEach(k => next.add(k));
-    setSelected(next);
-    setHasChanges(true);
+    commit(next);
   };
 
   const confirmSelectAll = () => {
@@ -394,18 +406,14 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
     const keys = (inventory.get(confirmDialog.resource) ?? []).map(a => `${confirmDialog.resource}:${a}`);
     const next = new Set(selected);
     keys.forEach(k => next.add(k));
-    setSelected(next);
-    setHasChanges(true);
+    commit(next);
     setConfirmDialog(null);
   };
 
   const handleSave = async () => {
+    if (!onUpdatePermissions) return;
     setSaving(true);
-    const permissions = Array.from(selected).map(key => {
-      const [resource, action] = key.split(':') as [ResourceType, ActionType];
-      return { resource, action };
-    });
-    const ok = await onUpdatePermissions(role.id, permissions);
+    const ok = await onUpdatePermissions(role.id, toPermissionList(selected));
     if (ok) {
       setHasChanges(false);
       toast({ title: 'Permissions saved', description: `${role.display_name} permissions updated.` });

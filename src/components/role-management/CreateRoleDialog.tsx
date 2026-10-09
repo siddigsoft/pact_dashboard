@@ -9,9 +9,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CreateRoleRequest, RESOURCES, ACTIONS, ResourceType, ActionType, RoleWithPermissions } from '@/types/roles';
+import { CreateRoleRequest, ResourceType, ActionType, RoleWithPermissions } from '@/types/roles';
 import { roleTemplates, permissionPresets, getCategoryColor, RoleTemplate } from '@/constants/roleTemplates';
 import { RoleBaselineAccessEditor } from './RoleBaselineAccessEditor';
+import { PermissionManager } from './PermissionManager';
 import { RoleBaselineAccess } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
 import { getGrantablePageGroups } from '@/lib/access-registry';
@@ -74,6 +75,19 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const pageGroups = useMemo(() => getGrantablePageGroups(), []);
+  const [pageSearch, setPageSearch] = useState('');
+  const visiblePageGroups = useMemo(() => {
+    const q = pageSearch.trim().toLowerCase();
+    if (!q) return pageGroups;
+    return pageGroups
+      .map(([group, groupPages]) => [
+        group,
+        group.toLowerCase().includes(q)
+          ? groupPages
+          : groupPages.filter(page => page.label.toLowerCase().includes(q) || page.slug.toLowerCase().includes(q)),
+      ] as [string, typeof groupPages])
+      .filter(([, groupPages]) => groupPages.length > 0);
+  }, [pageGroups, pageSearch]);
 
   useEffect(() => {
     if (cloneSourceRole && open) {
@@ -103,9 +117,10 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
     setFormData({ name: '', display_name: '', description: '' });
     setSelectedPermissions({});
     setSelectedPages({});
-      setSelectedUsers({});
-      setUserFilter('');
-      setError(null);
+    setPageSearch('');
+    setSelectedUsers({});
+    setUserFilter('');
+    setError(null);
   };
 
   const handleTemplateSelect = (template: RoleTemplate) => {
@@ -141,6 +156,21 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
       }),
     [selectedPermissions],
   );
+
+  const draftRole = useMemo<RoleWithPermissions>(() => ({
+    id: '',
+    name: formData.name,
+    display_name: formData.display_name || 'New role',
+    is_system_role: false,
+    is_active: true,
+    created_at: '',
+    updated_at: '',
+    permissions: permissionList.map(p => ({ id: '', role_id: '', created_at: '', ...p })),
+  }), [formData.name, formData.display_name, permissionList]);
+
+  const handleMatrixChange = (perms: { resource: ResourceType; action: ActionType }[]) => {
+    setSelectedPermissions(Object.fromEntries(perms.map(p => [`${p.resource}:${p.action}`, true])));
+  };
 
   const pageSlugList = useMemo(
     () => Object.entries(selectedPages).filter(([, v]) => v).map(([slug]) => slug),
@@ -213,7 +243,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
     setError(null);
     const detailsError = validateDetails();
     if (detailsError) { setError(detailsError); setStep('details'); return; }
-    if (permissionList.length === 0) {
+    if (withPageDefaultPermissions(permissionList, pageSlugList).length === 0) {
       setError('Select at least one action permission.');
       setStep('actions');
       return;
@@ -376,9 +406,21 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                 {step === 'pages' && (
                   <div className="space-y-4">
                     <p className="text-sm text-muted-foreground">
-                      Selected pages grant access to this role in navigation and routes.
+                      Selected pages grant access to this role in navigation and routes. Each selected page also grants the read permission it needs, so it opens without “Access Denied”.
                     </p>
-                    {pageGroups.map(([group, pages]) => (
+                    <div className="sticky top-0 z-10 bg-background py-2">
+                      <Input
+                        type="search"
+                        placeholder="Search pages by name, slug, or group…"
+                        value={pageSearch}
+                        onChange={e => setPageSearch(e.target.value)}
+                        data-testid="input-create-role-page-search"
+                      />
+                    </div>
+                    {visiblePageGroups.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No pages match “{pageSearch}”.</p>
+                    )}
+                    {visiblePageGroups.map(([group, pages]) => (
                       <Card key={group}>
                         <CardHeader className="py-3">
                           <div className="flex items-center justify-between">
@@ -423,28 +465,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                         </Button>
                       ))}
                     </div>
-                    {RESOURCES.map((resource) => (
-                      <Card key={resource}>
-                        <CardHeader className="py-3">
-                          <CardTitle className="text-base capitalize">{resource.replace('_', ' ')}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-0">
-                          {ACTIONS.map((action) => (
-                            <label key={`${resource}:${action}`} className="flex items-center gap-2 text-sm cursor-pointer">
-                              <Checkbox
-                                checked={!!selectedPermissions[`${resource}:${action}`]}
-                                onCheckedChange={(checked) => setSelectedPermissions((prev) => ({
-                                  ...prev,
-                                  [`${resource}:${action}`]: !!checked,
-                                }))}
-                                data-testid={`permission-${resource}-${action}`}
-                              />
-                              <span className="capitalize">{action}</span>
-                            </label>
-                          ))}
-                        </CardContent>
-                      </Card>
-                    ))}
+                    <PermissionManager role={draftRole} onChange={handleMatrixChange} />
                   </div>
                 )}
 
