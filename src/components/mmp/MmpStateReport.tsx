@@ -895,7 +895,8 @@ export default function MmpStateReport({
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent
-        className="p-0 gap-0 overflow-hidden [&>button:last-child]:hidden"
+        hideCloseButton
+        className="p-0 gap-0 overflow-hidden"
         style={{
           width: '98vw',
           maxWidth: '98vw',
