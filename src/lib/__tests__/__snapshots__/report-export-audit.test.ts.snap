@@ -959,7 +959,7 @@ exports[`report export access-control inventory > does not add ungated export co
   },
   {
     "expression": "<Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={exportXLSX}>",
-    "line": 1502,
+    "line": 1501,
     "source": "src/pages/HRHub.tsx",
   },
   {
@@ -1304,12 +1304,12 @@ exports[`report export access-control inventory > does not add ungated export co
   },
   {
     "expression": "<Button variant="outline" size="sm" className="h-7 px-2 text-xs gap-1.5" disabled={exportingIncentive} onClick={async () => { if (!user) return; setExportingIncentive(true); try { generateIncentivePDF({ userName: user.name ?? user.email ?? 'Staff', userRole: user.role ?? '', userEmail: user.email ?? null, isAdmin, payments: incentivePayments, }); } finally { setExportingIncentive(false); } }} >",
-    "line": 3326,
+    "line": 3238,
     "source": "src/pages/UserDetail.tsx",
   },
   {
     "expression": "<Button variant="ghost" size="sm" onClick={() => handleContractDownload(c)} className="h-8 w-8 p-0 text-indigo-600 hover:bg-indigo-50" title="Download" data-testid={\`button-download-contract-\${c.id}\`} >",
-    "line": 3620,
+    "line": 3532,
     "source": "src/pages/UserDetail.tsx",
   },
   {

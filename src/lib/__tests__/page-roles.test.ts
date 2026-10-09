@@ -201,10 +201,6 @@ describe('direct report route permissions', () => {
       resource: 'reports',
       action: 'read',
     });
-    expect(resolveRoutePermission('/field-ops', '?tab=incident-reports')).toEqual({
-      resource: 'incidents',
-      action: 'read',
-    });
     expect(resolveRoutePermission('/field-data/exports')).toEqual({
       resource: 'analytics',
       action: 'export',

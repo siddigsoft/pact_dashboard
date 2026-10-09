@@ -267,6 +267,14 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         ],
       },
       {
+        page: 'Field Ops Hub',
+        route: '/field-ops',
+        description: 'Unified field operations hub — field team, MMP, map',
+        actions: [
+          { key: 'site_visits:read', label: 'View Field Ops', description: 'Open the Field Ops hub', resource: 'site_visits', action: 'read' },
+        ],
+      },
+      {
         page: 'MMP Management',
         route: '/mmp',
         description: 'Monthly Monitoring Plans — upload, verify, approve, dispatch, cycle close',

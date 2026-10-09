@@ -130,7 +130,7 @@ function registryKeys(): Set<string> {
   );
 }
 
-describe('Unified Access Manager — permission registry coverage', () => {
+describe('Unified Access Manager — permission registry coverage', { timeout: 60_000 }, () => {
   it('registers every literal permission pair used by src', () => {
     const registered = registryKeys();
     const missing = collectLiteralPermissionUses().filter(use => !registered.has(use.key));

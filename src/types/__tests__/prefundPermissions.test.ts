@@ -179,7 +179,7 @@ describe('Pre-Fund payment permissions', () => {
     const salmaDownPaymentProcessing = readFileSync(
       `${process.cwd()}/supabase/migrations/20260917250000_salma_down_payment_processing_only.sql`,
       'utf8',
-    );
+    ).replace(/\r\n/g, '\n');
     const salmaApprovalTabOnly = readFileSync(
       `${process.cwd()}/supabase/migrations/20260917260000_salma_down_payment_approval_tab_only.sql`,
       'utf8',

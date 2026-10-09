@@ -306,6 +306,11 @@ export function resolveSlug(pathname: string): string | null {
   for (let len = segments.length - 1; len >= 1; len--) {
     const candidate = '/' + segments.slice(0, len).join('/');
     if (PATH_TO_SLUG[candidate]) return PATH_TO_SLUG[candidate];
+    const parentRedirect = PAGE_ACCESS_REDIRECTS.find(r => r.fromPath === candidate);
+    if (parentRedirect) {
+      const destination = resolveRegisteredLocation(parentRedirect.toPath);
+      if (destination) return destination;
+    }
   }
   return null;
 }

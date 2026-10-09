@@ -82,13 +82,18 @@ describe('filter registry wiring', () => {
         expect(source, `${item.key} reset`).toContain(`!visible('${shortKey}')`);
       } else if (legacyPrefix === 'down-payment-approval') {
         const shortKey = item.key.slice('down-payment-approval.'.length);
-        expect(source, `${item.key} render guard`).toContain(`isFilterVisible('${item.key}')`);
+        expect(
+          source.includes(`isFilterVisible('${item.key}')`) || source.includes(`isPageFilterVisible('${shortKey}')`),
+          `${item.key} render guard`,
+        ).toBe(true);
         expect(source, `${item.key} reset registration`).toContain(`['${shortKey}',`);
         expect(source, `${item.key} dynamic neutral reset`).toContain(
           '!isFilterVisible(`down-payment-approval.${key}`)',
         );
       } else {
-        const marker = `isFilterVisible('${item.key}')`;
+        const marker = legacyPrefix === 'cost-submission'
+          ? `isCostFilterVisible('${item.key.slice('cost-submission.'.length)}')`
+          : `isFilterVisible('${item.key}')`;
         expect(source, `${item.key} visibility/reset marker`).toContain(marker);
         expect(
           source.match(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))?.length ?? 0,
@@ -101,7 +106,7 @@ describe('filter registry wiring', () => {
 
   it('keeps Cost Submission refresh and exports outside the optional status guard', () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), PAGE_SOURCE['cost-submission']), 'utf8');
-    const guard = source.indexOf("{isFilterVisible('cost-submission.status') && ([");
+    const guard = source.indexOf("{isCostFilterVisible('status') && ([");
     const statusMapEnd = source.indexOf('))}', guard);
     expect(guard).toBeGreaterThan(-1);
     expect(statusMapEnd).toBeGreaterThan(guard);

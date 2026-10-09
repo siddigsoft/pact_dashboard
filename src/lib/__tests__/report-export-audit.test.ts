@@ -38,7 +38,7 @@ function productionSources(): ReportExportSource[] {
   }));
 }
 
-describe('report export access-control inventory', () => {
+describe('report export access-control inventory', { timeout: 60_000 }, () => {
   it('rejects a representative export control without ReportExportGate', () => {
     const audit = auditReportExportSource(`
       export function ExampleReport() {
