@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FitNumber } from '@/components/ui/fit-number';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -775,7 +776,7 @@ export default function PreFundingOverview() {
                     <div className="text-[9px] text-muted-foreground" dir="rtl">{kpi.labelAr}</div>
                     {(kpi as any).calculating
                       ? <div className="mt-1.5 h-8 w-36 rounded bg-muted animate-pulse" />
-                      : <div className="mt-1.5 text-2xl font-bold tabular-nums leading-none">{kpi.value}</div>
+                      : <FitNumber value={kpi.value} className="mt-1.5 text-2xl font-bold leading-none" />
                     }
                     <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{kpi.sub}</div>
                   </div>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FitNumber } from '@/components/ui/fit-number';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -71,9 +72,7 @@ function KPICard({
             {loading ? (
               <div className="h-7 w-16 bg-muted animate-pulse rounded" />
             ) : (
-              <p className={cn('text-2xl font-bold tabular-nums', color)} data-testid={`kpi-${title.toLowerCase().replace(/\s+/g, '-')}`}>
-                {value}
-              </p>
+              <FitNumber value={value} className={cn('text-2xl font-bold', color)} data-testid={`kpi-${title.toLowerCase().replace(/\s+/g, '-')}`} />
             )}
             {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
             {trend && trendLabel && (
