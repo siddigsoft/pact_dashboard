@@ -4,8 +4,8 @@ import { useWallet } from '@/context/wallet/WalletContext';
 import { useAppContext } from '@/context/AppContext';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { supabase } from '@/integrations/supabase/client';
-import { DataFreshnessBadge } from '@/components/realtime';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { FitNumber } from '@/components/ui/fit-number';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -39,9 +39,6 @@ import {
   Activity,
   Zap,
   ArrowLeft,
-  Menu,
-  Bell,
-  Settings,
   FileText,
   Banknote,
   ChevronDown,
@@ -79,7 +76,6 @@ const WalletPage = () => {
     withdrawalRequests, 
     stats, 
     loading, 
-    lastRefresh,
     createWithdrawalRequest,
     cancelWithdrawalRequest,
     confirmFundReceipt,
@@ -454,87 +450,28 @@ const WalletPage = () => {
   }
 
   return (
-    <div className="relative min-h-full">
-      {/* Black App Bar - scoped to the content area, not the full viewport */}
-      <div
-        className="sticky top-0 bg-black text-white flex items-center justify-between px-4 z-50"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}
-      >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-            aria-label="Back to dashboard"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold">My Wallet</h1>
-            <p className="text-white/60 text-xs">Your personal payment account</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleRefresh}
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-            aria-label="Refresh"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => navigate('/notifications')}
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors relative"
-            aria-label="Notifications"
-          >
-            <Bell className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => navigate('/settings')}
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-            aria-label="Settings"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Cyber Background with Animated Grid - scoped to wallet content */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950 -z-10">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]"></div>
-        <div className="absolute top-20 left-20 w-96 h-96 bg-blue-500/20 rounded-full blur-[120px] animate-pulse"></div>
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
-      </div>
-
-      <div className="relative space-y-6 p-3 sm:p-4 md:p-6 lg:p-8">
-
-        {/* Cyber Header */}
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 rounded-2xl blur-xl"></div>
-          <div className="relative bg-gradient-to-r from-slate-900/90 via-blue-900/90 to-purple-900/90 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg shadow-blue-500/50">
-                  <WalletIcon className="w-8 h-8 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent flex items-center gap-3">
-                    My Wallet
-                    <Badge className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-0 animate-pulse">
-                      <Zap className="w-3 h-3 mr-1" />
-                      ACTIVE
-                    </Badge>
-                  </h1>
-                  <p className="text-blue-300/80 mt-1 text-lg">
-                    Your personal payment account
-                  </p>
-                  <DataFreshnessBadge lastUpdated={lastRefresh} className="mt-2" />
-                </div>
+    <div className="min-h-full bg-[#F7F8FB] dark:bg-[#12182B] text-[#202943] dark:text-[#EFF1F7]">
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="rounded-xl border border-[#D8DDE9] bg-[#FDFDFD] p-5 dark:border-[#354064] dark:bg-[#1B2543] sm:p-6">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <button onClick={() => navigate('/dashboard')} className="mb-3 inline-flex items-center gap-1.5 text-sm text-[#566079] hover:text-[#273677] dark:text-[#AEB9D1]" aria-label="Back to dashboard">
+                  <ArrowLeft className="h-4 w-4" /> Dashboard
+                </button>
+                <h1 className="text-2xl font-semibold tracking-tight text-[#202943] dark:text-[#F7F8FB]">My Wallet</h1>
+                <p className="mt-1 text-sm text-[#566079] dark:text-[#AEB9D1]">Balance, withdrawals, and payment history in one place.</p>
               </div>
-              <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
+              <div className="flex flex-wrap items-center gap-2">
+                <details className="order-last w-full sm:w-auto">
+                  <summary className="inline-flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-md border border-[#D8DDE9] px-3 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] dark:border-[#354064] dark:text-[#CBD4EF]">
+                    Related pages <ChevronDown className="h-4 w-4" />
+                  </summary>
+                  <div className="mt-2 flex flex-wrap gap-2 rounded-md border border-[#D8DDE9] bg-[#FDFDFD] p-2 dark:border-[#354064] dark:bg-[#1B2543]">
                 <button
                   type="button"
                   onClick={() => navigate('/finance')}
-                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[#D8DDE9] px-3 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] dark:border-[#354064] dark:text-[#CBD4EF] dark:hover:bg-[#273677]/20"
                   data-testid="button-goto-finance"
                 >
                   <DollarSign className="w-4 h-4 mr-2" />
@@ -544,7 +481,7 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/budget')}
-                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[#D8DDE9] px-3 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] dark:border-[#354064] dark:text-[#CBD4EF] dark:hover:bg-[#273677]/20"
                   data-testid="button-goto-budget"
                 >
                   <Activity className="w-4 h-4 mr-2" />
@@ -554,7 +491,7 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/cost-submission')}
-                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[#D8DDE9] px-3 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] dark:border-[#354064] dark:text-[#CBD4EF] dark:hover:bg-[#273677]/20"
                   data-testid="button-goto-cost-submissions"
                 >
                   <Receipt className="w-4 h-4 mr-2" />
@@ -564,7 +501,7 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/down-payment-approval')}
-                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[#D8DDE9] px-3 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] dark:border-[#354064] dark:text-[#CBD4EF] dark:hover:bg-[#273677]/20"
                   data-testid="button-goto-advances"
                 >
                   <Banknote className="w-4 h-4 mr-2" />
@@ -574,17 +511,19 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/withdrawal-approval')}
-                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[#D8DDE9] px-3 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] dark:border-[#354064] dark:text-[#CBD4EF] dark:hover:bg-[#273677]/20"
                   data-testid="button-goto-withdrawal-approval"
                 >
                   <ArrowUpRight className="w-4 h-4 mr-2" />
                   <span className="hidden xs:inline">WITHDRAWALS</span>
                   <span className="xs:hidden">W</span>
                 </button>
+                  </div>
+                </details>
                 <button
                   type="button"
                   onClick={handleRefresh}
-                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[#D8DDE9] px-3 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] dark:border-[#354064] dark:text-[#CBD4EF] dark:hover:bg-[#273677]/20"
                   data-testid="button-refresh-wallet"
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
@@ -594,7 +533,7 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={() => exportTransactionsToCSV(filteredTransactions, wallet)}
-                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 hover:border-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[#D8DDE9] px-3 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] dark:border-[#354064] dark:text-[#CBD4EF]"
                   data-testid="button-export-csv"
                 >
                   <Download className="w-4 h-4 mr-2" />
@@ -604,7 +543,7 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={() => exportTransactionsToPDF(filteredTransactions, wallet, DEFAULT_CURRENCY)}
-                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 text-red-300 hover:border-red-400 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[#D8DDE9] px-3 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] dark:border-[#354064] dark:text-[#CBD4EF]"
                   data-testid="button-export-pdf"
                 >
                   <Download className="w-4 h-4 mr-2" />
@@ -614,7 +553,7 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={handleClearAllFilters}
-                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-orange-900/50 to-amber-900/50 border border-orange-500/30 text-orange-300 hover:border-orange-400 hover:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-orange-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[#D8DDE9] px-3 text-sm font-medium text-[#566079] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] dark:border-[#354064] dark:text-[#CBD4EF]"
                   data-testid="button-clear-filters"
                 >
                   <X className="w-4 h-4 mr-2" />
@@ -622,16 +561,16 @@ const WalletPage = () => {
                   <span className="xs:hidden">✕</span>
                 </button>
             {!currentUser?.bankAccount?.accountNumber && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-300 text-xs">
+              <div className="flex items-center gap-2 rounded-md border border-[#EC6A1F]/30 bg-[#EC6A1F]/5 px-3 py-2 text-xs text-[#B94B13]">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>Add your <a href="/settings" className="underline font-semibold hover:text-amber-100">bank account</a> in Settings before requesting a withdrawal.</span>
+                <span>Add your <a href="/settings" className="font-semibold underline hover:text-[#EC6A1F]">bank account</a> in Settings before requesting a withdrawal.</span>
               </div>
             )}
             <Dialog open={withdrawalDialogOpen} onOpenChange={setWithdrawalDialogOpen}>
               <DialogTrigger asChild>
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all inline-flex items-center focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="order-first inline-flex min-h-10 items-center gap-2 rounded-md bg-[#273677] px-4 text-sm font-semibold text-white hover:bg-[#1B2758] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
                   data-testid="button-request-withdrawal"
                   disabled={!currentUser?.bankAccount?.accountNumber}
                   title={!currentUser?.bankAccount?.accountNumber ? 'Add bank account in Settings first' : undefined}
@@ -647,13 +586,13 @@ const WalletPage = () => {
                 <div className="grid gap-4 py-4">
                   {/* Bank Account Destination Info */}
                   {currentUser?.bankAccount?.accountNumber && (
-                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-start gap-2">
-                      <Banknote className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                    <div className="rounded-lg border border-[#D8DDE9] bg-[#EFF1F7] p-3 flex items-start gap-2">
+                      <Banknote className="w-4 h-4 text-[#273677] mt-0.5 flex-shrink-0" />
                       <div className="text-xs space-y-0.5">
-                        <p className="font-semibold text-emerald-300">Funds will be sent to / سيتم إرسال المبلغ إلى:</p>
-                        <p className="text-emerald-200"><span className="text-emerald-400">Account Name:</span> {currentUser.bankAccount.accountName}</p>
-                        <p className="text-emerald-200"><span className="text-emerald-400">Account No:</span> {currentUser.bankAccount.accountNumber}</p>
-                        <p className="text-emerald-200"><span className="text-emerald-400">Branch:</span> {currentUser.bankAccount.branch}</p>
+                        <p className="font-semibold text-[#202943]">Funds will be sent to / سيتم إرسال المبلغ إلى:</p>
+                        <p className="text-[#566079]"><span className="font-medium text-[#202943]">Account Name:</span> {currentUser.bankAccount.accountName}</p>
+                        <p className="text-[#566079]"><span className="font-medium text-[#202943]">Account No:</span> {currentUser.bankAccount.accountNumber}</p>
+                        <p className="text-[#566079]"><span className="font-medium text-[#202943]">Branch:</span> {currentUser.bankAccount.branch}</p>
                       </div>
                     </div>
                   )}
@@ -711,11 +650,11 @@ const WalletPage = () => {
                     </Select>
                   </div>
                 </div>
-                <div className="flex gap-3 justify-end pt-4 border-t border-purple-500/20">
+                <div className="flex gap-3 justify-end pt-4 border-t border-[#D8DDE9]">
                   <button
                     type="button"
                     onClick={() => setWithdrawalDialogOpen(false)}
-                    className="px-4 py-2 rounded-md bg-slate-800/50 hover:bg-slate-800/70 text-purple-200 border border-purple-500/20 transition focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                    className="min-h-11 rounded-md border border-[#D8DDE9] px-4 py-2 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677]"
                     data-testid="button-cancel-withdrawal"
                   >
                     Cancel
@@ -724,7 +663,7 @@ const WalletPage = () => {
                     type="button"
                     onClick={handleWithdrawalRequest}
                     disabled={!withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || parseFloat(withdrawalAmount) > currentBalance}
-                    className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border border-purple-400/50 shadow-[0_0_15px_rgba(168,85,247,0.3)] disabled:opacity-50 disabled:cursor-not-allowed transition focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                    className="min-h-11 rounded-md bg-[#273677] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1B2758] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     data-testid="button-submit-withdrawal"
                   >
                     Submit Request
@@ -739,14 +678,14 @@ const WalletPage = () => {
 
         {/* Status Alerts */}
         {pendingWithdrawals.length > 0 && (
-          <Card className="bg-gradient-to-r from-orange-900/50 to-red-900/50 border-orange-500/40 backdrop-blur-xl shadow-[0_0_20px_rgba(251,146,60,0.2)]">
+          <Card className="border-[#EC6A1F]/30 bg-[#EC6A1F]/5 shadow-none">
             <CardContent className="flex items-center gap-3 p-4">
-              <AlertCircle className="w-5 h-5 text-orange-400 animate-pulse" />
+              <AlertCircle className="w-5 h-5 text-[#B94B13]" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-orange-200">
+                <p className="text-sm font-medium text-[#202943]">
                   You have {pendingWithdrawals.length} pending withdrawal request{pendingWithdrawals.length !== 1 ? 's' : ''}
                 </p>
-                <p className="text-xs text-orange-300/70 mt-0.5">
+                <p className="text-xs text-[#566079] mt-0.5">
                   Total amount: {formatCurrency(pendingWithdrawals.reduce((sum, r) => sum + r.amount, 0))}
                 </p>
               </div>
@@ -757,107 +696,100 @@ const WalletPage = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(59,130,246,0.2)]">
+        <Card className="border-[#D8DDE9] bg-[#FDFDFD] shadow-none dark:border-[#354064] dark:bg-[#1B2543]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-blue-300">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-[#566079] dark:text-[#AEB9D1]">
               Current Balance
             </CardTitle>
-            <WalletIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
+            <WalletIcon className="w-4 h-4 sm:w-5 sm:h-5 text-[#273677] dark:text-[#AEB9D1]" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
-              {formatCurrency(currentBalance)}
-            </div>
-            <p className="text-xs text-blue-300/70 mt-1">
+            <FitNumber value={formatCurrency(currentBalance)} className="text-lg sm:text-xl lg:text-2xl font-semibold leading-tight text-[#273677] dark:text-[#E7ECFB]" />
+            <p className="text-xs text-[#566079] dark:text-[#AEB9D1] mt-1">
               Available for withdrawal
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
+        <Card className="border-[#D8DDE9] bg-[#FDFDFD] shadow-none dark:border-[#354064] dark:bg-[#1B2543]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-purple-300">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-[#566079] dark:text-[#AEB9D1]">
               Total Earned
             </CardTitle>
-            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-[#273677] dark:text-[#AEB9D1]" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
-              {formatCurrency(stats?.totalEarned || 0)}
-            </div>
-            <p className="text-xs text-purple-300/70 mt-1 flex items-center gap-1">
+            <FitNumber value={formatCurrency(stats?.totalEarned || 0)} className="text-lg sm:text-xl lg:text-2xl font-semibold leading-tight text-[#202943] dark:text-[#E7ECFB]" />
+            <p className="text-xs text-[#566079] dark:text-[#AEB9D1] mt-1 flex items-center gap-1">
               <Receipt className="w-3 h-3" />
               {stats?.completedSiteVisits || 0} visits
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-slate-900/80 to-orange-900/80 border-orange-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(251,146,60,0.2)]">
+        <Card className="border-[#EC6A1F]/30 bg-[#EC6A1F]/5 shadow-none dark:bg-[#EC6A1F]/10">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-orange-300">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-[#B94B13]">
               Pending Withdrawals
             </CardTitle>
-            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400 animate-pulse" />
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-[#EC6A1F]" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
-              {formatCurrency(stats?.pendingWithdrawals || 0)}
-            </div>
-            <p className="text-xs text-orange-300/70 mt-1">
+            <FitNumber value={formatCurrency(stats?.pendingWithdrawals || 0)} className="text-lg sm:text-xl lg:text-2xl font-semibold leading-tight text-[#B94B13]" />
+            <p className="text-xs text-[#8A5B43] mt-1">
               {pendingWithdrawals.length} request{pendingWithdrawals.length !== 1 ? 's' : ''}
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-slate-900/80 to-cyan-900/80 border-cyan-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,211,238,0.2)]">
+        <Card className="border-[#D8DDE9] bg-[#FDFDFD] shadow-none dark:border-[#354064] dark:bg-[#1B2543]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-cyan-300">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-[#566079] dark:text-[#AEB9D1]">
               Total Withdrawn
             </CardTitle>
-            <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
+            <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5 text-[#273677] dark:text-[#AEB9D1]" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
-              {formatCurrency(stats?.totalWithdrawn || 0)}
-            </div>
-            <p className="text-xs text-cyan-300/70 mt-1">
+            <FitNumber value={formatCurrency(stats?.totalWithdrawn || 0)} className="text-lg sm:text-xl lg:text-2xl font-semibold leading-tight text-[#202943] dark:text-[#E7ECFB]" />
+            <p className="text-xs text-[#566079] dark:text-[#AEB9D1] mt-1">
               {completedWithdrawals.length} approved
             </p>
           </CardContent>
         </Card>
       </div>
 
+      <details className="group rounded-xl border border-[#D8DDE9] bg-[#FDFDFD] p-4 dark:border-[#354064] dark:bg-[#1B2543]">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-[#273677] dark:text-[#E7ECFB]">
+          More wallet insights <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="space-y-4 pt-4">
       {/* Weekly/Monthly Earnings Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-        <Card className="bg-gradient-to-br from-slate-900/80 to-teal-900/80 border-teal-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(20,184,166,0.2)]">
+        <Card className="border-[#D8DDE9] bg-[#FDFDFD] shadow-none dark:border-[#354064] dark:bg-[#1B2543]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-teal-300">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-[#566079] dark:text-[#AEB9D1]">
               This Week
             </CardTitle>
-            <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-teal-400" />
+            <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-[#273677] dark:text-[#AEB9D1]" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
-              {formatCurrency(stats?.weeklyEarnings || 0)}
-            </div>
-            <p className="text-xs text-teal-300/70 mt-1">
+            <FitNumber value={formatCurrency(stats?.weeklyEarnings || 0)} className="text-lg sm:text-xl lg:text-2xl font-semibold leading-tight text-[#202943] dark:text-[#E7ECFB]" />
+            <p className="text-xs text-[#566079] dark:text-[#AEB9D1] mt-1">
               {stats?.weeklySiteVisits || 0} site visit{(stats?.weeklySiteVisits || 0) !== 1 ? 's' : ''} completed
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-slate-900/80 to-rose-900/80 border-rose-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(244,63,94,0.2)]">
+        <Card className="border-[#D8DDE9] bg-[#FDFDFD] shadow-none dark:border-[#354064] dark:bg-[#1B2543]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-rose-300">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-[#566079] dark:text-[#AEB9D1]">
               This Month
             </CardTitle>
-            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400" />
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-[#273677] dark:text-[#AEB9D1]" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
-              {formatCurrency(stats?.monthlyEarnings || 0)}
-            </div>
-            <p className="text-xs text-rose-300/70 mt-1">
+            <FitNumber value={formatCurrency(stats?.monthlyEarnings || 0)} className="text-lg sm:text-xl lg:text-2xl font-semibold leading-tight text-[#202943] dark:text-[#E7ECFB]" />
+            <p className="text-xs text-[#566079] dark:text-[#AEB9D1] mt-1">
               {format(new Date(), 'MMMM yyyy')}
             </p>
           </CardContent>
@@ -866,51 +798,49 @@ const WalletPage = () => {
 
       {/* Additional Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-slate-900/80 to-green-900/80 border-green-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+        <Card className="border-[#D8DDE9] bg-[#FDFDFD] shadow-none dark:border-[#354064] dark:bg-[#1B2543]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide text-green-300">Withdrawal Success Rate</CardTitle>
+            <CardTitle className="text-sm font-medium uppercase tracking-wide text-[#566079] dark:text-[#AEB9D1]">Withdrawal Success Rate</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-3xl font-bold tabular-nums bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">{withdrawalSuccessRate.toFixed(0)}%</span>
+              <span className="text-3xl font-semibold tabular-nums text-[#202943] dark:text-[#E7ECFB]">{withdrawalSuccessRate.toFixed(0)}%</span>
               {withdrawalSuccessRate >= 80 ? (
-                <CheckCircle2 className="w-6 h-6 text-green-400 animate-pulse" />
+                <CheckCircle2 className="w-6 h-6 text-[#273677]" />
               ) : (
-                <AlertCircle className="w-6 h-6 text-orange-400 animate-pulse" />
+                <AlertCircle className="w-6 h-6 text-[#EC6A1F]" />
               )}
             </div>
             <Progress value={withdrawalSuccessRate} className="h-2" />
-            <p className="text-xs text-green-300/70">
+            <p className="text-xs text-[#566079] dark:text-[#AEB9D1]">
               {completedWithdrawals.length} approved, {rejectedWithdrawals.length} rejected
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-slate-900/80 to-indigo-900/80 border-indigo-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+        <Card className="border-[#D8DDE9] bg-[#FDFDFD] shadow-none dark:border-[#354064] dark:bg-[#1B2543]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide text-indigo-300">Average Transaction</CardTitle>
+            <CardTitle className="text-sm font-medium uppercase tracking-wide text-[#566079] dark:text-[#AEB9D1]">Average Transaction</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-              {transactions.length > 0
-                ? formatCurrency(transactions.reduce((sum, t) => sum + t.amount, 0) / transactions.length)
-                : formatCurrency(0)}
-            </div>
-            <p className="text-xs text-indigo-300/70 mt-1">
+            <FitNumber value={transactions.length > 0
+              ? formatCurrency(transactions.reduce((sum, t) => sum + t.amount, 0) / transactions.length)
+              : formatCurrency(0)} className="text-lg sm:text-xl lg:text-2xl font-semibold text-[#202943] dark:text-[#E7ECFB]" />
+            <p className="text-xs text-[#566079] dark:text-[#AEB9D1] mt-1">
               Across {stats?.totalTransactions || 0} transactions
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-slate-900/80 to-emerald-900/80 border-emerald-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+        <Card className="border-[#D8DDE9] bg-[#FDFDFD] shadow-none dark:border-[#354064] dark:bg-[#1B2543]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide text-emerald-300">Activity Status</CardTitle>
+            <CardTitle className="text-sm font-medium uppercase tracking-wide text-[#566079] dark:text-[#AEB9D1]">Activity Status</CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-3">
-            <Activity className="w-8 h-8 text-emerald-400 animate-pulse" />
+            <Activity className="w-8 h-8 text-[#273677] dark:text-[#AEB9D1]" />
             <div>
-              <p className="text-lg font-semibold text-emerald-300">ACTIVE</p>
-              <p className="text-xs text-emerald-300/70">
+              <p className="text-lg font-semibold text-[#202943] dark:text-[#E7ECFB]">Active</p>
+              <p className="text-xs text-[#566079] dark:text-[#AEB9D1]">
                 Last transaction: {transactions.length > 0 ? format(new Date(transactions[0].createdAt), 'MMM dd, yyyy') : 'Never'}
               </p>
             </div>
@@ -918,70 +848,66 @@ const WalletPage = () => {
         </Card>
       </div>
 
-      {/* Advanced Transaction Search */}
-      <TransactionSearch
-        onSearch={(filters) => setSearchFilters(filters)}
-        onClear={() => setSearchFilters({})}
-        filters={searchFilters}
-      />
+        </div>
+      </details>
 
       {/* Main Content Section */}
-      <Card className="bg-gradient-to-br from-slate-900/90 to-blue-900/90 border border-blue-500/30 backdrop-blur-xl shadow-[0_0_30px_rgba(59,130,246,0.3)]">
+      <Card className="border-[#D8DDE9] bg-[#FDFDFD] shadow-none dark:border-[#354064] dark:bg-[#1B2543]">
         <CardContent className="p-3 sm:p-4 md:p-6 lg:p-8">
           {/* Main Content Tabs */}
           <Tabs defaultValue="overview" className="w-full">
             <div className="overflow-x-auto mb-6">
-              <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1 min-h-[44px]">
+              <TabsList className="inline-flex h-auto w-max gap-1 border-b border-[#D8DDE9] bg-transparent p-0 dark:border-[#354064]">
                 <TabsTrigger 
                   value="overview" 
                   data-testid="tab-overview"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                  className="min-h-11 flex-shrink-0 rounded-none border-b-2 border-transparent px-3 text-xs font-medium text-[#566079] shadow-none data-[state=active]:border-[#273677] data-[state=active]:bg-transparent data-[state=active]:text-[#273677] dark:text-[#AEB9D1] dark:data-[state=active]:text-white sm:text-sm"
                 >
                   OVERVIEW
                 </TabsTrigger>
                 <TabsTrigger 
                   value="transactions" 
                   data-testid="tab-transactions"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                  className="min-h-11 flex-shrink-0 rounded-none border-b-2 border-transparent px-3 text-xs font-medium text-[#566079] shadow-none data-[state=active]:border-[#273677] data-[state=active]:bg-transparent data-[state=active]:text-[#273677] dark:text-[#AEB9D1] dark:data-[state=active]:text-white sm:text-sm"
                 >
                   TRANSACTIONS
                 </TabsTrigger>
                 <TabsTrigger 
                   value="withdrawals" 
                   data-testid="tab-withdrawals"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                  className="min-h-11 flex-shrink-0 rounded-none border-b-2 border-transparent px-3 text-xs font-medium text-[#566079] shadow-none data-[state=active]:border-[#273677] data-[state=active]:bg-transparent data-[state=active]:text-[#273677] dark:text-[#AEB9D1] dark:data-[state=active]:text-white sm:text-sm"
                 >
                   WITHDRAWALS
                 </TabsTrigger>
                 <TabsTrigger 
                   value="earnings" 
                   data-testid="tab-earnings"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                  className="min-h-11 flex-shrink-0 rounded-none border-b-2 border-transparent px-3 text-xs font-medium text-[#566079] shadow-none data-[state=active]:border-[#273677] data-[state=active]:bg-transparent data-[state=active]:text-[#273677] dark:text-[#AEB9D1] dark:data-[state=active]:text-white sm:text-sm"
                 >
                   EARNINGS
                 </TabsTrigger>
                 <TabsTrigger 
                   value="activity" 
                   data-testid="tab-activity"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                  className="min-h-11 flex-shrink-0 rounded-none border-b-2 border-transparent px-3 text-xs font-medium text-[#566079] shadow-none data-[state=active]:border-[#273677] data-[state=active]:bg-transparent data-[state=active]:text-[#273677] dark:text-[#AEB9D1] dark:data-[state=active]:text-white sm:text-sm"
                 >
                   ACTIVITY
                 </TabsTrigger>
                 <TabsTrigger 
                   value="statements" 
                   data-testid="tab-statements"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                  className="min-h-11 flex-shrink-0 rounded-none border-b-2 border-transparent px-3 text-xs font-medium text-[#566079] shadow-none data-[state=active]:border-[#273677] data-[state=active]:bg-transparent data-[state=active]:text-[#273677] dark:text-[#AEB9D1] dark:data-[state=active]:text-white sm:text-sm"
                 >
                   STATEMENTS
                 </TabsTrigger>
                 <TabsTrigger 
                   value="advances" 
                   data-testid="tab-advances"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-600 data-[state=active]:to-orange-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(245,158,11,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap relative"
+                  className="relative min-h-11 flex-shrink-0 rounded-none border-b-2 border-transparent px-3 text-xs font-medium text-[#566079] shadow-none data-[state=active]:border-[#273677] data-[state=active]:bg-transparent data-[state=active]:text-[#273677] dark:text-[#AEB9D1] dark:data-[state=active]:text-white sm:text-sm"
                 >
                   MY ADVANCES
                   {pendingAdvanceConfirmations.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                    <span className="ml-1 rounded-full bg-[#EC6A1F]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#B94B13]">
                       {pendingAdvanceConfirmations.length}
                     </span>
                   )}
@@ -989,11 +915,11 @@ const WalletPage = () => {
                 <TabsTrigger
                   value="cost-payments"
                   data-testid="tab-cost-payments"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(16,185,129,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap relative"
+                  className="relative min-h-11 flex-shrink-0 rounded-none border-b-2 border-transparent px-3 text-xs font-medium text-[#566079] shadow-none data-[state=active]:border-[#273677] data-[state=active]:bg-transparent data-[state=active]:text-[#273677] dark:text-[#AEB9D1] dark:data-[state=active]:text-white sm:text-sm"
                 >
                   COST PAYMENTS
                   {pendingCostPaymentConfirmations.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                    <span className="ml-1 rounded-full bg-[#EC6A1F]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#B94B13]">
                       {pendingCostPaymentConfirmations.length}
                     </span>
                   )}
@@ -1002,10 +928,10 @@ const WalletPage = () => {
                   <TabsTrigger
                     value="all-advances"
                     data-testid="tab-all-advances"
-                    className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(139,92,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap relative"
+                    className="relative min-h-11 flex-shrink-0 rounded-none border-b-2 border-transparent px-3 text-xs font-medium text-[#566079] shadow-none data-[state=active]:border-[#273677] data-[state=active]:bg-transparent data-[state=active]:text-[#273677] dark:text-[#AEB9D1] dark:data-[state=active]:text-white sm:text-sm"
                   >
                     ALL ADVANCES
-                    <span className="ml-1 text-[10px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded-full">
+                    <span className="ml-1 rounded-full bg-[#273677]/10 px-1.5 py-0.5 text-[10px] text-[#273677]">
                       {advanceRequests.length}
                     </span>
                   </TabsTrigger>
@@ -1395,7 +1321,7 @@ const WalletPage = () => {
                   <button
                     type="button"
                     onClick={() => exportWithdrawalsToCSV(displayWithdrawals, withdrawalStatusFilter)}
-                    className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 hover:border-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                    className="inline-flex min-h-11 items-center rounded-md border border-[#D8DDE9] px-3 py-1.5 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677]"
                     data-testid="button-export-withdrawals-csv"
                   >
                     <Download className="w-4 h-4 mr-2" />
@@ -1404,7 +1330,7 @@ const WalletPage = () => {
                   <button
                     type="button"
                     onClick={() => exportWithdrawalsToPDF(displayWithdrawals, withdrawalStatusFilter)}
-                    className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 text-red-300 hover:border-red-400 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                    className="inline-flex min-h-11 items-center rounded-md border border-[#D8DDE9] px-3 py-1.5 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#273677]"
                     data-testid="button-export-withdrawals-pdf"
                   >
                     <Download className="w-4 h-4 mr-2" />
@@ -1910,7 +1836,7 @@ const WalletPage = () => {
                         a.click();
                         URL.revokeObjectURL(url);
                       }}
-                      className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 transition-all backdrop-blur-xl inline-flex items-center min-h-[44px]"
+                      className="inline-flex min-h-11 items-center rounded-md border border-[#D8DDE9] px-3 py-2 text-sm font-medium text-[#273677] hover:bg-[#EFF1F7]"
                       data-testid="button-export-statement-csv"
                     >
                       <Download className="w-4 h-4 mr-2" />
