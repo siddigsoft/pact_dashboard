@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RoleBaselineAccessEditor } from './RoleBaselineAccessEditor';
 import { supabase } from '@/integrations/supabase/client';
 import { getGrantablePageGroups } from '@/lib/access-registry';
+import { withPageDefaultPermissions } from '@/lib/page-default-permissions';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RoleBaselineAccess, RoleWithPermissions, UpdateRoleRequest, ResourceType, ActionType } from '@/types/roles';
 import { PermissionManager } from './PermissionManager';
@@ -109,7 +110,7 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
         ...formData,
         ...baseline,
         page_slugs: pages,
-        permissions: selectedPermissions
+        permissions: withPageDefaultPermissions(selectedPermissions, pages) as typeof selectedPermissions
       });
       if (ok) {
         onOpenChange(false);
@@ -121,12 +122,13 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
 
   const handleUpdatePermissions = async (roleId: string, permissions: { resource: ResourceType; action: ActionType }[]) => {
     if (baselineLoading || baselineError) return false;
-    setSelectedPermissions(permissions);
+    const merged = withPageDefaultPermissions(permissions, pages) as typeof permissions;
+    setSelectedPermissions(merged);
     const ok = await onUpdateRole(roleId, {
       ...formData,
       ...baseline,
       page_slugs: pages,
-      permissions
+      permissions: merged
     });
     return ok;
   };
@@ -200,7 +202,7 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
           <TabsContent value="baseline" className="space-y-4">
             {baselineLoading ? <p className="text-sm">Loading access defaults…</p> : !baselineError && <>
               <h3 className="font-semibold">Page access</h3>
-              <p className="text-sm text-muted-foreground">Selected pages grant this role access in navigation and routes. All defaults save together.</p>
+              <p className="text-sm text-muted-foreground">Selected pages grant this role access in navigation and routes. Each selected page also grants the read permission it needs, so it opens without “Access Denied”. All defaults save together.</p>
               <div className="sticky top-0 z-10 bg-background py-2">
                 <Input
                   type="search"

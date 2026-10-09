@@ -15,6 +15,7 @@ import { RoleBaselineAccessEditor } from './RoleBaselineAccessEditor';
 import { RoleBaselineAccess } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
 import { getGrantablePageGroups } from '@/lib/access-registry';
+import { withPageDefaultPermissions } from '@/lib/page-default-permissions';
 import {
   Briefcase, MapPin, Wallet, BarChart3, Globe, Users, FileSearch, Wrench,
   Wand2, ListChecks, Star, Info, ChevronLeft, ChevronRight, Check,
@@ -190,7 +191,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
     }
     if (step === 'pages') { setStep('actions'); return; }
     if (step === 'actions') {
-      if (permissionList.length === 0) {
+      if (withPageDefaultPermissions(permissionList, pageSlugList).length === 0) {
         setError('Select at least one action permission.');
         return;
       }
@@ -223,7 +224,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
       name: formData.name.trim(),
       display_name: formData.display_name.trim(),
       description: formData.description.trim(),
-      permissions: permissionList,
+      permissions: withPageDefaultPermissions(permissionList, pageSlugList) as typeof permissionList,
       page_slugs: pageSlugList,
       assign_user_ids: assignUserIds,
       set_as_primary: true, // one role per person Ã¢ÂÂ assignment replaces any prior role

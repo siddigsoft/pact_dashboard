@@ -1294,7 +1294,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     description: 'Personal dashboard, project list, and user workspace',
     pages: [
       { page: 'My Incentives', route: '/incentives', description: 'Incentive overview — own payments, or all MMP incentives with permission', actions: [
-        { key: 'incentives:read', label: 'View All Incentives', description: 'See incentive snapshots and payments for all staff', resource: 'incentives', action: 'read' },
+        { key: 'incentives:read', label: 'View All Incentives', description: 'See incentive snapshots and payments for all staff', resource: 'incentives', action: 'read', isAdminOnly: true },
       ] },
       { page: 'Incentive Settings', route: '/mmp/incentive-settings', description: 'Incentive rules, hub overrides, and incentive reports', actions: [
         { key: 'incentives:update', label: 'Manage Incentive Settings', description: 'Edit incentive percentages, thresholds, and hub overrides', resource: 'incentives', action: 'update', isAdminOnly: true },
