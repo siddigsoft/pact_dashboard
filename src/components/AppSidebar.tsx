@@ -120,7 +120,7 @@
 
   /** All top-level sections start collapsed; the active route section auto-expands. */
   const DENSE_COLLAPSED_BY_DEFAULT = new Set([
-    'workspace-parent', 'programme-parent', 'incentives-parent', 'comms-parent',
+    'workspace-parent', 'workspace-more', 'programme-parent', 'incentives-parent', 'comms-parent',
     'fieldops-parent', 'coordination-parent', 'finance-parent', 'accounting-parent',
     'hr-parent', 'crm-parent', 'surveys-parent', 'analytics-parent', 'admin-parent',
     'help-parent', 'superadmin-parent',
@@ -138,7 +138,8 @@
   const SIDEBAR_NAV_ITEM =
     "min-h-8 h-auto py-1.5 rounded-md text-[13px] font-medium leading-snug transition-colors duration-150";
   const SIDEBAR_ICON_MUTED = "text-foreground/50";
-  const SIDEBAR_ICON_ACTIVE = "text-primary";
+  const SIDEBAR_ICON_ACTIVE = "text-[#273677] dark:text-[#AAB7EC]";
+  const WORKSPACE_PRIMARY_PATHS = new Set(['/dashboard', '/my-tasks', '/my-projects', '/notifications']);
 
   const isNavPathActive = (pathname: string, search: string, url: string) => {
     const [base, query] = url.split('?');
@@ -248,7 +249,7 @@
           className={cn(
             SIDEBAR_NAV_ITEM,
             isActive
-              ? "bg-primary/10 text-primary font-semibold"
+              ? "bg-[#273677]/10 text-[#273677] dark:bg-[#AAB7EC]/15 dark:text-[#AAB7EC] font-semibold"
               : "text-foreground/85 hover:bg-muted/80",
           )}
         >
@@ -256,7 +257,7 @@
             <item.icon
               className={cn(
                 "h-4 w-4 shrink-0",
-                isActive ? "text-primary" : "text-amber-600 dark:text-amber-400",
+                isActive ? SIDEBAR_ICON_ACTIVE : SIDEBAR_ICON_MUTED,
               )}
             />
             <span className="flex-1 min-w-0 truncate">{item.title}</span>
@@ -268,7 +269,7 @@
           aria-label="Remove from favorites"
           data-testid={`button-unfavorite-${item.id}`}
         >
-          <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+          <Star className="h-3.5 w-3.5 text-[#B94B13] fill-[#B94B13]" />
         </SidebarMenuAction>
       </SidebarMenuItem>
     );
@@ -799,6 +800,11 @@
         const stored = localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY);
         if (stored !== null) {
           const parsed: string[] = JSON.parse(stored);
+          // Add the new disclosure once without resetting existing section choices.
+          if (localStorage.getItem('pact-sidebar-workspace-more-initialized') !== 'true') {
+            parsed.push('workspace-more');
+            localStorage.setItem('pact-sidebar-workspace-more-initialized', 'true');
+          }
           return new Set(parsed);
         }
       } catch {}
@@ -1169,10 +1175,15 @@
       if (!menuGroups.length) return;
       const toExpand = new Set<string>();
       menuGroups.forEach((group: MenuGroup & { parentGroup?: string }) => {
-        if (group.items.some(item => isNavPathActive(pathname, search, item.url))) {
+        const activeItem = group.items.find(item => isNavPathActive(pathname, search, item.url));
+        if (activeItem) {
           toExpand.add(group.id);
           if ((group as { parentGroup?: string }).parentGroup) {
-            toExpand.add(`${(group as { parentGroup?: string }).parentGroup!}-parent`);
+            const parent = (group as { parentGroup?: string }).parentGroup!;
+            toExpand.add(`${parent}-parent`);
+            if (parent === 'workspace' && !WORKSPACE_PRIMARY_PATHS.has(activeItem.url)) {
+              toExpand.add('workspace-more');
+            }
           }
         }
       });
@@ -1187,7 +1198,7 @@
         try { localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, JSON.stringify([...next])); } catch {}
         return next;
       });
-    }, [pathname, menuGroups]);
+    }, [pathname, search, menuGroups]);
 
     const getInitials = (name: string) =>
       name.split(" ").map((part) => part[0]).join("").toUpperCase().substring(0, 2);
@@ -1308,7 +1319,7 @@
                         isFavoritesCollapsed && "-rotate-90"
                       )}
                     />
-                    <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500 shrink-0" />
+                    <Star className="h-3.5 w-3.5 fill-[#B94B13] text-[#B94B13] shrink-0" />
                     <span className="flex-1 truncate normal-case tracking-normal">Favorites</span>
                     <span className="text-[10px] font-normal tabular-nums text-foreground/40">{favoriteItems.length}</span>
                   </SidebarGroupLabel>
@@ -1340,24 +1351,24 @@
           )}
 
           {(() => {
-            // Section accents: one quiet hue each for wayfinding, not decoration
+            // Section icons share one quiet brand treatment; active links carry emphasis.
             type SectionCfg = { label: string; Icon: React.ElementType; iconColor: string };
             const SECTION_CFG: Record<string, SectionCfg> = {
-              'workspace':     { label: 'Workspace',      Icon: LayoutDashboard, iconColor: 'text-sky-600 dark:text-sky-400' },
-              'programme':     { label: 'Programme',      Icon: FolderKanban,    iconColor: 'text-blue-600 dark:text-blue-400' },
-              'incentives':    { label: 'Bonuses',        Icon: Award,           iconColor: 'text-amber-600 dark:text-amber-400' },
-              'comms':         { label: 'Communication',  Icon: MessageSquare,   iconColor: 'text-emerald-600 dark:text-emerald-400' },
-              'fieldops':      { label: 'Field Ops',      Icon: Activity,        iconColor: 'text-orange-600 dark:text-orange-400' },
-              'coordination':  { label: 'Coordination',   Icon: Network,         iconColor: 'text-violet-600 dark:text-violet-400' },
-              'finance':       { label: 'Finance',        Icon: Banknote,        iconColor: 'text-green-700 dark:text-green-400' },
-              'accounting':    { label: 'Accounting',     Icon: BookOpen,        iconColor: 'text-teal-700 dark:text-teal-400' },
-              'hr':            { label: 'HR & People',    Icon: Users,           iconColor: 'text-rose-600 dark:text-rose-400' },
-              'crm':           { label: 'CRM',            Icon: Handshake,       iconColor: 'text-indigo-600 dark:text-indigo-400' },
-              'surveys':       { label: 'Surveys',        Icon: ClipboardList,   iconColor: 'text-cyan-700 dark:text-cyan-400' },
-              'analytics':     { label: 'Analytics',      Icon: BarChart3,       iconColor: 'text-fuchsia-700 dark:text-fuchsia-400' },
-              'admin':         { label: 'Administration', Icon: Settings,        iconColor: 'text-slate-600 dark:text-slate-300' },
-              'help':          { label: 'Help',           Icon: HelpCircle,      iconColor: 'text-slate-500 dark:text-slate-400' },
-              'superadmin':    { label: 'Super Admin',    Icon: ShieldCheck,     iconColor: 'text-red-600 dark:text-red-400' },
+              'workspace':     { label: 'Workspace',      Icon: LayoutDashboard, iconColor: SIDEBAR_ICON_MUTED },
+              'programme':     { label: 'Programme',      Icon: FolderKanban,    iconColor: SIDEBAR_ICON_MUTED },
+              'incentives':    { label: 'Bonuses',        Icon: Award,           iconColor: SIDEBAR_ICON_MUTED },
+              'comms':         { label: 'Communication',  Icon: MessageSquare,   iconColor: SIDEBAR_ICON_MUTED },
+              'fieldops':      { label: 'Field Ops',      Icon: Activity,        iconColor: SIDEBAR_ICON_MUTED },
+              'coordination':  { label: 'Coordination',   Icon: Network,         iconColor: SIDEBAR_ICON_MUTED },
+              'finance':       { label: 'Finance',        Icon: Banknote,        iconColor: SIDEBAR_ICON_MUTED },
+              'accounting':    { label: 'Accounting',     Icon: BookOpen,        iconColor: SIDEBAR_ICON_MUTED },
+              'hr':            { label: 'HR & People',    Icon: Users,           iconColor: SIDEBAR_ICON_MUTED },
+              'crm':           { label: 'CRM',            Icon: Handshake,       iconColor: SIDEBAR_ICON_MUTED },
+              'surveys':       { label: 'Surveys',        Icon: ClipboardList,   iconColor: SIDEBAR_ICON_MUTED },
+              'analytics':     { label: 'Analytics',      Icon: BarChart3,       iconColor: SIDEBAR_ICON_MUTED },
+              'admin':         { label: 'Administration', Icon: Settings,        iconColor: SIDEBAR_ICON_MUTED },
+              'help':          { label: 'Help',           Icon: HelpCircle,      iconColor: SIDEBAR_ICON_MUTED },
+              'superadmin':    { label: 'Super Admin',    Icon: ShieldCheck,     iconColor: SIDEBAR_ICON_MUTED },
             };
 
             // Group sub-groups by parentGroup; track min order for sorting sections
@@ -1387,8 +1398,8 @@
               ) : null;
 
             // Action queue vs informational unread
-            const BADGE_ACTION = "bg-red-500 text-white";
-            const BADGE_INFO = "bg-sky-600 text-white";
+            const BADGE_ACTION = "bg-[#B94B13] text-white";
+            const BADGE_INFO = "bg-[#273677] text-white";
             const renderItemBadge = (itemId: string) => {
               switch (itemId) {
                 case 'approvals-hub':
@@ -1440,7 +1451,7 @@
                         className={cn(
                           SIDEBAR_NAV_ITEM,
                           isActive
-                            ? "bg-primary/10 text-primary font-semibold"
+                            ? "bg-[#273677]/10 text-[#273677] dark:bg-[#AAB7EC]/15 dark:text-[#AAB7EC] font-semibold"
                             : "text-foreground/85 hover:bg-muted/80 hover:text-foreground",
                         )}
                       >
@@ -1469,7 +1480,7 @@
                           className={cn(
                             "h-3.5 w-3.5",
                             isItemFavorite
-                              ? "text-amber-500 fill-amber-500"
+                              ? "text-[#B94B13] fill-[#B94B13]"
                               : "text-muted-foreground"
                           )}
                         />
@@ -1501,6 +1512,13 @@
               const { label, Icon, iconColor } = cfg;
               const items = flattenSectionItems(subGroups);
               if (items.length === 0) return null;
+              const primaryWorkspaceItems = parentGroupId === 'workspace'
+                ? items.filter(item => WORKSPACE_PRIMARY_PATHS.has(item.url))
+                : items;
+              const moreWorkspaceItems = parentGroupId === 'workspace'
+                ? items.filter(item => !WORKSPACE_PRIMARY_PATHS.has(item.url))
+                : [];
+              const moreWorkspaceCollapsed = collapsedGroups.has('workspace-more');
               return (
                 <Collapsible key={`${parentKey}${keySuffix}`} open={!isCollapsed}>
                   <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
@@ -1513,14 +1531,28 @@
                         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-150", isCollapsed && "-rotate-90")} />
                         <Icon className={cn("h-3.5 w-3.5 shrink-0", iconColor)} />
                         <span className="flex-1 truncate">{label}</span>
-                        <span className="text-[10px] font-normal normal-case tracking-normal tabular-nums text-foreground/40">
-                          {items.length}
-                        </span>
                       </SidebarGroupLabel>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarGroupContent className="pt-0.5 pb-1">
-                        {renderMenuItems(items, iconColor)}
+                        {renderMenuItems(primaryWorkspaceItems, iconColor)}
+                        {moreWorkspaceItems.length > 0 && (
+                          <Collapsible open={!moreWorkspaceCollapsed}>
+                            <CollapsibleTrigger asChild>
+                              <button
+                                type="button"
+                                onClick={() => toggleGroupCollapse('workspace-more')}
+                                className="mt-1 flex min-h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-medium text-foreground/65 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                aria-label={`${moreWorkspaceCollapsed ? 'Show' : 'Hide'} more workspace links`}
+                              >
+                                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-150', moreWorkspaceCollapsed && '-rotate-90')} />
+                                <span className="flex-1">More workspace</span>
+                                <span className="tabular-nums text-foreground/40">{moreWorkspaceItems.length}</span>
+                              </button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>{renderMenuItems(moreWorkspaceItems, iconColor)}</CollapsibleContent>
+                          </Collapsible>
+                        )}
                       </SidebarGroupContent>
                     </CollapsibleContent>
                   </SidebarGroup>
