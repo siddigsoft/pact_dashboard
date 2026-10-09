@@ -154,12 +154,12 @@ exports[`report export access-control inventory > does not add ungated export co
   },
   {
     "expression": "<Button variant="outline" size="sm" onClick={exportExcel} disabled={!stats || !canUseMmpReports || excelLoading} className="border-white/30 text-white bg-white/10 hover:bg-white/20 hover:border-white/50 h-8 text-xs" >",
-    "line": 1211,
+    "line": 1212,
     "source": "src/components/mmp/MmpFullReportDialog.tsx",
   },
   {
     "expression": "<Button size="sm" onClick={exportPDF} disabled={!stats || !canUseMmpReports} className="bg-white/15 hover:bg-white/25 text-white border border-white/30 h-8 text-xs" >",
-    "line": 1223,
+    "line": 1224,
     "source": "src/components/mmp/MmpFullReportDialog.tsx",
   },
   {
@@ -381,16 +381,6 @@ exports[`report export access-control inventory > does not add ungated export co
     "expression": "<Button variant="outline" size="sm" onClick={() => { const url = photos[selectedPhotoIndex]?.photo_url; if (url) void openStoredFile(url); }} data-testid="button-download-photo" >",
     "line": 346,
     "source": "src/components/site-visit/CompletedVisitReportCard.tsx",
-  },
-  {
-    "expression": "<Button variant="outline" size="sm" className="flex items-center gap-1" onClick={handleExportExcel} >",
-    "line": 115,
-    "source": "src/components/SiteEntriesTable.tsx",
-  },
-  {
-    "expression": "<Button variant="outline" size="sm" className="flex items-center gap-1" onClick={handleExportPDF} >",
-    "line": 124,
-    "source": "src/components/SiteEntriesTable.tsx",
   },
   {
     "expression": "<Button variant="outline" data-testid="button-export">",
