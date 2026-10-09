@@ -299,11 +299,10 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   });
 
   const createSuperAdmin = async (data: CreateSuperAdmin): Promise<boolean> => {
-    // Only the platform owner can appoint super admins
-    if (!isProtectedOwner(currentUser?.id)) {
+    if (!isSuperAdmin) {
       toast({
         title: 'Not Authorised',
-        description: 'Only the platform owner can appoint super administrators.',
+        description: 'Only an active Super Admin can appoint super administrators.',
         variant: 'destructive',
       });
       return false;
