@@ -76,55 +76,61 @@ export default function CoverageMap() {
       setHubs((hubRes.data ?? []) as Hub[]);
       setCycles((cycleRes.data ?? []) as Cycle[]);
 
+      // Canonical site master is sites_registry (master_sites / site_visits were removed).
       let siteQ = supabase
-        .from('master_sites')
-        .select(`
-          id, name, locality, latitude, longitude,
-          hubs!hub_id(name)
-        `)
+        .from('sites_registry')
+        .select('id, site_code, site_name, locality_name, hub_id, hub_name, gps_latitude, gps_longitude')
         .limit(2000);
       if (hubId !== 'all') siteQ = siteQ.eq('hub_id', hubId);
       const { data: sitesRaw, error: sErr } = await siteQ;
       if (sErr) throw sErr;
 
-      let visitQ = supabase
-        .from('site_visits')
-        .select('id, site_id, status, visit_date, mmp_file_id, profiles!data_collector_id(full_name)')
+      let entryQ = supabase
+        .from('mmp_site_entries')
+        .select('id, site_code, status, visit_date, mmp_file_id, monitoring_by')
         .order('visit_date', { ascending: false })
         .limit(5000);
-      if (cycleId !== 'all') visitQ = visitQ.eq('mmp_file_id', cycleId);
-      const { data: visitsRaw } = await visitQ;
+      if (cycleId !== 'all') entryQ = entryQ.eq('mmp_file_id', cycleId);
+      const { data: entriesRaw } = await entryQ;
 
-      const visitMap: Record<string, typeof visitsRaw extends (infer T)[] | null ? T : never> = {};
-      for (const v of visitsRaw ?? []) {
-        if (!visitMap[v.site_id as string]) visitMap[v.site_id as string] = v as any;
+      const DONE = new Set(['completed', 'submitted', 'wfp_confirmed', 'done', 'visited']);
+      const entryByCode: Record<string, any> = {};
+      for (const e of entriesRaw ?? []) {
+        const code = String((e as any).site_code ?? '').trim().toLowerCase();
+        if (!code || entryByCode[code]) continue;
+        entryByCode[code] = e;
       }
 
       const now = new Date();
       const result: SiteRecord[] = (sitesRaw ?? []).map((s: any) => {
-        const visit = visitMap[s.id];
+        const code = String(s.site_code ?? '').trim().toLowerCase();
+        const entry = code ? entryByCode[code] : undefined;
+        const lat = s.gps_latitude != null ? Number(s.gps_latitude) : null;
+        const lng = s.gps_longitude != null ? Number(s.gps_longitude) : null;
         let status: SiteRecord['visit_status'] = 'unvisited';
-        if (!s.latitude || !s.longitude) status = 'no_gps';
-        else if (visit) {
-          if (visit.status === 'completed') status = 'visited';
-          else if (visit.status === 'postponed') status = 'postponed';
+        if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
+          status = 'no_gps';
+        } else if (entry) {
+          const st = String(entry.status ?? '').toLowerCase().trim();
+          if (DONE.has(st)) status = 'visited';
+          else if (st === 'postponed' || st === 'not_covered') status = 'postponed';
           else {
-            const visitDate = visit.visit_date ? new Date(visit.visit_date) : null;
+            const visitDate = entry.visit_date ? new Date(entry.visit_date) : null;
             status = visitDate && visitDate < now ? 'overdue' : 'unvisited';
           }
         }
         return {
           id: s.id,
-          name: s.name,
-          locality: s.locality ?? null,
-          hub_name: s.hubs?.name ?? null,
-          latitude: s.latitude,
-          longitude: s.longitude,
+          name: s.site_name ?? s.site_code ?? 'Site',
+          locality: s.locality_name ?? null,
+          hub_name: s.hub_name ?? null,
+          latitude: lat,
+          longitude: lng,
           visit_status: status,
-          visit_date: visit?.visit_date ?? null,
-          visit_id: visit?.id ?? null,
+          visit_date: entry?.visit_date ?? null,
+          visit_id: entry?.id ?? null,
           cycle_name: null,
-          data_collector: (visit as any)?.profiles?.full_name ?? null,
+          data_collector: null,
         };
       });
       setSites(result);

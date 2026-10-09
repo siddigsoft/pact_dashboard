@@ -81,9 +81,6 @@
     SidebarMenuItem, 
     SidebarMenuButton,
     SidebarMenuAction,
-    SidebarMenuSub,
-    SidebarMenuSubItem,
-    SidebarMenuSubButton,
     SidebarSeparator,
     SidebarTrigger,
     useSidebar
@@ -121,32 +118,27 @@
   import { toast } from "@/hooks/use-toast";
   import { cn } from "@/lib/utils";
 
-  /** Groups with many links — collapsed by default to reduce visual clutter */
+  /** All top-level sections start collapsed; the active route section auto-expands. */
   const DENSE_COLLAPSED_BY_DEFAULT = new Set([
-    // section parents
-    'workspace-parent', 'programme-parent', 'comms-parent', 'fieldops-parent',
-    'coordination-parent', 'hr-parent', 'crm-parent', 'surveys-parent',
-    'analytics-parent', 'admin-parent', 'help-parent', 'superadmin-parent',
-    'super-admin',
-    'finance-reports',
-    'finance-management',
-    'admin',
-    'hr-people',
+    'workspace-parent', 'programme-parent', 'incentives-parent', 'comms-parent',
+    'fieldops-parent', 'coordination-parent', 'finance-parent', 'accounting-parent',
+    'hr-parent', 'crm-parent', 'surveys-parent', 'analytics-parent', 'admin-parent',
+    'help-parent', 'superadmin-parent',
+    'super-admin', 'finance-reports', 'finance-management', 'admin', 'hr-people',
     'analytics',
-    'finance-parent',
   ]);
 
-  const SIDEBAR_GROUP_SHELL = "py-1 px-2";
+  const SIDEBAR_COLLAPSE_STORAGE_KEY = 'pact-sidebar-collapsed-v2';
+
+  const SIDEBAR_GROUP_SHELL = "py-0.5 px-1.5";
   const SIDEBAR_GROUP_LABEL =
-    "min-h-8 h-auto py-1 px-2.5 text-[11px] leading-snug tracking-wide font-semibold cursor-pointer flex items-center gap-2 rounded-lg transition-colors";
-  // Base class for section headers — individual iconColor overrides the icon hue per-section.
+    "min-h-7 h-auto py-1.5 px-2 text-[11px] leading-none tracking-wide font-semibold uppercase cursor-pointer flex items-center gap-2 rounded-md transition-colors duration-150";
   const SIDEBAR_SECTION_LABEL =
-    "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60";
-  // min-h + h-auto so long labels wrap to a second line instead of truncating
+    "text-foreground/65 hover:text-foreground hover:bg-muted/70";
   const SIDEBAR_NAV_ITEM =
-    "min-h-9 h-auto py-1.5 rounded-lg text-[13px] font-medium leading-snug transition-all duration-200";
-  const SIDEBAR_NAV_SUB_ITEM =
-    "min-h-8 h-auto py-1 rounded-md text-[12px] font-medium leading-snug transition-all duration-200";
+    "min-h-8 h-auto py-1.5 rounded-md text-[13px] font-medium leading-snug transition-colors duration-150";
+  const SIDEBAR_ICON_MUTED = "text-foreground/50";
+  const SIDEBAR_ICON_ACTIVE = "text-primary";
 
   const isNavPathActive = (pathname: string, search: string, url: string) => {
     const [base, query] = url.split('?');
@@ -255,20 +247,19 @@
           tooltip={item.title}
           className={cn(
             SIDEBAR_NAV_ITEM,
-            isActive &&
-              "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 font-semibold"
+            isActive
+              ? "bg-primary/10 text-primary font-semibold"
+              : "text-foreground/85 hover:bg-muted/80",
           )}
         >
           <Link to={item.url} className="flex items-center gap-2.5 pl-4" data-testid={`nav-favorite-${item.id}`}>
             <item.icon
               className={cn(
                 "h-4 w-4 shrink-0",
-                isActive
-                  ? "text-amber-700 dark:text-amber-300"
-                  : "text-amber-600 dark:text-amber-400"
+                isActive ? "text-primary" : "text-amber-600 dark:text-amber-400",
               )}
             />
-            <span className="flex-1 min-w-0">{item.title}</span>
+            <span className="flex-1 min-w-0 truncate">{item.title}</span>
           </Link>
         </SidebarMenuButton>
         <SidebarMenuAction
@@ -492,23 +483,26 @@
     if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: myMoneyLabel, order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
 
     const approvalItems: MenuGroup['items'] = [];
-    if (!isHidden('/approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM || isCountryDirector || isSeniorManagement)) {
+    // Prefer Approvals Hub as the single door; keep standalone trackers that are not hub tabs.
+    const canSeeApprovalsHub = isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM || isCountryDirector || isSeniorManagement;
+    if (!isHidden('/approvals') && canSeeApprovalsHub) {
       approvalItems.push({ id: 'approvals-hub', title: "Approvals Hub", url: "/approvals", icon: Inbox, priority: 0, isPinned: isPinned('/approvals') });
-    }
-    if (!isHidden('/supervisor-approvals') && canSeePath('/supervisor-approvals', defaultRole)) {
-      approvalItems.push({ id: 'supervisor-approvals', title: "Tier 1 Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 1, isPinned: isPinned('/supervisor-approvals') });
-    }
-    if (!isHidden('/withdrawal-approval') && canSeePath('/withdrawal-approval', defaultRole)) {
-      approvalItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/withdrawal-approval') });
+    } else {
+      if (!isHidden('/supervisor-approvals') && canSeePath('/supervisor-approvals', defaultRole)) {
+        approvalItems.push({ id: 'supervisor-approvals', title: "Tier 1 Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 1, isPinned: isPinned('/supervisor-approvals') });
+      }
+      if (!isHidden('/withdrawal-approval') && canSeePath('/withdrawal-approval', defaultRole)) {
+        approvalItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/withdrawal-approval') });
+      }
+      if (!isHidden('/finance-approval') && canSeePath('/finance-approval', defaultRole)) {
+        approvalItems.push({ id: 'finance-approval', title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4, isPinned: isPinned('/finance-approval') });
+      }
     }
     if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isCountryDirector || isSeniorManagement)) {
       approvalItems.push({ id: 'down-payment-approval', title: "Down-Payment Tracker", url: "/down-payment-approval", icon: DollarSign, priority: 3, isPinned: isPinned('/down-payment-approval') });
     }
     if (!isHidden('/field-payments') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       approvalItems.push({ id: 'field-payments', title: "Field Payments Centre", url: "/field-payments", icon: Receipt, priority: 3.5, isPinned: isPinned('/field-payments') });
-    }
-    if (!isHidden('/finance-approval') && canSeePath('/finance-approval', defaultRole)) {
-      approvalItems.push({ id: 'finance-approval', title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4, isPinned: isPinned('/finance-approval') });
     }
     if (approvalItems.length) groups.push({ id: 'finance-approvals', label: "Approvals", order: 5.2, items: approvalItems, parentGroup: 'finance' } as any);
 
@@ -802,7 +796,7 @@
 
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
       try {
-        const stored = localStorage.getItem('pact-sidebar-collapsed');
+        const stored = localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY);
         if (stored !== null) {
           const parsed: string[] = JSON.parse(stored);
           return new Set(parsed);
@@ -1165,12 +1159,12 @@
         } else {
           next.add(groupId);
         }
-        try { localStorage.setItem('pact-sidebar-collapsed', JSON.stringify([...next])); } catch {}
+        try { localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, JSON.stringify([...next])); } catch {}
         return next;
       });
     };
 
-    // Keep the section for the current page expanded
+    // Keep only the section for the current page expanded
     useEffect(() => {
       if (!menuGroups.length) return;
       const toExpand = new Set<string>();
@@ -1190,7 +1184,7 @@
           if (next.has(id)) { next.delete(id); changed = true; }
         });
         if (!changed) return prev;
-        try { localStorage.setItem('pact-sidebar-collapsed', JSON.stringify([...next])); } catch {}
+        try { localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, JSON.stringify([...next])); } catch {}
         return next;
       });
     }, [pathname, menuGroups]);
@@ -1278,28 +1272,26 @@
 
     return (
       <>
-        <Sidebar collapsible="offcanvas" className="border-r border-slate-200/80 bg-white dark:border-gray-800 dark:bg-slate-950">
+        <Sidebar collapsible="offcanvas" className="border-r border-border bg-card dark:bg-slate-950">
 
-        {/* h-14 matches the Navbar so the logo sits on the header's baseline. No
-            border-b: the Navbar's rule stops at the sidebar divider, leaving this
-            one unbroken full-height panel — the Workspace Hub's connected look. */}
+        {/* h-14 matches the Navbar so the logo sits on the header's baseline. */}
         <SidebarHeader className="px-3 py-0">
           <div className="flex h-14 items-center gap-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
             <img src={Logo} alt="PACT Logo" className="h-8 w-8 shrink-0 object-contain" />
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate group-data-[collapsible=icon]:hidden">
+            <span className="text-sm font-semibold tracking-tight text-foreground truncate group-data-[collapsible=icon]:hidden">
               PACT
             </span>
             <SidebarTrigger
-              className="ml-auto h-7 w-7 shrink-0 rounded-md text-slate-500 hover:text-slate-700 dark:text-slate-400 group-data-[collapsible=icon]:hidden"
+              className="ml-auto h-7 w-7 shrink-0 rounded-md text-foreground/55 hover:text-foreground group-data-[collapsible=icon]:hidden"
               data-testid="button-sidebar-trigger"
             />
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="px-2 pt-3 pb-2 gap-0.5">
+        <SidebarContent className="px-2 pt-2 pb-2 gap-0">
           {favoriteItems.length > 0 && (
             <Collapsible open={!isFavoritesCollapsed}>
-              <SidebarGroup className={cn(SIDEBAR_GROUP_SHELL, "pb-2")}>
+              <SidebarGroup className={cn(SIDEBAR_GROUP_SHELL, "pb-1")}>
                 <CollapsibleTrigger asChild>
                   <SidebarGroupLabel
                     className={cn(SIDEBAR_GROUP_LABEL, SIDEBAR_SECTION_LABEL)}
@@ -1312,13 +1304,13 @@
                   >
                     <ChevronDown
                       className={cn(
-                        "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                        "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
                         isFavoritesCollapsed && "-rotate-90"
                       )}
                     />
                     <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500 shrink-0" />
-                    <span className="flex-1 truncate">Favorites</span>
-                    <span className="text-[10px] font-normal tabular-nums opacity-60">{favoriteItems.length}</span>
+                    <span className="flex-1 truncate normal-case tracking-normal">Favorites</span>
+                    <span className="text-[10px] font-normal tabular-nums text-foreground/40">{favoriteItems.length}</span>
                   </SidebarGroupLabel>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -1348,24 +1340,24 @@
           )}
 
           {(() => {
-            // ── Section config: parentGroup value → display config ──────────────
-            type SectionCfg = { label: string; Icon: React.ElementType; labelClass: string; iconColor: string };
+            // Section accents: one quiet hue each for wayfinding, not decoration
+            type SectionCfg = { label: string; Icon: React.ElementType; iconColor: string };
             const SECTION_CFG: Record<string, SectionCfg> = {
-              'workspace':     { label: 'My Workspace',             Icon: LayoutDashboard, labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-indigo-500 dark:text-indigo-400'  },
-              'programme':     { label: 'Programme Management',     Icon: FolderKanban,    labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-blue-500 dark:text-blue-400'      },
-              'incentives':    { label: 'Incentive Bonuses',        Icon: Award,           labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-amber-500 dark:text-amber-400'    },
-              'comms':         { label: 'Communication',            Icon: MessageSquare,   labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-emerald-500 dark:text-emerald-400'},
-              'fieldops':      { label: 'Field Operations',         Icon: Activity,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-orange-500 dark:text-orange-400'  },
-              'coordination':  { label: 'Coordination & Oversight', Icon: Network,         labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-purple-500 dark:text-purple-400'  },
-              'finance':       { label: 'Payments & Finance',       Icon: Banknote,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-green-500 dark:text-green-400'    },
-              'accounting':    { label: 'Accounting',               Icon: BookOpen,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-teal-500 dark:text-teal-400'      },
-              'hr':            { label: 'HR & People',              Icon: Users,           labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-pink-500 dark:text-pink-400'      },
-              'crm':           { label: 'CRM',                      Icon: Handshake,       labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-violet-500 dark:text-violet-400'  },
-              'surveys':       { label: 'Surveys',                  Icon: ClipboardList,   labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-cyan-500 dark:text-cyan-400'      },
-              'analytics':     { label: 'Analytics & Reports',      Icon: BarChart3,       labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-purple-500 dark:text-purple-400'  },
-              'admin':         { label: 'Administration',           Icon: Settings,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-slate-500 dark:text-slate-400'    },
-              'help':          { label: 'Help & Support',           Icon: HelpCircle,      labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-slate-500 dark:text-slate-400'    },
-              'superadmin':    { label: 'Super Admin',              Icon: ShieldCheck,     labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-rose-500 dark:text-rose-400'      },
+              'workspace':     { label: 'Workspace',      Icon: LayoutDashboard, iconColor: 'text-sky-600 dark:text-sky-400' },
+              'programme':     { label: 'Programme',      Icon: FolderKanban,    iconColor: 'text-blue-600 dark:text-blue-400' },
+              'incentives':    { label: 'Bonuses',        Icon: Award,           iconColor: 'text-amber-600 dark:text-amber-400' },
+              'comms':         { label: 'Communication',  Icon: MessageSquare,   iconColor: 'text-emerald-600 dark:text-emerald-400' },
+              'fieldops':      { label: 'Field Ops',      Icon: Activity,        iconColor: 'text-orange-600 dark:text-orange-400' },
+              'coordination':  { label: 'Coordination',   Icon: Network,         iconColor: 'text-violet-600 dark:text-violet-400' },
+              'finance':       { label: 'Finance',        Icon: Banknote,        iconColor: 'text-green-700 dark:text-green-400' },
+              'accounting':    { label: 'Accounting',     Icon: BookOpen,        iconColor: 'text-teal-700 dark:text-teal-400' },
+              'hr':            { label: 'HR & People',    Icon: Users,           iconColor: 'text-rose-600 dark:text-rose-400' },
+              'crm':           { label: 'CRM',            Icon: Handshake,       iconColor: 'text-indigo-600 dark:text-indigo-400' },
+              'surveys':       { label: 'Surveys',        Icon: ClipboardList,   iconColor: 'text-cyan-700 dark:text-cyan-400' },
+              'analytics':     { label: 'Analytics',      Icon: BarChart3,       iconColor: 'text-fuchsia-700 dark:text-fuchsia-400' },
+              'admin':         { label: 'Administration', Icon: Settings,        iconColor: 'text-slate-600 dark:text-slate-300' },
+              'help':          { label: 'Help',           Icon: HelpCircle,      iconColor: 'text-slate-500 dark:text-slate-400' },
+              'superadmin':    { label: 'Super Admin',    Icon: ShieldCheck,     iconColor: 'text-red-600 dark:text-red-400' },
             };
 
             // Group sub-groups by parentGroup; track min order for sorting sections
@@ -1385,7 +1377,7 @@
               count > 0 ? (
                 <span
                   className={cn(
-                    "ml-auto shrink-0 inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-white text-[9px] font-bold leading-none",
+                    "ml-auto shrink-0 inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-md text-[10px] font-semibold tabular-nums leading-none",
                     className
                   )}
                   data-testid={testId}
@@ -1394,10 +1386,9 @@
                 </span>
               ) : null;
 
-            // Two-tier badge vocabulary: red = a queue waiting on the user's
-            // action, blue = informational unread count. One hue per meaning.
-            const BADGE_ACTION = "bg-red-500";
-            const BADGE_INFO = "bg-blue-600";
+            // Action queue vs informational unread
+            const BADGE_ACTION = "bg-red-500 text-white";
+            const BADGE_INFO = "bg-sky-600 text-white";
             const renderItemBadge = (itemId: string) => {
               switch (itemId) {
                 case 'approvals-hub':
@@ -1434,177 +1425,102 @@
               }
             };
 
-            const renderMenuItems = (items: MenuGroup['items'], nested = false, iconColor = 'text-slate-500 dark:text-slate-400') => {
-              if (nested) {
-                return (
-                  <SidebarMenuSub className="mx-2 gap-0.5 border-l border-slate-200/80 dark:border-gray-700">
-                    {items.map((item) => {
-                      const isActive = isNavPathActive(pathname, search, item.url);
-                      const isItemFavorite = isFavorite(item.url);
-                      return (
-                        <SidebarMenuSubItem key={item.id} className="group/subitem relative">
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={isActive}
+            // Flat list under each section — no nested Personal/Team/Tools accordions
+            const renderMenuItems = (items: MenuGroup['items'], sectionIconColor = SIDEBAR_ICON_MUTED) => (
+              <SidebarMenu className="gap-0.5 px-0.5">
+                {items.map((item, itemIndex) => {
+                  const isActive = isNavPathActive(pathname, search, item.url);
+                  const isItemFavorite = isFavorite(item.url);
+                  return (
+                    <SidebarMenuItem key={item.id} index={itemIndex}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        tooltip={item.title}
+                        className={cn(
+                          SIDEBAR_NAV_ITEM,
+                          isActive
+                            ? "bg-primary/10 text-primary font-semibold"
+                            : "text-foreground/85 hover:bg-muted/80 hover:text-foreground",
+                        )}
+                      >
+                        <Link to={item.url} className="flex items-center gap-2.5" data-testid={`nav-link-${item.id}`}>
+                          <item.icon
                             className={cn(
-                              SIDEBAR_NAV_SUB_ITEM,
-                              isActive &&
-                                "bg-blue-100 text-blue-700 dark:bg-blue-900/70 dark:text-blue-300 font-semibold"
-                            )}
-                          >
-                            <Link to={item.url} className="flex items-center gap-2 pr-6" data-testid={`nav-link-${item.id}`}>
-                              <item.icon
-                                className={cn(
-                                  "h-3.5 w-3.5 shrink-0",
-                                  isActive
-                                    ? "text-blue-700 dark:text-blue-300"
-                                    : iconColor
-                                )}
-                              />
-                              <span className="flex-1">{item.title}</span>
-                              {renderItemBadge(item.id)}
-                            </Link>
-                          </SidebarMenuSubButton>
-                          <button
-                            className={cn(
-                              "absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center rounded transition-opacity",
-                              isItemFavorite
-                                ? "opacity-100"
-                                : "opacity-0 group-hover/subitem:opacity-100"
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              toggleFavorite(item.url, item.title, item.icon?.name || 'Star');
-                            }}
-                            aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                            data-testid={`button-favorite-${item.id}`}
-                          >
-                            <Star
-                              className={cn(
-                                "h-3 w-3",
-                                isItemFavorite
-                                  ? "text-amber-500 fill-amber-500"
-                                  : "text-muted-foreground"
-                              )}
-                            />
-                          </button>
-                        </SidebarMenuSubItem>
-                      );
-                    })}
-                  </SidebarMenuSub>
-                );
-              }
-
-              return (
-                <SidebarMenu className="gap-0.5 px-0.5">
-                  {items.map((item, itemIndex) => {
-                    const isActive = isNavPathActive(pathname, search, item.url);
-                    const isItemFavorite = isFavorite(item.url);
-                    return (
-                      <SidebarMenuItem key={item.id} index={itemIndex}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={isActive}
-                          tooltip={item.title}
-                          className={cn(
-                            SIDEBAR_NAV_ITEM,
-                            isActive &&
-                              "bg-blue-100 text-blue-700 dark:bg-blue-900/70 dark:text-blue-300 font-semibold shadow-sm border border-blue-200/60 dark:border-blue-800/50"
-                          )}
-                        >
-                          <Link to={item.url} className="flex items-center gap-2.5" data-testid={`nav-link-${item.id}`}>
-                            <item.icon
-                              className={cn(
-                                "h-4 w-4 shrink-0",
-                                isActive
-                                  ? "text-blue-700 dark:text-blue-300"
-                                  : iconColor
-                              )}
-                            />
-                            <span className="flex-1">{item.title}</span>
-                            {renderItemBadge(item.id)}
-                          </Link>
-                        </SidebarMenuButton>
-                        <SidebarMenuAction
-                          showOnHover={!isItemFavorite}
-                          className={isItemFavorite ? "opacity-100" : undefined}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFavorite(item.url, item.title, item.icon?.name || 'Star');
-                          }}
-                          aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                          data-testid={`button-favorite-${item.id}`}
-                        >
-                          <Star
-                            className={cn(
-                              "h-3.5 w-3.5",
-                              isItemFavorite
-                                ? "text-amber-500 fill-amber-500"
-                                : "text-muted-foreground"
+                              "h-4 w-4 shrink-0",
+                              isActive ? SIDEBAR_ICON_ACTIVE : sectionIconColor,
                             )}
                           />
-                        </SidebarMenuAction>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              );
-            };
-
-            const renderSubGroups = (subGroups: SubGroup[], iconColor = 'text-slate-500 dark:text-slate-400') =>
-              subGroups.sort((a, b) => a.order - b.order).map(subGroup => {
-                const isSubCollapsed = collapsedGroups.has(subGroup.id);
-                return (
-                  <Collapsible key={subGroup.id} open={!isSubCollapsed}>
-                    <CollapsibleTrigger asChild>
-                      <button
-                        type="button"
-                        className="w-full min-h-7 py-1 px-3 text-[11px] font-medium leading-snug text-muted-foreground cursor-pointer flex items-center gap-2 rounded-md hover:bg-muted/50 transition-colors"
-                        onClick={() => toggleGroupCollapse(subGroup.id)}
-                        data-testid={`group-label-${subGroup.id}`}
+                          <span className="flex-1 truncate">{item.title}</span>
+                          {renderItemBadge(item.id)}
+                        </Link>
+                      </SidebarMenuButton>
+                      <SidebarMenuAction
+                        showOnHover={!isItemFavorite}
+                        className={isItemFavorite ? "opacity-100" : undefined}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(item.url, item.title, item.icon?.name || 'Star');
+                        }}
+                        aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                        data-testid={`button-favorite-${item.id}`}
                       >
-                        <ChevronDown
+                        <Star
                           className={cn(
-                            "h-3 w-3 shrink-0 transition-transform duration-200",
-                            isSubCollapsed && "-rotate-90"
+                            "h-3.5 w-3.5",
+                            isItemFavorite
+                              ? "text-amber-500 fill-amber-500"
+                              : "text-muted-foreground"
                           )}
                         />
-                        <span className="flex-1 text-left">{subGroup.label}</span>
-                        <span className="text-[10px] tabular-nums opacity-50">{subGroup.items.length}</span>
-                      </button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      {renderMenuItems(subGroup.items, true, iconColor)}
-                    </CollapsibleContent>
-                  </Collapsible>
-                );
-              });
+                      </SidebarMenuAction>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            );
 
-            // ── Generic section renderer (works for all sections) ──────────────
+            const flattenSectionItems = (subGroups: SubGroup[]): MenuGroup['items'] => {
+              const seen = new Set<string>();
+              const flat: MenuGroup['items'] = [];
+              [...subGroups].sort((a, b) => a.order - b.order).forEach(sg => {
+                [...sg.items].sort((a, b) => a.priority - b.priority).forEach(item => {
+                  if (seen.has(item.url)) return;
+                  seen.add(item.url);
+                  flat.push(item);
+                });
+              });
+              return flat;
+            };
+
             const renderSection = (parentGroupId: string, subGroups: SubGroup[], keySuffix = '') => {
               const cfg = SECTION_CFG[parentGroupId];
               if (!cfg || subGroups.length === 0) return null;
               const parentKey = `${parentGroupId}-parent`;
               const isCollapsed = collapsedGroups.has(parentKey);
-              const { label, Icon, labelClass, iconColor } = cfg;
+              const { label, Icon, iconColor } = cfg;
+              const items = flattenSectionItems(subGroups);
+              if (items.length === 0) return null;
               return (
                 <Collapsible key={`${parentKey}${keySuffix}`} open={!isCollapsed}>
                   <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
                     <CollapsibleTrigger asChild>
                       <SidebarGroupLabel
-                        className={cn(SIDEBAR_GROUP_LABEL, labelClass)}
+                        className={cn(SIDEBAR_GROUP_LABEL, SIDEBAR_SECTION_LABEL)}
                         onClick={() => toggleGroupCollapse(parentKey)}
                         data-testid={`group-label-${parentKey}${keySuffix}`}
                       >
-                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isCollapsed && "-rotate-90")} />
+                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-150", isCollapsed && "-rotate-90")} />
                         <Icon className={cn("h-3.5 w-3.5 shrink-0", iconColor)} />
-                        <span className="flex-1">{label}</span>
+                        <span className="flex-1 truncate">{label}</span>
+                        <span className="text-[10px] font-normal normal-case tracking-normal tabular-nums text-foreground/40">
+                          {items.length}
+                        </span>
                       </SidebarGroupLabel>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <SidebarGroupContent className="space-y-1 pt-0.5">
-                        {renderSubGroups(subGroups, iconColor)}
+                      <SidebarGroupContent className="pt-0.5 pb-1">
+                        {renderMenuItems(items, iconColor)}
                       </SidebarGroupContent>
                     </CollapsibleContent>
                   </SidebarGroup>
@@ -1619,7 +1535,7 @@
           })()}
         </SidebarContent>
 
-        <SidebarFooter className="border-t border-slate-200/70 px-3 py-3">
+        <SidebarFooter className="border-t border-border px-3 py-3">
           {/* View As picker — Super Admins only; always uses real SA status */}
           {realIsSuperAdmin && (
             <div className="mb-2 group-data-[collapsible=icon]:hidden">
@@ -1667,13 +1583,13 @@
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-2.5 px-2.5 py-2 h-11 hover:bg-blue-50 dark:hover:bg-gray-800 rounded-xl group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+                  className="w-full justify-start gap-2.5 px-2.5 py-2 h-11 hover:bg-primary/5 rounded-lg group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
                   data-testid="button-user-menu"
                 >
                   <div className="relative shrink-0">
                     <Avatar className="h-7 w-7">
                       <AvatarImage src={currentUser.avatar} alt={currentUser.fullName || currentUser.name} />
-                      <AvatarFallback className="bg-blue-600 text-white text-[10px]">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-[10px]">
                         {getInitials(currentUser.fullName || currentUser.name)}
                       </AvatarFallback>
                     </Avatar>
