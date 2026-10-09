@@ -263,8 +263,7 @@ import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 import SessionManager from './components/layout/SessionManager';
 import { ActivityTrackingProvider } from './context/activity/ActivityTrackingContext';
-import EmailPreviewPage from './pages/EmailPreviewPage';
-import StaffOnboarding from './pages/StaffOnboarding';
+const EmailPreviewPage = lazy(() => import('./pages/EmailPreviewPage'));
 
 
 // Loading component for Suspense fallback

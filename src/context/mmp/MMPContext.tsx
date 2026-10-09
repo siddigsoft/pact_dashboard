@@ -172,8 +172,11 @@ export const useMMPProvider = () => {
   }, [queryClient]);
 
   const refreshMMPFiles = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: mmpQueryKeys.files() });
-    await queryClient.invalidateQueries({ queryKey: mmpQueryKeys.siteEntryCounts() });
+    // Start both refreshes together; callers need the updated file list, while
+    // the eight status-count requests can finish after the action completes.
+    const filesRefresh = queryClient.invalidateQueries({ queryKey: mmpQueryKeys.files() });
+    void queryClient.invalidateQueries({ queryKey: mmpQueryKeys.siteEntryCounts() });
+    await filesRefresh;
   }, [queryClient]);
 
   // Load site entries using a single bulk IN query — much faster than one query per MMP

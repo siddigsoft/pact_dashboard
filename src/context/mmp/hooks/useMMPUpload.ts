@@ -1,7 +1,6 @@
 import { MMPFile } from '@/types';
-import { CSVValidationError } from '@/utils/csvValidator';
+import type { CSVValidationError } from '@/utils/csvValidator';
 import { toast } from 'sonner';
-import { uploadMMPFile } from '@/utils/mmpFileUpload';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { supabase } from '@/integrations/supabase/client';
 import { ensureValidSession } from '@/lib/session-health';
@@ -30,6 +29,7 @@ export const useMMPUpload = (addMMPFile: (mmp: MMPFile) => void) => {
 
       const normalized = typeof metadata === 'string' ? { projectId: metadata } : metadata;
 
+      const { uploadMMPFile } = await import('@/utils/mmpFileUpload');
       const { success, mmpData, error, validationReport, validationErrors, validationWarnings } = await uploadMMPFile(file, normalized, onProgress);
 
       if (!success || error) {

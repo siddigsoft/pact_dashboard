@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { MMPFile } from '@/types';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { uploadMMPFile } from '@/utils/mmpFileUpload';
 import { logDeletionAudit } from '@/services/mmpAudit.service';
 import { ensureValidSession } from '@/lib/session-health';
 import { withTimeout } from '@/utils/promise-with-timeout';
