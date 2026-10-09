@@ -2,7 +2,7 @@ const CACHE_NAME = 'pact-v8';
 const OFFLINE_URL = '/offline.html';
 const STATIC_CACHE = 'pact-static-v6';
 const API_CACHE = 'pact-api-v6';
-const DYNAMIC_CACHE = 'pact-dynamic-v5';
+const DYNAMIC_CACHE = 'pact-dynamic-v6';
 
 const SW_DEBUG_HOSTS = ['localhost', '127.0.0.1'];
 const SW_DEBUG = SW_DEBUG_HOSTS.includes(self.location.hostname) || self.location.hostname.endsWith('.local');
@@ -489,8 +489,11 @@ async function networkFirstWithCache(request, cacheName) {
   try {
     const networkResponse = await fetch(request);
     
-    // Cache API only supports GET Request objects as keys
-    if (networkResponse.ok && request.method === 'GET') {
+    // Cache API only supports GET Request objects as keys.
+    // Never store an HTML fallback page under a script/style URL.
+    const isHtmlForAsset = /\.(js|css)(\?.*)?$/.test(new URL(request.url).pathname)
+      && (networkResponse.headers.get('content-type') || '').includes('text/html');
+    if (networkResponse.ok && request.method === 'GET' && !isHtmlForAsset) {
       try {
         const responseToCache = networkResponse.clone();
         const headers = new Headers(responseToCache.headers);

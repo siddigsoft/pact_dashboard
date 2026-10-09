@@ -1,9 +1,12 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 
 const CHUNK_RELOAD_KEY = 'pact_chunk_reload_ts';
+/** Minimum gap between automatic reloads, so a genuinely broken chunk cannot cause a refresh loop. */
+const RELOAD_COOLDOWN_MS = 60_000;
 
+// "reading 'default'" is what React.lazy throws when Vite's preload helper resolves a failed import to undefined.
 const CHUNK_ERROR_PATTERN =
-  /loading chunk|failed to fetch dynamically imported module|importing a module script failed|chunkloaderror/i;
+  /loading chunk|failed to fetch dynamically imported module|importing a module script failed|chunkloaderror|error loading dynamically imported module|unable to preload css|reading 'default'/i;
 
 export function isChunkLoadError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error ?? '');
@@ -11,17 +14,18 @@ export function isChunkLoadError(error: unknown): boolean {
 }
 
 /**
- * Reload once per browser session so stale post-deploy chunks pick up the new
- * manifest without trapping users in a refresh loop when the underlying issue
- * is not a stale chunk.
+ * Reload so stale post-deploy chunks pick up the new manifest, at most once per
+ * cooldown window so users are not trapped in a refresh loop when the underlying
+ * issue is not a stale chunk.
  * Returns true when a reload was triggered.
  */
 export function reloadForStaleChunk(): boolean {
   if (typeof window === 'undefined') return false;
 
-  if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) return false;
+  const last = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY)) || 0;
+  if (Date.now() - last < RELOAD_COOLDOWN_MS) return false;
 
-  sessionStorage.setItem(CHUNK_RELOAD_KEY, 'attempted');
+  sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
   window.location.reload();
   return true;
 }
@@ -32,9 +36,10 @@ export function reloadForStaleChunk(): boolean {
 export function setupChunkLoadRecovery(): void {
   if (typeof window === 'undefined') return;
 
+  // preventDefault makes Vite resolve the import to undefined, so only suppress it when a reload is under way;
+  // otherwise let the real error reach the ErrorBoundary's recovery screen.
   window.addEventListener('vite:preloadError', (event: Event) => {
-    event.preventDefault();
-    reloadForStaleChunk();
+    if (reloadForStaleChunk()) event.preventDefault();
   });
 
   window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
@@ -54,7 +59,9 @@ export function lazyWithRetry<T extends ComponentType<unknown>>(
 ): LazyExoticComponent<T> {
   return lazy(async () => {
     try {
-      return await importer();
+      const mod = await importer();
+      if (!mod?.default) throw new Error('Failed to fetch dynamically imported module');
+      return mod;
     } catch (error) {
       if (!isChunkLoadError(error)) throw error;
 
