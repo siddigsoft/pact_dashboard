@@ -341,8 +341,8 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin','ict'] },
   { slug:'changelog',           label:'Changelog',              path:'/changelog',              icon:History, group:'Administration',
     roles:['superAdmin','admin','ict'] },
-  { slug:'page-access',         label:'Page Access Control',    path:'/page-access',            icon:Lock, group:'Administration',
-    roles:['superAdmin'] },
+  { slug:'page-access',         label:'Page Access Control',    path:'/super-admin-hub?tab=roles', icon:Lock, group:'Administration',
+    roles:['superAdmin'], note:'Legacy slug; redirects to Roles. Per-user exceptions UI removed.' },
   { slug:'system-diagrams',     label:'System Diagrams',        path:'/system-diagrams',        icon:GitBranch, group:'Administration',
     roles:['superAdmin'] },
   { slug:'helpline',            label:'Helpline',               path:'/helpline',               icon:Phone, group:'Administration',
@@ -370,8 +370,6 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin'], note:'Live URL for Approval Dashboard. Linked with Finance Approval Dashboard — grants cascade together.' },
 
   // Permissions & Audit section
-  { slug:'sa-permissions-mgmt', label:'User Access (SA)',       path:'/super-admin-hub?tab=user-access', icon:Lock, group:'Super Admin',
-    roles:['superAdmin'], note:'Canonical Users workspace. Legacy Screen Permissions and Page Grants URLs redirect here.' },
   { slug:'sa-audit-logs',       label:'System Audit Logs (SA)', path:'/super-admin-hub?tab=audit-logs', icon:ScrollText, group:'Super Admin',
     roles:['superAdmin','admin'] },
   { slug:'sa-button-registry',  label:'Button Registry',        path:'/super-admin-hub?tab=button-registry', icon:LayoutList, group:'Super Admin',

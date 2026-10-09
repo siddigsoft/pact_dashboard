@@ -1,4 +1,4 @@
-// Compatibility exports for historical imports. All editable access UI lives in UnifiedAccessManager.
+// Compatibility exports for historical imports. Editable access UI lives in Role Management / Roles.
 import { Navigate } from 'react-router-dom';
 import { normalizeRole } from '@/utils/roleMapping';
 import type { PageDef } from '@/lib/access-registry';
@@ -141,5 +141,5 @@ export interface PageOverride {
 }
 
 export default function PageAccessControl() {
-  return <Navigate to="/super-admin-hub?tab=user-access" replace />;
+  return <Navigate to="/super-admin-hub?tab=roles" replace />;
 }

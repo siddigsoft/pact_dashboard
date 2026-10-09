@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, ShieldCheck, Activity, HeartPulse, ClipboardCheck,
   Lock, ScrollText, Mail, Eye, Smartphone, PenTool, PhoneCall,
-  RefreshCw, ScanLine, Database, Info, LayoutGrid, Shield, KeyRound,
+  RefreshCw, ScanLine, Database, Info, LayoutGrid, Shield,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
@@ -25,12 +25,11 @@ const TransactionScannerPanel = lazy(() => import('./TransactionScanner'));
 const DataManagementPanel     = lazy(() => import('../components/superAdmin/SuperAdminDataManagement').then(m => ({ default: m.SuperAdminDataManagement })));
 const ButtonRegistryPanel     = lazy(() => import('../components/superAdmin/SuperAdminButtonRegistry').then(m => ({ default: m.SuperAdminButtonRegistry })));
 const RolesPanel              = lazy(() => import('./RoleManagement'));
-const UserAccessPanel         = lazy(() => import('../components/superAdmin/InlineAccessManager'));
 
 type SASection = 'monitoring' | 'permissions' | 'email' | 'mobile' | 'data';
 type SATab =
   | 'super-admin' | 'system-monitoring' | 'cycle-health' | 'approval-dashboard'
-  | 'roles' | 'user-access' | 'audit-logs' | 'button-registry'
+  | 'roles' | 'audit-logs' | 'button-registry'
   | 'email-tracking' | 'email-management' | 'email-preview'
   | 'mobile-help-articles' | 'mobile-signatures' | 'mobile-call-scheduling' | 'mobile-document-sync'
   | 'transaction-scanner' | 'data-management';
@@ -63,15 +62,11 @@ const SECTIONS: SectionDef[] = [
   },
   {
     id: 'permissions', label: 'Access Management', icon: Lock, color: '#1e3a5f',
-    description: 'One access administration surface — role baselines, user exceptions, pages, actions, data scope, and audit.',
+    description: 'Role baselines, action map, and audit.',
     tabs: [
       {
         id: 'roles', label: 'Roles', icon: Shield,
         description: 'Role baselines — create and edit roles, page defaults, action permissions, and user assignment via transactional upsert.',
-      },
-      {
-        id: 'user-access', label: 'Users', icon: KeyRound,
-        description: 'Per-user exceptions — page access, hub-tab visibility, action overrides, column visibility, and data scope rules.',
       },
       {
         id: 'button-registry', label: 'Actions', icon: LayoutGrid,
@@ -148,7 +143,6 @@ const PanelMap: Record<SATab, React.LazyExoticComponent<any>> = {
   'cycle-health': CycleHealthPanel,
   'approval-dashboard': ApprovalDashboardPanel,
   'roles': RolesPanel,
-  'user-access': UserAccessPanel,
   'audit-logs': AuditLogsPanel,
   'email-tracking': EmailTrackingPanel,
   'email-management': EmailManagementPanel,
@@ -171,10 +165,10 @@ const Spinner = () => (
 export default function SuperAdminHub() {
   const [params, setParams] = useSearchParams();
   const rawTabParam = params.get('tab');
-  // Legacy Screen Permissions / Page Grants tabs → Users (typed overrides).
+  // Retired User Access / legacy permission tabs → Roles.
   const rawTab = (
-    rawTabParam === 'permissions' || rawTabParam === 'page-grants'
-      ? 'user-access'
+    rawTabParam === 'permissions' || rawTabParam === 'page-grants' || rawTabParam === 'user-access'
+      ? 'roles'
       : rawTabParam
   ) as SATab | null;
   const _savedSA = localStorage.getItem('hub_last_tab_super_admin') as SATab | null;

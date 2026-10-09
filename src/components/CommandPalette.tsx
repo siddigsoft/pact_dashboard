@@ -197,7 +197,7 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'Classifications', url: '/classifications', icon: Award, group: 'Administration', keywords: ['class', 'grade'] },
   { title: 'Classification Fees', url: '/classification-fees', icon: DollarSign, group: 'Administration', keywords: ['fee', 'rate'] },
   { title: 'Settings', url: '/settings', icon: Settings, group: 'Administration', keywords: ['config', 'preferences'] },
-  { title: 'Access Management', url: '/super-admin-hub?tab=user-access', icon: ShieldCheck, group: 'Administration', keywords: ['access', 'permission', 'roles', 'users'] },
+  { title: 'Access Management', url: '/super-admin-hub?tab=roles', icon: ShieldCheck, group: 'Administration', keywords: ['access', 'permission', 'roles'] },
   { title: 'Role Perspective Viewer', url: '/role-perspective', icon: ShieldCheck, group: 'Administration', keywords: ['simulate', 'perspective'] },
   { title: 'Task Admin', url: '/task-admin', icon: CheckSquare, group: 'Administration', keywords: ['task', 'admin', 'template'] },
   { title: 'Staff Directory', url: '/admin/staff-profiles', icon: Users, group: 'Administration', keywords: ['staff', 'profiles', 'directory', 'team', 'bank', 'account'] },

@@ -187,7 +187,6 @@ export const HUB_TAB_REGISTRY: HubDef[] = [
         sectionLabel: 'Permissions & Audit',
         tabs: [
           { tabId: 'roles',           label: 'Roles',            description: 'Manage system and custom roles, assign users, and configure permissions.' },
-          { tabId: 'user-access',     label: 'User Access',      description: 'Canonical per-user control of page access, hub tabs, action permissions, and data scope.' },
           { tabId: 'audit-logs',      label: 'Audit Logs',       description: 'Immutable record of all system actions.' },
           { tabId: 'button-registry', label: 'Button Registry',  description: 'Full button and permission map across the entire platform.' },
         ],

@@ -219,7 +219,6 @@ const RoleManagement = () => {
             activeRoleCount={roles.filter(r => r.is_active).length}
             userCount={users.length}
             assignmentCount={assignmentCount}
-            onOpenPeople={() => navigate('/super-admin-hub?tab=user-access')}
             onOpenRoles={() => setActiveRoleTab('roles')}
           />
         </TabsContent>

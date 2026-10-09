@@ -123,7 +123,7 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Edit Role: {role.display_name}</DialogTitle>
           <DialogDescription>
-            Role defaults live here. Per-user exceptions are under Super Admin → User Access.
+            Role defaults live here: pages, tabs, and action permissions for this role.
           </DialogDescription>
         </DialogHeader>
         <p className="text-xs text-muted-foreground -mt-2 mb-1">

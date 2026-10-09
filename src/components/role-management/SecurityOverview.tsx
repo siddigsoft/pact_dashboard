@@ -5,7 +5,6 @@ type SecurityOverviewProps = {
   activeRoleCount: number;
   userCount: number;
   assignmentCount: number;
-  onOpenPeople: () => void;
   onOpenRoles: () => void;
 };
 
@@ -14,7 +13,6 @@ export function SecurityOverview({
   activeRoleCount,
   userCount,
   assignmentCount,
-  onOpenPeople,
   onOpenRoles,
 }: SecurityOverviewProps) {
   return (
@@ -24,11 +22,10 @@ export function SecurityOverview({
           Role baselines
         </p>
         <h2 className="text-xl font-semibold tracking-tight text-slate-800 sm:text-2xl">
-          Edit roles here. Exceptions live elsewhere.
+          Manage role defaults here
         </h2>
         <p className="text-sm leading-6 text-slate-600">
-          Role defaults (permissions, pages, tabs) are managed on the Roles tab.
-          Per-person grants and blocks stay in Super Admin → Users.
+          Permissions, pages, and tabs are set per role on the Roles tab.
         </p>
       </header>
 
@@ -53,14 +50,7 @@ export function SecurityOverview({
         />
       </dl>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <ActionLink title="Roles" detail="Create and edit role baselines." onClick={onOpenRoles} />
-        <ActionLink
-          title="User exceptions"
-          detail="Grant or block one person in Super Admin → Users."
-          onClick={onOpenPeople}
-        />
-      </div>
+      <ActionLink title="Roles" detail="Create and edit role baselines." onClick={onOpenRoles} />
     </div>
   );
 }
@@ -93,7 +83,7 @@ function ActionLink({ title, detail, onClick }: { title: string; detail: string;
     <button
       type="button"
       onClick={onClick}
-      className="group flex items-start justify-between gap-3 rounded-md border border-slate-200 bg-transparent px-4 py-3 text-left transition-colors hover:border-slate-400 hover:bg-slate-50"
+      className="group flex w-full max-w-md items-start justify-between gap-3 rounded-md border border-slate-200 bg-transparent px-4 py-3 text-left transition-colors hover:border-slate-400 hover:bg-slate-50"
     >
       <span>
         <span className="block text-sm font-semibold text-slate-800">{title}</span>

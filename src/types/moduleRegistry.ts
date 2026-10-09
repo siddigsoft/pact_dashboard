@@ -212,11 +212,10 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       },
       {
         page: 'Access Management',
-        route: '/super-admin-hub?tab=user-access',
-        description: 'Authoritative access admin — role baselines and per-user typed overrides (legacy screen JSON retired)',
+        route: '/super-admin-hub?tab=roles',
+        description: 'Authoritative access admin — role baselines (permissions, pages, tabs)',
         actions: [
-          { key: 'permissions:read',     label: 'View Access',     description: 'See effective access and overrides',         resource: 'permissions', action: 'read' },
-          { key: 'permissions:override', label: 'Override Access', description: 'Grant or revoke per-user page/action access',   resource: 'permissions', action: 'override', isSuperAdminOnly: true },
+          { key: 'permissions:read', label: 'View Access', description: 'See role baselines and effective access', resource: 'permissions', action: 'read' },
         ],
       },
       {
@@ -229,11 +228,10 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       },
       {
         page: 'Page Access Control',
-        route: '/page-access',
-        description: 'Grant or restrict page-level access for individual users or role groups',
+        route: '/super-admin-hub?tab=roles',
+        description: 'Legacy entry; page access is managed via role baselines on Roles',
         actions: [
-          { key: 'permissions:read',     label: 'View Page Access',   description: 'See per-user page grants',                resource: 'permissions', action: 'read' },
-          { key: 'permissions:override', label: 'Manage Page Access', description: 'Grant or block page-level access per user', resource: 'permissions', action: 'override', isSuperAdminOnly: true },
+          { key: 'permissions:read', label: 'View Page Access', description: 'See role page defaults', resource: 'permissions', action: 'read' },
         ],
       },
       {
