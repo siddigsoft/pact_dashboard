@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
+import { usePageSlugAccess } from '@/hooks/usePageSlugAccess';
 import { supabase } from '@/integrations/supabase/client';
 import { insertNotificationsToDb } from '@/services/notification-insert';
 import { ensureValidSession } from '@/lib/session-health';
@@ -267,8 +268,8 @@ export default function AdminBroadcastPage() {
   const [draftRestored,     setDraftRestored]     = useState(false);
   const [scheduledDrafts,   setScheduledDrafts]   = useState<any[]>([]);
 
-  const role = (currentUser?.role || '').toLowerCase();
-  const isAdmin = ['admin', 'superadmin', 'ict', 'financialadmin'].includes(role);
+  const { canSeePage, loading: pageAccessLoading } = usePageSlugAccess();
+  const isAdmin = canSeePage('broadcast');
 
   const getPriority = (val: string) => PRIORITY_OPTIONS.find(p => p.value === val) || PRIORITY_OPTIONS[0];
   const getAudience = (val: string) => AUDIENCE_OPTIONS.find(a => a.value === val) || AUDIENCE_OPTIONS[0];
@@ -882,6 +883,10 @@ export default function AdminBroadcastPage() {
     localStorage.setItem(SCHEDULED_KEY, JSON.stringify(updated));
     setScheduledDrafts(updated);
   };
+
+  if (pageAccessLoading) {
+    return <div className="flex items-center justify-center min-h-[400px] text-sm text-muted-foreground">Loading…</div>;
+  }
 
   if (!isAdmin) {
     return (

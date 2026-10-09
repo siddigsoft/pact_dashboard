@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, MessageSquare, Phone, FileSignature, Megaphone,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
+import { usePageSlugAccess } from '@/hooks/usePageSlugAccess';
 
 const ChatPanel       = lazy(() => import('./Chat'));
 const CallsPanel      = lazy(() => import('./Calls'));
@@ -55,7 +56,13 @@ const SECTIONS: SectionDef[] = [
 ];
 
 const LS_KEY = 'hub_last_tab_communication';
-const ALL_TABS = SECTIONS.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id as CommSection, sectionColor: s.color })));
+
+/** Tabs backed by their own Access defaults page; unlisted tabs are open to everyone with the hub. */
+const TAB_PAGE_SLUG: Partial<Record<CommTab, string>> = {
+  signatures: 'signatures',
+  broadcast: 'broadcast',
+  whatsapp: 'whatsapp-admin',
+};
 
 const PanelMap: Record<CommTab, React.LazyExoticComponent<any>> = {
   chat:       ChatPanel,
@@ -76,8 +83,22 @@ function PanelLoader() {
 
 export default function CommunicationHub() {
   const [params, setParams] = useSearchParams();
+  const { canSeePage, loading: accessLoading } = usePageSlugAccess();
+
+  const visibleSections = useMemo(
+    () => SECTIONS
+      .map(s => ({ ...s, tabs: s.tabs.filter(t => !TAB_PAGE_SLUG[t.id] || canSeePage(TAB_PAGE_SLUG[t.id]!)) }))
+      .filter(s => s.tabs.length > 0),
+    [canSeePage],
+  );
+  const ALL_TABS = useMemo(
+    () => visibleSections.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id as CommSection, sectionColor: s.color }))),
+    [visibleSections],
+  );
+
   const rawTab = params.get('tab') ?? '';
   const tabDef = ALL_TABS.find(t => t.id === rawTab);
+  const rawTabPending = accessLoading && !!TAB_PAGE_SLUG[rawTab as CommTab];
 
   const getDefaultTab = (): CommTab | null => {
     const saved = localStorage.getItem(LS_KEY) as CommTab | null;
@@ -85,11 +106,14 @@ export default function CommunicationHub() {
     return null;
   };
 
-  const activeTab: CommTab | null = tabDef ? (rawTab as CommTab) : getDefaultTab();
+  const activeTab: CommTab | null = tabDef ? (rawTab as CommTab) : rawTabPending ? null : getDefaultTab();
 
   useEffect(() => {
-    if (!rawTab && activeTab) setParams({ tab: activeTab }, { replace: true });
-  }, []);
+    if (accessLoading) return;
+    if ((!rawTab || !tabDef) && activeTab) setParams({ tab: activeTab }, { replace: true });
+    else if (rawTab && !tabDef) setParams({}, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessLoading, rawTab, tabDef, activeTab]);
 
   const setTab = (t: CommTab) => {
     localStorage.setItem(LS_KEY, t);
@@ -97,14 +121,14 @@ export default function CommunicationHub() {
   };
 
   const activeTabDef = activeTab ? ALL_TABS.find(t => t.id === activeTab)! : null;
-  const activeSection = activeTabDef ? SECTIONS.find(s => s.id === activeTabDef.sectionId)! : null;
+  const activeSection = activeTabDef ? visibleSections.find(s => s.id === activeTabDef.sectionId)! : null;
   const accent = activeSection?.color ?? '#6366f1';
 
   const overviewContent = (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
       <p className="text-sm text-muted-foreground mb-6">Select a section to get started, or jump directly to any tool below.</p>
       <div className="grid gap-5 sm:grid-cols-2">
-        {SECTIONS.map(section => (
+        {visibleSections.map(section => (
           <div
             key={section.id}
             className="bg-card rounded-2xl border border-border p-6 cursor-pointer hover:shadow-lg transition-shadow group"
@@ -145,7 +169,7 @@ export default function CommunicationHub() {
       title="Communication"
       subtitle="Chat · Calls · Signatures · Broadcasts"
       hubIcon={MessageCircle}
-      sections={SECTIONS}
+      sections={visibleSections}
       activeSectionId={activeSection?.id ?? null}
       activeTabId={activeTab}
       activeTabDescription={activeTabDef?.description ?? null}
@@ -154,6 +178,7 @@ export default function CommunicationHub() {
       onTabClick={id => setTab(id as CommTab)}
       overviewContent={overviewContent}
     >
+      {rawTabPending && <PanelLoader />}
       {activeTab && (
         <div className="min-h-[calc(100vh-160px)]">
           <Suspense fallback={<PanelLoader />}>
