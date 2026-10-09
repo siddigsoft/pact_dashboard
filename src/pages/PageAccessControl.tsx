@@ -141,5 +141,5 @@ export interface PageOverride {
 }
 
 export default function PageAccessControl() {
-  return <Navigate to="/super-admin-hub?tab=roles" replace />;
+  return <Navigate to="/role-management" replace />;
 }

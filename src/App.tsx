@@ -715,7 +715,7 @@ const AppRoutes = () => {
         <Route path="/archive" element={<Navigate to="/analytics?tab=archive" replace />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/role-management" element={<RoleManagement />} />
-        <Route path="/page-access" element={<Navigate to="/super-admin-hub?tab=roles" replace />} />
+        <Route path="/page-access" element={<Navigate to="/role-management" replace />} />
         {/* ── Super Admin Hub ── */}
         <Route path="/super-admin-hub" element={<SuperAdminHub />} />
         <Route path="/super-admin-management" element={<Navigate to="/super-admin-hub?tab=super-admin" replace />} />
@@ -748,7 +748,7 @@ const AppRoutes = () => {
         <Route path="/task-admin" element={<Navigate to="/admin-hub?tab=task-admin" replace />} />
         <Route path="/admin/project-flow-stages" element={<Navigate to="/admin-hub?tab=project-flow-stages" replace />} />
         <Route path="/admin/transaction-scanner" element={<Navigate to="/super-admin-hub?tab=transaction-scanner" replace />} />
-        <Route path="/permissions-management" element={<Navigate to="/super-admin-hub?tab=roles" replace />} />
+        <Route path="/permissions-management" element={<Navigate to="/role-management" replace />} />
         <Route path="/role-perspective" element={<RolePerspectiveViewer />} />
         <Route path="/support-contacts" element={<SupportContacts />} />
         <Route path="/mobile-support-tickets" element={<MobileSupportTickets />} />

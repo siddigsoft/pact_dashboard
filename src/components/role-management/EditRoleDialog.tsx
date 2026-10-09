@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,9 +6,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RoleBaselineAccessEditor } from './RoleBaselineAccessEditor';
 import { supabase } from '@/integrations/supabase/client';
-import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { getGrantablePageGroups } from '@/lib/access-registry';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RoleBaselineAccess, RoleWithPermissions, UpdateRoleRequest, ResourceType, ActionType } from '@/types/roles';
 import { PermissionManager } from './PermissionManager';
@@ -64,6 +65,7 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
 
   const [selectedPermissions, setSelectedPermissions] = useState<{ resource: ResourceType; action: ActionType }[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const pageGroups = useMemo(() => getGrantablePageGroups(), []);
 
   useEffect(() => {
     if (role) {
@@ -184,8 +186,46 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
           <TabsContent value="baseline" className="space-y-4">
             {baselineLoading ? <p className="text-sm">Loading access defaults…</p> : !baselineError && <>
               <h3 className="font-semibold">Page access</h3>
-              <p className="text-sm text-muted-foreground">Selected pages grant this role access. All defaults save together.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">{PAGE_DEFS.map(page => <label key={page.slug} className="flex items-center gap-2 text-sm"><Checkbox checked={pages.includes(page.slug)} onCheckedChange={checked => setPages(current => checked ? [...current, page.slug] : current.filter(slug => slug !== page.slug))} />{page.label}</label>)}</div>
+              <p className="text-sm text-muted-foreground">Selected pages grant this role access in navigation and routes. All defaults save together.</p>
+              <div className="space-y-3">
+                {pageGroups.map(([group, groupPages]) => (
+                  <Card key={group}>
+                    <CardHeader className="py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <CardTitle className="text-base">{group}</CardTitle>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const allOn = groupPages.every(page => pages.includes(page.slug));
+                            setPages(current => {
+                              if (allOn) return current.filter(slug => !groupPages.some(page => page.slug === slug));
+                              const next = new Set(current);
+                              groupPages.forEach(page => next.add(page.slug));
+                              return Array.from(next);
+                            });
+                          }}
+                        >
+                          Toggle group
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-0">
+                      {groupPages.map(page => (
+                        <label key={page.slug} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={pages.includes(page.slug)}
+                            onCheckedChange={checked => setPages(current => checked ? [...current, page.slug] : current.filter(slug => slug !== page.slug))}
+                          />
+                          <span>{page.label}</span>
+                          <span className="text-xs text-muted-foreground">{page.slug}</span>
+                        </label>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
               <RoleBaselineAccessEditor value={baseline} onChange={setBaseline} allowCostScope={allowCostScope} />
               <Button type="button" disabled={submitting || isLoading} onClick={() => { void handleSubmit({ preventDefault() {} } as React.FormEvent); }}>{submitting ? 'Saving…' : 'Save role and access defaults'}</Button>
             </>}

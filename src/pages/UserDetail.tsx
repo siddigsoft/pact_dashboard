@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, type FC } from "react";
 import { format, parseISO } from "date-fns";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "@/context/user/UserContext";
 import { isProtectedOwner } from "@/lib/protected-accounts";
 import { AdminRoleConfirmDialog } from "@/components/ui/AdminRoleConfirmDialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, ChevronUp, Info, Camera, RefreshCw, History } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, Shield, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, ChevronUp, Info, Camera, RefreshCw, History } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
@@ -319,89 +319,6 @@ const UserDetail: FC = () => {
   // on consecutive saves within the same session.
   const savedDepartmentIdRef = useRef<string | null>(null);
   const [allUsers, setAllUsers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
-
-  // ── Additional / secondary roles ─────────────────────────────────────────
-  // ── Additional roles stored as JSONB on profiles.additional_roles ──────────
-  // Schema: [{role, hub_id, assigned_at, assigned_by}]
-  // Migration (run once in Supabase SQL Editor):
-  //   ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS additional_roles jsonb DEFAULT '[]'::jsonb;
-  interface AdditionalRole { role: string; hub_id: string | null; assigned_at: string | null; assigned_by?: string | null }
-  const [additionalRoles, setAdditionalRoles] = useState<AdditionalRole[]>([]);
-  const [addRoleMode, setAddRoleMode]           = useState(false);
-  const [newRolePick, setNewRolePick]           = useState('');
-  const [newRoleHub, setNewRoleHub]             = useState('');
-  const [addRoleSaving, setAddRoleSaving]       = useState(false);
-  const [rolesNeedsMigration, setRolesNeedsMigration] = useState(false);
-
-  const fetchAdditionalRoles = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('additional_roles')
-      .eq('id', userId)
-      .single();
-    if (error?.message?.includes('additional_roles')) {
-      // Column not yet added — migration not applied
-      setRolesNeedsMigration(true);
-      setAdditionalRoles([]);
-    } else if (error) {
-      setAdditionalRoles([]);
-    } else {
-      const arr = Array.isArray(data?.additional_roles) ? data.additional_roles : [];
-      setAdditionalRoles(arr as AdditionalRole[]);
-      setRolesNeedsMigration(false);
-    }
-  };
-
-  const saveAdditionalRoles = async (updated: AdditionalRole[]) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ additional_roles: updated })
-      .eq('id', user!.id);
-    if (error?.message?.includes('additional_roles')) {
-      setRolesNeedsMigration(true);
-      throw new Error('Migration needed — see panel for instructions.');
-    }
-    if (error) throw error;
-    setAdditionalRoles(updated);
-  };
-
-  const handleAddRole = async () => {
-    if (!user || !newRolePick) return;
-    setAddRoleSaving(true);
-    try {
-      const alreadyExists = additionalRoles.some(r => r.role === newRolePick);
-      if (alreadyExists) {
-        toast({ title: 'Role already assigned', description: `${toRoleLabel(newRolePick)} is already an additional role for this user.`, variant: 'destructive' });
-        return;
-      }
-      const newEntry: AdditionalRole = {
-        role: newRolePick,
-        hub_id: newRoleHub || null,
-        assigned_at: new Date().toISOString(),
-        assigned_by: currentUser?.id ?? null,
-      };
-      await saveAdditionalRoles([...additionalRoles, newEntry]);
-      toast({ title: 'Role added', description: `${toRoleLabel(newRolePick)} added as an additional role.` });
-      setAddRoleMode(false);
-      setNewRolePick('');
-      setNewRoleHub('');
-    } catch (e: any) {
-      toast({ title: 'Error adding role', description: e.message, variant: 'destructive' });
-    } finally {
-      setAddRoleSaving(false);
-    }
-  };
-
-  const handleRemoveAdditionalRole = async (roleToRemove: string) => {
-    if (!user) return;
-    try {
-      const updated = additionalRoles.filter(r => r.role !== roleToRemove);
-      await saveAdditionalRoles(updated);
-      toast({ title: 'Role removed' });
-    } catch (e: any) {
-      toast({ title: 'Error removing role', description: e.message, variant: 'destructive' });
-    }
-  };
 
   // ── Location personal data (city/address for non-field staff) ───────────
   const [locPersonal, setLocPersonal] = useState({ address_line1: '', address_line2: '', city: '', country: '' });
@@ -1199,11 +1116,6 @@ const UserDetail: FC = () => {
     if (user?.id) fetchContracts(user.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
-
-  useEffect(() => {
-    if (user?.id && activeSection === 'access') fetchAdditionalRoles(user.id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, activeSection]);
 
   // Classification history is now derived directly from the context's allClassifications
   // — no separate useEffect or DB query needed.
@@ -3778,180 +3690,18 @@ const UserDetail: FC = () => {
                   </div>
                 )}
 
-                {/* ── Additional / Secondary Roles ────────────────────────── */}
-                {isAdmin && (() => {
-                  const MIGRATION_SQL = `-- Run once in Supabase SQL Editor (safe to re-run)
-ALTER TABLE public.profiles
-  ADD COLUMN IF NOT EXISTS additional_roles jsonb DEFAULT '[]'::jsonb;`;
-
-                  return (
-                    <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                          <Plus className="h-3.5 w-3.5" /> Additional Roles
-                        </h4>
-                        {!addRoleMode && !rolesNeedsMigration && (
-                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setAddRoleMode(true)}>
-                            <Plus className="h-3 w-3" /> Add Role
-                          </Button>
-                        )}
-                      </div>
-
-                      {/* ── Migration required banner ── */}
-                      {rolesNeedsMigration ? (
-                        <div className="rounded-lg border border-amber-400/40 bg-amber-50/60 dark:bg-amber-900/20 p-3 space-y-3">
-                          <div className="flex items-start gap-2">
-                            <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">One-time database setup required</p>
-                              <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
-                                One quick SQL change is needed on your <strong>profiles</strong> table to store additional roles.
-                                Run the two-line SQL below in your <strong>Supabase SQL Editor</strong>, then click <em>I've run it, try again</em>.
-                              </p>
-                              <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-1 font-medium">
-                                💡 If you see <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">"column already exists"</code> — that means it's done! Click <em>I've run it, try again</em> below.
-                              </p>
-                            </div>
-                          </div>
-                          <div className="relative">
-                            <pre className="text-[10px] leading-relaxed font-mono bg-[#0d1117] text-green-300 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{MIGRATION_SQL}</pre>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(MIGRATION_SQL);
-                                toast({ title: 'SQL copied!', description: 'Paste it into Supabase SQL Editor and click Run.' });
-                              }}
-                              className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-semibold bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded transition-colors"
-                            >
-                              <Upload className="h-3 w-3" /> Copy SQL
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <a
-                              href="https://supabase.com/dashboard/project/_/sql/new"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
-                            >
-                              <Globe className="h-3 w-3" /> Open Supabase SQL Editor ↗
-                            </a>
-                            <span className="text-muted-foreground text-[10px]">—</span>
-                            <button
-                              onClick={async () => {
-                                setRolesNeedsMigration(false);
-                                await fetchAdditionalRoles(user.id);
-                                setAddRoleMode(true);
-                              }}
-                              className="text-[11px] text-muted-foreground hover:text-foreground underline"
-                            >
-                              I've run it, try again
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-[11px] text-muted-foreground">
-                            Secondary roles this user holds in addition to their primary role — optionally scoped to a specific hub.
-                          </p>
-
-                          {additionalRoles.length === 0 && !addRoleMode && (
-                            <p className="text-xs text-muted-foreground italic">No additional roles assigned.</p>
-                          )}
-                          <div className="space-y-2">
-                            {additionalRoles.map(ar => (
-                              <div key={ar.role} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border bg-background text-sm">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Badge variant="secondary" className="text-xs font-medium">
-                                    {toRoleLabel(ar.role) || ar.role}
-                                  </Badge>
-                                  {ar.hub_id && (
-                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                      <MapPin className="h-3 w-3" /> {hubs.find(h => h.id === ar.hub_id)?.name || ar.hub_id}
-                                    </span>
-                                  )}
-                                  {ar.assigned_at && (
-                                    <span className="text-[10px] text-muted-foreground">
-                                      Since {new Date(ar.assigned_at).toLocaleDateString()}
-                                    </span>
-                                  )}
-                                </div>
-                                <Button size="sm" variant="ghost"
-                                  className="h-6 w-6 p-0 text-red-500 hover:bg-red-50 hover:text-red-600 shrink-0"
-                                  onClick={() => handleRemoveAdditionalRole(ar.role)}
-                                  title="Remove this role">
-                                  <UserX className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-
-                          {addRoleMode && (
-                            <div className="rounded-lg border bg-background p-3 space-y-3">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                  <label className="text-xs font-medium">Role</label>
-                                  <select
-                                    className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
-                                    value={newRolePick}
-                                    onChange={e => setNewRolePick(e.target.value)}
-                                  >
-                                    <option value="">Select role…</option>
-                                    {(VISIBLE_ROLE_CODES as readonly string[])
-                                      .filter(r => normalizeRole(r) !== normalizeRole(user.role || ''))
-                                      .map(r => (
-                                        <option key={r} value={r}>{toRoleLabel(r) || r}</option>
-                                      ))}
-                                    {customDbRoles.map(r => (
-                                      <option key={r.id} value={r.name}>{r.display_name || r.name}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div className="space-y-1.5">
-                                  <label className="text-xs font-medium">
-                                    Hub Scope
-                                    {['supervisor','hubSupervisor','hub_supervisor'].some(s => normalizeRole(newRolePick) === normalizeRole(s)) && (
-                                      <span className="text-red-500 ml-1">*</span>
-                                    )}
-                                  </label>
-                                  <select
-                                    className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
-                                    value={newRoleHub}
-                                    onChange={e => setNewRoleHub(e.target.value)}
-                                  >
-                                    <option value="">— Select hub —</option>
-                                    {hubs.map(h => (
-                                      <option key={h.id} value={h.id}>{h.name}</option>
-                                    ))}
-                                  </select>
-                                  {['supervisor','hubSupervisor','hub_supervisor'].some(s => normalizeRole(newRolePick) === normalizeRole(s)) && !newRoleHub && (
-                                    <p className="text-[10px] text-red-500">Hub is required for Supervisor role</p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={handleAddRole}
-                                  disabled={
-                                    !newRolePick ||
-                                    addRoleSaving ||
-                                    (['supervisor','hubSupervisor','hub_supervisor'].some(s => normalizeRole(newRolePick) === normalizeRole(s)) && !newRoleHub)
-                                  }
-                                  className="gap-1.5"
-                                >
-                                  {addRoleSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                                  {addRoleSaving ? 'Saving…' : 'Add Role'}
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => { setAddRoleMode(false); setNewRolePick(''); setNewRoleHub(''); }}>
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })()}
+                {isAdmin && (
+                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      <Shield className="h-3.5 w-3.5" /> Role policy
+                    </h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Each person has exactly one role. Change it above or assign users from{' '}
+                      <Link to="/role-management" className="underline font-medium text-foreground">Role Management</Link>
+                      — additional / secondary roles are no longer used.
+                    </p>
+                  </div>
+                )}
 
                 <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
                   <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">

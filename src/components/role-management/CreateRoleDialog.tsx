@@ -14,7 +14,7 @@ import { roleTemplates, permissionPresets, getCategoryColor, RoleTemplate } from
 import { RoleBaselineAccessEditor } from './RoleBaselineAccessEditor';
 import { RoleBaselineAccess } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
-import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { getGrantablePageGroups } from '@/lib/access-registry';
 import {
   Briefcase, MapPin, Wallet, BarChart3, Globe, Users, FileSearch, Wrench,
   Wand2, ListChecks, Star, Info, ChevronLeft, ChevronRight, Check,
@@ -69,19 +69,10 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
   const [selectedPermissions, setSelectedPermissions] = useState<Record<string, boolean>>({});
   const [selectedPages, setSelectedPages] = useState<Record<string, boolean>>({});
   const [selectedUsers, setSelectedUsers] = useState<Record<string, boolean>>({});
-  const [setAsPrimary, setSetAsPrimary] = useState(false);
   const [userFilter, setUserFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const pageGroups = useMemo(() => {
-    const map = new Map<string, typeof PAGE_DEFS>();
-    for (const page of PAGE_DEFS) {
-      const list = map.get(page.group) ?? [];
-      list.push(page);
-      map.set(page.group, list);
-    }
-    return Array.from(map.entries());
-  }, []);
+  const pageGroups = useMemo(() => getGrantablePageGroups(), []);
 
   useEffect(() => {
     if (cloneSourceRole && open) {
@@ -111,10 +102,9 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
     setFormData({ name: '', display_name: '', description: '' });
     setSelectedPermissions({});
     setSelectedPages({});
-    setSelectedUsers({});
-    setSetAsPrimary(false);
-    setUserFilter('');
-    setError(null);
+      setSelectedUsers({});
+      setUserFilter('');
+      setError(null);
   };
 
   const handleTemplateSelect = (template: RoleTemplate) => {
@@ -236,7 +226,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
       permissions: permissionList,
       page_slugs: pageSlugList,
       assign_user_ids: assignUserIds,
-      set_as_primary: setAsPrimary,
+      set_as_primary: true, // one role per person Ã¢ÂÂ assignment replaces any prior role
       reason: 'Created via staged Role Management wizard',
     };
 
@@ -271,7 +261,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
             Create Custom Role
           </DialogTitle>
           <DialogDescription>
-            Role details → Page access → Action permissions → Assign users → Review and save
+            Role details ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Page access ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Action permissions ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Assign users ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Review and save
           </DialogDescription>
           <div className="flex flex-wrap gap-2 pt-2">
             {STEPS.map((s, i) => (
@@ -461,10 +451,9 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
 
                 {step === 'assign' && (
                   <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Checkbox id="set-primary" checked={setAsPrimary} onCheckedChange={(c) => setSetAsPrimary(!!c)} />
-                      <Label htmlFor="set-primary">Set as primary role for assigned users</Label>
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Each person has one role. Assigning a user here replaces their current role.
+                    </p>
                     <Input placeholder="Filter users…" value={userFilter} onChange={(e) => setUserFilter(e.target.value)} />
                     <div className="space-y-2 max-h-[50vh] overflow-auto border rounded-md p-3">
                       {filteredUsers.length === 0 && (
@@ -492,7 +481,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                       <CardContent className="text-sm space-y-1">
                         <div><strong>Name:</strong> {formData.name.trim()}</div>
                         <div><strong>Display:</strong> {formData.display_name.trim()}</div>
-                        <div><strong>Description:</strong> {formData.description.trim() || '—'}</div>
+                        <div><strong>Description:</strong> {formData.description.trim() || 'ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ'}</div>
                       </CardContent>
                     </Card>
                     <Card>
@@ -511,7 +500,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                         ))}
                       </CardContent>
                     </Card>
-                    <Card><CardHeader><CardTitle className="text-base">Tabs, columns & scope</CardTitle></CardHeader><CardContent className="text-sm">{baseline.tab_rules?.filter(rule => rule.is_blocked).length ?? 0} hidden tabs � {baseline.column_rules?.filter(rule => rule.is_hidden).length ?? 0} hidden columns � Cost scope: {baseline.cost_scope?.mode ?? 'application default'}</CardContent></Card>
+                    <Card><CardHeader><CardTitle className="text-base">Tabs, columns & scope</CardTitle></CardHeader><CardContent className="text-sm">{baseline.tab_rules?.filter(rule => rule.is_blocked).length ?? 0} hidden tabs ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ· {baseline.column_rules?.filter(rule => rule.is_hidden).length ?? 0} hidden columns ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ· Cost scope: {baseline.cost_scope?.mode ?? 'application default'}</CardContent></Card>
                     <Card>
                       <CardHeader><CardTitle className="text-base">Users ({assignUserIds.length})</CardTitle></CardHeader>
                       <CardContent className="text-sm">
@@ -524,7 +513,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                           </ul>
                         )}
                         <p className="text-muted-foreground mt-2">
-                          Primary role update: {setAsPrimary ? 'yes' : 'no'}
+                          Assigned users will have this role only (any previous role is replaced).
                         </p>
                         <p className="text-muted-foreground">
                           Role, access defaults and assignments save together with one audit record.
@@ -555,7 +544,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                     </Button>
                   ) : (
                     <Button type="button" disabled={isLoading} onClick={handleSave} className="min-h-11" data-testid="button-create-role-submit">
-                      {isLoading ? 'Saving…' : 'Save role'}
+                      {isLoading ? 'SavingÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¦' : 'Save role'}
                     </Button>
                   )}
                 </div>

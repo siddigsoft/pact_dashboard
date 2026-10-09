@@ -1,5 +1,5 @@
 import { Suspense, lazy, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import {
   Loader2, ShieldCheck, Activity, HeartPulse, ClipboardCheck,
   Lock, ScrollText, Mail, Eye, Smartphone, PenTool, PhoneCall,
@@ -24,7 +24,9 @@ const MobileDocSyncPanel      = lazy(() => import('./MobileDocumentSync'));
 const TransactionScannerPanel = lazy(() => import('./TransactionScanner'));
 const DataManagementPanel     = lazy(() => import('../components/superAdmin/SuperAdminDataManagement').then(m => ({ default: m.SuperAdminDataManagement })));
 const ButtonRegistryPanel     = lazy(() => import('../components/superAdmin/SuperAdminButtonRegistry').then(m => ({ default: m.SuperAdminButtonRegistry })));
-const RolesPanel              = lazy(() => import('./RoleManagement'));
+const RolesRedirectPanel = lazy(async () => ({
+  default: () => <Navigate to="/role-management" replace />,
+}));
 
 type SASection = 'monitoring' | 'permissions' | 'email' | 'mobile' | 'data';
 type SATab =
@@ -62,15 +64,15 @@ const SECTIONS: SectionDef[] = [
   },
   {
     id: 'permissions', label: 'Access Management', icon: Lock, color: '#1e3a5f',
-    description: 'Role baselines, action map, and audit.',
+    description: 'Role Management door, action map, and audit.',
     tabs: [
       {
-        id: 'roles', label: 'Roles', icon: Shield,
-        description: 'Role baselines — create and edit roles, page defaults, action permissions, and user assignment via transactional upsert.',
+        id: 'roles', label: 'Role Management', icon: Shield,
+        description: 'Opens /role-management — the only place to create and edit role baselines (pages, actions, tabs, assignments).',
       },
       {
         id: 'button-registry', label: 'Actions', icon: LayoutGrid,
-        description: 'Action map across the platform — which roles can perform each button/action, with links into Role Management.',
+        description: 'Read-only action map — toggle grants in Role Management.',
       },
       {
         id: 'audit-logs', label: 'Audit', icon: ScrollText,
@@ -142,7 +144,7 @@ const PanelMap: Record<SATab, React.LazyExoticComponent<any>> = {
   'system-monitoring': MonitoringDashboardPanel,
   'cycle-health': CycleHealthPanel,
   'approval-dashboard': ApprovalDashboardPanel,
-  'roles': RolesPanel,
+  'roles': RolesRedirectPanel,
   'audit-logs': AuditLogsPanel,
   'email-tracking': EmailTrackingPanel,
   'email-management': EmailManagementPanel,
@@ -165,7 +167,7 @@ const Spinner = () => (
 export default function SuperAdminHub() {
   const [params, setParams] = useSearchParams();
   const rawTabParam = params.get('tab');
-  // Retired User Access / legacy permission tabs → Roles.
+  // Retired User Access / legacy permission tabs → Role Management door.
   const rawTab = (
     rawTabParam === 'permissions' || rawTabParam === 'page-grants' || rawTabParam === 'user-access'
       ? 'roles'

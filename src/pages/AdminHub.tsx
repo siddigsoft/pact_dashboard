@@ -35,7 +35,7 @@ const SECTIONS: SectionDef[] = [
     description: 'Manage users, roles, access permissions, departments, and hub structures.',
     tabs: [
       { id: 'users',          label: 'User Management',    icon: Users,      description: 'Create, edit, and deactivate user accounts — assign roles, set hub affiliations, manage profile details, and view login history.' },
-      { id: 'role-management',label: 'Role Management',    icon: Shield,     description: 'Define and configure roles, permissions, and per-user access overrides — use the Access Manager inside Role Management for page, tab, column, and action-level control.' },
+      { id: 'role-management',label: 'Role Management',    icon: Shield,     description: 'Opens Role Management — create and edit role baselines for pages, actions, tabs, and user assignment.' },
       { id: 'departments',    label: 'Departments',        icon: Building2,  description: 'Manage organisational departments — create entries, assign staff, and link departments to hubs for reporting and filtering.' },
       { id: 'hub-management', label: 'Hub Management',     icon: Building2,  description: 'Configure hubs and sub-hubs — define geographic coverage, assign managers, set operational parameters, and manage locality lists.' },
     ],

@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { X, Plus, Loader2 } from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
 import { RoleWithPermissions, AssignRoleRequest } from '@/types/roles';
 
 interface User {
@@ -42,7 +41,6 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   const [selectedUserId, setSelectedUserId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAssigning, setIsAssigning] = useState(false);
-  const [makePrimary, setMakePrimary] = useState(false);
 
   const unassignedUsers = users.filter(user => 
     !assignedUsers.some(assigned => assigned.id === user.id)
@@ -58,12 +56,10 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
 
     setIsAssigning(true);
     try {
-      const assignData: AssignRoleRequest = { user_id: selectedUserId, role_id: role.id, make_primary: makePrimary };
-
-      await onAssignRole(assignData);
+      // One role per person — assignment replaces any prior role.
+      await onAssignRole({ user_id: selectedUserId, role_id: role.id, make_primary: true });
       setSelectedUserId('');
       setSearchTerm('');
-      setMakePrimary(false);
     } finally {
       setIsAssigning(false);
     }
@@ -73,21 +69,6 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
     if (!role) return;
 
     await onRemoveRole(userId, role.id);
-  };
-
-  const handleMakePrimary = async (userId: string) => {
-    if (!role || isAssigning) return;
-
-    setIsAssigning(true);
-    try {
-      await onAssignRole({
-        user_id: userId,
-        role_id: role.id,
-        make_primary: true,
-      });
-    } finally {
-      setIsAssigning(false);
-    }
   };
 
   const getInitials = (name: string) =>
@@ -100,7 +81,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
         <DialogHeader>
           <DialogTitle>Manage Users for {role?.display_name}</DialogTitle>
           <DialogDescription>
-            Assign or remove users from this role.
+            Each person has exactly one role. Assigning here replaces their current role.
           </DialogDescription>
         </DialogHeader>
 
@@ -146,13 +127,9 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
                 )}
               </Button>
             </div>
-            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-              <Checkbox checked={makePrimary} onCheckedChange={(checked) => setMakePrimary(checked === true)} className="mt-0.5" />
-              <span>
-                <span className="font-semibold">Make {role?.display_name ?? role?.name ?? 'this role'} the primary display role</span>
-                <span className="mt-0.5 block text-amber-800">This changes the role shown in the user header. Existing role assignments are kept.</span>
-              </span>
-            </label>
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              One role per person — any previous role on the selected user is removed when you assign.
+            </p>
           </div>
 
           {/* Assigned Users */}
@@ -186,14 +163,6 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
                         </TableCell>
                         <TableCell className="text-gray-500">{user.email}</TableCell>
                         <TableCell className="whitespace-nowrap">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleMakePrimary(user.id)}
-                            disabled={isAssigning || isLoading}
-                          >
-                            Make primary
-                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"

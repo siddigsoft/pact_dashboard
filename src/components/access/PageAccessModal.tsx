@@ -14,11 +14,11 @@ export function PageAccessModal({ open, onClose, pageSlug }: PageAccessModalProp
         <DialogHeader>
           <DialogTitle>{page?.label ?? 'Page'} access</DialogTitle>
           <DialogDescription>
-            Page access is controlled by role baselines. Open Roles to edit defaults.
+            Page access is controlled by role baselines in Role Management.
           </DialogDescription>
         </DialogHeader>
         <Button asChild>
-          <Link to={accessWorkspaceUrl({ pageSlug })} onClick={onClose}>Open Roles</Link>
+          <Link to={accessWorkspaceUrl({ pageSlug })} onClick={onClose}>Open Role Management</Link>
         </Button>
       </DialogContent>
     </Dialog>

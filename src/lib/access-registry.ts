@@ -330,7 +330,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'integrations',        label:'Integrations',           path:'/integrations',           icon:PlugZap, group:'Administration',
     roles:['superAdmin','admin','ict'] },
   { slug:'permissions-management', label:'Permissions Management', path:'/permissions-management', icon:Key, group:'Administration',
-    roles:['superAdmin'] },
+    roles:['superAdmin'], note:'Legacy slug; App redirects to /role-management. Not grantable in role baselines.' },
   { slug:'role-perspective',    label:'Role Perspective',       path:'/role-perspective',       icon:Eye, group:'Administration',
     roles:['superAdmin','admin'] },
   { slug:'documentation',       label:'Documentation',          path:'/documentation',          icon:BookOpen, group:'Administration',
@@ -341,8 +341,8 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin','ict'] },
   { slug:'changelog',           label:'Changelog',              path:'/changelog',              icon:History, group:'Administration',
     roles:['superAdmin','admin','ict'] },
-  { slug:'page-access',         label:'Page Access Control',    path:'/super-admin-hub?tab=roles', icon:Lock, group:'Administration',
-    roles:['superAdmin'], note:'Legacy slug; redirects to Roles. Per-user exceptions UI removed.' },
+  { slug:'page-access',         label:'Page Access Control',    path:'/page-access', icon:Lock, group:'Administration',
+    roles:['superAdmin'], note:'Legacy slug; App redirects to /role-management. Per-user exceptions UI removed. Not grantable in role baselines.' },
   { slug:'system-diagrams',     label:'System Diagrams',        path:'/system-diagrams',        icon:GitBranch, group:'Administration',
     roles:['superAdmin'] },
   { slug:'helpline',            label:'Helpline',               path:'/helpline',               icon:Phone, group:'Administration',
@@ -457,6 +457,28 @@ export function getPageDefinition(slug: string): PageDef | undefined {
 
 export function getPageNavigationGroup(group: string) {
   return PAGE_NAVIGATION_GROUPS[group];
+}
+
+/** Legacy redirect-only PAGE_DEFS — hide from Role Management baseline checklists. */
+const NON_GRANTABLE_PAGE_SLUGS = new Set([
+  'page-access',
+  'permissions-management',
+]);
+
+/** Pages admins can toggle as role baselines in Create/Edit Role. */
+export function getGrantablePageDefs(definitions: readonly PageDef[] = PAGE_DEFS): PageDef[] {
+  return definitions.filter(page => !NON_GRANTABLE_PAGE_SLUGS.has(page.slug) && !page.slug.includes(':'));
+}
+
+/** Group grantable pages for Role Management page-access UIs. */
+export function getGrantablePageGroups(definitions: readonly PageDef[] = PAGE_DEFS): Array<[string, PageDef[]]> {
+  const map = new globalThis.Map<string, PageDef[]>();
+  for (const page of getGrantablePageDefs(definitions)) {
+    const list = map.get(page.group) ?? [];
+    list.push(page);
+    map.set(page.group, list);
+  }
+  return Array.from(map.entries());
 }
 
 export interface PageRegistryIssue {

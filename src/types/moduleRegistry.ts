@@ -39,10 +39,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     color: 'blue',
     description: 'User accounts, roles, permissions, system settings, and access control',
     pages: [
-      { page: 'Permissions Management', route: '/permissions-management', description: 'Review and manage access permissions', actions: [
-        { key: 'permissions:read', label: 'View Permissions', description: 'Review access configuration', resource: 'permissions', action: 'read' },
-      ] },
-
       {
         page: 'User Management',
         route: '/admin-hub',
@@ -58,8 +54,8 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       },
       {
         page: 'Role Management',
-        route: '/admin-hub?tab=role-management',
-        description: 'Create, edit, delete roles and assign granular permissions',
+        route: '/role-management',
+        description: 'Create, edit, delete roles and assign page/action/tab baselines',
         actions: [
           { key: 'roles:read', label: 'View Roles', description: 'See all roles and their permissions', resource: 'roles', action: 'read' },
           { key: 'roles:create', label: 'Create Role', description: 'Define a new custom role', resource: 'roles', action: 'create', isAdminOnly: true },
@@ -67,7 +63,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'roles:delete', label: 'Delete Role', description: 'Remove a custom role', resource: 'roles', action: 'delete', isDestructive: true, isAdminOnly: true },
           { key: 'roles:assign', label: 'Assign Role to User', description: 'Put a user into a role', resource: 'roles', action: 'assign', isAdminOnly: true },
           { key: 'permissions:read', label: 'View Permission Matrix', description: 'See the full Access Map', resource: 'permissions', action: 'read' },
-          { key: 'permissions:override', label: 'Override User Permissions', description: 'Grant or block individual permissions per user', resource: 'permissions', action: 'override', isSuperAdminOnly: true },
         ],
       },
       {
@@ -146,17 +141,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         ],
       },
       {
-        page: 'Role Management',
-        route: '/role-management',
-        description: 'Standalone role management page — create and configure custom roles',
-        actions: [
-          { key: 'roles:read',   label: 'View Roles',   description: 'See all roles and their permissions',  resource: 'roles', action: 'read' },
-          { key: 'roles:create', label: 'Create Role',  description: 'Define a new custom role',             resource: 'roles', action: 'create', isAdminOnly: true },
-          { key: 'roles:update', label: 'Edit Role',    description: 'Modify a role permission set',         resource: 'roles', action: 'update', isAdminOnly: true },
-          { key: 'roles:delete', label: 'Delete Role',  description: 'Remove a custom role',                 resource: 'roles', action: 'delete', isDestructive: true, isAdminOnly: true },
-        ],
-      },
-      {
         page: 'Classifications',
         route: '/classifications',
         description: 'Site and CP classification tiers used across MMP and field operations',
@@ -211,27 +195,11 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         ],
       },
       {
-        page: 'Access Management',
-        route: '/super-admin-hub?tab=roles',
-        description: 'Authoritative access admin — role baselines (permissions, pages, tabs)',
-        actions: [
-          { key: 'permissions:read', label: 'View Access', description: 'See role baselines and effective access', resource: 'permissions', action: 'read' },
-        ],
-      },
-      {
         page: 'Role Perspective',
         route: '/role-perspective',
         description: 'Preview the application UI as any other role — impersonation for QA and support',
         actions: [
           { key: 'roles:read', label: 'View Role Perspective', description: 'Switch the UI to simulate another role', resource: 'roles', action: 'read', isAdminOnly: true },
-        ],
-      },
-      {
-        page: 'Page Access Control',
-        route: '/super-admin-hub?tab=roles',
-        description: 'Legacy entry; page access is managed via role baselines on Roles',
-        actions: [
-          { key: 'permissions:read', label: 'View Page Access', description: 'See role page defaults', resource: 'permissions', action: 'read' },
         ],
       },
       {
