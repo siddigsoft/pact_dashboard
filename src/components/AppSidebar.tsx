@@ -647,8 +647,11 @@
     const navigate = useNavigate();
     const { currentUser, logout, roles } = useAppContext();
     const { showDueReminders } = useSiteVisitReminders();
-    const { state } = useSidebar();
+    const { state, isMobile, setOpenMobile } = useSidebar();
     const isSidebarCollapsed = state === 'collapsed';
+    useEffect(() => {
+      if (isMobile) setOpenMobile(false);
+    }, [pathname, search, isMobile, setOpenMobile]);
     const { isSuperAdmin: realIsSuperAdmin } = useSuperAdmin();
     const { viewAs, setViewAs, clearViewAs, openPickerRequest, clearOpenPickerRequest } = useViewAs();
     const { userSettings, updateMenuPreferences, menuPreferences: contextMenuPrefs } = useSettings();
@@ -1474,7 +1477,7 @@
                             : "text-foreground/85 hover:bg-muted/80 hover:text-foreground",
                         )}
                       >
-                        <Link to={item.url} className="flex items-center gap-2.5" data-testid={`nav-link-${item.id}`}>
+                        <Link to={item.url} onClick={() => setOpenMobile(false)} className="flex items-center gap-2.5" data-testid={`nav-link-${item.id}`}>
                           <item.icon
                             className={cn(
                               "h-4 w-4 shrink-0",
@@ -1691,7 +1694,7 @@
 
       </Sidebar>
 
-      {isSidebarCollapsed && (
+      {isSidebarCollapsed && !isMobile && (
         <div className="fixed left-4 top-4 z-50">
           <SidebarTrigger className="h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-gray-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-gray-500 dark:hover:bg-slate-800" />
         </div>

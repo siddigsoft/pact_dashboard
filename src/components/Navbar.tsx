@@ -20,6 +20,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { RealtimeActivityIndicator } from '@/components/realtime';
 import { useFocusReconnect } from '@/hooks/useFocusReconnect';
 import { CommandPalette } from '@/components/CommandPalette';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 
 const Navbar = () => {
         const { setTheme, theme } = useTheme();
@@ -65,6 +66,11 @@ const Navbar = () => {
         return (
                 <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white dark:border-slate-800 dark:bg-slate-950">
                         <div className="flex h-14 items-center gap-3 px-4 lg:px-6">
+                                <SidebarTrigger
+                                        className="h-9 w-9 shrink-0 rounded-lg text-[#273677] hover:bg-[#273677]/10 md:hidden"
+                                        aria-label="Open navigation menu"
+                                        data-testid="button-mobile-sidebar"
+                                />
                                 {/* Search — centred in the available space */}
                                 <div className="flex flex-1 justify-center min-w-0">
                                         <div className="w-full max-w-md">
