@@ -349,11 +349,10 @@ function LeaveEntitlementsPanel() {
     try {
       const existing = entMap[form.user_id];
       const payload = { user_id: form.user_id, year, annual_days: form.annual_days ?? 0, sick_days: form.sick_days ?? 0, emergency_days: form.emergency_days ?? 0, maternity_days: form.maternity_days ?? 0, paternity_days: form.paternity_days ?? 0, unpaid_days: form.unpaid_days ?? 0, updated_at: new Date().toISOString() };
-      if (existing?.id) {
-        await supabase.from('leave_entitlements').update(payload).eq('id', existing.id);
-      } else {
-        await supabase.from('leave_entitlements').insert(payload);
-      }
+      const { error } = existing?.id
+        ? await supabase.from('leave_entitlements').update(payload).eq('id', existing.id)
+        : await supabase.from('leave_entitlements').insert(payload);
+      if (error) throw error;
       toast({ title: 'Entitlement saved' });
       setEditing(null);
       refetch();
@@ -437,16 +436,17 @@ function LeaveEntitlementsPanel() {
         }
         if (existing?.id) {
           const newAnnual = (existing.annual_days ?? 0) + row.carryForward;
-          await supabase.from('leave_entitlements').update({
+          const { error } = await supabase.from('leave_entitlements').update({
             annual_days: newAnnual,
             carried_forward_days: row.carryForward,
             updated_at: new Date().toISOString(),
           }).eq('id', existing.id);
+          if (error) throw error;
           updated++;
         } else {
           // Use same base as current year's entitlement
           const curEntData = (entitlements ?? []).find((e: Entitlement) => e.user_id === row.userId);
-          await supabase.from('leave_entitlements').insert({
+          const { error } = await supabase.from('leave_entitlements').insert({
             user_id: row.userId,
             year: nextYear,
             annual_days: (curEntData?.annual_days ?? 21) + row.carryForward,
@@ -457,6 +457,7 @@ function LeaveEntitlementsPanel() {
             unpaid_days: curEntData?.unpaid_days ?? 0,
             carried_forward_days: row.carryForward,
           });
+          if (error) throw error;
           created++;
         }
       }
