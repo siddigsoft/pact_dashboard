@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -52,7 +51,6 @@ const BLANK: Omit<Fund, 'id' | 'created_at'> = {
 
 export default function AccountingFunds() {
   const { hasAnyRole } = useAuthorization();
-  const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanManage = hasAnyRole(['super_admin', 'admin', 'finance', 'accountant']);
 
   const overrideCanManage = usePageManageOverride('accounting-funds', roleCanManage);
@@ -84,7 +82,7 @@ export default function AccountingFunds() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -166,7 +164,6 @@ export default function AccountingFunds() {
     exportToExcel(rows, 'Funds Register', `funds-registry-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-4 max-w-[1100px]">

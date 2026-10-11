@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -59,7 +58,6 @@ const BLANK = {
 
 export default function AccountingTaxManagement() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
 
   const overrideCanEdit = usePageManageOverride('accounting-tax', roleCanEdit);
@@ -103,7 +101,7 @@ export default function AccountingTaxManagement() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => taxCodes.filter(t => {
     if (typeFilter !== 'all' && t.tax_type !== typeFilter) return false;
@@ -190,7 +188,6 @@ export default function AccountingTaxManagement() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
 
   if (tableExists === false) {
     return (

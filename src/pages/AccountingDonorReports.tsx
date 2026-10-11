@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
@@ -32,10 +31,9 @@ const RESTRICTION_CFG: Record<string, { label: string; color: string; short: str
 const CHART_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#0ea5e9'];
 
 export default function AccountingDonorReports() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated } = useAuthorization();
 
-  const reportsQuery = useDonorReportsQuery(allowed && isAuthenticated);
+  const reportsQuery = useDonorReportsQuery(isAuthenticated);
   const funds = reportsQuery.data?.funds ?? [];
   const activity = reportsQuery.data?.activity ?? [];
   const partners = reportsQuery.data?.partners ?? [];
@@ -137,7 +135,6 @@ export default function AccountingDonorReports() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
   if (loading && !reportsQuery.data) return <PageLoader label="Loading donor reports…" />;
 
   return (

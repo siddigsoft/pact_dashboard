@@ -35,7 +35,6 @@ export default function AccountingLockDates() {
   const { currentUser } = useUser();
   const { toast } = useToast();
   const canManage = hasAnyRole(['super_admin','admin','financialAdmin']);
-  const allowed   = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
 
   const [locks, setLocks]         = useState<LockDate[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -55,7 +54,7 @@ export default function AccountingLockDates() {
     setCompanies((cRes.data??[]) as Company[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const sf = (k: keyof typeof BLANK, v: string) => setForm(p=>({...p,[k]:v}));
 
@@ -83,7 +82,6 @@ export default function AccountingLockDates() {
   const activeLocks = locks.filter(l => l.is_active);
   const getCompany  = (id: string | null) => companies.find(c=>c.id===id)?.name_en ?? 'All Companies';
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

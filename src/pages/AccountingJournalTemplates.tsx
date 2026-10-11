@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Navigate as Nav } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -24,7 +23,6 @@ export default function AccountingJournalTemplates() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
   const [rows, setRows] = useState<JTemplate[]>([]);
@@ -46,7 +44,7 @@ export default function AccountingJournalTemplates() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -80,7 +78,6 @@ export default function AccountingJournalTemplates() {
   };
 
   if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Nav to="/" replace />;
 
   const TYPE_COLORS: Record<string, string> = { general: 'bg-blue-50 text-blue-700', bank: 'bg-emerald-50 text-emerald-700', cash: 'bg-amber-50 text-amber-700', sale: 'bg-purple-50 text-purple-700', purchase: 'bg-rose-50 text-rose-700' };
 

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
@@ -169,9 +169,8 @@ const PHASE_ROADMAP = [
 ];
 
 export default function AccountingSettings() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { loading: authLoading } = useAuthorization();
   const { isSuperAdmin }                     = useSuperAdmin();
-  const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canToggle = isSuperAdmin;
   const { toast } = useToast();
 
@@ -205,7 +204,7 @@ export default function AccountingSettings() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { if (allowed) { void load(); void loadHealth(); } }, [allowed]);
+  useEffect(() => { { void load(); void loadHealth(); } }, []);
 
   const loadHealth = async () => {
     setTableHealth(MODULE_TABLES.map(t => ({ ...t, count: null, loading: true, error: false })));
@@ -266,7 +265,6 @@ export default function AccountingSettings() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const totalTables = tableHealth.length;
   const activeTables = tableHealth.filter(t => !t.error && t.count !== null && t.count > 0).length;

@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -65,7 +64,6 @@ const MIGRATION_NOTICE = (
 export default function AccountingCostAllocation() {
   const { hasAnyRole } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
 
   const overrideCanEdit = usePageManageOverride('accounting-cost-allocation', roleCanEdit);
@@ -240,7 +238,6 @@ export default function AccountingCostAllocation() {
   };
 
   if (!authReady) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const activeRulesCount = rules.filter(r => r.is_active).length;
   const rulesWithTargets = rules.filter(r => targets.some(t => t.rule_id === r.id)).length;

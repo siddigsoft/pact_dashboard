@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -35,7 +34,6 @@ export default function AccountingRecurringJournals() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
   const [rows, setRows] = useState<RecurringJournal[]>([]);
@@ -56,7 +54,7 @@ export default function AccountingRecurringJournals() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const counts = useMemo(() => ({
     active: rows.filter(r => r.is_active).length,
@@ -95,7 +93,6 @@ export default function AccountingRecurringJournals() {
   };
 
   if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const today = new Date().toISOString().slice(0, 10);
 

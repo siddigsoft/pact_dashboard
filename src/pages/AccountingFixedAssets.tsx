@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -94,7 +93,6 @@ const BLANK: Partial<Asset> = { name_en: '', name_ar: '', category: 'equipment',
 
 export default function AccountingFixedAssets() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
   const overrideCanEdit = usePageManageOverride('accounting-fixed-assets', roleCanEdit);
@@ -423,7 +421,6 @@ export default function AccountingFixedAssets() {
   }
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const DepBar = ({ asset }: { asset: Asset }) => {
     const { depreciationPct, bookValue, accumulated, monthlyDep } = calcDepreciation(asset, today);

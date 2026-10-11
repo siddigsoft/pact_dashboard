@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -23,10 +22,7 @@ interface Asset {
 interface ScheduleLine { period: string; openingNBV: number; depreciation: number; closingNBV: number }
 
 export default function AccountingDepreciationSchedule() {
-  const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
-
-  const [assets, setAssets]       = useState<Asset[]>([]);
+    const [assets, setAssets]       = useState<Asset[]>([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [catFilter, setCatFilter] = useState('all');
@@ -44,7 +40,7 @@ export default function AccountingDepreciationSchedule() {
     setAssets((data ?? []) as Asset[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => assets.filter(a => {
     if (statusFilter !== 'all' && a.status !== statusFilter) return false;
@@ -84,7 +80,6 @@ export default function AccountingDepreciationSchedule() {
     }))), 'Depreciation Schedule','depreciation-schedule.xlsx'
   );
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

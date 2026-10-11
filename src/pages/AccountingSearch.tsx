@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent } from '@/components/ui/card';
@@ -55,8 +55,7 @@ function statusColor(s: string) {
 
 /* ─── main component ──────────────────────────────────────────────────────── */
 export default function AccountingSearch() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { loading: authLoading } = useAuthorization();
 
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebounce(query.trim(), 320);
@@ -238,7 +237,6 @@ export default function AccountingSearch() {
   const activeCategories = categories.filter(c => c.results.length > 0 || c.loading);
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 max-w-[900px] space-y-5">

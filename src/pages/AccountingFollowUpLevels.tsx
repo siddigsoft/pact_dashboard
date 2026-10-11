@@ -35,7 +35,6 @@ export default function AccountingFollowUpLevels() {
   const { currentUser } = useUser();
   const { toast } = useToast();
   const canManage = hasAnyRole(['super_admin','admin','financialAdmin']);
-  const allowed   = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
 
   const [levels, setLevels]     = useState<FollowUpLevel[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -51,7 +50,7 @@ export default function AccountingFollowUpLevels() {
     setLevels((data??[]) as FollowUpLevel[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const sf = (k: keyof typeof BLANK, v: any) => setForm(p=>({...p,[k]:v}));
 
@@ -85,7 +84,6 @@ export default function AccountingFollowUpLevels() {
     void load();
   };
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

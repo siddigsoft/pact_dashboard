@@ -39,7 +39,6 @@ export default function AccountingProjectLinks() {
   const { currentUser } = useUser();
   const { toast } = useToast();
   const canManage = hasAnyRole(['super_admin','admin','financialAdmin','finance','projectManager','coordinator']);
-  const allowed   = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor','projectManager','coordinator']);
 
   const [links, setLinks]         = useState<ProjectLink[]>([]);
   const [projects, setProjects]   = useState<Project[]>([]);
@@ -67,7 +66,7 @@ export default function AccountingProjectLinks() {
     setCompanies((cRes.data??[]) as Company[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const sf = (k: keyof typeof BLANK, v: any) => setForm(p=>({...p,[k]:v}));
 
@@ -119,7 +118,6 @@ export default function AccountingProjectLinks() {
     return [...map.entries()].map(([pid, ls]) => ({ pid, name: getProject(pid), links: ls }));
   }, [filtered]);
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

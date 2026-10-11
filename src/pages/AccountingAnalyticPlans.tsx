@@ -42,7 +42,6 @@ export default function AccountingAnalyticPlans() {
   const { currentUser } = useUser();
   const { toast } = useToast();
   const canManage = hasAnyRole(['super_admin','admin','financialAdmin']);
-  const allowed   = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
 
   const [plans, setPlans]         = useState<AnalyticPlan[]>([]);
   const [accounts, setAccounts]   = useState<AnalyticAccount[]>([]);
@@ -75,7 +74,7 @@ export default function AccountingAnalyticPlans() {
     setCompanies((cRes.data??[]) as Company[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const sp = (k: keyof typeof BLANK_PLAN, v: any) => setPlanForm(p=>({...p,[k]:v}));
   const sa = (k: keyof typeof BLANK_ACCOUNT, v: any) => setAccForm(p=>({...p,[k]:v}));
@@ -120,7 +119,6 @@ export default function AccountingAnalyticPlans() {
   const filteredAccounts = selectedPlan === 'all' ? accounts : accounts.filter(a => a.plan_id === selectedPlan);
   const getPlanName = (id: string) => plans.find(p=>p.id===id)?.name_en ?? '—';
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

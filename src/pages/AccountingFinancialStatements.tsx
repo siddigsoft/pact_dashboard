@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,8 +35,7 @@ function netBalance(row: TbRow, type: string): number {
 }
 
 export default function AccountingFinancialStatements() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated } = useAuthorization();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -301,7 +299,6 @@ export default function AccountingFinancialStatements() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const StatementSection = ({ rows, type, title, titleAr, totalLabel, totalLabelAr, total, accentClass }: {
     rows: TbRow[]; type: string; title: string; titleAr: string;

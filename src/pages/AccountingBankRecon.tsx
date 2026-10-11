@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -43,7 +42,6 @@ const BLANK_LINE = { statement_date: '', description: '', reference: '', amount:
 
 export default function AccountingBankRecon() {
   const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
   const overrideCanEdit = usePageManageOverride('accounting-bank-recon', roleCanEdit);
@@ -293,7 +291,6 @@ export default function AccountingBankRecon() {
     exportToExcel(rows, `Bank Recon - ${selectedBank?.account_name ?? 'Report'}`, `bank-recon-${selectedBank?.account_name ?? 'report'}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="bank-recon-page">

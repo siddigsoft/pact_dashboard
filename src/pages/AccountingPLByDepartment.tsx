@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -19,9 +18,8 @@ interface DeptRow { dept: string; revenue: number; expense: number; net: number;
 const fmt = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(n);
 
 export default function AccountingPLByDepartment() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
 
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(String(currentYear));
@@ -59,12 +57,11 @@ export default function AccountingPLByDepartment() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void run(); }, [allowed, year, period]);
+  useEffect(() => { void run(); }, [year, period]);
 
   const totals = useMemo(() => rows.reduce((s, r) => ({ revenue: s.revenue + r.revenue, expense: s.expense + r.expense, net: s.net + r.net }), { revenue: 0, expense: 0, net: 0 }), [rows]);
 
   if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-4 p-4">

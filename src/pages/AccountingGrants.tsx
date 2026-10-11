@@ -1,5 +1,4 @@
 import { useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -79,7 +78,6 @@ const BLANK_MILESTONE = { title: '', due_date: '', status: 'pending', submitted_
 
 export default function AccountingGrants() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
 
   const overrideCanEdit = usePageManageOverride('accounting-grants', roleCanEdit);
@@ -87,7 +85,7 @@ export default function AccountingGrants() {
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();
 
-  const query = useGrantsWithSpendQuery(allowed && isAuthenticated);
+  const query = useGrantsWithSpendQuery(isAuthenticated);
   const migrationNeeded = query.data?.migrationNeeded ?? false;
   const preFundPipelineTotal = query.data?.preFundPipelineTotal ?? 0;
   const loading = query.isLoading;
@@ -399,7 +397,6 @@ export default function AccountingGrants() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
   if (loading && !query.data) return <PageLoader label="Loading grants…" />;
 
   return (

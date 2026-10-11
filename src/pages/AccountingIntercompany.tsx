@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useUser } from '@/context/user/UserContext';
@@ -19,7 +18,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
-import { formatNumber } from '@/lib/accountingFormat';
+import { downloadCsv, formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 
 interface Country {
@@ -60,7 +59,6 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export default function AccountingIntercompany() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canWrite = hasAnyRole(['super_admin', 'admin', 'finance', 'accountant']);
   const { currentUser } = useUser();
   const { toast } = useToast();
@@ -109,7 +107,7 @@ export default function AccountingIntercompany() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const countryMap = useMemo(() => {
     const m: Record<string, Country> = {};
@@ -253,7 +251,6 @@ export default function AccountingIntercompany() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-4 max-w-[1400px]">

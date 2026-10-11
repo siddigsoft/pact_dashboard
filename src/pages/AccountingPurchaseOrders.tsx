@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
@@ -15,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Loader2, ShoppingCart, Plus, Download, RefreshCw, Search, CheckCircle2, XCircle, Clock, FileText, Pencil, ChevronRight, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
-import { formatNumber } from '@/lib/accountingFormat';
+import { downloadCsv, formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
@@ -59,7 +58,6 @@ const BLANK = { title: '', description: '', vendor_id: '', country_id: '', fund_
 
 export default function AccountingPurchaseOrders() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor', 'project_manager', 'program_manager']);
   const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
   const { currentUser } = useAppContext();
   const { toast } = useToast();
@@ -200,7 +198,6 @@ export default function AccountingPurchaseOrders() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const StatusBadge = ({ status }: { status: string }) => {
     const cfg = STATUS_CFG[status] ?? STATUS_CFG.draft;

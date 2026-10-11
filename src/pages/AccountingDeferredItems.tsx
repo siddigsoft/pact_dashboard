@@ -38,7 +38,6 @@ export default function AccountingDeferredItems() {
   const { currentUser } = useUser();
   const { toast } = useToast();
   const canManage = hasAnyRole(['super_admin','admin','financialAdmin','finance']);
-  const allowed   = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
 
   const [items, setItems]       = useState<DeferredItem[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -56,7 +55,7 @@ export default function AccountingDeferredItems() {
     setItems((data??[]) as DeferredItem[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const sf = (k: keyof typeof BLANK, v: string) => setForm(p=>({...p,[k]:v}));
 
@@ -103,7 +102,6 @@ export default function AccountingDeferredItems() {
     recognized: filtered.reduce((s,i)=>s+(i.original_amount-i.remaining_amount),0),
   }), [filtered]);
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

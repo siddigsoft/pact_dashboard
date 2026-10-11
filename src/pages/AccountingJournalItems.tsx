@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -24,10 +23,7 @@ interface LineItem {
 const PAGE_SIZE = 100;
 
 export default function AccountingJournalItems() {
-  const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
-
-  const [items, setItems]         = useState<LineItem[]>([]);
+    const [items, setItems]         = useState<LineItem[]>([]);
   const [loading, setLoading]     = useState(true);
   const [page, setPage]           = useState(0);
   const [total, setTotal]         = useState(0);
@@ -81,7 +77,7 @@ export default function AccountingJournalItems() {
     setLoading(false);
   }, [page, statusFilter, dcFilter, dateFrom, dateTo]);
 
-  useEffect(() => { if (allowed) void load(); }, [allowed, load]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => { setPage(0); }, [search, dateFrom, dateTo, dcFilter, statusFilter]);
 
   const filtered = useMemo(() => {
@@ -108,7 +104,6 @@ export default function AccountingJournalItems() {
   const totalDR = filtered.filter(l=>l.debit_credit==='DR').reduce((s,l)=>s+l.functional_amount,0);
   const totalCR = filtered.filter(l=>l.debit_credit==='CR').reduce((s,l)=>s+l.functional_amount,0);
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

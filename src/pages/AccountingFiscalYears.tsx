@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -15,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  Loader2, RefreshCw, Plus, ChevronRight, ChevronDown, Calendar, Lock, Unlock,
+  Loader2, RefreshCw, Plus, ChevronRight, ChevronDown, Calendar, Lock, Unlock, Download,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
@@ -50,7 +49,6 @@ const STATUS_LABELS: Record<string, string> = {
 export default function AccountingFiscalYears() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanManage = hasAnyRole(['super_admin', 'admin']);
 
   const overrideCanManage = usePageManageOverride('accounting-fiscal-years', roleCanManage);
@@ -91,7 +89,7 @@ export default function AccountingFiscalYears() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const periodsByYear = useMemo(() => {
     const m = new Map<string, Period[]>();
@@ -229,7 +227,6 @@ export default function AccountingFiscalYears() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-4 max-w-[1100px]">

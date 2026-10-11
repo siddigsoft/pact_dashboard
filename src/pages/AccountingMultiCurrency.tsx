@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -17,7 +16,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
-import { formatNumber } from '@/lib/accountingFormat';
+import { downloadCsv, formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
@@ -37,7 +36,6 @@ const BLANK = {
 
 export default function AccountingMultiCurrency() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
 
   const overrideCanEdit = usePageManageOverride('accounting-multi-currency', roleCanEdit);
@@ -73,7 +71,7 @@ export default function AccountingMultiCurrency() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => rates.filter(r => {
     if (fromFilter !== 'all' && r.from_currency !== fromFilter) return false;
@@ -146,7 +144,6 @@ export default function AccountingMultiCurrency() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
 
   if (tableExists === false) {
     return (

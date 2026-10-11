@@ -47,7 +47,6 @@ export default function AccountingLoans() {
   const { currentUser } = useUser();
   const { toast } = useToast();
   const canManage = hasAnyRole(['super_admin','admin','financialAdmin','finance']);
-  const allowed   = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
 
   const [loans, setLoans]     = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +65,7 @@ export default function AccountingLoans() {
     setLoans((data??[]) as Loan[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const sf = (k: keyof typeof BLANK, v: string) => setForm(p=>({...p,[k]:v}));
 
@@ -136,7 +135,6 @@ export default function AccountingLoans() {
     paid: filtered.reduce((s,l)=>s+l.total_paid,0),
   }), [filtered]);
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

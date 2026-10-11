@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -30,7 +29,6 @@ const BLANK_VENDOR: Partial<Vendor> = { name_en: '', name_ar: '', vendor_type: '
 
 export default function AccountingVendors() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
   const overrideCanEdit = usePageManageOverride('accounting-vendors', roleCanEdit);
@@ -173,7 +171,6 @@ export default function AccountingVendors() {
   }, [vendorLines]);
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const typeBadge = (t: string) => {
     const map: Record<string, string> = { supplier: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30', service_provider: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30', consultant: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30', ngo_partner: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30', government: 'bg-slate-100 text-slate-800', utility: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30' };

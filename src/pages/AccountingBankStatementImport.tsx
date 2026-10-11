@@ -58,8 +58,7 @@ function parseCSV(text: string): ParsedLine[] {
 }
 
 export default function AccountingBankStatementImport() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { isAuthenticated } = useAuthorization();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -93,7 +92,7 @@ export default function AccountingBankStatementImport() {
     setStmtLines((data ?? []) as SavedLine[]);
   }
 
-  useEffect(() => { if (isAuthenticated && allowed) load(); }, [isAuthenticated]);
+  useEffect(() => { if (isAuthenticated) load(); }, [isAuthenticated]);
   useEffect(() => { if (selectedStmt) loadLines(selectedStmt.id); else setStmtLines([]); }, [selectedStmt]);
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -166,7 +165,7 @@ export default function AccountingBankStatementImport() {
 
   const unmatchedCount = stmtLines.filter(l => l.status === 'unmatched').length;
 
-  if (!isAuthenticated || !allowed) {
+  if (!isAuthenticated) {
     return <div className="flex items-center justify-center py-24 text-muted-foreground"><AlertTriangle className="h-5 w-5 mr-2" />Access restricted.</div>;
   }
 

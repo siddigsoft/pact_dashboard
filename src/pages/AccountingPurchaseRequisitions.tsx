@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -69,7 +68,6 @@ const BLANK = {
 
 export default function AccountingPurchaseRequisitions() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor', 'project_manager', 'program_manager']);
   const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
   const { toast } = useToast();
 
@@ -109,7 +107,7 @@ export default function AccountingPurchaseRequisitions() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => prs.filter(p => {
     if (statusFilter !== 'all' && p.status !== statusFilter) return false;
@@ -213,7 +211,6 @@ export default function AccountingPurchaseRequisitions() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1200px]">

@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,8 +27,7 @@ interface ConsolidatedRow { account_type: string; total_debit: number; total_cre
 interface ElimEntry { desc: string; amount: number; entity_a: string; entity_b: string; account: string }
 
 export default function AccountingConsolidation() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated } = useAuthorization();
 
   const [lines, setLines] = useState<JournalLine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,7 +134,6 @@ export default function AccountingConsolidation() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 

@@ -34,8 +34,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function AccountingGLBridgePreFunding() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { isAuthenticated } = useAuthorization();
 
   const [logs, setLogs] = useState<BridgeLog[]>([]);
   const [unposted, setUnposted] = useState<PreFundTxn[]>([]);
@@ -71,7 +70,7 @@ export default function AccountingGLBridgePreFunding() {
     setLoading(false);
   }
 
-  useEffect(() => { if (isAuthenticated && allowed) load(); }, [isAuthenticated]);
+  useEffect(() => { if (isAuthenticated) load(); }, [isAuthenticated]);
 
   async function runBridge() {
     setBridging(true);
@@ -126,7 +125,7 @@ export default function AccountingGLBridgePreFunding() {
   // Only count unresolved errors for the badge (resolved = acknowledged by Finance)
   const errorCount   = logs.filter(l => l.status === 'error' && !l.resolved_at).length;
 
-  if (!isAuthenticated || !allowed) {
+  if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
         <AlertTriangle className="h-5 w-5 mr-2" />

@@ -34,8 +34,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function AccountingGLBridgePayroll() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'hr_admin']);
+  const { isAuthenticated } = useAuthorization();
 
   const [logs, setLogs] = useState<BridgeLog[]>([]);
   const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([]);
@@ -69,7 +68,7 @@ export default function AccountingGLBridgePayroll() {
     setLoading(false);
   }
 
-  useEffect(() => { if (isAuthenticated && allowed) load(); }, [isAuthenticated]);
+  useEffect(() => { if (isAuthenticated) load(); }, [isAuthenticated]);
 
   const bridgedPayrollIds  = new Set(logs.filter(l => l.source_table === 'payroll_runs'  && l.status === 'success').map(l => l.source_id));
   const bridgedEosbIds     = new Set(logs.filter(l => l.source_table === 'eosb_accrual'  && l.status === 'success').map(l => l.source_id));
@@ -152,7 +151,7 @@ export default function AccountingGLBridgePayroll() {
     toast.success('Error marked as resolved — it will no longer appear in the Finance Dashboard alert.');
   }
 
-  if (!isAuthenticated || !allowed) {
+  if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
         <AlertTriangle className="h-5 w-5 mr-2" />

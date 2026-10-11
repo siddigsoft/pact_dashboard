@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { fetchAccountingFinanceKpis } from '@/services/accountingFinanceKpis';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -197,10 +196,7 @@ function QuickLink({ href, icon: Icon, color, label, sub }: { href: string; icon
 /* ─── main component ─────────────────────────────────────────────────── */
 export default function AccountingFinanceDashboard() {
   const { authReady } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-
-  const {
+    const {
     data: kpis,
     isLoading,
     isFetching,
@@ -210,7 +206,7 @@ export default function AccountingFinanceDashboard() {
   } = useQuery({
     queryKey: ['accounting', 'finance-kpis'],
     queryFn: fetchAccountingFinanceKpis,
-    enabled: authReady && allowed,
+    enabled: authReady,
     staleTime: 1000 * 60 * 2,
   });
 
@@ -228,7 +224,7 @@ export default function AccountingFinanceDashboard() {
       if (err) return 0;
       return count ?? 0;
     },
-    enabled: authReady && allowed,
+    enabled: authReady,
     staleTime: 60_000,
   });
 
@@ -258,7 +254,6 @@ export default function AccountingFinanceDashboard() {
   );
 
   if (!authReady) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const revExpTrend = monthlyRevExp.data ?? [];
   const hasRevExpData = revExpTrend.some(d => d.revenue > 0 || d.expense > 0);

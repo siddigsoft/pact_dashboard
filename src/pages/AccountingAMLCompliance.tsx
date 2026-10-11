@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -117,7 +116,6 @@ function scoreEntry(e: JournalEntry): { type: RiskType; score: number } | null {
 /* ─── component ───────────────────────────────────────────────────────────── */
 export default function AccountingAMLCompliance() {
   const { hasAnyRole } = useAuthorization();
-  const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin']);
 
   const overrideCanEdit = usePageManageOverride('accounting-aml', roleCanEdit);
@@ -400,7 +398,6 @@ export default function AccountingAMLCompliance() {
     exportToExcel(rows, 'AML Alerts', `aml-alerts-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!allowed) return <Navigate to="/" replace />;
 
   const checkStatus = (s: ComplianceCheck['status']) => {
     if (s === 'pass') return { icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200' };

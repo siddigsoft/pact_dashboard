@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,8 +36,7 @@ interface TbRow {
 interface AccountMeta { id: string; account_type: string; subtype: string; country_id: string | null }
 
 export default function AccountingTrialBalance() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated } = useAuthorization();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -121,7 +120,7 @@ export default function AccountingTrialBalance() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed && periodId) void runTb(); }, [periodId, fundId, allowed]);
+  useEffect(() => { if (periodId) void runTb(); }, [periodId, fundId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -242,7 +241,6 @@ export default function AccountingTrialBalance() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-4 max-w-[1400px]">

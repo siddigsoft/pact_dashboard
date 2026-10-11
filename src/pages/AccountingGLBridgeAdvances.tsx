@@ -101,8 +101,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AccountingGLBridgeAdvances() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { isAuthenticated } = useAuthorization();
 
   const [dpUnposted,  setDpUnposted]  = useState<DownPayment[]>([]);
   const [opsUnposted, setOpsUnposted] = useState<CostSubmission[]>([]);
@@ -184,7 +183,7 @@ export default function AccountingGLBridgeAdvances() {
     setLoading(false);
   }
 
-  useEffect(() => { if (isAuthenticated && allowed) load(); }, [isAuthenticated]);
+  useEffect(() => { if (isAuthenticated) load(); }, [isAuthenticated]);
 
   // ── Bridge runners ────────────────────────────────────────────────────────
   async function runDpBridge() {
@@ -270,7 +269,7 @@ export default function AccountingGLBridgeAdvances() {
   const dpErrorCount    = logs.filter(l => l.source_table === 'down_payment_requests'        && l.status === 'error' && !l.resolved_at).length;
   const opsErrorCount   = logs.filter(l => l.source_table === 'operational_cost_submissions'  && l.status === 'error' && !l.resolved_at).length;
 
-  if (!isAuthenticated || !allowed) {
+  if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
         <AlertTriangle className="h-5 w-5 mr-2" />

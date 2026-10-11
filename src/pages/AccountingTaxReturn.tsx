@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -17,9 +16,8 @@ interface TaxSummaryRow { tax_name: string; tax_rate: number; taxable_base: numb
 const fmt = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(n ?? 0);
 
 export default function AccountingTaxReturn() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
 
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
@@ -63,7 +61,7 @@ export default function AccountingTaxReturn() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void run(); }, [allowed, year, quarter]);
+  useEffect(() => { void run(); }, [year, quarter]);
 
   const totals = useMemo(() => ({
     output: rows.reduce((s, r) => s + r.output_tax, 0),
@@ -75,7 +73,6 @@ export default function AccountingTaxReturn() {
   const exportData = [...rows.map(r => ({ ...r, type: 'VAT/Tax' })), ...whtRows.map(r => ({ tax_name: (r.acct_withholding_tax_rates as any)?.name_en, wht_amount: r.wht_amount, gross: r.gross_amount, type: 'WHT' }))];
 
   if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-4 p-4">

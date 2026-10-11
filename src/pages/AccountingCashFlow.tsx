@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,8 +38,7 @@ function classifyCF(accountType: string, subtype: string | null): CFCategory {
 interface CfSection { label: string; labelAr: string; items: { account_id: string; code: string; name: string; inflow: number; outflow: number; net: number }[]; totalInflow: number; totalOutflow: number; total: number }
 
 export default function AccountingCashFlow() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated } = useAuthorization();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -190,7 +188,6 @@ export default function AccountingCashFlow() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const SectionBlock = ({ sectionKey, sec }: { sectionKey: string; sec: CfSection }) => {
     const expanded = expandedSections.has(sectionKey);

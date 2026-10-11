@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
@@ -29,12 +29,11 @@ const PAGE_SIZE = 100;
 
 export default function AccountingGeneralLedger() {
   const isColVisible = useColumnVisibility('accounting-general-ledger');
-  const { hasAnyRole, isAuthenticated, checkPermission } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated, checkPermission } = useAuthorization();
   const canExport = checkPermission('accounting', 'export');
   const [searchParams] = useSearchParams();
 
-  const bootstrapQuery = useGlBootstrapQuery(allowed && isAuthenticated);
+  const bootstrapQuery = useGlBootstrapQuery(isAuthenticated);
   const accounts = bootstrapQuery.data?.accounts ?? [];
   const years = bootstrapQuery.data?.years ?? [];
   const periods = bootstrapQuery.data?.periods ?? [];
@@ -185,7 +184,6 @@ export default function AccountingGeneralLedger() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
   if (bootstrap) return <PageLoader label="Loading general ledger…" />;
 
   return (

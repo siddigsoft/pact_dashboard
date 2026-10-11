@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -46,7 +45,6 @@ const DATE_RANGES = [
 
 export default function AccountingSOD() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed     = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'auditor']);
   const canToggle   = hasAnyRole(['super_admin']);
   const { toast }   = useToast();
 
@@ -88,7 +86,7 @@ export default function AccountingSOD() {
     setLoading(false);
   }, [dateRange]);
 
-  useEffect(() => { if (allowed) void load(); }, [allowed, dateRange]);
+  useEffect(() => { void load(); }, [dateRange]);
 
   const getName = (id: string) => {
     const p = profiles.find(p => p.id === id);
@@ -154,7 +152,6 @@ export default function AccountingSOD() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
 
   const isEnforcing = sodFlag?.is_enabled ?? false;
 

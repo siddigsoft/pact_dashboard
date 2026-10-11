@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -130,8 +129,7 @@ const HEALTH_CFG = {
 };
 
 export default function AccountingGLAudit() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { loading: authLoading } = useAuthorization();
   const { toast } = useToast();
 
   const [tab, setTab] = useState<'log' | 'coverage' | 'integrity'>('coverage');
@@ -399,7 +397,6 @@ export default function AccountingGLAudit() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1200px]">

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,7 +66,6 @@ const BLANK_LINE = (): NewLine => ({
 export default function AccountingJournals() {
   const isColVisible = useColumnVisibility('accounting-journals');
   const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canPost   = hasAnyRole(['super_admin', 'finance', 'accountant']);
   const { toast } = useToast();
 
@@ -85,7 +83,7 @@ export default function AccountingJournals() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const metaQuery = useJournalsMetaQuery(allowed && isAuthenticated);
+  const metaQuery = useJournalsMetaQuery(isAuthenticated);
   const entriesQuery = useJournalEntriesQuery(
     {
       periodId: periodFilter,
@@ -95,7 +93,7 @@ export default function AccountingJournals() {
       page,
       pageSize: PAGE_SIZE,
     },
-    allowed && isAuthenticated
+    isAuthenticated
   );
 
   const years = metaQuery.data?.years ?? [];
@@ -343,7 +341,6 @@ export default function AccountingJournals() {
   }, [openLines]);
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
   if (metaQuery.isLoading && !metaQuery.data) return <PageLoader label="Loading journals…" />;
 
   return (

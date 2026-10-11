@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -76,7 +75,6 @@ const CHECK_LABELS: Record<string, { label: string; icon: React.ElementType; des
 
 export default function AccountingPeriodClose() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canClose  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
   const { toast } = useToast();
 
@@ -105,7 +103,7 @@ export default function AccountingPeriodClose() {
     setLoading(false);
   }, [selectedYear]);
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const visiblePeriods = useMemo(() =>
     periods.filter(p => p.fiscal_year_id === selectedYear).sort((a, b) => a.period_no - b.period_no),
@@ -232,7 +230,6 @@ export default function AccountingPeriodClose() {
   }, [visiblePeriods]);
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1000px]">
