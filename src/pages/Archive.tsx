@@ -12,7 +12,6 @@ import ArchiveSiteVisitList from "@/components/archive/ArchiveSiteVisitList";
 import ArchiveDocumentList from "@/components/archive/ArchiveDocumentList";
 import ArchiveSearch from "@/components/archive/ArchiveSearch";
 import ArchiveCalendarView from "@/components/archive/ArchiveCalendarView";
-import { useAuthorization } from "@/hooks/use-authorization";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -21,33 +20,7 @@ const ArchivePage = () => {
   const navigate = useNavigate();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { currentUser } = useAppContext();
-  const { checkPermission, hasAnyRole } = useAuthorization();
   const { toast } = useToast();
-  const canAccess = checkPermission('reports', 'read') || hasAnyRole(['admin']);
-  if (!canAccess) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-destructive">Access Denied</CardTitle>
-            <CardDescription>
-              You don't have permission to access this page.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="outline"
-              onClick={() => navigate('/dashboard')}
-              className="w-full"
-            >
-              Return to Dashboard
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-  
   const handleBackClick = () => {
     navigate("/dashboard");
   };

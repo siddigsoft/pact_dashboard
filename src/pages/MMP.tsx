@@ -2477,9 +2477,6 @@ const MMP = () => {
     loadMySitesForEnumerator();
   }, [canClaimSites, currentUser?.id, enumeratorRefreshTrigger]);
 
-  // canRead: checkPermission is the primary gate (reads DEFAULT_ROLE_PERMISSIONS / DB toggles).
-  // Security Panel toggling mmp:read for a role will reflect here immediately.
-  const canRead = checkPermission('mmp', 'read');
   // canCreate: intentionally more restrictive than DEFAULT_ROLE_PERMISSIONS — only Admin/ICT
   // may upload on the main MMP list page (business rule). Security Panel can REVOKE this further.
   const canCreate = (isAdmin || isICT) && checkPermission('mmp', 'create');
@@ -4464,26 +4461,6 @@ const MMP = () => {
     setSiteVisitStats(derivedStats);
     setSiteVisitRows(derivedRows);
   }, [derivedStats, derivedRows]);
-
-  if (!canRead) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-destructive">{t('mmpPage.accessDenied')}</CardTitle>
-            <CardDescription>
-              {t('mmpPage.noPermission')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" onClick={() => navigate('/dashboard')} className="w-full">
-              {t('mmpPage.returnToDashboard')}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-3 min-h-screen bg-slate-50 dark:bg-gray-900 py-2 sm:py-3 px-2 sm:px-4 md:px-6">

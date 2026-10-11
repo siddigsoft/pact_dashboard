@@ -55,7 +55,7 @@ const ProjectsPage = () => {
   const { isFilterVisible } = useCurrentUserAccess();
   const navigate = useNavigate();
   useProjectStalledAlert();
-  const { hasAnyRole, isSuperAdmin, hasExplicitActionGrant, checkPermission } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin, hasExplicitActionGrant } = useAuthorization();
   const { currentUser } = useUser();
 
   const projectContext = useProjectContext();
@@ -154,38 +154,6 @@ const ProjectsPage = () => {
     setFilterPM('all');
     setFilterSearch('');
   };
-
-  // Baseline roles, Access Control page/action grant, or projects:read permission.
-  const canViewProjects =
-    isSuperAdmin() ||
-    hasAnyRole([
-      'admin', 'Admin', 'fom', 'FOM', 'ict', 'ICT', 'projectManager', 'ProjectManager',
-      'employee', 'Employee', 'countryDirector', 'Country Director', 'hr', 'HR',
-    ]) ||
-    hasGrantedOrgProjectsAccess ||
-    checkPermission('projects', 'read');
-
-  if (!canViewProjects) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="text-center space-y-3 max-w-sm">
-          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
-            <FolderKanban className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h2 className="text-xl font-semibold">Access Restricted</h2>
-          <p className="text-muted-foreground text-sm">
-            You do not have access to the Projects module.
-          </p>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="text-sm text-primary underline hover:no-underline"
-          >
-            Return to Dashboard
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background p-2.5 md:p-3 space-y-2.5">

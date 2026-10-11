@@ -35,7 +35,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useAuthorization } from "@/hooks/use-authorization";
 import {
   Select,
   SelectContent,
@@ -137,33 +136,6 @@ const DataVisibility: FC = () => {
   }, [searchTerm]);
 
   const navigate = useNavigate();
-
-  const { checkPermission, hasAnyRole } = useAuthorization();
-  const canAccess = checkPermission('reports', 'read') || hasAnyRole(['admin']);
-  
-  if (!canAccess) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-destructive">Access Denied</CardTitle>
-            <CardDescription>
-              You don't have permission to access this page.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="outline"
-              onClick={() => navigate('/analytics?tab=data-visibility')}
-              className="w-full"
-            >
-              Go Back
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   useEffect(() => {
     if (siteVisits && siteVisits.length > 0) {
