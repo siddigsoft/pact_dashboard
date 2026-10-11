@@ -621,7 +621,7 @@ async function fetchCollectorClassifications(): Promise<Map<string, CollectorCla
 
     const { data: classifications } = await supabase
       .from('user_classifications')
-      .select('*')
+      .select('user_id, classification_level, role_scope, is_active')
       .eq('is_active', true);
 
     const { data: feeStructures } = await supabase

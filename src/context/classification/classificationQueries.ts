@@ -55,15 +55,33 @@ function transformFeeStructureFromDB(data: any): ClassificationFeeStructure {
   };
 }
 
+// Retainer columns are not selectable on user_classifications; they come from the
+// user_classification_retainers view, which only returns rows the caller may see.
+export const CLASSIFICATION_BASE_COLUMNS =
+  'id, user_id, classification_level, role_scope, effective_from, effective_until, assigned_by, change_reason, notes, is_active, created_at, updated_at';
+
+export async function withRetainers<T extends { id: string }>(rows: T[]): Promise<T[]> {
+  if (rows.length === 0) return rows;
+  const { data, error } = await (supabase as any)
+    .from('user_classification_retainers')
+    .select('id, has_retainer, retainer_amount_cents, retainer_currency, retainer_payout_currency, retainer_frequency');
+  if (error) {
+    console.warn('[Classification] Could not load retainers:', error.message);
+    return rows;
+  }
+  const byId = new Map<string, Record<string, unknown>>((data ?? []).map((r: any) => [r.id, r]));
+  return rows.map(row => ({ ...row, ...(byId.get(row.id) ?? {}) }));
+}
+
 async function fetchUserClassifications(): Promise<UserClassification[]> {
   try {
     const { data, error } = await supabase
       .from('user_classifications')
-      .select('*')
+      .select(CLASSIFICATION_BASE_COLUMNS)
       .order('effective_from', { ascending: false });
 
     if (error) throw error;
-    return (data || []).map(transformUserClassificationFromDB);
+    return (await withRetainers((data || []) as any[])).map(transformUserClassificationFromDB);
   } catch (err: any) {
     console.warn('[Classification] Could not load user classifications:', err?.message || err);
     return [];

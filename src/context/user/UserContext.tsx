@@ -619,7 +619,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Fetch user's active classification
       const { data: classificationData } = await supabase
-        .from('user_classifications')
+        .from('user_classification_retainers' as any)
         .select('classification_level, role_scope, has_retainer, retainer_amount_cents, retainer_currency, effective_from, effective_until')
         .eq('user_id', authUser.id)
         .eq('is_active', true)
