@@ -40,9 +40,9 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 export default function AccountingBudgetEncumbrance() {
-  const { checkPermission, hasAnyRole, isAuthenticated } = useAuthorization();
+  const { checkPermission, isAuthenticated, canWriteAccounting } = useAuthorization();
   const canExport = checkPermission('finances', 'export');
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-budget-encumbrance', roleCanEdit);
 

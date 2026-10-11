@@ -256,11 +256,11 @@ export default function AccountingGLBridge() {
   const [retryCandidate, setRetryCandidate] = useState<BridgeLogRow | null>(null);
   const [retryingLogId, setRetryingLogId] = useState<string | null>(null);
   const [unresolvedOffset, setUnresolvedOffset] = useState(0);
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting } = useAuthorization();
   const { toast } = useToast();
   // This matches the existing retry RPC's server-side role allowlist. The RPC
   // remains the source of truth and performs its own authorization check.
-  const canRetry = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canRetry = canWriteAccounting();
 
   // Bridge summary from DB view
   const { data: summaryRows = [], refetch: refetchSummary, isFetching: loadingSummary } =

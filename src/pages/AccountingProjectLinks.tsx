@@ -35,10 +35,10 @@ const LINK_TYPE_STYLES: Record<string,string> = {
 const BLANK = { project_id:'', account_id:'', company_id:'', link_type:'expense', description:'', is_default:false };
 
 export default function AccountingProjectLinks() {
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting, checkPermission } = useAuthorization();
   const { currentUser } = useUser();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin','admin','financialAdmin','finance','projectManager','coordinator']);
+  const canManage = canWriteAccounting() || checkPermission('projects', 'update');
 
   const [links, setLinks]         = useState<ProjectLink[]>([]);
   const [projects, setProjects]   = useState<Project[]>([]);

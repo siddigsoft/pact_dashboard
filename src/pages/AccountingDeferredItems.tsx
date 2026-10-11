@@ -34,10 +34,10 @@ const BLANK = {
 };
 
 export default function AccountingDeferredItems() {
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting } = useAuthorization();
   const { currentUser } = useUser();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin','admin','financialAdmin','finance']);
+  const canManage = canWriteAccounting();
 
   const [items, setItems]       = useState<DeferredItem[]>([]);
   const [loading, setLoading]   = useState(true);

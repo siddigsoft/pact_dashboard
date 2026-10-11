@@ -24,9 +24,9 @@ const fmt = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigit
 const daysDiff = (d: string) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
 
 export default function AccountingOutstandingChecks() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canManage = canWriteAccounting();
 
   const [rows, setRows] = useState<Cheque[]>([]);
   const [loading, setLoading] = useState(true);

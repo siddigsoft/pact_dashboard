@@ -50,8 +50,8 @@ const BLANK: Omit<Fund, 'id' | 'created_at'> = {
 };
 
 export default function AccountingFunds() {
-  const { hasAnyRole } = useAuthorization();
-  const roleCanManage = hasAnyRole(['super_admin', 'admin', 'finance', 'accountant']);
+  const { canWriteAccounting } = useAuthorization();
+  const roleCanManage = canWriteAccounting();
 
   const overrideCanManage = usePageManageOverride('accounting-funds', roleCanManage);
 

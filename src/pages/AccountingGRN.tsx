@@ -64,8 +64,8 @@ const BLANK = {
 };
 
 export default function AccountingGRN() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const canInspect = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const canInspect = canWriteAccounting();
   const { toast } = useToast();
 
   const [grns, setGRNs]       = useState<GRN[]>([]);

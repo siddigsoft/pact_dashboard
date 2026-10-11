@@ -31,10 +31,10 @@ const FREQ_COLORS: Record<string, string> = {
 };
 
 export default function AccountingRecurringJournals() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canManage = canWriteAccounting();
 
   const [rows, setRows] = useState<RecurringJournal[]>([]);
   const [loading, setLoading] = useState(true);

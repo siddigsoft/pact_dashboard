@@ -38,10 +38,10 @@ const STATUS_COLORS: Record<string, string> = {
 const fmt = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(n ?? 0);
 
 export default function AccountingWireTransfers() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canManage = canWriteAccounting();
 
   const [rows, setRows]         = useState<Wire[]>([]);
   const [loading, setLoading]   = useState(true);

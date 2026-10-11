@@ -28,8 +28,8 @@ const VENDOR_TYPES = ['supplier', 'service_provider', 'consultant', 'ngo_partner
 const BLANK_VENDOR: Partial<Vendor> = { name_en: '', name_ar: '', vendor_type: 'supplier', payment_terms: 30, currency: 'USD', tax_id: '', contact_name: '', contact_email: '', contact_phone: '', address: '', bank_name: '', bank_account_no: '', swift_code: '', notes: '' };
 
 export default function AccountingVendors() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-vendors', roleCanEdit);
 

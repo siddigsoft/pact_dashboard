@@ -67,8 +67,8 @@ const BLANK = {
 };
 
 export default function AccountingAPInvoices() {
-  const { hasAnyRole } = useAuthorization();
-  const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const { canWriteAccounting } = useAuthorization();
+  const canApprove = canWriteAccounting();
   const { toast } = useToast();
 
   const [invoices, setInvoices]   = useState<APInvoice[]>([]);

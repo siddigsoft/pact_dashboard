@@ -25,10 +25,10 @@ interface Country { id: string; name_en: string; flag_emoji: string }
 const fmt = (n: number | null) => n != null ? `$${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(n)}` : '—';
 
 export default function AccountingPerDiemRates() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const canManage = canWriteAccounting();
 
   const [rows, setRows] = useState<PerDiem[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);

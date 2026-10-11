@@ -23,10 +23,10 @@ interface WHTEntry { id: string; rate_id: string; entry_date: string; vendor_nam
 const fmt = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(n ?? 0);
 
 export default function AccountingWithholdingTax() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canManage = canWriteAccounting();
 
   const [rates, setRates] = useState<WHTRate[]>([]);
   const [entries, setEntries] = useState<WHTEntry[]>([]);

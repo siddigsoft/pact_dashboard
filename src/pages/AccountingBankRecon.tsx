@@ -41,8 +41,8 @@ const BLANK_BANK = { account_name: '', bank_name: '', account_number: '', curren
 const BLANK_LINE = { statement_date: '', description: '', reference: '', amount: '', running_balance: '', currency: 'USD' };
 
 export default function AccountingBankRecon() {
-  const { hasAnyRole } = useAuthorization();
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { canWriteAccounting } = useAuthorization();
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-bank-recon', roleCanEdit);
 

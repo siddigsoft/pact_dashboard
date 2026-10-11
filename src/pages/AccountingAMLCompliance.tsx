@@ -115,8 +115,8 @@ function scoreEntry(e: JournalEntry): { type: RiskType; score: number } | null {
 
 /* ─── component ───────────────────────────────────────────────────────────── */
 export default function AccountingAMLCompliance() {
-  const { hasAnyRole } = useAuthorization();
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin']);
+  const { canWriteAccounting } = useAuthorization();
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-aml', roleCanEdit);
 

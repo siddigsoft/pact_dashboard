@@ -30,10 +30,10 @@ const REPLEN_COLORS: Record<string, string> = {
 };
 
 export default function AccountingPettyCash() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canManage = canWriteAccounting();
 
   const [boxes, setBoxes]         = useState<CashBox[]>([]);
   const [txns, setTxns]           = useState<CashTxn[]>([]);

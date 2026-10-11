@@ -57,8 +57,8 @@ const STATUS_FLOW: Record<string, string[]> = {
 const BLANK = { title: '', description: '', vendor_id: '', country_id: '', fund_id: '', gl_account_id: '', amount: 0, currency: 'USD', required_date: '', notes: '', invoice_ref: '' };
 
 export default function AccountingPurchaseOrders() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const canApprove = canWriteAccounting();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
 

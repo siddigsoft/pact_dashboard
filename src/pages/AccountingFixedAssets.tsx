@@ -92,8 +92,8 @@ function calcDepreciation(asset: Asset, asOfDate: Date): { monthlyDep: number; a
 const BLANK: Partial<Asset> = { name_en: '', name_ar: '', category: 'equipment', currency: 'USD', acquisition_date: new Date().toISOString().slice(0, 10), acquisition_cost: 0, useful_life_months: 60, salvage_value: 0, depreciation_method: 'straight_line', status: 'active', location: '', serial_number: '', supplier: '', notes: '' };
 
 export default function AccountingFixedAssets() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-fixed-assets', roleCanEdit);
 

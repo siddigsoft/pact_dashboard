@@ -26,10 +26,10 @@ interface Reval {
 const fmt = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(n ?? 0);
 
 export default function AccountingAssetRevaluation() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canManage = canWriteAccounting();
 
   const [rows, setRows] = useState<Reval[]>([]);
   const [assets, setAssets] = useState<{ id: string; asset_name: string; asset_code: string; cost: number; accumulated_depreciation: number }[]>([]);

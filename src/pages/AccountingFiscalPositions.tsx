@@ -27,10 +27,10 @@ interface FiscalPosition {
 const BLANK = { name_en:'', name_ar:'', company_id:'', country_id:'', auto_apply:false, notes:'', is_active:true };
 
 export default function AccountingFiscalPositions() {
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting } = useAuthorization();
   const { currentUser } = useUser();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin','admin','financialAdmin']);
+  const canManage = canWriteAccounting();
 
   const [positions, setPositions] = useState<FiscalPosition[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);

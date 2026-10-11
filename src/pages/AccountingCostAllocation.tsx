@@ -62,9 +62,9 @@ const MIGRATION_NOTICE = (
 );
 
 export default function AccountingCostAllocation() {
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-cost-allocation', roleCanEdit);
 

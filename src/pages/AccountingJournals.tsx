@@ -65,8 +65,8 @@ const BLANK_LINE = (): NewLine => ({
 
 export default function AccountingJournals() {
   const isColVisible = useColumnVisibility('accounting-journals');
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const canPost   = hasAnyRole(['super_admin', 'finance', 'accountant']);
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
+  const canPost   = canWriteAccounting();
   const { toast } = useToast();
 
   const invalidateJournals = useInvalidateJournalsBundle();

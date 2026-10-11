@@ -40,9 +40,9 @@ function usageBand(pct: number): 'ok' | 'warn' | 'over' {
 }
 
 export default function AccountingBudgetVsActual() {
-  const { checkPermission, hasAnyRole, isAuthenticated } = useAuthorization();
+  const { checkPermission, isAuthenticated, canWriteAccounting } = useAuthorization();
   const canExport = checkPermission('finances', 'export');
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-budget-variance', roleCanEdit);
 

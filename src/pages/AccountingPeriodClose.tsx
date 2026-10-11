@@ -74,8 +74,8 @@ const CHECK_LABELS: Record<string, { label: string; icon: React.ElementType; des
 };
 
 export default function AccountingPeriodClose() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const canClose  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const canClose  = canWriteAccounting();
   const { toast } = useToast();
 
   const [years, setYears]       = useState<FiscalYear[]>([]);

@@ -58,8 +58,8 @@ const STATUS_STYLES: Record<TxStatus, string> = {
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function AccountingIntercompany() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const canWrite = hasAnyRole(['super_admin', 'admin', 'finance', 'accountant']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const canWrite = canWriteAccounting();
   const { currentUser } = useUser();
   const { toast } = useToast();
 

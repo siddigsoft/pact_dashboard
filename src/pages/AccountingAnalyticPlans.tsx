@@ -38,10 +38,10 @@ const BLANK_PLAN: Omit<AnalyticPlan,'id'> = {
 const BLANK_ACCOUNT = { name_en:'', name_ar:'', code:'', plan_id:'', company_id:'', currency_code:'USD', is_active:true };
 
 export default function AccountingAnalyticPlans() {
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting } = useAuthorization();
   const { currentUser } = useUser();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin','admin','financialAdmin']);
+  const canManage = canWriteAccounting();
 
   const [plans, setPlans]         = useState<AnalyticPlan[]>([]);
   const [accounts, setAccounts]   = useState<AnalyticAccount[]>([]);

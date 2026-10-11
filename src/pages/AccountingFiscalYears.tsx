@@ -47,9 +47,9 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function AccountingFiscalYears() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
-  const roleCanManage = hasAnyRole(['super_admin', 'admin']);
+  const roleCanManage = canWriteAccounting();
 
   const overrideCanManage = usePageManageOverride('accounting-fiscal-years', roleCanManage);
 

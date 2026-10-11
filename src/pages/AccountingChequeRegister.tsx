@@ -69,9 +69,9 @@ const BLANK = {
 };
 
 export default function AccountingChequeRegister() {
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission, canWriteAccounting } = useAuthorization();
   const canExport  = checkPermission('procurement', 'export');
-  const canAction  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const canAction  = canWriteAccounting();
   const { toast } = useToast();
 
   const [cheques, setCheques]         = useState<Cheque[]>([]);

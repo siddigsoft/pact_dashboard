@@ -44,9 +44,9 @@ const TYPE_LABEL: Record<string, { label: string; color: string }> = {
 };
 
 export default function AccountingBudgetPlanning() {
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission, canWriteAccounting } = useAuthorization();
   const canExport = checkPermission('finances', 'export');
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-budget', roleCanEdit);
 
@@ -628,7 +628,7 @@ export default function AccountingBudgetPlanning() {
                   Submit for Approval
                 </Button>
               )}
-              {approvalRecord?.status === 'submitted' && hasAnyRole(['super_admin', 'admin', 'financialAdmin']) && (
+              {approvalRecord?.status === 'submitted' && canWriteAccounting() && (
                 <>
                   <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => reviewBudget('approved')} disabled={approvingBudget} data-testid="button-approve-budget">
                     {approvingBudget ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <ShieldCheck className="h-3.5 w-3.5 mr-1" />}

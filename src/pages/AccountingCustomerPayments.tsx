@@ -30,10 +30,10 @@ const fmt = (n: number, cur = 'USD') =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(n ?? 0);
 
 export default function AccountingCustomerPayments() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canManage = canWriteAccounting();
 
   const [rows, setRows] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);

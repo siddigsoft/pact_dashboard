@@ -35,8 +35,8 @@ const BLANK = {
 };
 
 export default function AccountingMultiCurrency() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-multi-currency', roleCanEdit);
 

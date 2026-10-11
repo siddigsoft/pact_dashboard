@@ -43,10 +43,10 @@ const BLANK = {
 };
 
 export default function AccountingLoans() {
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting } = useAuthorization();
   const { currentUser } = useUser();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin','admin','financialAdmin','finance']);
+  const canManage = canWriteAccounting();
 
   const [loans, setLoans]     = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);

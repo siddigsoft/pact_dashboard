@@ -67,8 +67,8 @@ const BLANK = {
 };
 
 export default function AccountingPurchaseRequisitions() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const canApprove = canWriteAccounting();
   const { toast } = useToast();
 
   const [prs, setPRs]       = useState<PR[]>([]);

@@ -20,10 +20,10 @@ interface JTemplate {
 }
 
 export default function AccountingJournalTemplates() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canManage = canWriteAccounting();
 
   const [rows, setRows] = useState<JTemplate[]>([]);
   const [loading, setLoading] = useState(true);

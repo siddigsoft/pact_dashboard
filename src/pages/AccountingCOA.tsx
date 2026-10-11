@@ -120,10 +120,10 @@ const BLANK_FORM = {
 type FormState = typeof BLANK_FORM;
 
 export default function AccountingCOA() {
-  const { hasAnyRole, isAuthenticated, checkPermission } = useAuthorization();
+  const { isAuthenticated, checkPermission, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const navigate = useNavigate();
-  const roleCanManage = hasAnyRole(['super_admin', 'admin']);
+  const roleCanManage = canWriteAccounting();
   const canExport = checkPermission('accounting', 'export');
 
   const overrideCanManage = usePageManageOverride('accounting-coa', roleCanManage);

@@ -44,12 +44,12 @@ const fmt = (n: number | null | undefined) =>
   new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
 
 export default function AccountingExpenseReports() {
-  const { hasAnyRole, isAuthenticated, user } = useAuthorization();
+  const { isAuthenticated, user, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const canTier1  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'fom']);
-  const canTier2  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
-  const canPay    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canTier1  = canWriteAccounting();
+  const canTier2  = canWriteAccounting();
+  const canPay    = canWriteAccounting();
 
   const [rows, setRows]           = useState<ExpenseReport[]>([]);
   const [employees, setEmployees] = useState<{ id: string; full_name: string }[]>([]);

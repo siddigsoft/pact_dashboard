@@ -20,10 +20,10 @@ interface ExpCat {
 }
 
 export default function AccountingExpenseCategories() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const canManage = canWriteAccounting();
 
   const [rows, setRows] = useState<ExpCat[]>([]);
   const [loading, setLoading] = useState(true);

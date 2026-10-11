@@ -60,9 +60,9 @@ function calcDepr(a: Asset): AssetWithDepr {
 }
 
 export default function AccountingDepreciationRun() {
-  const { checkPermission, hasAnyRole, loading: authLoading } = useAuthorization();
+  const { checkPermission, loading: authLoading, canWriteAccounting } = useAuthorization();
   const canExport = checkPermission('fixed_assets', 'export');
-  const canRun = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const canRun = canWriteAccounting();
   const { toast } = useToast();
 
   const [assets, setAssets] = useState<AssetWithDepr[]>([]);

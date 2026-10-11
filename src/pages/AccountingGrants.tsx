@@ -77,8 +77,8 @@ const BLANK_EXPENSE = { expense_date: '', amount: '', description: '' };
 const BLANK_MILESTONE = { title: '', due_date: '', status: 'pending', submitted_date: '', notes: '' };
 
 export default function AccountingGrants() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-grants', roleCanEdit);
 
