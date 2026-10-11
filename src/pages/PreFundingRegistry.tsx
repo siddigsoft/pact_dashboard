@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { exportToExcel } from '@/utils/report-export';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -949,14 +948,10 @@ async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
 
 export default function PreFundingRegistry() {
   const { hasAnyRole, isSuperAdmin } = useAuthorization();
-  const { canViewOrgPreFunds } = usePreFundOrgAccess();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const isSuper = isSuperAdmin();
   const canManage = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  // Access Control grant unlocks org-wide fund list; create/edit stay canManage.
-  const canAccess = canManage || canViewOrgPreFunds;
-
   // Pre-filter by project when arriving from ProjectCostTab "View / Manage" button
   const [searchParams] = useSearchParams();
   const urlProjectId = searchParams.get('project_id') || '';
@@ -2302,15 +2297,6 @@ export default function PreFundingRegistry() {
     'Fund Registry',
     `fund-registry-${format(new Date(), 'yyyy-MM-dd')}.xlsx`
   );
-
-  if (!canAccess) {
-    return (
-      <div className="p-8 text-center">
-        <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
-        <p className="text-muted-foreground">Access denied.</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-5 p-4 md:p-6">

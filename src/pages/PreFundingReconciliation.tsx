@@ -2383,10 +2383,6 @@ export default function PreFundingReconciliation() {
   // Unattributed = payment txns with no user_id assigned
   const filteredUnattributedPayments = filteredTransactions.filter(t => t.transaction_type === 'payment' && !t.user_id);
 
-  if (!canAccess) return (
-    <div className="p-8 text-center"><AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" /><p className="text-muted-foreground">Access denied.</p></div>
-  );
-
   return (
     <div className="space-y-5 p-4 md:p-6">
       <div className="flex items-center justify-between">

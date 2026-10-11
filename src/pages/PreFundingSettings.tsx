@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Settings2, Plus, Pencil, Trash2, RefreshCw, AlertTriangle,
+  Settings2, Plus, Pencil, Trash2, RefreshCw,
   Lock, Globe, Activity, RotateCcw, Zap, Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -100,7 +100,7 @@ export default function PreFundingSettings() {
   const { hasAnyRole } = useAuthorization();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const canEdit = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
 
   const [settings, setSettings]       = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [periodTypes, setPeriodTypes]  = useState<PeriodType[]>([]);
@@ -358,10 +358,6 @@ export default function PreFundingSettings() {
 
   const set = (k: keyof Settings, v: any) => setSettings(p => ({ ...p, [k]: v }));
 
-  if (!canAccess) return (
-    <div className="p-8 text-center"><AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" /><p className="text-muted-foreground">Access denied.</p></div>
-  );
-
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-4xl">
       <div className="flex items-center justify-between">
@@ -371,14 +367,14 @@ export default function PreFundingSettings() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-4 w-4 mr-1.5" />Refresh</Button>
-          <Button size="sm" onClick={handleSave} disabled={saving} data-testid="button-save-settings">{saving ? 'Saving…' : 'Save Settings'}</Button>
+          <Button size="sm" onClick={handleSave} disabled={saving || !canEdit} data-testid="button-save-settings">{saving ? 'Saving…' : 'Save Settings'}</Button>
         </div>
       </div>
 
       {loading ? (
         <div className="space-y-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>
       ) : (
-        <>
+        <fieldset disabled={!canEdit} className="contents">
           {/* ── System defaults */}
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Globe className="h-4 w-4 text-sky-600" />System Defaults</CardTitle></CardHeader>
@@ -720,7 +716,7 @@ export default function PreFundingSettings() {
               {saving ? 'Saving…' : 'Save All Settings'}
             </Button>
           </div>
-        </>
+        </fieldset>
       )}
 
       {/* Period Type Dialog */}

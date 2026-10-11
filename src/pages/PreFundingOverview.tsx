@@ -231,11 +231,10 @@ function calcBurnDaysLeft(f: PreFundRow): number | null {
 }
 
 export default function PreFundingOverview() {
-  const { hasAnyRole, checkPermission } = useAuthorization();
-  const { canViewOrgPreFunds, isFinanceAdmin } = usePreFundOrgAccess();
+  const { checkPermission } = useAuthorization();
+  const { isFinanceAdmin } = usePreFundOrgAccess();
   const navigate = useNavigate();
   // Finance/admin + Access Control grant: org-wide balance view; others: role baselines
-  const canAccess = canViewOrgPreFunds || hasAnyRole(['coordinator', 'supervisor', 'fom', 'dataTeam', 'data_collector', 'employee', 'countryDirector']);
   const canCreatePreFund = checkPermission('pre_funding', 'create');
   const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
 
@@ -608,15 +607,6 @@ export default function PreFundingOverview() {
       };
     });
     exportToExcel(rows, 'Pre-Fund Balances', `pre-fund-balances-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-  }
-
-  if (!canAccess) {
-    return (
-      <div className="p-8 text-center">
-        <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
-        <p className="text-muted-foreground">You don't have access to Pre-Funding.</p>
-      </div>
-    );
   }
 
   return (
