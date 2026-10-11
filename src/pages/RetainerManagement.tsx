@@ -159,17 +159,12 @@ const RetainerManagement = () => {
   const isFinancialAdmin = hasAnyRole(['finance_admin', 'Finance Admin']);
   const roleCanManage = isSuperAdmin || isAdmin || isFinancialAdmin;
   const overrideCanManage = usePageManageOverride('retainer-management', roleCanManage);
-  // The page's directory destination is payroll:read.  A read grant must
-  // expose the fetched payment history without granting any processing
-  // controls; manage remains role/page-override based.
-  const canRead = checkPermission('payroll', 'read');
-  const canView = roleCanManage || overrideCanManage || canRead;
   const canManage = roleCanManage || overrideCanManage;
 
   const [activeTab, setActiveTab] = useState('overview');
   const invalidateRetainer = useInvalidateRetainerQueries();
-  const retainerQuery = useRetainerBundleQuery(canView);
-  const loading = canView && retainerQuery.isLoading;
+  const retainerQuery = useRetainerBundleQuery(true);
+  const loading = retainerQuery.isLoading;
   const transactions = (retainerQuery.data?.transactions ?? []) as RetainerTransaction[];
   const eligibleUsers = (retainerQuery.data?.eligibleUsers ?? []) as EligibleUser[];
   const [searchQuery, setSearchQuery] = useState('');
@@ -200,9 +195,8 @@ const RetainerManagement = () => {
   };
 
   const fetchData = useCallback(async () => {
-    if (!canView) return;
     await invalidateRetainer();
-  }, [canView, invalidateRetainer]);
+  }, [invalidateRetainer]);
 
   const userNameMap = useMemo(() => {
     const map: Record<string, { name: string; email: string }> = {};
@@ -670,19 +664,6 @@ const RetainerManagement = () => {
         .map(u => u.user_id),
     );
   }, [eligibleUsers, fxWarnings]);
-
-  if (!canView) {
-    return (
-      <div className="container mx-auto p-6">
-        <Alert variant="destructive">
-          <AlertTriangle className="h-5 w-5" />
-          <AlertDescription>
-            Access Denied: You do not have permission to view retainer management. This page is restricted to administrators and financial admins.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
 
   if (loading && !retainerQuery.data) {
     return <PageLoader label="Loading retainers…" />;
