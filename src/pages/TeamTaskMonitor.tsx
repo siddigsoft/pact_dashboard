@@ -5,6 +5,7 @@ import { Users, CheckSquare, AlertTriangle, TrendingUp, Calendar, ChevronLeft, C
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { isTaskEmailEvent } from '@/lib/taskNotificationPolicy';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { Button } from '@/components/ui/button';
@@ -57,11 +58,6 @@ interface Department {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const EXEC_ROLES = ['super_admin', 'superadmin', 'admin', 'ceo', 'coo', 'cto', 'Admin', 'SuperAdmin', 'hr_manager'];
-function isExecRole(role: string | null): boolean {
-  if (!role) return false;
-  return EXEC_ROLES.some(r => r.toLowerCase() === role.toLowerCase());
-}
 function priorityColor(p: string | null) {
   if (!p) return 'bg-slate-100 text-slate-500';
   switch (p.toLowerCase()) {
@@ -224,8 +220,10 @@ export default function TeamTaskMonitor() {
   const [waMsg, setWaMsg] = useState('');
   const [waSending, setWaSending] = useState(false);
 
-  const role = currentUser?.role ?? '';
-  const isExec = isExecRole(role);
+  // Page access is enforced by the route guard; these gate the manager actions.
+  const { checkPermission } = useAuthorization();
+  const canAssignTasks = checkPermission('tasks', 'assign');
+  const canUpdateTasks = checkPermission('tasks', 'update');
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['team-task-monitor'],
@@ -540,16 +538,6 @@ export default function TeamTaskMonitor() {
     return Math.max(1, ...allDays);
   }, [selectedEmp, calendarDays, getTasksForDay]);
 
-  if (!isExec) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-muted-foreground">
-        <Eye className="h-12 w-12 opacity-20" />
-        <p className="text-lg font-semibold">Executive Access Only</p>
-        <p className="text-sm">This section is restricted to CEO, COO, CTO, and Admin roles.</p>
-      </div>
-    );
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] gap-3 text-muted-foreground">
@@ -576,7 +564,7 @@ export default function TeamTaskMonitor() {
         </div>
         <div className="flex items-center gap-2 sm:ml-auto flex-wrap">
           <Badge variant="outline" className="text-[10px] font-semibold bg-[#1D3461]/10 text-[#1D3461] border-[#1D3461]/30">
-            {role} View
+            {currentUser?.role ?? ''} View
           </Badge>
           <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => refetch()}>
             <RefreshCw className="h-3 w-3" /> Refresh
@@ -780,22 +768,26 @@ export default function TeamTaskMonitor() {
                         >
                           <Calendar className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={e => { e.stopPropagation(); setSelectedEmp(m); setShowCreateTask(true); }}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 transition-all"
-                          title="Create task for this employee"
-                          data-testid={`btn-create-task-${m.emp.id}`}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={e => { e.stopPropagation(); openNudge(m); }}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 transition-all"
-                          title="Send WhatsApp message"
-                          data-testid={`btn-whatsapp-${m.emp.id}`}
-                        >
-                          <MessageSquare className="h-4 w-4" />
-                        </button>
+                        {canAssignTasks && (
+                          <>
+                            <button
+                              onClick={e => { e.stopPropagation(); setSelectedEmp(m); setShowCreateTask(true); }}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                              title="Create task for this employee"
+                              data-testid={`btn-create-task-${m.emp.id}`}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); openNudge(m); }}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 transition-all"
+                              title="Send WhatsApp message"
+                              data-testid={`btn-whatsapp-${m.emp.id}`}
+                            >
+                              <MessageSquare className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                         {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                       </div>
                     </div>
@@ -839,7 +831,7 @@ export default function TeamTaskMonitor() {
                               {task.notes && <p className="text-[10px] text-muted-foreground mt-0.5 truncate italic">📝 {task.notes}</p>}
                             </div>
                             {/* Quick status update */}
-                            <Select value={task.status} onValueChange={val => updateStatusMutation.mutate({ taskId: task.id, status: val, empId: m.emp.id })}>
+                            <Select disabled={!canUpdateTasks} value={task.status} onValueChange={val => updateStatusMutation.mutate({ taskId: task.id, status: val, empId: m.emp.id })}>
                               <SelectTrigger className="h-6 text-[10px] w-24 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <SelectValue />
                               </SelectTrigger>
@@ -1008,9 +1000,11 @@ export default function TeamTaskMonitor() {
                         <Phone className="h-3.5 w-3.5" />
                       </a>
                     )}
-                    <Button size="sm" className="h-7 text-xs gap-1 bg-[#1D3461] hover:bg-[#1D3461]/90" onClick={() => setShowCreateTask(true)}>
-                      <Plus className="h-3 w-3" /> Add Task
-                    </Button>
+                    {canAssignTasks && (
+                      <Button size="sm" className="h-7 text-xs gap-1 bg-[#1D3461] hover:bg-[#1D3461]/90" onClick={() => setShowCreateTask(true)}>
+                        <Plus className="h-3 w-3" /> Add Task
+                      </Button>
+                    )}
                   </div>
                 </DialogTitle>
               </DialogHeader>
@@ -1138,7 +1132,7 @@ export default function TeamTaskMonitor() {
                               {task.category && <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-px rounded">{task.category}</span>}
                             </div>
                           </div>
-                          <Select value={task.status} onValueChange={val => updateStatusMutation.mutate({ taskId: task.id, status: val, empId: selectedEmp.emp.id })}>
+                          <Select disabled={!canUpdateTasks} value={task.status} onValueChange={val => updateStatusMutation.mutate({ taskId: task.id, status: val, empId: selectedEmp.emp.id })}>
                             <SelectTrigger className="h-6 text-[10px] w-24 flex-shrink-0">
                               <SelectValue />
                             </SelectTrigger>

@@ -2,13 +2,13 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureValidSession } from '@/lib/session-health';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useAppContext } from "@/context/AppContext";
@@ -44,7 +44,6 @@ import {
   UserPlus,
   Users,
   RefreshCw,
-  Shield,
 } from "lucide-react";
 
 interface SupportContact {
@@ -76,7 +75,7 @@ interface ContactFormData {
 export default function SupportContacts() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { currentUser, hasRole, roles } = useAppContext();
+  const { currentUser } = useAppContext();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<SupportContact | null>(null);
   const [formData, setFormData] = useState<ContactFormData>({
@@ -90,7 +89,9 @@ export default function SupportContacts() {
     is_active: true,
   });
 
-  const isAdmin = hasRole("admin") || hasRole("super_admin");
+  // Mirrors the is_admin() RLS check on support_contacts writes.
+  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const isAdmin = isSuperAdmin() || hasAnyRole(['admin']);
 
   const { data: contacts = [], isLoading, refetch } = useQuery({
     queryKey: ["support-contacts"],
@@ -212,19 +213,6 @@ export default function SupportContacts() {
     );
   }
 
-  if (!isAdmin) {
-    return (
-      <div className="container mx-auto py-6">
-        <Alert>
-          <Shield className="h-4 w-4" />
-          <AlertDescription>
-            You don't have permission to access support contact management. This page is restricted to administrators.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
   const resetForm = () => {
     setFormData({
       name: "",
@@ -284,7 +272,7 @@ export default function SupportContacts() {
           </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button data-testid="button-add-contact">
+              <Button data-testid="button-add-contact" className={isAdmin ? undefined : 'hidden'}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Contact
               </Button>
@@ -359,14 +347,16 @@ export default function SupportContacts() {
             <div className="text-center py-8 text-muted-foreground">
               <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No support contacts yet</p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => setIsAddDialogOpen(true)}
-                data-testid="button-add-first-contact"
-              >
-                Add your first contact
-              </Button>
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => setIsAddDialogOpen(true)}
+                  data-testid="button-add-first-contact"
+                >
+                  Add your first contact
+                </Button>
+              )}
             </div>
           ) : (
             <Table>
@@ -427,6 +417,7 @@ export default function SupportContacts() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Switch
+                          disabled={!isAdmin}
                           checked={contact.is_active}
                           onCheckedChange={(checked) =>
                             toggleActiveStatus.mutate({ id: contact.id, isActive: checked })
@@ -439,7 +430,7 @@ export default function SupportContacts() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
+                      {isAdmin && <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" data-testid={`menu-${contact.id}`}>
                             <MoreHorizontal className="h-4 w-4" />
@@ -465,7 +456,7 @@ export default function SupportContacts() {
                             Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
-                      </DropdownMenu>
+                      </DropdownMenu>}
                     </TableCell>
                   </TableRow>
                 ))}

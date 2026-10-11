@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Navigate } from "react-router-dom";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,13 +28,8 @@ const AuditCompliancePage = () => {
   const { toast } = useToast();
   const { logs, loading, getAuditStats, getAuditLogs } = useAudit();
   const { isSuperAdmin } = useSuperAdmin();
-  const { hasAnyRole } = useAuthorization();
-
-  // Page-level access guard — only admins, super admins, financial admins, and HR may view compliance data
-  const canView = isSuperAdmin || hasAnyRole(['super_admin', 'admin', 'financial_admin', 'hr']);
-  if (!canView) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  const { checkPermission } = useAuthorization();
+  const canExport = isSuperAdmin || checkPermission('audit_logs', 'export');
 
   const stats = useMemo(() => getAuditStats(), [logs]);
 
@@ -225,14 +219,18 @@ const AuditCompliancePage = () => {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" onClick={handleGenerateReport} disabled={loading} data-testid="button-generate-report">
-            {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ChartBar className="h-4 w-4 mr-2" />}
-            Generate Report
-          </Button>
-          <Button variant="outline" onClick={handleExportData} disabled={loading} data-testid="button-export-data">
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
+          {canExport && (
+            <>
+              <Button variant="outline" onClick={handleGenerateReport} disabled={loading} data-testid="button-generate-report">
+                {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ChartBar className="h-4 w-4 mr-2" />}
+                Generate Report
+              </Button>
+              <Button variant="outline" onClick={handleExportData} disabled={loading} data-testid="button-export-data">
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+            </>
+          )}
           {isSuperAdmin && (
             <Popover open={showExportOptions} onOpenChange={setShowExportOptions}>
               <PopoverTrigger asChild>
@@ -473,10 +471,12 @@ const AuditCompliancePage = () => {
                     </SelectContent>
                   </Select>
 
-                  <Button variant="ghost" size="sm" className="h-8" onClick={handleExportData} data-testid="button-export-logs">
-                    <Download className="h-4 w-4 mr-1" />
-                    Export
-                  </Button>
+                  {canExport && (
+                    <Button variant="ghost" size="sm" className="h-8" onClick={handleExportData} data-testid="button-export-logs">
+                      <Download className="h-4 w-4 mr-1" />
+                      Export
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>

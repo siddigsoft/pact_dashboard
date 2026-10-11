@@ -13,7 +13,6 @@ import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/toast';
 import { useAppContext } from '@/context/AppContext';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useProjectContext } from '@/context/project/ProjectContext';
@@ -82,12 +81,9 @@ const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 export default function TrackerPreparationPlan() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const { hasAnyRole } = useAuthorization();
   const { mmpFiles, loading: mmpLoading } = useMMP();
   const { siteVisits, loading: siteVisitsLoading } = useSiteVisitContext();
   const { projects, loading: projectsLoading } = useProjectContext();
-  
-  const hasAccess = hasAnyRole(['admin', 'Admin', 'ict', 'ICT']);
   
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
@@ -116,33 +112,14 @@ export default function TrackerPreparationPlan() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (hasAccess) {
-      loadInitialData();
-    }
-  }, [hasAccess]);
+    loadInitialData();
+  }, []);
 
   useEffect(() => {
-    if (hasAccess && filters.month && filters.year && !mmpLoading && !siteVisitsLoading) {
+    if (filters.month && filters.year && !mmpLoading && !siteVisitsLoading) {
       loadTrackerData();
     }
-  }, [filters, hasAccess, mmpFiles, siteVisits, mmpLoading, siteVisitsLoading]);
-  
-  if (!hasAccess) {
-    return (
-      <div className="p-6">
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Access Restricted</h2>
-            <p className="text-muted-foreground text-center">
-              You do not have permission to access the Tracker Preparation Plan.
-              This page is only available to Admin and ICT users.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  }, [filters, mmpFiles, siteVisits, mmpLoading, siteVisitsLoading]);
 
   const loadInitialData = async () => {
     try {

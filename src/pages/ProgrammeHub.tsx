@@ -2,10 +2,10 @@ import { Suspense, lazy, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, FolderKanban, LayoutDashboard, BarChart3, Database,
-  Building2, ClipboardList, TrendingUp, ArrowRight, Lock,
+  Building2, ClipboardList, TrendingUp, ArrowRight,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
-import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageSlugAccess } from '@/hooks/usePageSlugAccess';
 
 const ProjectsPanel       = lazy(() => import('./Projects'));
 const PortfolioPanel      = lazy(() => import('./PortfolioDashboard'));
@@ -59,7 +59,14 @@ const ALL_SECTIONS: SectionDef[] = [
   },
 ];
 
-const PROJECTS_TABS: ProgTab[] = ['projects', 'portfolio', 'analytics'];
+const TAB_PAGE_SLUG: Record<ProgTab, string> = {
+  projects: 'projects',
+  portfolio: 'portfolio',
+  analytics: 'portfolio',
+  mmp: 'mmp',
+  'hub-ops': 'hub-operations',
+  'tracker-prep': 'tracker-preparation',
+};
 
 const LS_KEY = 'hub_last_tab_programme';
 
@@ -83,15 +90,14 @@ function PanelLoader() {
 
 export default function ProgrammeHub() {
   const [params, setParams] = useSearchParams();
-  const { isSuperAdmin, hasAnyRole } = useAuthorization();
-
-  const canSeeProjects = isSuperAdmin() || hasAnyRole(['admin']);
+  const { canSeePage, loading: accessLoading } = usePageSlugAccess();
 
   const SECTIONS = useMemo(
-    () => canSeeProjects ? ALL_SECTIONS : ALL_SECTIONS.filter(s => s.id !== 'projects'),
-    [canSeeProjects],
+    () => ALL_SECTIONS
+      .map(s => ({ ...s, tabs: s.tabs.filter(t => canSeePage(TAB_PAGE_SLUG[t.id])) }))
+      .filter(s => s.tabs.length > 0),
+    [canSeePage],
   );
-
   const ALL_TABS = useMemo(
     () => SECTIONS.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id as ProgSection, sectionColor: s.color }))),
     [SECTIONS],
@@ -114,17 +120,18 @@ export default function ProgrammeHub() {
     setParams({ tab: t }, { replace: true });
   };
 
+  const allowedTabKey = ALL_TABS.map(t => t.id).join('|');
   useEffect(() => {
+    if (accessLoading) return;
     if (!rawTab && activeTab) {
       setParams({ tab: activeTab }, { replace: true });
       return;
     }
-    // If CD (or other restricted user) lands on a projects tab, redirect to first allowed tab
     if (rawTab && !isTabAllowed(rawTab as ProgTab)) {
       const fallback = ALL_TABS[0]?.id ?? null;
       if (fallback) setParams({ tab: fallback }, { replace: true });
     }
-  }, [canSeeProjects]);
+  }, [accessLoading, allowedTabKey]);
 
   const activeTabDef = activeTab ? ALL_TABS.find(t => t.id === activeTab) ?? null : null;
   const activeSection = activeTabDef ? SECTIONS.find(s => s.id === activeTabDef.sectionId) ?? null : null;
@@ -132,14 +139,6 @@ export default function ProgrammeHub() {
   const overviewContent = (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
       <p className="text-sm text-muted-foreground mb-6">Select a section to get started, or jump directly to any tool below.</p>
-      {!canSeeProjects && (
-        <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10 px-4 py-3">
-          <Lock className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-          <p className="text-sm text-amber-700 dark:text-amber-300">
-            The <strong>Projects &amp; Portfolio</strong> section is restricted to Admin and Super Admin users.
-          </p>
-        </div>
-      )}
       <div className="grid gap-5 sm:grid-cols-2">
         {SECTIONS.map(section => (
           <div
@@ -180,7 +179,7 @@ export default function ProgrammeHub() {
   return (
     <HubLayout
       title="Programme Management"
-      subtitle={canSeeProjects ? 'Projects · Portfolio · Field Planning' : 'Field Planning'}
+      subtitle={SECTIONS.map(s => s.label).join(' · ')}
       hubIcon={TrendingUp}
       sections={SECTIONS}
       activeSectionId={activeSection?.id ?? null}

@@ -738,7 +738,7 @@ const AppRoutes = () => {
         <Route path="/accounting/ap-invoices" element={<Navigate to="/accounting?tab=ap-invoices" replace />} />
         <Route path="/accounting/cheque-register" element={<Navigate to="/accounting?tab=cheque-register" replace />} />
         <Route path="/accounting/period-close" element={<Navigate to="/accounting?tab=period-close" replace />} />
-        <Route path="/executive" element={<SuperAdminRoute><PageWrapper><ExecutiveDashboard /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/executive" element={<PageWrapper><ExecutiveDashboard /></PageWrapper>} />
         <Route path="/accounting/tax" element={<Navigate to="/accounting?tab=tax" replace />} />
         <Route path="/accounting/multi-currency" element={<Navigate to="/accounting?tab=multi-currency" replace />} />
         <Route path="/accounting/budget-encumbrance" element={<Navigate to="/accounting?tab=budget-encumbrance" replace />} />

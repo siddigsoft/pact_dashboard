@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FitNumber } from '@/components/ui/fit-number';
 import { Badge } from '@/components/ui/badge';
@@ -95,9 +94,6 @@ function KPICard({
 }
 
 export default function ExecutiveDashboard() {
-  const { hasAnyRole } = useAuthorization();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'Admin', 'country_director', 'countryDirector', 'fom', 'FOM']);
-
   const [org, setOrg] = useState<OrgKPIs | null>(null);
   const [proj, setProj] = useState<ProjectKPIs | null>(null);
   const [fin, setFin] = useState<FinKPIs | null>(null);
@@ -226,12 +222,6 @@ export default function ExecutiveDashboard() {
 
   useEffect(() => { void load(); }, [load]);
   const handleRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
-
-  if (!canAccess) return (
-    <div className="flex items-center justify-center h-64">
-      <p className="text-muted-foreground">Access restricted to senior management.</p>
-    </div>
-  );
 
   const overallScore = [
     mmp ? mmp.coveragePct : 0,

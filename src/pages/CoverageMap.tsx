@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,9 +49,7 @@ function FitBounds({ sites }: { sites: SiteRecord[] }) {
 }
 
 export default function CoverageMap() {
-  const { hasAnyRole } = useAuthorization();
   const { toast } = useToast();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'Admin', 'supervisor', 'fom', 'FOM', 'coordinator', 'country_director']);
 
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [hubs, setHubs] = useState<Hub[]>([]);
@@ -164,12 +161,6 @@ export default function CoverageMap() {
   const coveragePct = sites.length ? Math.round((counts.visited / sites.length) * 100) : 0;
 
   const mappable = filtered.filter(s => s.latitude && s.longitude);
-
-  if (!canAccess) return (
-    <div className="flex items-center justify-center h-64">
-      <p className="text-muted-foreground">Access denied.</p>
-    </div>
-  );
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
