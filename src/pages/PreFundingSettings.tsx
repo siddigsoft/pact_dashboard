@@ -97,10 +97,10 @@ const BUILTIN_PERIOD_TYPES = [
 ];
 
 export default function PreFundingSettings() {
-  const { hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
-  const canEdit = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const canEdit = checkPermission('pre_funding', 'update') || checkPermission('pre_funding', 'approve');
 
   const [settings, setSettings]       = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [periodTypes, setPeriodTypes]  = useState<PeriodType[]>([]);

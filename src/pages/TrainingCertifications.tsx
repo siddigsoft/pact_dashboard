@@ -61,10 +61,10 @@ const BLANK = {
 
 export default function TrainingCertificationsPage() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
+  const isAdmin = checkPermission('hr', 'update');
 
   const [records, setRecords] = useState<Record_[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);

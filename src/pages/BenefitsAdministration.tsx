@@ -72,13 +72,13 @@ const BLANK_PERIOD = {
 
 export default function BenefitsAdministration() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('benefits', 'export');
   const { toast } = useToast();
-  const isAdmin = hasAnyRole(['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin', 'hr', 'hr_manager']);
-  const canCreate = isAdmin && checkPermission('benefits', 'create');
-  const canUpdate = isAdmin && checkPermission('benefits', 'update');
-  const canApprove = isAdmin && checkPermission('benefits', 'approve');
+  const isAdmin = checkPermission('benefits', 'read') || checkPermission('benefits', 'update');
+  const canCreate = checkPermission('benefits', 'create');
+  const canUpdate = checkPermission('benefits', 'update');
+  const canApprove = checkPermission('benefits', 'approve');
   const canSubmit = checkPermission('benefits', 'submit');
 
   const [plans, setPlans] = useState<Plan[]>([]);

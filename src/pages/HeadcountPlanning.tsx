@@ -35,12 +35,12 @@ const BLANK = {
 
 export default function HeadcountPlanning() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
-  const canCreate = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']) || checkPermission('hr', 'create');
-  const canUpdate = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']) || checkPermission('hr', 'update');
-  const canDelete = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']) || checkPermission('hr', 'delete');
+  const canCreate = checkPermission('hr', 'create');
+  const canUpdate = checkPermission('hr', 'update');
+  const canDelete = checkPermission('hr', 'delete');
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [depts, setDepts] = useState<Dept[]>([]);

@@ -301,10 +301,8 @@ function TrackerView() {
 /*  Main component — Guide | Tracker toggle                  */
 /* ══════════════════════════════════════════════════════════ */
 export default function StaffOnboarding() {
-  const { isSuperAdmin, hasAnyRole, checkPermission } = useAuthorization();
-  const roleCanManage = isSuperAdmin() || hasAnyRole(['super_admin','superAdmin','SuperAdmin','admin','Admin','finance','Finance']);
-  // HR read grants are sufficient for tracker visibility; write/create
-  // controls remain role/action gated inside the tracker.
+  const { checkPermission } = useAuthorization();
+  const roleCanManage = checkPermission('hr', 'update');
   const canRead = checkPermission('hr', 'read');
   const canViewTracker = roleCanManage || canRead;
   const [view, setView] = useState<'guide' | 'tracker'>('guide');

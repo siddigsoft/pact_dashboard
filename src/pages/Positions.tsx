@@ -74,11 +74,11 @@ const BLANK = {
 
 export default function PositionsPage() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole, isSuperAdmin, checkPermission } = useAuthorization();
+  const { isSuperAdmin, checkPermission } = useAuthorization();
   const canExport = checkPermission('hr', 'export');
   const isSA = isSuperAdmin();
   const { toast } = useToast();
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
+  const isAdmin = checkPermission('hr', 'update');
 
   const [positions, setPositions] = useState<Position[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);

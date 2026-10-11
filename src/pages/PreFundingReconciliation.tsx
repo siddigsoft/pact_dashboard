@@ -736,14 +736,14 @@ async function uploadPdfToStorage(blob: Blob, filename: string, fundId: string):
 }
 
 export default function PreFundingReconciliation() {
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
   const { canViewOrgPreFunds } = usePreFundOrgAccess();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const isCD = hasAnyRole(['countryDirector']);
   const canAccess = canViewOrgPreFunds || isCD;
-  const canManageExceptions = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  const canRemoveOperationalCostPayment = hasAnyRole(['super_admin', 'admin']);
+  const canManageExceptions = checkPermission('pre_funding', 'update');
+  const canRemoveOperationalCostPayment = checkPermission('pre_funding', 'delete');
 
   const [funds, setFunds]             = useState<PreFundSummary[]>([]);
   const [fundsComputedAvail, setFundsComputedAvail] = useState<Map<string, number>>(new Map());

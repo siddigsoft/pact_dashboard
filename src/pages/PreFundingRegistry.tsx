@@ -947,11 +947,11 @@ async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
 }
 
 export default function PreFundingRegistry() {
-  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const { checkPermission, isSuperAdmin } = useAuthorization();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const isSuper = isSuperAdmin();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const canManage = checkPermission('pre_funding', 'create');
   // Pre-filter by project when arriving from ProjectCostTab "View / Manage" button
   const [searchParams] = useSearchParams();
   const urlProjectId = searchParams.get('project_id') || '';

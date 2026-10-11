@@ -47,13 +47,12 @@ const BLANK = {
 
 export default function DisciplinaryTracking() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
-  const roleCanManage = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']);
-  const canCreate = roleCanManage || checkPermission('hr', 'create');
-  const canUpdate = roleCanManage || checkPermission('hr', 'update');
-  const canDelete = roleCanManage || checkPermission('hr', 'delete');
+  const canCreate = checkPermission('hr', 'create');
+  const canUpdate = checkPermission('hr', 'update');
+  const canDelete = checkPermission('hr', 'delete');
 
   const [cases, setCases] = useState<Case[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
