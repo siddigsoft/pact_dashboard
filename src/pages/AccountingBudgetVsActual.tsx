@@ -41,7 +41,6 @@ function usageBand(pct: number): 'ok' | 'warn' | 'over' {
 
 export default function AccountingBudgetVsActual() {
   const { checkPermission, hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = checkPermission('finances', 'read');
   const canExport = checkPermission('finances', 'export');
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
@@ -72,7 +71,6 @@ export default function AccountingBudgetVsActual() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!allowed) return;
     (async () => {
       const [yRes, pRes, fRes, aRes] = await Promise.all([
         supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
@@ -90,19 +88,18 @@ export default function AccountingBudgetVsActual() {
       if (first) setPeriodId(first.id);
       setBootstrap(false);
     })();
-  }, [allowed]);
+  }, []);
 
   const loadBudgetLines = useCallback(async (pid: string, fid: string) => {
-    if (!allowed) return;
     const q = supabase.from('acct_budget_lines').select('id, account_id, period_id, fund_id, budget_amount').eq('period_id', pid);
     if (fid !== 'all') q.eq('fund_id', fid);
     const { data, error: bErr } = await q;
     if (bErr && bErr.code !== '42P01') throw new Error(bErr.message);
     setBudgetLines((data ?? []) as BudgetLine[]);
-  }, [allowed]);
+  }, []);
 
   const runReport = useCallback(async () => {
-    if (!allowed || !periodId) return;
+    if (!periodId) return;
     setLoading(true);
     setError(null);
     try {
@@ -172,9 +169,9 @@ export default function AccountingBudgetVsActual() {
     } finally {
       setLoading(false);
     }
-  }, [allowed, periodId, fundId, loadBudgetLines]);
+  }, [periodId, fundId, loadBudgetLines]);
 
-  useEffect(() => { if (allowed && !bootstrap && periodId) void runReport(); }, [allowed, periodId, fundId, bootstrap, runReport]);
+  useEffect(() => { if (!bootstrap && periodId) void runReport(); }, [periodId, fundId, bootstrap, runReport]);
 
   const selectedPeriod = useMemo(() => periods.find(p => p.id === periodId), [periods, periodId]);
   const selectedCurrency = 'SDG';
@@ -307,7 +304,6 @@ export default function AccountingBudgetVsActual() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="bva-page">

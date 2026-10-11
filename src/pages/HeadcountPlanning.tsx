@@ -38,9 +38,6 @@ export default function HeadcountPlanning() {
   const { hasAnyRole, checkPermission } = useAuthorization();
   const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
-  const roleCanView = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager', 'finance']);
-  const canRead = checkPermission('hr', 'read');
-  const canView = roleCanView || canRead;
   const canCreate = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']) || checkPermission('hr', 'create');
   const canUpdate = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']) || checkPermission('hr', 'update');
   const canDelete = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']) || checkPermission('hr', 'delete');
@@ -56,8 +53,8 @@ export default function HeadcountPlanning() {
   const [missingTable, setMissingTable] = useState(false);
 
   useEffect(() => {
-    if (canView) fetchAll();
-  }, [canView]);
+    fetchAll();
+  }, []);
 
   async function fetchAll() {
     setLoading(true);
@@ -147,7 +144,6 @@ export default function HeadcountPlanning() {
     else { toast({ title: 'Plan deleted' }); fetchAll(); }
   }
 
-  if (!canView) return <Card className="border-dashed"><CardContent className="py-16 text-center text-sm text-muted-foreground">Headcount planning is restricted to HR, admin, and finance roles.</CardContent></Card>;
   if (loading) return <PageLoader compact />;
   if (missingTable) {
     return (

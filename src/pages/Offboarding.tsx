@@ -65,8 +65,6 @@ export default function Offboarding() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const roleCanManage = isHrAdmin(profile?.role);
-  const canRead = checkPermission('hr', 'read');
-  const canView = roleCanManage || canRead;
   const canCreate = roleCanManage || checkPermission('hr', 'create');
   const canUpdate = roleCanManage || checkPermission('hr', 'update');
   const [open, setOpen] = useState(false);
@@ -91,7 +89,6 @@ export default function Offboarding() {
 
   const { data: cases = [], isLoading } = useQuery<Offboarding[]>({
     queryKey: ['offboarding-cases'],
-    enabled: canView,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('offboarding_cases').select('*').order('created_at', { ascending: false });
@@ -106,7 +103,6 @@ export default function Offboarding() {
 
   const { data: employees = [] } = useQuery<Profile[]>({
     queryKey: ['offboarding-employees'],
-    enabled: canView,
     queryFn: async () => {
       const { data, error } = await supabase.from('profiles')
         .select('id, full_name, role, email, contract_start_date')
@@ -121,7 +117,6 @@ export default function Offboarding() {
   //  (b) departing employee IS a named successor in another position's plan
   const { data: successionPositions = [] } = useQuery({
     queryKey: ['offboarding-succession-positions'],
-    enabled: canView,
     queryFn: async () => {
       const { data } = await supabase
         .from('positions')
@@ -340,15 +335,6 @@ export default function Offboarding() {
     });
     doc.save(`offboarding-${c.user_name ?? c.user_id}-${c.last_working_date}.pdf`);
   };
-
-  if (!canView) {
-    return (
-      <div className="container mx-auto p-6 max-w-2xl text-center text-muted-foreground" data-testid="page-offboarding-no-access">
-        <LogOut className="w-12 h-12 mx-auto opacity-50 mb-3" />
-        Offboarding is HR/Admin only. / هذه الصفحة لإدارة الموارد البشرية فقط.
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-6 max-w-7xl" data-testid="page-offboarding">

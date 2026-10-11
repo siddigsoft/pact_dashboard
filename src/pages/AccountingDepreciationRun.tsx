@@ -61,7 +61,6 @@ function calcDepr(a: Asset): AssetWithDepr {
 
 export default function AccountingDepreciationRun() {
   const { checkPermission, hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = checkPermission('fixed_assets', 'read');
   const canExport = checkPermission('fixed_assets', 'export');
   const canRun = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
   const { toast } = useToast();
@@ -81,7 +80,6 @@ export default function AccountingDepreciationRun() {
   const [unifiedLoading, setUnifiedLoading] = useState(false);
 
   const loadUnifiedRuns = useCallback(async () => {
-    if (!allowed) return;
     setUnifiedLoading(true);
     const { data } = await supabase
       .from('asset_depreciation_runs' as any)
@@ -90,10 +88,9 @@ export default function AccountingDepreciationRun() {
       .limit(50);
     setUnifiedRuns((data ?? []) as UnifiedDepRun[]);
     setUnifiedLoading(false);
-  }, [allowed]);
+  }, []);
 
   const load = useCallback(async () => {
-    if (!allowed) return;
     setLoading(true);
     const [assetRes, runRes] = await Promise.all([
       supabase.from('acct_fixed_assets').select('id, asset_name, asset_code, category, acquisition_cost, salvage_value, useful_life_months, acquisition_date, status').eq('status', 'active').limit(1000),
@@ -119,9 +116,9 @@ export default function AccountingDepreciationRun() {
       setGlLogMap(map);
     }
     setLoading(false);
-  }, [allowed]);
+  }, []);
 
-  useEffect(() => { if (allowed) { void load(); void loadUnifiedRuns(); } }, [allowed, load, loadUnifiedRuns]);
+  useEffect(() => { void load(); void loadUnifiedRuns(); }, [load, loadUnifiedRuns]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -166,7 +163,6 @@ export default function AccountingDepreciationRun() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="depreciation-run-page">

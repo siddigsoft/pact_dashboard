@@ -70,7 +70,6 @@ const BLANK = {
 
 export default function AccountingChequeRegister() {
   const { checkPermission, hasAnyRole } = useAuthorization();
-  const allowed    = checkPermission('procurement', 'read');
   const canExport  = checkPermission('procurement', 'export');
   const canAction  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
   const { toast } = useToast();
@@ -96,7 +95,6 @@ export default function AccountingChequeRegister() {
   const [actioning, setActioning]     = useState(false);
 
   const load = useCallback(async () => {
-    if (!allowed) return;
     setLoading(true);
     const [{ data: chequeData }, { data: bankData }, { data: invData }, { data: vData }, { data: fData }, { data: cData }] = await Promise.all([
       supabase.from('acct_cheque_register').select('*').order('created_at', { ascending: false }),
@@ -113,9 +111,9 @@ export default function AccountingChequeRegister() {
     setFunds((fData ?? []) as Fund[]);
     setCountries((cData ?? []) as {id:string;name_en:string}[]);
     setLoading(false);
-  }, [allowed]);
+  }, []);
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, [load]);
 
   const filtered = useMemo(() => cheques.filter(c => {
     if (statusFilter !== 'all' && c.status !== statusFilter) return false;
@@ -220,7 +218,6 @@ export default function AccountingChequeRegister() {
     exportToExcel(rows, 'Cheque & Payment Register', `cheque-register-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!allowed)   return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1200px]">

@@ -33,7 +33,6 @@ interface HistoricalRow { month: string; inflows: number; outflows: number; net:
 export default function AccountingCashFlowForecast() {
   const { checkPermission } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = checkPermission('finances', 'read');
   const canExport = checkPermission('finances', 'export');
 
   const [loading, setLoading] = useState(true);
@@ -49,7 +48,7 @@ export default function AccountingCashFlowForecast() {
   const [missingTables, setMissingTables] = useState<string[]>([]);
 
   const load = useCallback(async () => {
-    if (!allowed || !authReady) return;
+    if (!authReady) return;
     setLoading(true); setError(null);
     try {
       const missing: string[] = [];
@@ -165,9 +164,9 @@ export default function AccountingCashFlowForecast() {
       setMissingTables(missing);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
-  }, [allowed, authReady]);
+  }, [authReady]);
 
-  useEffect(() => { if (allowed && authReady) void load(); }, [allowed, authReady, load]);
+  useEffect(() => { if (authReady) void load(); }, [authReady, load]);
 
   const forecast: ForecastRow[] = useMemo(() => {
     const rows: ForecastRow[] = [];
@@ -216,7 +215,6 @@ export default function AccountingCashFlowForecast() {
   };
 
   if (!authReady) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const lowestBalance = forecast.reduce((min, r) => Math.min(min, r.closingBalance), Infinity);
   const netPositiveMonths = forecast.filter(r => r.net >= 0).length;

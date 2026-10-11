@@ -45,7 +45,6 @@ const TYPE_LABEL: Record<string, { label: string; color: string }> = {
 
 export default function AccountingBudgetPlanning() {
   const { checkPermission, hasAnyRole } = useAuthorization();
-  const allowed  = checkPermission('finances', 'read');
   const canExport = checkPermission('finances', 'export');
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
@@ -83,7 +82,6 @@ export default function AccountingBudgetPlanning() {
 
   /* ── bootstrap ── */
   useEffect(() => {
-    if (!allowed) return;
     (async () => {
       const [yRes, pRes, fRes, aRes, cRes] = await Promise.all([
         supabase.from('acct_fiscal_years').select('id, code, name_en').order('code', { ascending: false }),
@@ -107,33 +105,33 @@ export default function AccountingBudgetPlanning() {
       }
       setLoading(false);
     })();
-  }, [allowed]);
+  }, []);
 
 
   /* ── load budget lines for selected period/fund ── */
   const loadBudgetLines = useCallback(async (pid: string, fid: string) => {
-    if (!allowed || !pid) return;
+    if (!pid) return;
     const q = supabase.from('acct_budget_lines').select('id, account_id, period_id, fund_id, fiscal_year_id, budget_amount, obr_id, obr_notes').eq('period_id', pid);
     if (fid !== 'all') (q as any).eq('fund_id', fid);
     const { data, error } = await q;
     if (error?.code === '42P01') { setTableExists(false); return; }
     setTableExists(true);
     setBudgetLines((data ?? []) as BudgetLine[]);
-  }, [allowed]);
+  }, []);
 
-  useEffect(() => { if (allowed && periodId) void loadBudgetLines(periodId, fundId); }, [allowed, periodId, fundId, loadBudgetLines]);
+  useEffect(() => { if (periodId) void loadBudgetLines(periodId, fundId); }, [periodId, fundId, loadBudgetLines]);
 
   /* ── load approval record for current period/fund ── */
   const loadApproval = useCallback(async (pid: string, fid: string) => {
-    if (!allowed || !pid || !approvalTableExists) return;
+    if (!pid || !approvalTableExists) return;
     const q = supabase.from('acct_budget_approvals' as any).select('*').eq('period_id', pid);
     if (fid !== 'all') (q as any).eq('fund_id', fid); else (q as any).is('fund_id', null);
     const { data, error } = await (q as any).maybeSingle();
     if (error?.code === '42P01') { setApprovalTableExists(false); return; }
     setApprovalRecord((data as any) ?? null);
-  }, [allowed, approvalTableExists]);
+  }, [approvalTableExists]);
 
-  useEffect(() => { if (allowed && periodId) void loadApproval(periodId, fundId); }, [allowed, periodId, fundId, loadApproval]);
+  useEffect(() => { if (periodId) void loadApproval(periodId, fundId); }, [periodId, fundId, loadApproval]);
 
   /* ── budget approval actions ── */
   const submitForApproval = async () => {
@@ -479,7 +477,6 @@ export default function AccountingBudgetPlanning() {
   };
 
   if (loading) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1200px]">

@@ -41,7 +41,6 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export default function AccountingBudgetEncumbrance() {
   const { checkPermission, hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed  = checkPermission('finances', 'read');
   const canExport = checkPermission('finances', 'export');
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
 
@@ -50,7 +49,7 @@ export default function AccountingBudgetEncumbrance() {
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();
 
-  const query = useBudgetEncumbranceQuery(allowed && isAuthenticated);
+  const query = useBudgetEncumbranceQuery(isAuthenticated);
   const tableExists = query.data?.tableExists ?? null;
   const encumbrances = query.data?.encumbrances ?? [];
   const funds = query.data?.funds ?? [];
@@ -147,7 +146,6 @@ export default function AccountingBudgetEncumbrance() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
   if (loading && !query.data) return <PageLoader label="Loading encumbrances…" />;
 
   if (tableExists === false) {

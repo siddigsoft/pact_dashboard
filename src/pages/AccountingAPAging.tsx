@@ -55,10 +55,9 @@ function ageBucket(postingDate: string, paymentTerms: number): AgeBucket {
 export default function AccountingAPAging() {
   const { checkPermission } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = checkPermission('procurement', 'read');
   const canExport = checkPermission('procurement', 'export');
 
-  const query = useApAgingQuery(allowed && authReady);
+  const query = useApAgingQuery(authReady);
   const vendors = query.data?.vendors ?? [];
   const lines = query.data?.lines ?? [];
   const loading = query.isLoading;
@@ -230,7 +229,6 @@ export default function AccountingAPAging() {
   const VENDOR_TYPES = ['supplier', 'service_provider', 'consultant', 'ngo_partner', 'government', 'utility'];
 
   if (!authReady) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
   if (loading && !query.data) return <PageLoader label="Loading AP aging…" />;
 
   const riskBadge = (r: VendorAgingRow) => {
