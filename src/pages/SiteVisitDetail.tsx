@@ -65,7 +65,8 @@ const SiteVisitDetail = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [costDialogOpen, setCostDialogOpen] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canAssignCost = checkPermission('site_visits', 'assign_cost');
   const { reconcileSiteVisitFee } = useWallet();
   
   useEffect(() => {
@@ -551,7 +552,7 @@ const SiteVisitDetail = () => {
       {/* Mobile Bottom Action Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t p-4 lg:hidden z-50">
         <div className="flex items-center gap-2 max-w-lg mx-auto">
-          {hasAnyRole(['admin', 'ict']) && (
+          {canAssignCost && (
             <Button 
               variant="outline"
               size="sm"
@@ -620,7 +621,7 @@ const SiteVisitDetail = () => {
       {/* Desktop Action Buttons - Hidden on Mobile */}
       <div className="hidden lg:block fixed bottom-6 right-6 z-50">
         <div className="flex items-center gap-2 bg-background/95 backdrop-blur border rounded-lg p-2 shadow-lg">
-          {hasAnyRole(['admin', 'ict']) && (
+          {canAssignCost && (
             <Button 
               variant="outline"
               size="sm"

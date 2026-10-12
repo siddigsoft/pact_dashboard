@@ -192,6 +192,7 @@ export type ActionType =
   // Financial button permissions are separate from page/resource CRUD.
   | 'mark_paid'
   | 'use_for_payment'
+  | 'assign_cost'
   /** Explicit lifecycle/status and configuration mutations. */
   | 'status'
   | 'settings';
@@ -214,7 +215,7 @@ export const ACTIONS: ActionType[] = [
   'publish', 'send', 'recall', 'revert', 'send_to_finance', 'revert_paid', 'revert_tier',
   'restore', 'override', 'submit', 'export',
   'full_report', 'state_report', 'hub_report',
-  'mark_paid', 'use_for_payment', 'status', 'settings',
+  'mark_paid', 'use_for_payment', 'assign_cost', 'status', 'settings',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -249,6 +250,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   full_report: 'Full MMP Report', state_report: 'State MMP Report', hub_report: 'Hub MMP Report',
   mark_paid: 'Mark Cost Submission Paid',
   use_for_payment: 'Use Pre-Fund for Payment',
+  assign_cost: 'Assign Cost',
   status: 'Change Status',
   settings: 'Manage Settings',
 };
@@ -294,7 +296,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'site_visits', action: 'create' }, { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' }, { resource: 'site_visits', action: 'delete' },
     { resource: 'site_visits', action: 'assign' }, { resource: 'site_visits', action: 'approve' },
-    { resource: 'site_visits', action: 'export' },
+    { resource: 'site_visits', action: 'export' }, { resource: 'site_visits', action: 'assign_cost' },
     { resource: 'hub_operations', action: 'read' }, { resource: 'hub_operations', action: 'update' },
     // Field ops
     { resource: 'safety', action: 'read' }, { resource: 'safety', action: 'update' },
@@ -467,7 +469,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'mmp', action: 'update' }, { resource: 'mmp', action: 'approve' },
     { resource: 'mmp', action: 'archive' }, { resource: 'mmp', action: 'export' },
     { resource: 'site_visits', action: 'create' }, { resource: 'site_visits', action: 'read' },
-    { resource: 'site_visits', action: 'update' },
+    { resource: 'site_visits', action: 'update' }, { resource: 'site_visits', action: 'assign_cost' },
     { resource: 'finances', action: 'read' },
     { resource: 'reports', action: 'read' }, { resource: 'reports', action: 'create' },
     { resource: 'reports', action: 'export' },
