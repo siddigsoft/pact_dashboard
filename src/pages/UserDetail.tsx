@@ -1163,7 +1163,7 @@ const UserDetail: FC = () => {
   const handleDeleteBankAccount = async () => {
     if (!user || !updateUser) return;
     setIsDeletingBankAccount(true);
-    const updatedUser: User = { ...user, bankAccount: undefined };
+    const updatedUser: User = { ...user, bankAccount: null };
     try {
       const success = await updateUser(updatedUser);
       if (success) {

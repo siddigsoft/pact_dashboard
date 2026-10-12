@@ -1596,8 +1596,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         locality_id: updatedUser.localityId,
         employee_id: updatedUser.employeeId,
         phone: updatedUser.phone,
-        bank_account: (updatedUser as any).bankAccount || null,
       };
+      // undefined = bank details weren't loaded for this user; null = explicit removal.
+      const newBankAccount = updatedUser.bankAccount;
+      if (newBankAccount !== undefined) {
+        updatePayload.bank_account = newBankAccount;
+      }
       // Only include role in the payload for non-protected-owner accounts.
       if (!isProtectedOwner(updatedUser.id)) {
         updatePayload.role = updatedUser.role;
@@ -1642,8 +1646,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // We do this fire-and-forget (no await at top level) so it never blocks
       // the main save path.
       const oldBA  = existingUser ? (existingUser as any).bankAccount ?? null : null;
-      const newBA  = (updatedUser as any).bankAccount ?? null;
+      const newBA  = newBankAccount ?? null;
       const baChanged =
+        newBankAccount !== undefined &&
         JSON.stringify(oldBA ?? null) !== JSON.stringify(newBA ?? null);
       if (baChanged) {
         supabase.from('bank_account_history').insert({

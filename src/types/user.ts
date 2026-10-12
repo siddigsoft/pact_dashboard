@@ -138,7 +138,7 @@ export interface User {
     country?: string;
     currency?: string;
     routingNumber?: string;
-  };
+  } | null;
 
   /**
    * Employment & department fields (from profiles table)
