@@ -65,9 +65,9 @@ function calcPct(prev: number | null, next: number): number | null {
 export default function SalaryIncrements() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const { hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('payroll', 'export');
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hrManager', 'financialAdmin']);
+  const isAdmin = checkPermission('payroll', 'update');
 
   const invalidateIncrements = useInvalidateSalaryIncrements();
   const incrementsQuery = useSalaryIncrementsQuery(isAdmin || !!currentUser?.id);

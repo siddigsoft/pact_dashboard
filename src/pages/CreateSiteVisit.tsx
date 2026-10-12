@@ -10,10 +10,10 @@ import { useAuthorization } from '@/hooks/use-authorization';
 const CreateSiteVisit = () => {
   const navigate = useNavigate();
   const { currentUser } = useAppContext();
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
 
   // Check if user has permission (admin bypass)
-  const canAccess = checkPermission('site_visits', 'create') || hasAnyRole(['admin']);
+  const canAccess = checkPermission('site_visits', 'create');
   if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">

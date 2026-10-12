@@ -20,7 +20,7 @@ const CreateSiteVisitMMPDetail = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, calculateDistanceFee } = useAppContext();
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const { getMmpById } = useMMP();
   const { createSiteVisit } = useSiteVisitContext();
   
@@ -71,7 +71,7 @@ const CreateSiteVisitMMPDetail = () => {
     setLoading(false);
   }, [id]);
 
-  const canAccess = checkPermission('site_visits', 'create') || hasAnyRole(['admin']);
+  const canAccess = checkPermission('site_visits', 'create');
   if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">

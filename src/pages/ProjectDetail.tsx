@@ -24,7 +24,7 @@ const ProjectDetailPage = () => {
   const [project, setProject] = useState<Project | undefined>(undefined);
   const { toast } = useToast();
   const [deleting, setDeleting] = useState(false);
-  const { isSuperAdmin, hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const { currentUser, authReady } = useUser();
   const { data: activities } = useProjectActivitiesQuery(id);
   const updateProjectCache = useUpdateProjectInCache();
@@ -53,6 +53,28 @@ const ProjectDetailPage = () => {
     // No toast — the in-page "Project Not Found" banner + countdown handles this clearly.
   }, [id, projects, loading, authReady, activities]);
 
+  // Auto-redirect countdown when project is not found
+  const [countdown, setCountdown] = useState(5);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!project && authReady && !loading && projects.length > 0) {
+      countdownRef.current = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(countdownRef.current!);
+            navigate('/projects');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, [project, authReady, loading, projects.length]);
+
   const handleEdit = () => {
     if (!checkPermission('projects', 'update')) {
       toast({ title: 'Permission denied', description: 'You do not have permission to edit this project.', variant: 'destructive' });
@@ -70,16 +92,10 @@ const ProjectDetailPage = () => {
       });
       return;
     }
-    // Only Super Admin / Admin / FOM, OR the project's own Project Manager may delete.
-    const isPrivileged = checkPermission('projects', 'delete') &&
-      (isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'fom', 'FOM']));
-    const isPM = !!project?.team?.projectManager &&
-      ((!!currentUser?.id && project.team.projectManager === currentUser.id) ||
-        (!!currentUser?.fullName && project.team.projectManager === currentUser.fullName));
-    if (!checkPermission('projects', 'delete') || (!isPrivileged && !isPM)) {
+    if (!checkPermission('projects', 'delete')) {
       toast({
         title: 'Permission denied',
-        description: 'Only Super Admins, Admins, FOM, or the project\'s Project Manager can delete this project.',
+        description: 'You do not have permission to delete projects.',
         variant: 'destructive',
       });
       return;
@@ -115,28 +131,6 @@ const ProjectDetailPage = () => {
       </div>
     );
   }
-
-  // Auto-redirect countdown when project is not found
-  const [countdown, setCountdown] = useState(5);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (!project && authReady && !loading && projects.length > 0) {
-      countdownRef.current = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(countdownRef.current!);
-            navigate('/projects');
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, [project, authReady, loading, projects.length]);
 
   if (!project && authReady && !loading) {
     return (

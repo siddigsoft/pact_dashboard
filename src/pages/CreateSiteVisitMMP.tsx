@@ -16,7 +16,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 const CreateSiteVisitMMP = () => {
   const navigate = useNavigate();
   const { currentUser } = useAppContext();
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const { mmpFiles, loading } = useMMP();
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -39,7 +39,7 @@ const CreateSiteVisitMMP = () => {
   );
 
   // Check if user has permission (admin bypass)
-  const canAccess = checkPermission('site_visits', 'create') || hasAnyRole(['admin']);
+  const canAccess = checkPermission('site_visits', 'create');
   if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">

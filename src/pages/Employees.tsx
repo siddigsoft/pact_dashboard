@@ -1910,9 +1910,8 @@ export default function Employees() {
     }
   }, []);
 
-  const { hasAnyRole, isSuperAdmin, checkPermission } = useAuthorization();
-  const roleCanEdit = checkPermission('hr', 'update') &&
-    (isSuperAdmin() || hasAnyRole(['admin', 'fom', 'financialAdmin', 'hrManager', 'hr']));
+  const { checkPermission } = useAuthorization();
+  const roleCanEdit = checkPermission('hr', 'update');
   const overrideCanEdit = usePageManageOverride('employees', roleCanEdit);
   const canEdit = roleCanEdit || overrideCanEdit;
   const isColVisible = useColumnVisibility('employees');
