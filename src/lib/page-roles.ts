@@ -340,6 +340,11 @@ export function isOwnUserProfilePath(
   return !!match && match[1] === userId;
 }
 
+/** True for /settings — the signed-in user's own preferences page. */
+export function isOwnSettingsPath(pathname: string): boolean {
+  return (splitLocation(pathname).pathname.replace(/\/$/, '') || '/') === '/settings';
+}
+
 /**
  * The single registry-derived description of a protected navigation target.
  *

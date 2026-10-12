@@ -344,6 +344,17 @@ describe('current user access manifest evaluator', () => {
     expect(evaluateManifestRouteAccess(context, '/users')).toBe(false);
   });
 
+  it('lets any role open their own Settings but not the Admin Hub settings tab', () => {
+    const context = manifest({
+      roles: ['Supervisor'],
+      page_role_configs: { settings: ['admin', 'superAdmin'] },
+      page_overrides: {},
+    });
+    expect(evaluateManifestRouteAccess(context, '/settings')).toBe(true);
+    expect(evaluateManifestRouteAccess(context, '/settings', '?tab=security')).toBe(true);
+    expect(evaluateManifestRouteAccess(context, '/admin-hub', '?tab=settings')).toBe(false);
+  });
+
   it('does not open project detail from My Projects when that page is blocked', () => {
     const context = manifest({
       roles: ['Field Assistant'],

@@ -554,7 +554,7 @@ const AppRoutes = () => {
         <Route path="/notification-preferences" element={<NotificationPreferences />} />
         <Route path="/notification-history" element={<NotificationHistory />} />
         <Route path="/notification-analytics" element={<NotificationAnalytics />} />
-        <Route path="/settings" element={<Navigate to="/admin-hub?tab=settings" replace />} />
+        <Route path="/settings" element={<PageWrapper><Settings /></PageWrapper>} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/payroll" element={<Navigate to="/hr?tab=payroll" replace />} />
         <Route path="/hr" element={<HRHub />} />

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import {
@@ -539,12 +540,9 @@ const Settings = () => {
   const [wCountryId, setWCountryId] = useState<string>('all');
   const [savingWorkspace, setSavingWorkspace] = useState(false);
 
-  const isAdminUser = ['admin', 'superadmin', 'ict', 'financialadmin'].includes(
-    (currentUser?.role || '').toLowerCase()
-  );
-
-  const isSuperAdminUser = (currentUser?.role || '').toLowerCase().replace(/\s+/g, '') === 'superadmin'
-    || (currentUser?.role || '') === 'super_admin';
+  const { checkPermission, isSuperAdmin } = useAuthorization();
+  const canOpenBroadcastCenter = checkPermission('broadcast', 'read');
+  const isSuperAdminUser = isSuperAdmin();
 
   const [hasMonitoringAccess, setHasMonitoringAccess] = useState(false);
   useEffect(() => {
@@ -1940,7 +1938,7 @@ const Settings = () => {
           </Card>
 
           {/* Admin Broadcast Center Link */}
-          {isAdminUser && (
+          {canOpenBroadcastCenter && (
             <Card className="border border-violet-500/30 shadow-sm">
               <CardHeader className="bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-800/20 border-b p-4 sm:p-6">
                 <div className="flex items-center gap-2">

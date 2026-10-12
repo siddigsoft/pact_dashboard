@@ -153,7 +153,6 @@ export const PAGE_ACCESS_REDIRECTS: PageAccessRedirect[] = [
   { fromPath: '/site-visits', toPath: '/field-ops' },
   { fromPath: '/salary-increments', toPath: '/hr?tab=salary-increments' },
   { fromPath: '/salary-retainer-report', toPath: '/finance-hub?tab=salary-retainer' },
-  { fromPath: '/settings', toPath: '/admin-hub?tab=settings' },
   { fromPath: '/signatures', toPath: '/communication-hub?tab=signatures' },
   { fromPath: '/staff-onboarding', toPath: '/hr?tab=onboarding' },
   { fromPath: '/subscriptions', toPath: '/finance-hub?tab=subscriptions' },
