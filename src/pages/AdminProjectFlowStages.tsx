@@ -306,8 +306,8 @@ function StageEditor({
 }
 
 export default function AdminProjectFlowStages() {
-  const { hasAnyRole } = useAuthorization();
-  const isAdmin = hasAnyRole(['admin', 'super_admin']);
+  const { checkPermission } = useAuthorization();
+  const canConfigure = checkPermission('projects', 'settings');
   const [selectedType, setSelectedType] = useState<string>('tpm');
 
   const overridesQuery = useQuery({
@@ -319,7 +319,7 @@ export default function AdminProjectFlowStages() {
       if (error) return [];
       return (data ?? []) as OverrideRow[];
     },
-    enabled: isAdmin,
+    enabled: canConfigure,
   });
 
   const flow = PROJECT_FLOWS[selectedType] ?? PROJECT_FLOWS.other;
@@ -330,12 +330,12 @@ export default function AdminProjectFlowStages() {
     );
   }, [overridesQuery.data, selectedType]);
 
-  if (!isAdmin) {
+  if (!canConfigure) {
     return (
       <div className="container mx-auto p-6">
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
-            Access restricted to administrators.
+            You need the Configure Project Workflow permission to open this page.
           </CardContent>
         </Card>
       </div>

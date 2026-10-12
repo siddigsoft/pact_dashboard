@@ -297,6 +297,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'site_visits', action: 'update' }, { resource: 'site_visits', action: 'delete' },
     { resource: 'site_visits', action: 'assign' }, { resource: 'site_visits', action: 'approve' },
     { resource: 'site_visits', action: 'export' }, { resource: 'site_visits', action: 'assign_cost' },
+    { resource: 'projects', action: 'settings' },
     { resource: 'hub_operations', action: 'read' }, { resource: 'hub_operations', action: 'update' },
     // Field ops
     { resource: 'safety', action: 'read' }, { resource: 'safety', action: 'update' },
