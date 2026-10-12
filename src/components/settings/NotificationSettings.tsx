@@ -2,31 +2,21 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { useSettings } from "@/context/settings/SettingsContext";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Bell, 
   BellRing, 
-  Volume2, 
-  VolumeX,
-  Vibrate,
   Moon,
   Clock,
   Smartphone,
-  Mail,
   MessageSquare,
   DollarSign,
   Users,
-  AlertTriangle,
   Shield,
-  ChevronRight,
   CheckCircle2,
-  XCircle,
-  Zap,
   Globe
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -204,29 +194,6 @@ export function NotificationSettings() {
     updateNotificationSettings({ ...notificationSettings, browserPush: checked });
   };
 
-  const handleEmailToggle = (checked: boolean) => {
-    updateNotificationSettings({ ...notificationSettings, email: checked });
-  };
-
-  const handleSoundToggle = (checked: boolean) => {
-    updateNotificationSettings({ ...notificationSettings, sound: checked });
-    if (checked) {
-      const audio = new Audio('/notification.mp3');
-      audio.volume = 0.3;
-      audio.play().catch(() => {});
-    }
-  };
-
-  const handleVibrationToggle = (checked: boolean) => {
-    updateNotificationSettings({
-      ...notificationSettings,
-      vibration: checked
-    });
-    if (checked && 'vibrate' in navigator) {
-      navigator.vibrate([100, 50, 100]);
-    }
-  };
-
   const handleQuietHoursToggle = (checked: boolean) => {
     updateNotificationSettings({
       ...notificationSettings,
@@ -257,17 +224,10 @@ export function NotificationSettings() {
     });
   };
 
-  const handleFrequencyChange = (value: string) => {
-    updateNotificationSettings({
-      ...notificationSettings,
-      frequency: value as 'instant' | 'hourly' | 'daily'
-    });
-  };
-
   const handleAutoDeleteChange = (value: string) => {
     updateNotificationSettings({
       ...notificationSettings,
-      autoDeleteDays: value === 'never' ? null : parseInt(value)
+      autoDeleteDays: parseInt(value)
     });
   };
 
@@ -353,56 +313,6 @@ export function NotificationSettings() {
             testId="switch-browser-push"
             badge={pushPermission === 'granted' ? 'Active' : pushPermission === 'denied' ? 'Blocked' : undefined}
             badgeVariant={pushPermission === 'granted' ? 'default' : 'destructive'}
-          />
-          <SettingRow
-            icon={<Mail className="w-5 h-5 text-white" />}
-            iconBg="bg-gradient-to-br from-violet-500 to-purple-600"
-            title="Email Notifications"
-            description="Receive important updates via email"
-            checked={notificationSettings.email ?? false}
-            onCheckedChange={handleEmailToggle}
-            disabled={!isEnabled}
-            testId="switch-email-notifications"
-          />
-        </CardContent>
-      </Card>
-
-      {/* Sound & Vibration */}
-      <Card className="overflow-hidden border shadow-sm">
-        <CardHeader className="pb-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border-b">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-sm">
-              <Volume2 className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <CardTitle className="text-base">Sound & Vibration</CardTitle>
-              <CardDescription className="text-xs">
-                Customize how you're alerted
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4 space-y-3">
-          <SettingRow
-            icon={notificationSettings.sound ? <Volume2 className="w-5 h-5 text-white" /> : <VolumeX className="w-5 h-5 text-white" />}
-            iconBg={notificationSettings.sound ? "bg-gradient-to-br from-amber-500 to-orange-500" : "bg-muted"}
-            title="Notification Sounds"
-            description="Play a sound when you receive a notification"
-            checked={notificationSettings.sound ?? true}
-            onCheckedChange={handleSoundToggle}
-            disabled={!isEnabled}
-            variant="warning"
-            testId="switch-sound"
-          />
-          <SettingRow
-            icon={<Vibrate className="w-5 h-5 text-white" />}
-            iconBg="bg-gradient-to-br from-rose-500 to-pink-600"
-            title="Vibration"
-            description="Vibrate on mobile devices for new notifications"
-            checked={notificationSettings.vibration ?? false}
-            onCheckedChange={handleVibrationToggle}
-            disabled={!isEnabled}
-            testId="switch-vibration"
           />
         </CardContent>
       </Card>
@@ -490,61 +400,26 @@ export function NotificationSettings() {
         </CardContent>
       </Card>
 
-      {/* Delivery Preferences */}
+      {/* Cleanup */}
       <Card className="overflow-hidden border shadow-sm">
         <CardHeader className="pb-4 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-950/30 dark:to-cyan-950/30 border-b">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl shadow-sm">
-              <Zap className="w-5 h-5 text-white" />
+              <Clock className="w-5 h-5 text-white" />
             </div>
             <div>
-              <CardTitle className="text-base">Delivery Preferences</CardTitle>
+              <CardTitle className="text-base">Cleanup</CardTitle>
               <CardDescription className="text-xs">
-                Control how often you receive notifications
+                Remove old notifications automatically
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-4 space-y-4">
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Notification Frequency</Label>
-            <Select
-              value={notificationSettings.frequency ?? 'instant'}
-              onValueChange={handleFrequencyChange}
-              disabled={!isEnabled}
-            >
-              <SelectTrigger data-testid="select-frequency" className="h-11">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="instant">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-500" />
-                    <span>Instant - Send immediately</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="hourly">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-blue-500" />
-                    <span>Hourly Digest - Batch every hour</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="daily">
-                  <div className="flex items-center gap-2">
-                    <Moon className="w-4 h-4 text-indigo-500" />
-                    <span>Daily Digest - Once per day</span>
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-2">
             <Label className="text-sm font-medium">Auto-Delete Old Notifications</Label>
             <Select
-              value={notificationSettings.autoDeleteDays?.toString() ?? 'never'}
+              value={notificationSettings.autoDeleteDays?.toString() ?? '30'}
               onValueChange={handleAutoDeleteChange}
               disabled={!isEnabled}
             >
@@ -557,7 +432,6 @@ export function NotificationSettings() {
                 <SelectItem value="30">After 30 days</SelectItem>
                 <SelectItem value="60">After 60 days</SelectItem>
                 <SelectItem value="90">After 90 days</SelectItem>
-                <SelectItem value="never">Never delete automatically</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-[11px] text-muted-foreground">
@@ -637,42 +511,6 @@ export function NotificationSettings() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Test Notification */}
-      {isEnabled && (
-        <Card className="overflow-hidden border shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <h4 className="text-sm font-semibold">Test Your Settings</h4>
-                <p className="text-xs text-muted-foreground">
-                  Send a test notification to verify everything works
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if ('Notification' in window && Notification.permission === 'granted') {
-                    new Notification('PACT Test Notification', {
-                      body: 'Your notifications are working correctly!',
-                      icon: '/icons/icon-192x192.png',
-                      badge: '/icons/icon-72x72.png'
-                    });
-                  }
-                  toast({
-                    title: "Test notification sent",
-                    description: "Check your notification center",
-                  });
-                }}
-                data-testid="button-test-notification"
-              >
-                <Bell className="w-4 h-4 mr-2" />
-                Send Test
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

@@ -1341,7 +1341,7 @@ export const TOUR_REGISTRY: TourDef[] = [
         element: '[role="tablist"]',
         popover: {
           title: 'Settings categories',
-          description: "Settings are grouped by area: General, Notifications, Appearance, and Integrations. Your changes are saved automatically in most sections.",
+          description: "Settings are grouped by area: Navigation, Location, Notifications, Language, Security, and Profile. Your changes are saved automatically in most sections.",
           side: 'bottom',
         },
       },

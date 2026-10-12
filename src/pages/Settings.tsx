@@ -8,7 +8,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthorization } from "@/hooks/use-authorization";
@@ -17,13 +16,10 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import {
   Settings as SettingsIcon,
   Bell,
-  Palette,
   User,
-  Database,
   MapPin,
   Sparkles,
   Eye,
-  Moon,
   Globe,
   Lock,
   Save,
@@ -33,14 +29,12 @@ import {
   CheckCircle,
   XCircle,
   Menu,
-  Pin,
   EyeOff,
   LayoutDashboard,
   Camera,
   Upload,
   AlertCircle,
   Banknote,
-  CreditCard,
   CheckCircle2,
   Megaphone,
   Mail,
@@ -73,403 +67,8 @@ import { useMFA } from "@/hooks/use-mfa";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import { Badge } from "@/components/ui/badge";
 import { NotificationSettings as NotificationSettingsComponent } from "@/components/settings/NotificationSettings";
-import { useBiometric } from "@/hooks/use-biometric";
-import { useDevice } from "@/hooks/use-device";
-import { Fingerprint } from "lucide-react";
 import { useViewMode } from "@/context/ViewModeContext";
 import { MobileSettingsScreen } from "@/components/mobile/MobileSettingsScreen";
-import { NotificationTriggerService } from "@/services/NotificationTriggerService";
-
-function BiometricSettingsSection() {
-  const { isNative } = useDevice();
-  const { currentUser } = useUser();
-  const {
-    status,
-    isLoading,
-    storeCredentials,
-    clearCredentials,
-    refreshStatus,
-    authenticate,
-  } = useBiometric();
-  const { toast } = useToast();
-  const [isEnabling, setIsEnabling] = useState(false);
-  const [isDisabling, setIsDisabling] = useState(false);
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
-  const [password, setPassword] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-
-  if (!isNative) {
-    return (
-      <div className="pt-4 border-t">
-        <div className="p-4 bg-muted/50 rounded-lg">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <Fingerprint className="h-5 w-5 text-muted-foreground" />
-              <div className="space-y-1">
-                <Label className="text-base font-medium">Biometric Login</Label>
-                <p className="text-sm text-muted-foreground">
-                  Use fingerprint or face recognition for quick login
-                </p>
-              </div>
-            </div>
-            <Badge variant="secondary" className="min-h-[28px] px-3">
-              <Smartphone className="h-3 w-3 mr-1" />
-              Mobile Only
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-3">
-            Biometric authentication is only available in the PACT mobile app.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const handleStartEnableBiometric = async () => {
-    await refreshStatus();
-
-    if (!status.isAvailable) {
-      toast({
-        title: "Biometric Not Available",
-        description:
-          status.errorMessage ||
-          "Your device doesn't support biometric authentication.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!status.isEnrolled) {
-      toast({
-        title: "No Biometrics Enrolled",
-        description:
-          "Please set up fingerprint or face recognition in your device settings first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setPassword("");
-    setPasswordError("");
-    setShowPasswordDialog(true);
-  };
-
-  const handleConfirmEnableBiometric = async () => {
-    if (!password.trim()) {
-      setPasswordError("Please enter your password");
-      return;
-    }
-
-    if (!currentUser?.email) {
-      setPasswordError("Unable to get your email. Please try again.");
-      return;
-    }
-
-    setIsEnabling(true);
-    setPasswordError("");
-
-    try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: currentUser.email,
-        password: password,
-      });
-
-      if (signInError) {
-        setPasswordError("Incorrect password. Please try again.");
-        setIsEnabling(false);
-        return;
-      }
-
-      const authResult = await authenticate({
-        reason: "Verify your identity to enable biometric login",
-        title: "Enable Biometric Login",
-      });
-
-      if (!authResult.success) {
-        toast({
-          title: "Authentication Failed",
-          description:
-            authResult.error ||
-            "Biometric verification failed. Please try again.",
-          variant: "destructive",
-        });
-        setIsEnabling(false);
-        return;
-      }
-
-      const storeResult = await storeCredentials({
-        username: currentUser.email,
-        password: password,
-      });
-
-      if (!storeResult.success) {
-        toast({
-          title: "Error",
-          description:
-            storeResult.error || "Failed to save credentials securely.",
-          variant: "destructive",
-        });
-        setIsEnabling(false);
-        return;
-      }
-
-      setShowPasswordDialog(false);
-      setPassword("");
-
-      toast({
-        title: "Biometric Enabled",
-        description:
-          "You can now use fingerprint or face recognition to log in.",
-        variant: "default",
-      });
-
-      await refreshStatus();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description:
-          error?.message || "Failed to enable biometric authentication.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsEnabling(false);
-    }
-  };
-
-  const handleDisableBiometric = async () => {
-    setIsDisabling(true);
-    try {
-      await clearCredentials();
-      toast({
-        title: "Biometric Disabled",
-        description: "Biometric login has been disabled for your account.",
-        variant: "default",
-      });
-      await refreshStatus();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description:
-          error?.message || "Failed to disable biometric authentication.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsDisabling(false);
-    }
-  };
-
-  return (
-    <div className="pt-4 border-t">
-      <div className="p-4 bg-muted/50 rounded-lg min-h-[80px]">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Fingerprint className="h-5 w-5 text-muted-foreground" />
-            <div className="space-y-1">
-              <Label className="text-base font-medium">Biometric Login</Label>
-              <p className="text-sm text-muted-foreground">
-                {status.biometricType === "face"
-                  ? "Use Face ID for quick login"
-                  : status.biometricType === "iris"
-                    ? "Use Iris scan for quick login"
-                    : "Use fingerprint for quick login"}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {isLoading ? (
-              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-            ) : status.hasStoredCredentials ? (
-              <Badge
-                variant="default"
-                className="bg-green-500 hover:bg-green-600 min-h-[28px] px-3"
-              >
-                <CheckCircle className="h-3 w-3 mr-1" />
-                Enabled
-              </Badge>
-            ) : status.isAvailable ? (
-              <Badge variant="secondary" className="min-h-[28px] px-3">
-                <XCircle className="h-3 w-3 mr-1" />
-                Disabled
-              </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className="min-h-[28px] px-3 text-amber-600 border-amber-300"
-              >
-                <AlertCircle className="h-3 w-3 mr-1" />
-                Not Available
-              </Badge>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {status.isAvailable && !status.isEnrolled && (
-        <div className="mt-3 p-3 border rounded-lg bg-amber-50 dark:bg-amber-900/20">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5" />
-            <p className="text-sm text-amber-800 dark:text-amber-200">
-              No biometrics enrolled on this device. Please set up fingerprint
-              or face recognition in your device settings.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {status.isAvailable && status.isEnrolled && (
-        <div className="mt-3">
-          {status.hasStoredCredentials ? (
-            <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-900/20">
-              <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
-                <div className="space-y-2">
-                  <p className="font-medium text-green-800 dark:text-green-200">
-                    Biometric login is active
-                  </p>
-                  <p className="text-sm text-green-700 dark:text-green-300">
-                    You can use{" "}
-                    {status.biometricType === "face"
-                      ? "Face ID"
-                      : status.biometricType === "iris"
-                        ? "Iris scan"
-                        : "your fingerprint"}{" "}
-                    to quickly log in to the app.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDisableBiometric}
-                    disabled={isDisabling}
-                    className="mt-2 min-h-[36px] px-4"
-                    data-testid="button-disable-biometric"
-                  >
-                    {isDisabling ? (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        Disabling...
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="mr-2 h-4 w-4" />
-                        Disable Biometric Login
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="p-4 border rounded-lg">
-              <div className="flex items-start gap-3">
-                <Fingerprint className="h-5 w-5 text-muted-foreground mt-0.5" />
-                <div className="space-y-2">
-                  <p className="font-medium">Enable quick login</p>
-                  <p className="text-sm text-muted-foreground">
-                    Set up biometric authentication for faster, more secure
-                    access to the app without entering your password.
-                  </p>
-                  <Button
-                    onClick={handleStartEnableBiometric}
-                    disabled={isEnabling}
-                    className="mt-2 min-h-[44px] px-6"
-                    data-testid="button-enable-biometric"
-                  >
-                    {isEnabling ? (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        Setting up...
-                      </>
-                    ) : (
-                      <>
-                        <Fingerprint className="mr-2 h-4 w-4" />
-                        Enable Biometric Login
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {!status.isAvailable && status.errorMessage && (
-        <div className="mt-3 p-3 border rounded-lg bg-muted/50">
-          <p className="text-sm text-muted-foreground">{status.errorMessage}</p>
-        </div>
-      )}
-
-      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Fingerprint className="h-5 w-5" />
-              Enable Biometric Login
-            </DialogTitle>
-            <DialogDescription>
-              Enter your password to securely save your login credentials for
-              biometric authentication.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="biometric-password">Password</Label>
-              <Input
-                id="biometric-password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setPasswordError("");
-                }}
-                className={passwordError ? "border-destructive" : ""}
-                data-testid="input-biometric-password"
-              />
-              {passwordError && (
-                <p className="text-sm text-destructive">{passwordError}</p>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Your password will be encrypted and stored securely on your
-              device. It will only be accessible via biometric authentication.
-            </p>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowPasswordDialog(false);
-                setPassword("");
-                setPasswordError("");
-              }}
-              disabled={isEnabling}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirmEnableBiometric}
-              disabled={isEnabling || !password.trim()}
-              data-testid="button-confirm-biometric"
-            >
-              {isEnabling ? (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  Verifying...
-                </>
-              ) : (
-                <>
-                  <Fingerprint className="mr-2 h-4 w-4" />
-                  Enable
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
 
 const Settings = () => {
   const { viewMode } = useViewMode();
@@ -477,17 +76,8 @@ const Settings = () => {
   const { toast } = useToast();
   const { currentUser, updateUser, logout } = useUser();
   const {
-    userSettings,
     notificationSettings,
-    appearanceSettings,
-    menuPreferences,
     dashboardPreferences,
-    dataVisibilitySettings,
-    updateUserSettings,
-    updateNotificationSettings,
-    updateAppearanceSettings,
-    updateDataVisibilitySettings,
-    updateMenuPreferences,
     updateDashboardPreferences,
     loading,
   } = useSettings();
@@ -521,7 +111,7 @@ const Settings = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [changing, setChanging] = useState(false);
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState("navigation");
   const [showMFASetup, setShowMFASetup] = useState(false);
   const [disablingMFA, setDisablingMFA] = useState(false);
 
@@ -531,90 +121,9 @@ const Settings = () => {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [bankAccountSubmitting, setBankAccountSubmitting] = useState(false);
-  const [broadcastSending, setBroadcastSending] = useState(false);
-  const [broadcastResult, setBroadcastResult] = useState<{ sent: number; skipped: number } | null>(null);
-  const [broadcastOnlyMissing, setBroadcastOnlyMissing] = useState(true);
 
-  interface WCountry { id: string; code: string; name_en: string; currency_code: string; currency_symbol: string; flag_emoji: string | null; }
-  const [wCountries, setWCountries] = useState<WCountry[]>([]);
-  const [wCountryId, setWCountryId] = useState<string>('all');
-  const [savingWorkspace, setSavingWorkspace] = useState(false);
-
-  const { checkPermission, isSuperAdmin } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canOpenBroadcastCenter = checkPermission('broadcast', 'read');
-  const isSuperAdminUser = isSuperAdmin();
-
-  const [hasMonitoringAccess, setHasMonitoringAccess] = useState(false);
-  useEffect(() => {
-    if (isSuperAdminUser) { setHasMonitoringAccess(true); return; }
-    if (!currentUser?.id) return;
-    supabase
-      .from('monitoring_page_access')
-      .select('id')
-      .eq('user_id', currentUser.id)
-      .maybeSingle()
-      .then(({ data }) => setHasMonitoringAccess(!!data));
-  }, [currentUser?.id, isSuperAdminUser]);
-
-  useEffect(() => {
-    supabase
-      .from('countries')
-      .select('id,code,name_en,currency_code,currency_symbol,flag_emoji')
-      .eq('is_active', true)
-      .order('name_en')
-      .then(({ data }) => setWCountries((data ?? []) as WCountry[]));
-  }, []);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    const stored = localStorage.getItem(`pact-acct-country-${currentUser.id}`);
-    supabase
-      .from('profiles')
-      .select('default_country_id')
-      .eq('id', currentUser.id)
-      .single()
-      .then(({ data }) => {
-        const dbId: string = (data as { default_country_id?: string | null } | null)?.default_country_id ?? 'all';
-        setWCountryId(stored ?? dbId);
-      });
-  }, [currentUser?.id]);
-
-  const handleSaveWorkspace = async () => {
-    if (!currentUser?.id) return;
-    setSavingWorkspace(true);
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ default_country_id: wCountryId === 'all' ? null : wCountryId })
-        .eq('id', currentUser.id);
-      if (error) throw error;
-      localStorage.removeItem(`pact-acct-country-${currentUser.id}`);
-      toast({ title: 'Workspace saved', description: 'Your default accounting country has been updated.' });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err?.message || 'Could not save workspace settings.', variant: 'destructive' });
-    } finally {
-      setSavingWorkspace(false);
-    }
-  };
-
-  const handleBroadcastBankAccountReminder = async () => {
-    setBroadcastSending(true);
-    setBroadcastResult(null);
-    try {
-      const result = await NotificationTriggerService.broadcastBankAccountReminder({
-        onlyMissing: broadcastOnlyMissing,
-      });
-      setBroadcastResult({ sent: result.sent, skipped: result.skipped });
-      toast({
-        title: 'Broadcast Sent / تم الإرسال',
-        description: `Notification sent to ${result.sent} user(s). ${result.skipped} already have bank accounts.`,
-      });
-    } catch (err) {
-      toast({ title: 'Error', description: 'Failed to send broadcast.', variant: 'destructive' });
-    } finally {
-      setBroadcastSending(false);
-    }
-  };
 
   const handleBankAccountSubmit = async (values: BankakAccountFormValues) => {
     if (!currentUser) return;
@@ -747,116 +256,6 @@ const Settings = () => {
     checkMFAStatus();
   }, [checkMFAStatus]);
 
-  const handleNotificationsToggle = (enabled: boolean) => {
-    updateNotificationSettings({
-      ...notificationSettings,
-      enabled,
-    });
-  };
-
-  const handleEmailNotificationsToggle = (checked: boolean) => {
-    updateNotificationSettings({
-      ...notificationSettings,
-      email: checked,
-    });
-  };
-
-  const handleSoundAlertsToggle = (checked: boolean) => {
-    updateNotificationSettings({
-      ...notificationSettings,
-      sound: checked,
-    });
-  };
-
-  const handleBrowserPushToggle = async (checked: boolean) => {
-    if (checked && "Notification" in window) {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        toast({
-          title: "Permission denied",
-          description:
-            "Browser notifications were not enabled. Please allow notifications in your browser settings.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-    updateNotificationSettings({
-      ...notificationSettings,
-      browserPush: checked,
-    });
-  };
-
-  const handleCategoryToggle = (
-    category: keyof typeof notificationSettings.categories,
-    checked: boolean,
-  ) => {
-    updateNotificationSettings({
-      ...notificationSettings,
-      categories: {
-        ...notificationSettings.categories,
-        [category]: checked,
-      },
-    });
-  };
-
-  const handleQuietHoursToggle = (enabled: boolean) => {
-    updateNotificationSettings({
-      ...notificationSettings,
-      quietHours: {
-        ...notificationSettings.quietHours,
-        enabled,
-      },
-    });
-  };
-
-  const handleQuietHoursChange = (
-    field: "startHour" | "endHour",
-    value: number,
-  ) => {
-    updateNotificationSettings({
-      ...notificationSettings,
-      quietHours: {
-        ...notificationSettings.quietHours,
-        [field]: value,
-      },
-    });
-  };
-
-  const handleFrequencyChange = (frequency: "instant" | "hourly" | "daily") => {
-    updateNotificationSettings({
-      ...notificationSettings,
-      frequency,
-    });
-  };
-
-  const handleAutoDeleteChange = (days: number) => {
-    updateNotificationSettings({
-      ...notificationSettings,
-      autoDeleteDays: days,
-    });
-  };
-
-  const handleDarkModeToggle = (checked: boolean) => {
-    updateAppearanceSettings({
-      ...appearanceSettings,
-      darkMode: checked,
-    });
-  };
-
-  const handleThemeChange = (value: string) => {
-    updateAppearanceSettings({
-      ...appearanceSettings,
-      theme: value,
-    });
-  };
-
-  const handleDefaultPageChange = (value: string) => {
-    updateUserSettings({
-      defaultPage: value,
-    });
-  };
-
   const handleSaveProfile = async () => {
     if (!currentUser) return;
 
@@ -900,24 +299,6 @@ const Settings = () => {
         variant: "destructive",
       });
     }
-  };
-
-  const handleDataSharingToggle = (checked: boolean) => {
-    updateDataVisibilitySettings({
-      options: {
-        ...dataVisibilitySettings?.options,
-        shareLocationWithTeam: checked,
-      },
-    });
-  };
-
-  const handleDisplayMetricsToggle = (checked: boolean) => {
-    updateDataVisibilitySettings({
-      options: {
-        ...dataVisibilitySettings?.options,
-        displayPersonalMetrics: checked,
-      },
-    });
   };
 
   const handleDisableMFA = async () => {
@@ -1062,29 +443,7 @@ const Settings = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <Card
-          className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0 min-h-[120px]"
-          onClick={() => setActiveTab("general")}
-          data-testid="card-general-settings"
-        >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
-            <CardTitle className="text-sm font-medium text-white/90">
-              General
-            </CardTitle>
-            <Globe className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <div className="text-xl sm:text-2xl font-bold text-white">
-              Preferences
-            </div>
-            <p className="text-xs text-white/80 mt-1">
-              Landing page & defaults
-            </p>
-          </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
-        </Card>
-
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <Card
           className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0 min-h-[120px]"
           onClick={() => setActiveTab("notifications")}
@@ -1101,29 +460,7 @@ const Settings = () => {
               {notificationSettings.enabled ? "Enabled" : "Disabled"}
             </div>
             <p className="text-xs text-white/80 mt-1">
-              Alerts & email settings
-            </p>
-          </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
-        </Card>
-
-        <Card
-          className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0 min-h-[120px]"
-          onClick={() => setActiveTab("appearance")}
-          data-testid="card-appearance-settings"
-        >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Appearance
-            </CardTitle>
-            <Moon className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <div className="text-xl sm:text-2xl font-bold text-white">
-              {appearanceSettings.darkMode ? "Dark" : "Light"}
-            </div>
-            <p className="text-xs text-white/80 mt-1">
-              Theme & display options
+              Alerts & quiet hours
             </p>
           </CardContent>
           <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
@@ -1155,15 +492,7 @@ const Settings = () => {
         onValueChange={setActiveTab}
         className="space-y-4"
       >
-        <TabsList className="grid w-full grid-cols-4 gap-1 h-auto p-1">
-          <TabsTrigger
-            value="general"
-            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
-            data-testid="tab-general"
-          >
-            <SettingsIcon className="h-4 w-4" />
-            <span className="hidden xs:inline sm:inline">General</span>
-          </TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 gap-1 h-auto p-1">
           <TabsTrigger
             value="navigation"
             className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
@@ -1189,12 +518,12 @@ const Settings = () => {
             <span className="hidden xs:inline sm:inline">Notifications</span>
           </TabsTrigger>
           <TabsTrigger
-            value="appearance"
+            value="language"
             className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
-            data-testid="tab-appearance"
+            data-testid="tab-language"
           >
-            <Palette className="h-4 w-4" />
-            <span className="hidden xs:inline sm:inline">Appearance</span>
+            <Globe className="h-4 w-4" />
+            <span className="hidden xs:inline sm:inline">Language</span>
           </TabsTrigger>
           <TabsTrigger
             value="security"
@@ -1212,97 +541,7 @@ const Settings = () => {
             <User className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Profile</span>
           </TabsTrigger>
-          <TabsTrigger
-            value="dataVisibility"
-            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
-            data-testid="tab-data-visibility"
-          >
-            <Eye className="h-4 w-4" />
-            <span className="hidden xs:inline sm:inline">Privacy</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="workspace"
-            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
-            data-testid="tab-workspace"
-          >
-            <Globe className="h-4 w-4" />
-            <span className="hidden xs:inline sm:inline">Workspace</span>
-          </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="general" className="space-y-4">
-          <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-b p-4 sm:p-6">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-blue-500 rounded-lg">
-                  <SettingsIcon className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">General Settings</CardTitle>
-                  <CardDescription>
-                    Configure general system preferences
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6 p-4 sm:p-6 pt-4 sm:pt-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
-                <div className="space-y-1">
-                  <Label
-                    htmlFor="default-page"
-                    className="text-base font-medium"
-                  >
-                    Default Landing Page
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Choose which page to show after login
-                  </p>
-                </div>
-                <Select
-                  value={userSettings?.settings?.defaultPage || "dashboard"}
-                  onValueChange={handleDefaultPageChange}
-                >
-                  <SelectTrigger
-                    className="w-full sm:w-[200px] min-h-[44px]"
-                    data-testid="select-default-page"
-                  >
-                    <SelectValue placeholder="Select page" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="dashboard">Dashboard</SelectItem>
-                    <SelectItem value="mmp">MMP Management</SelectItem>
-                    <SelectItem value="site-visits">Site Visits</SelectItem>
-                    <SelectItem value="reports">Reports</SelectItem>
-                    {hasMonitoringAccess ? (
-                      <SelectItem value="monitoring">System Monitoring</SelectItem>
-                    ) : null}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex justify-end pt-4 border-t">
-                <Button
-                  onClick={() => {
-                    updateUserSettings({
-                      defaultPage:
-                        userSettings?.settings?.defaultPage || "dashboard",
-                    });
-                    toast({
-                      title: "Settings saved",
-                      description: "Your general settings have been updated.",
-                      variant: "success",
-                    });
-                  }}
-                  className="min-h-[44px] px-6"
-                  data-testid="button-save-general"
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Changes
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="navigation" className="space-y-4">
           <Card className="border shadow-sm">
@@ -1316,7 +555,7 @@ const Settings = () => {
                     Navigation Preferences
                   </CardTitle>
                   <CardDescription>
-                    Customize your sidebar menu and dashboard layout
+                    Choose where the dashboard opens for you
                   </CardDescription>
                 </div>
               </div>
@@ -1358,122 +597,6 @@ const Settings = () => {
                 </Select>
               </div>
 
-              <div className="border-t pt-6 space-y-4">
-                <div className="flex items-center gap-2">
-                  <Pin className="h-5 w-5 text-amber-600" />
-                  <h3 className="font-semibold">Pinned Menu Items</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Pinned items appear at the top of their menu groups for quick
-                  access
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {menuPreferences?.pinnedItems?.length > 0 ? (
-                    menuPreferences.pinnedItems.map((url) => (
-                      <Badge
-                        key={url}
-                        variant="secondary"
-                        className="gap-1 min-h-[32px] px-3 py-1"
-                      >
-                        <Pin className="h-3 w-3" />
-                        {url.replace("/", "")}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6 ml-1 min-h-[24px]"
-                          onClick={() => {
-                            const updated = menuPreferences.pinnedItems.filter(
-                              (i) => i !== url,
-                            );
-                            updateMenuPreferences({ pinnedItems: updated });
-                          }}
-                          data-testid={`button-unpin-${url.replace("/", "")}`}
-                        >
-                          <XCircle className="h-3 w-3" />
-                        </Button>
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">
-                      No pinned items. Right-click menu items to pin them.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="border-t pt-6 space-y-4">
-                <div className="flex items-center gap-2">
-                  <EyeOff className="h-5 w-5 text-gray-600" />
-                  <h3 className="font-semibold">Hidden Menu Items</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Hidden items won't appear in your sidebar menu
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {menuPreferences?.hiddenItems?.length > 0 ? (
-                    menuPreferences.hiddenItems.map((url) => (
-                      <Badge
-                        key={url}
-                        variant="outline"
-                        className="gap-1 min-h-[32px] px-3 py-1"
-                      >
-                        <EyeOff className="h-3 w-3" />
-                        {url.replace("/", "")}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6 ml-1 min-h-[24px]"
-                          onClick={() => {
-                            const updated = menuPreferences.hiddenItems.filter(
-                              (i) => i !== url,
-                            );
-                            updateMenuPreferences({ hiddenItems: updated });
-                          }}
-                          data-testid={`button-show-${url.replace("/", "")}`}
-                        >
-                          <Eye className="h-3 w-3" />
-                        </Button>
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">
-                      No hidden items. Right-click menu items to hide them.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row justify-between gap-3 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  className="min-h-[44px] px-6"
-                  onClick={() => {
-                    updateMenuPreferences({
-                      hiddenItems: [],
-                      pinnedItems: [],
-                      collapsedGroups: [],
-                      favoritePages: [],
-                    });
-                    updateDashboardPreferences({
-                      defaultZone: "operations",
-                      hiddenWidgets: [],
-                      widgetOrder: [],
-                      quickStats: [],
-                      defaultTimeRange: "week",
-                    });
-                    toast({
-                      title: "Preferences reset",
-                      description:
-                        "Navigation preferences have been reset to defaults.",
-                      variant: "success",
-                    });
-                  }}
-                  data-testid="button-reset-nav"
-                >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Reset to Defaults
-                </Button>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1503,73 +626,22 @@ const Settings = () => {
           <NotificationSettingsComponent />
         </TabsContent>
 
-        <TabsContent value="appearance" className="space-y-4">
+        <TabsContent value="language" className="space-y-4">
           <Card className="border shadow-sm">
             <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-b p-4 sm:p-6">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-purple-500 rounded-lg">
-                  <Palette className="h-5 w-5 text-white" />
+                  <Globe className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg">Appearance Settings</CardTitle>
+                  <CardTitle className="text-lg">Language</CardTitle>
                   <CardDescription>
-                    Customize the look and feel of the application
+                    Choose the language the app is shown in
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4 p-4 sm:p-6 pt-4 sm:pt-6">
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg min-h-[60px]">
-                <div className="flex items-center gap-3">
-                  <Moon className="h-5 w-5 text-muted-foreground" />
-                  <div className="space-y-1">
-                    <Label
-                      htmlFor="dark-mode"
-                      className="text-base font-medium"
-                    >
-                      Dark Mode
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Switch to dark theme
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  id="dark-mode"
-                  checked={appearanceSettings.darkMode}
-                  onCheckedChange={handleDarkModeToggle}
-                  className="scale-110"
-                  data-testid="switch-dark-mode"
-                />
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg min-h-[60px]">
-                <div className="space-y-1">
-                  <Label htmlFor="theme" className="text-base font-medium">
-                    Theme Style
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Choose your preferred theme
-                  </p>
-                </div>
-                <Select
-                  value={appearanceSettings.theme}
-                  onValueChange={handleThemeChange}
-                >
-                  <SelectTrigger
-                    className="w-full sm:w-[200px] min-h-[44px]"
-                    data-testid="select-theme"
-                  >
-                    <SelectValue placeholder="Select theme" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Default</SelectItem>
-                    <SelectItem value="high-contrast">High Contrast</SelectItem>
-                    <SelectItem value="neutral">Neutral</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg min-h-[60px]">
                 <div className="flex items-center gap-3">
                   <Globe className="h-5 w-5 text-muted-foreground" />
@@ -1583,25 +655,6 @@ const Settings = () => {
                   </div>
                 </div>
                 <LanguageSwitcher variant="full" />
-              </div>
-
-              <div className="flex justify-end pt-4 border-t">
-                <Button
-                  onClick={() => {
-                    updateAppearanceSettings(appearanceSettings);
-                    toast({
-                      title: "Settings saved",
-                      description:
-                        "Your appearance settings have been updated.",
-                      variant: "success",
-                    });
-                  }}
-                  className="min-h-[44px] px-6"
-                  data-testid="button-save-appearance"
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Changes
-                </Button>
               </div>
             </CardContent>
           </Card>
@@ -1720,8 +773,6 @@ const Settings = () => {
                   </div>
                 </div>
               )}
-
-              <BiometricSettingsSection />
 
               <div className="pt-4 border-t">
                 <h4 className="text-sm font-medium mb-3">
@@ -1972,188 +1023,6 @@ const Settings = () => {
             </Card>
           )}
 
-        </TabsContent>
-
-        <TabsContent value="dataVisibility" className="space-y-4">
-          <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-b p-4 sm:p-6">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-indigo-500 rounded-lg">
-                  <Eye className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">
-                    Data Visibility & Privacy
-                  </CardTitle>
-                  <CardDescription>
-                    Control how your data is shared and displayed
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4 p-4 sm:p-6 pt-4 sm:pt-6">
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg min-h-[60px]">
-                <div className="flex items-center gap-3">
-                  <MapPin className="h-5 w-5 text-muted-foreground" />
-                  <div className="space-y-1">
-                    <Label
-                      htmlFor="location-sharing"
-                      className="text-base font-medium"
-                    >
-                      Share Location with Team
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Allow team members to see your location
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  id="location-sharing"
-                  checked={
-                    !!dataVisibilitySettings?.options?.shareLocationWithTeam
-                  }
-                  onCheckedChange={handleDataSharingToggle}
-                  className="scale-110"
-                  data-testid="switch-location-sharing"
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg min-h-[60px]">
-                <div className="flex items-center gap-3">
-                  <Database className="h-5 w-5 text-muted-foreground" />
-                  <div className="space-y-1">
-                    <Label
-                      htmlFor="display-metrics"
-                      className="text-base font-medium"
-                    >
-                      Display Personal Metrics
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Show your metrics on team dashboard
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  id="display-metrics"
-                  checked={
-                    !!dataVisibilitySettings?.options?.displayPersonalMetrics
-                  }
-                  onCheckedChange={handleDisplayMetricsToggle}
-                  className="scale-110"
-                  data-testid="switch-display-metrics"
-                />
-              </div>
-
-              <div className="flex justify-end pt-4 border-t">
-                <Button
-                  onClick={() => {
-                    toast({
-                      title: "Settings saved",
-                      description:
-                        "Your data visibility settings have been updated.",
-                    });
-                  }}
-                  className="min-h-[44px] px-6"
-                  data-testid="button-save-privacy"
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Changes
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="workspace" className="space-y-4">
-          <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-teal-50 to-teal-100 dark:from-teal-900/20 dark:to-teal-800/20 border-b p-4 sm:p-6">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-teal-500 rounded-lg">
-                  <Globe className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Workspace & Country</CardTitle>
-                  <CardDescription>
-                    Set your default country for accounting modules (COA, Journals, Trial Balance).
-                    You can still switch per-session on any accounting page.
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6 p-4 sm:p-6 pt-4 sm:pt-6">
-              <div className="space-y-3">
-                <Label className="text-base font-medium">Default Accounting Country</Label>
-                <p className="text-sm text-muted-foreground">
-                  All accounting pages will auto-filter to this country when you open them.
-                  Admins can still switch to any country on the fly.
-                </p>
-                <Select value={wCountryId} onValueChange={setWCountryId}>
-                  <SelectTrigger className="w-full sm:w-[320px] h-11" data-testid="select-workspace-country">
-                    <SelectValue placeholder="Select a country…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">
-                      <span className="flex items-center gap-2">
-                        <Globe className="h-4 w-4 text-muted-foreground" />
-                        All countries (no default)
-                      </span>
-                    </SelectItem>
-                    {wCountries.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        <span className="flex items-center gap-2">
-                          {c.flag_emoji && <span>{c.flag_emoji}</span>}
-                          {c.name_en}
-                          <span className="text-muted-foreground text-xs ml-1">
-                            {c.currency_code} {c.currency_symbol}
-                          </span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {wCountryId && wCountryId !== 'all' && (() => {
-                const c = wCountries.find((x) => x.id === wCountryId);
-                if (!c) return null;
-                return (
-                  <div className="p-4 bg-teal-50 dark:bg-teal-900/20 rounded-lg border border-teal-200 dark:border-teal-800 flex items-center gap-4">
-                    <div className="text-4xl">{c.flag_emoji ?? '🌍'}</div>
-                    <div>
-                      <p className="font-semibold text-teal-800 dark:text-teal-200">{c.name_en}</p>
-                      <p className="text-sm text-teal-600 dark:text-teal-400">
-                        Currency: <span className="font-medium">{c.currency_code} ({c.currency_symbol})</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        All new journal entries will default to {c.currency_code} when this country is selected.
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="flex justify-end pt-2 border-t">
-                <Button
-                  onClick={handleSaveWorkspace}
-                  disabled={savingWorkspace}
-                  className="min-h-[44px] px-8"
-                  data-testid="button-save-workspace"
-                >
-                  {savingWorkspace ? (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                      Saving…
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Workspace
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
 

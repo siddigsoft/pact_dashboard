@@ -100,7 +100,6 @@ export interface User {
       sms?: boolean;
     };
     theme?: 'light' | 'dark' | 'system';
-    defaultPage?: string;
     shareLocationWithTeam?: boolean;
     displayPersonalMetrics?: boolean;
   };

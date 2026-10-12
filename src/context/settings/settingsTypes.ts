@@ -3,7 +3,6 @@ export type UserSettings = {
   user_id?: string;
   settings?: {
     theme?: 'light' | 'dark' | 'system';
-    defaultPage?: string;
     language?: string;
     [key: string]: any;
   };
