@@ -772,3 +772,10 @@ for (const permissions of Object.values(DEFAULT_ROLE_PERMISSIONS)) {
     }
   }
 }
+
+// Pulse surveys are answered by all staff.
+for (const permissions of Object.values(DEFAULT_ROLE_PERMISSIONS)) {
+  if (!permissions.some(p => p.resource === 'pulse_surveys' && p.action === 'submit')) {
+    permissions.push({ resource: 'pulse_surveys', action: 'submit' });
+  }
+}

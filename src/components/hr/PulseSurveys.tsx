@@ -134,12 +134,17 @@ function isSurveyOpen(s: PulseSurvey): boolean {
 }
 
 export default function PulseSurveys() {
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('pulse_surveys', 'export');
+  const canViewResults = checkPermission('pulse_surveys', 'read');
+  const canCreate = checkPermission('pulse_surveys', 'create');
+  const canUpdate = checkPermission('pulse_surveys', 'update');
+  const canDelete = checkPermission('pulse_surveys', 'delete');
+  const canSubmit = checkPermission('pulse_surveys', 'submit');
+  const canManage = canViewResults || canCreate || canUpdate || canDelete;
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const isAdmin = hasAnyRole(['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin', 'hr', 'hr_manager']);
 
   const userHubId       = (currentUser as any)?.hubId ?? (currentUser as any)?.hub_id ?? null;
   const userDeptId      = (currentUser as any)?.departmentId ?? (currentUser as any)?.department_id ?? null;
@@ -184,13 +189,13 @@ export default function PulseSurveys() {
   const { data: responses = [], isLoading: loadResponses } = useQuery({
     queryKey: ['hr-pulse-responses'],
     queryFn: async () => {
-      if (!isAdmin) return [];
+      if (!canViewResults) return [];
       const { data, error } = await supabase.from('hr_pulse_responses' as any).select('*');
       if (error?.code === '42P01') return [];
       return (data ?? []) as unknown as PulseResponse[];
     },
     staleTime: 30_000,
-    enabled: isAdmin,
+    enabled: canViewResults,
   });
 
   const { data: hubs = [] } = useQuery({
@@ -468,6 +473,40 @@ export default function PulseSurveys() {
 
   if (loadSurveys) return <div className="flex items-center justify-center h-64"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
 
+  /* ── Employee: take audience-scoped open surveys ── */
+  const respondView = (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">All responses are fully anonymous — your identity is never stored with your answers.</p>
+      {openSurveys.length === 0 ? (
+        <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
+          No active pulse surveys for your team right now. Check back later.
+        </CardContent></Card>
+      ) : openSurveys.map(s => {
+        const done = submittedIds.has(s.id);
+        return (
+          <Card key={s.id} data-testid={`card-survey-${s.id}`}>
+            <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-medium text-sm">{s.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  Closes {format(parseISO(s.ends_at), 'PP')} · {s.questions.length} question{s.questions.length !== 1 ? 's' : ''}
+                </p>
+                {s.description && <p className="text-xs text-muted-foreground">{s.description}</p>}
+              </div>
+              {done ? (
+                <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-4 w-4" />Submitted</span>
+              ) : (
+                <Button size="sm" onClick={() => openSurveyForTaking(s)} data-testid={`button-take-${s.id}`}>
+                  <Send className="h-3.5 w-3.5 mr-1" />Take Survey
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="space-y-4 p-4 md:p-6 max-w-5xl mx-auto" data-testid="page-pulse-surveys">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -475,18 +514,19 @@ export default function PulseSurveys() {
           <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare className="h-4 w-4" />Engagement Pulse Surveys</h2>
           <p className="text-sm text-muted-foreground">Anonymous staff pulse checks. Responses are never linked to individuals.</p>
         </div>
-        {isAdmin && (
+        {canCreate && (
           <Button size="sm" onClick={openNew} data-testid="button-new-survey">
             <Plus className="h-4 w-4 mr-1" />New Survey
           </Button>
         )}
       </div>
 
-      {isAdmin ? (
+      {canManage ? (
         <Tabs defaultValue="surveys">
           <TabsList>
             <TabsTrigger value="surveys">All Surveys ({surveys.length})</TabsTrigger>
-            <TabsTrigger value="results">Results & Analytics</TabsTrigger>
+            {canViewResults && <TabsTrigger value="results">Results & Analytics</TabsTrigger>}
+            {canSubmit && <TabsTrigger value="respond">Take Surveys</TabsTrigger>}
           </TabsList>
 
           {/* ── Admin: survey list ── */}
@@ -524,8 +564,8 @@ export default function PulseSurveys() {
                            <Button size="sm" variant="outline" onClick={() => exportResults(s)} data-testid={`button-export-${s.id}`}>Export</Button>
                          </ReportExportGate>
                        )}
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Edit2 className="h-3.5 w-3.5" /></Button>
-                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => deleteSurvey(s)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      {canUpdate && <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Edit2 className="h-3.5 w-3.5" /></Button>}
+                      {canDelete && <Button size="sm" variant="ghost" className="text-red-600" onClick={() => deleteSurvey(s)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                     </div>
                   </CardContent>
                 </Card>
@@ -534,7 +574,7 @@ export default function PulseSurveys() {
           </TabsContent>
 
           {/* ── Admin: results & analytics ── */}
-          <TabsContent value="results" className="space-y-4 pt-3">
+          {canViewResults && <TabsContent value="results" className="space-y-4 pt-3">
             {loadResponses ? (
               <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>
             ) : surveys.filter(s => (responsesBySurvey[s.id] ?? []).length > 0).length === 0 ? (
@@ -677,40 +717,16 @@ export default function PulseSurveys() {
                 </Card>
               );
             })}
-          </TabsContent>
+          </TabsContent>}
+
+          {canSubmit && <TabsContent value="respond" className="pt-3">{respondView}</TabsContent>}
         </Tabs>
+      ) : canSubmit ? (
+        respondView
       ) : (
-        /* ── Employee: take audience-scoped open surveys ── */
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">All responses are fully anonymous — your identity is never stored with your answers.</p>
-          {openSurveys.length === 0 ? (
-            <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
-              No active pulse surveys for your team right now. Check back later.
-            </CardContent></Card>
-          ) : openSurveys.map(s => {
-            const done = submittedIds.has(s.id);
-            return (
-              <Card key={s.id} data-testid={`card-survey-${s.id}`}>
-                <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-sm">{s.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Closes {format(parseISO(s.ends_at), 'PP')} · {s.questions.length} question{s.questions.length !== 1 ? 's' : ''}
-                    </p>
-                    {s.description && <p className="text-xs text-muted-foreground">{s.description}</p>}
-                  </div>
-                  {done ? (
-                    <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-4 w-4" />Submitted</span>
-                  ) : (
-                    <Button size="sm" onClick={() => openSurveyForTaking(s)} data-testid={`button-take-${s.id}`}>
-                      <Send className="h-3.5 w-3.5 mr-1" />Take Survey
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
+          You don't have access to pulse surveys.
+        </CardContent></Card>
       )}
 
       {/* ── Create / Edit Dialog ── */}
