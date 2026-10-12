@@ -773,9 +773,11 @@ for (const permissions of Object.values(DEFAULT_ROLE_PERMISSIONS)) {
   }
 }
 
-// Pulse surveys are answered by all staff.
+// All staff answer pulse surveys and request their own benefit enrollment.
 for (const permissions of Object.values(DEFAULT_ROLE_PERMISSIONS)) {
-  if (!permissions.some(p => p.resource === 'pulse_surveys' && p.action === 'submit')) {
-    permissions.push({ resource: 'pulse_surveys', action: 'submit' });
+  for (const resource of ['pulse_surveys', 'benefits'] as const) {
+    if (!permissions.some(p => p.resource === resource && p.action === 'submit')) {
+      permissions.push({ resource, action: 'submit' });
+    }
   }
 }

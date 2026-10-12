@@ -47,10 +47,10 @@ interface Props { userId: string; viewedBySelf?: boolean; }
 
 export default function EmployeeBenefitsTab({ userId, viewedBySelf = false }: Props) {
   const { currentUser } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const { toast } = useToast();
-  const isAdmin = hasAnyRole(['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin', 'hr', 'hr_manager']);
-  const canSelfEnroll = viewedBySelf || currentUser?.id === userId;
+  const isSelf = viewedBySelf || currentUser?.id === userId;
+  const canEnroll = isSelf ? checkPermission('benefits', 'submit') : checkPermission('benefits', 'create');
 
   const [enrollDialogOpen, setEnrollDialogOpen] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState('');
@@ -158,6 +158,8 @@ export default function EmployeeBenefitsTab({ userId, viewedBySelf = false }: Pr
       plan_id: selectedPlanId,
       user_id: userId,
       status: 'pending',
+      approved_by: null,
+      approved_at: null,
       dependents_count: selectedDeps.length,
       dependents_json: depsData,
       notes: enrollNotes || null,
@@ -181,7 +183,7 @@ export default function EmployeeBenefitsTab({ userId, viewedBySelf = false }: Pr
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             <HeartPulse className="h-8 w-8 mx-auto mb-2 text-rose-300" />
             <p>No active benefit enrollments.</p>
-            {activeOpenPeriod && (canSelfEnroll || isAdmin) && (
+            {activeOpenPeriod && canEnroll && (
               <p className="mt-1 text-xs">Open enrollment is active — enroll in a plan below.</p>
             )}
           </CardContent>
@@ -251,7 +253,7 @@ export default function EmployeeBenefitsTab({ userId, viewedBySelf = false }: Pr
                 </p>
               </div>
             </div>
-            {(canSelfEnroll || isAdmin) && availableToEnroll.length > 0 && (
+            {canEnroll && availableToEnroll.length > 0 && (
               <Button size="sm" onClick={openEnrollDialog} data-testid="button-open-enroll-dialog">
                 <UserPlus className="h-3.5 w-3.5 mr-1" />Enroll
               </Button>
