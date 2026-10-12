@@ -1047,15 +1047,16 @@ function PayrollPanel() {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TaskAdmin() {
-  const { hasAnyRole } = useAuthorization();
-  const isAdmin = hasAnyRole(['super_admin', 'admin']);
+  const { checkPermission } = useAuthorization();
+  const canApprove = checkPermission('tasks', 'approve');
+  const canManage = canApprove || checkPermission('tasks', 'update');
 
-  if (!isAdmin) {
+  if (!canManage) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <AlertTriangle className="h-10 w-10 text-amber-500" />
         <h2 className="text-lg font-semibold">Access Denied</h2>
-        <p className="text-sm text-muted-foreground">This page is only accessible to admins.</p>
+        <p className="text-sm text-muted-foreground">You need permission to manage tasks to open this page.</p>
       </div>
     );
   }
@@ -1076,8 +1077,8 @@ export default function TaskAdmin() {
         <TabsList className="h-9 text-xs">
           <TabsTrigger value="overview" className="text-xs gap-1.5"><ListTodo className="h-3.5 w-3.5" />Task Overview</TabsTrigger>
           <TabsTrigger value="templates" className="text-xs gap-1.5"><RepeatIcon className="h-3.5 w-3.5" />Daily Templates</TabsTrigger>
-          <TabsTrigger value="rewards" className="text-xs gap-1.5"><Award className="h-3.5 w-3.5" />Reward Approvals</TabsTrigger>
-          <TabsTrigger value="payroll" className="text-xs gap-1.5"><DollarSign className="h-3.5 w-3.5" />Payroll</TabsTrigger>
+          {canApprove && <TabsTrigger value="rewards" className="text-xs gap-1.5"><Award className="h-3.5 w-3.5" />Reward Approvals</TabsTrigger>}
+          {canApprove && <TabsTrigger value="payroll" className="text-xs gap-1.5"><DollarSign className="h-3.5 w-3.5" />Payroll</TabsTrigger>}
           <TabsTrigger value="field_tasks" className="text-xs gap-1.5"><ClipboardList className="h-3.5 w-3.5" />Field Tasks</TabsTrigger>
         </TabsList>
 
@@ -1089,13 +1090,17 @@ export default function TaskAdmin() {
           <DailyTemplatesPanel />
         </TabsContent>
 
-        <TabsContent value="rewards" className="mt-4">
-          <RewardApprovalsPanel />
-        </TabsContent>
+        {canApprove && (
+          <TabsContent value="rewards" className="mt-4">
+            <RewardApprovalsPanel />
+          </TabsContent>
+        )}
 
-        <TabsContent value="payroll" className="mt-4">
-          <PayrollPanel />
-        </TabsContent>
+        {canApprove && (
+          <TabsContent value="payroll" className="mt-4">
+            <PayrollPanel />
+          </TabsContent>
+        )}
 
         <TabsContent value="field_tasks" className="mt-4">
           <ProjectFieldTasksAdminPanel />
