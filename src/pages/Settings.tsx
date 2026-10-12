@@ -132,9 +132,15 @@ const Settings = () => {
       const updatedUser = {
         ...currentUser,
         bankAccount: {
-          accountName: values.accountName,
+          accountName:   values.accountName,
           accountNumber: values.accountNumber,
-          branch: values.branch,
+          bankName:      values.bankName      || undefined,
+          branch:        values.branch        || undefined,
+          iban:          values.iban          || undefined,
+          swiftBic:      values.swiftBic      || undefined,
+          country:       values.country       || undefined,
+          currency:      values.currency      || undefined,
+          routingNumber: values.routingNumber || undefined,
         },
       };
       const success = await updateUser(updatedUser as any);
@@ -982,7 +988,6 @@ const Settings = () => {
                 onSubmit={handleBankAccountSubmit}
                 isSubmitting={bankAccountSubmitting}
                 existingDetails={currentUser?.bankAccount as any}
-                currentUserRole={currentUser?.role}
                 isEditable={true}
               />
             </CardContent>

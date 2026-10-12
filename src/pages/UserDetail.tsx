@@ -3950,7 +3950,6 @@ const UserDetail: FC = () => {
             onSubmit={handleBankAccountSubmit}
             isSubmitting={false}
             existingDetails={user?.bankAccount as any}
-            currentUserRole={currentUser?.role}
           />
         </DialogContent>
       </Dialog>
