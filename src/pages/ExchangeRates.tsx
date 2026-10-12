@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { format, parseISO, startOfDay, isToday, isYesterday, differenceInHours, differenceInDays } from 'date-fns';
 
 interface ExchangeRateRecord {
@@ -54,6 +55,10 @@ const RATE_TYPE_OPTIONS = [
 ];
 
 export default function ExchangeRates() {
+  const { checkPermission, canWriteAccounting } = useAuthorization();
+  const canAddRate = canWriteAccounting();
+  const canEditRate = checkPermission('accounting', 'update');
+  const canDeleteRate = checkPermission('accounting', 'delete');
   const [rates, setRates] = useState<ExchangeRateRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -422,7 +427,7 @@ export default function ExchangeRates() {
                     />
                     <Button 
                       onClick={handleAddRate} 
-                      disabled={saving || !newRate.usd_to_sdg}
+                      disabled={saving || !newRate.usd_to_sdg || !canAddRate}
                       data-testid="button-add-rate"
                     >
                       {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -527,19 +532,21 @@ export default function ExchangeRates() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => {
-                                  setEditingId(rate.id);
-                                  setEditValue(Number(rate.rate));
-                                }}
-                                disabled={editingId !== null}
-                                data-testid={`button-edit-rate-${rate.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              {pendingDeleteId === rate.id ? (
+                              {canEditRate && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setEditingId(rate.id);
+                                    setEditValue(Number(rate.rate));
+                                  }}
+                                  disabled={editingId !== null}
+                                  data-testid={`button-edit-rate-${rate.id}`}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {!canDeleteRate ? null : pendingDeleteId === rate.id ? (
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs text-muted-foreground">Sure?</span>
                                   <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" onClick={() => { handleDeleteRate(rate.id); setPendingDeleteId(null); }} data-testid={`button-confirm-delete-rate-${rate.id}`}>Yes</Button>

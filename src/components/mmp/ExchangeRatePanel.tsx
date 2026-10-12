@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RefreshCw, Building2, TrendingUp, Clock, Info, DollarSign } from 'lucide-react';
 import { ExchangeRateService, type ExchangeRateSummary } from '@/services/exchangeRate.service';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 interface ExchangeRatePanelProps {
   variant?: 'full' | 'compact' | 'banner';
@@ -14,9 +15,11 @@ interface ExchangeRatePanelProps {
 
 export function ExchangeRatePanel({ 
   variant = 'full', 
-  showRefresh = true,
+  showRefresh: showRefreshProp = true,
   onRateChange 
 }: ExchangeRatePanelProps) {
+  const { canWriteAccounting } = useAuthorization();
+  const showRefresh = showRefreshProp && canWriteAccounting();
   const [rates, setRates] = useState<ExchangeRateSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
