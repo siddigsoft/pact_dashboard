@@ -868,12 +868,12 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         route: '/performance-reviews',
         description: 'Staff performance appraisals — create cycles, rate competencies, track goals',
         actions: [
-          { key: 'hr_analytics:read',   label: 'View Performance Reviews', description: 'Browse all appraisal records',          resource: 'hr_analytics', action: 'read' },
-          { key: 'hr_analytics:create', label: 'Create Review Cycle',      description: 'Launch a new performance review period', resource: 'hr_analytics', action: 'create', isAdminOnly: true },
-          { key: 'hr_analytics:update', label: 'Submit / Rate Review',     description: 'Complete a performance appraisal form',  resource: 'hr_analytics', action: 'update' },
-          { key: 'hr_analytics:approve', label: 'Approve Review',          description: 'Sign off on a completed appraisal',      resource: 'hr_analytics', action: 'approve', isAdminOnly: true },
-          { key: 'hr_analytics:delete', label: 'Delete Review',            description: 'Remove an eligible appraisal record',     resource: 'hr_analytics', action: 'delete', isDestructive: true, isAdminOnly: true },
-          { key: 'hr_analytics:export', label: 'Export Reviews',           description: 'Download performance review data',       resource: 'hr_analytics', action: 'export' },
+          { key: 'performance_reviews:read',    label: 'View All Performance Reviews', description: 'Browse every appraisal record (staff always see reviews they give or receive)', resource: 'performance_reviews', action: 'read' },
+          { key: 'performance_reviews:create',  label: 'Create Review',                description: 'Start a performance review for a staff member',                  resource: 'performance_reviews', action: 'create', isAdminOnly: true },
+          { key: 'performance_reviews:update',  label: 'Edit Any Review',              description: 'Edit or rate any appraisal, not just ones you review',          resource: 'performance_reviews', action: 'update', isAdminOnly: true },
+          { key: 'performance_reviews:approve', label: 'Approve & Calibrate Reviews',  description: 'Sign off appraisals, manage peer nominations and calibration',  resource: 'performance_reviews', action: 'approve', isAdminOnly: true },
+          { key: 'performance_reviews:delete',  label: 'Delete Review',                description: 'Remove an appraisal record',                                     resource: 'performance_reviews', action: 'delete', isDestructive: true, isAdminOnly: true },
+          { key: 'performance_reviews:export',  label: 'Export Reviews',               description: 'Download performance review data',                               resource: 'performance_reviews', action: 'export' },
         ],
       },
       {

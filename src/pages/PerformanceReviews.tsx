@@ -141,12 +141,12 @@ function PhaseBadge({ phase }: { phase: string }) {
 export default function PerformanceReviews() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const { hasAnyRole, checkPermission } = useAuthorization();
-  const canExport = checkPermission('hr_analytics', 'export');
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_admin', 'manager']);
-  const canCreate = isAdmin && checkPermission('hr_analytics', 'create');
-  const canUpdate = checkPermission('hr_analytics', 'update');
-  const canApprove = isAdmin && checkPermission('hr_analytics', 'approve');
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('performance_reviews', 'export');
+  const isAdmin = checkPermission('performance_reviews', 'approve');
+  const canCreate = checkPermission('performance_reviews', 'create');
+  const canUpdate = checkPermission('performance_reviews', 'update');
+  const canApprove = isAdmin;
 
   // ── Core data ──────────────────────────────────────────────────────────────
   const [reviews, setReviews]   = useState<Review[]>([]);
@@ -267,12 +267,8 @@ export default function PerformanceReviews() {
 
   // Calibration scope: HR/admin see all team reviews in calibration; managers see only the
   // reviews they own (reviewer_id = currentUser.id) to enforce team-scoped calibration.
-  const isHrOrAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_admin']);
   const calibrationReviews = isAdmin
-    ? reviews.filter(r =>
-        r.cycle_phase === 'calibration' &&
-        (isHrOrAdmin || r.reviewer_id === currentUser?.id)
-      )
+    ? reviews.filter(r => r.cycle_phase === 'calibration')
     : [];
 
   const filtered = (
@@ -457,7 +453,7 @@ export default function PerformanceReviews() {
   }
 
   async function deleteReview(id: string) {
-    if (!checkPermission('hr_analytics', 'delete')) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
+    if (!checkPermission('performance_reviews', 'delete')) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     const { error } = await supabase.from('performance_reviews').delete().eq('id', id);
     if (error) { toast({ title: 'Failed to delete', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Review deleted' });
@@ -719,7 +715,7 @@ export default function PerformanceReviews() {
 
   // ── Export ─────────────────────────────────────────────────────────────────
   function exportReviews() {
-    if (!checkPermission('hr_analytics', 'export')) return;
+    if (!checkPermission('performance_reviews', 'export')) return;
     exportToExcel(filtered.map(r => ({
       'Employee': r.reviewee_name ?? '',
       'Review Period': r.review_period,
@@ -844,7 +840,7 @@ export default function PerformanceReviews() {
               <Input className="pl-8 w-44" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
             </div>
           )}
-          {canExport && <ReportExportGate resource="hr_analytics">
+          {canExport && <ReportExportGate resource="performance_reviews">
             <Button size="sm" variant="outline" onClick={exportReviews} data-testid="button-export-reviews">
               <Download className="h-4 w-4 mr-1" />Export
             </Button>

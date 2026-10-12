@@ -143,6 +143,7 @@ export type ResourceType =
   | 'succession'
   | 'pulse_surveys'
   | 'hr_analytics'
+  | 'performance_reviews'
   // Tools & communication
   | 'surveys'
   | 'tasks'
@@ -204,6 +205,7 @@ export const RESOURCES: ResourceType[] = [
   'finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions',
   'pre_funding', 'procurement', 'fixed_assets', 'incentives',
   'hr', 'payroll', 'salary_advances', 'leave', 'benefits', 'succession', 'pulse_surveys', 'hr_analytics',
+  'performance_reviews',
   'surveys', 'tasks', 'notifications', 'broadcast', 'whatsapp', 'calendar',
   'signatures', 'integrations', 'transactions', 'chat',
   'crm', 'reports',
@@ -232,7 +234,7 @@ export const RESOURCE_LABELS: Record<ResourceType, string> = {
   pre_funding: 'Pre-Funding', procurement: 'Procurement (P2P)', fixed_assets: 'Fixed Assets', incentives: 'Incentives',
   hr: 'HR Hub', payroll: 'Payroll', salary_advances: 'Salary Advances', leave: 'Leave Management',
   benefits: 'Benefits Enrollment', succession: 'Succession Planning', pulse_surveys: 'Pulse Surveys',
-  hr_analytics: 'HR Analytics',
+  hr_analytics: 'HR Analytics', performance_reviews: 'Performance Reviews',
   surveys: 'Surveys', tasks: 'Tasks', notifications: 'Notifications',
   broadcast: 'Broadcast', whatsapp: 'WhatsApp', calendar: 'Calendar',
   signatures: 'Signatures', integrations: 'Integrations', transactions: 'Transactions', chat: 'Chat',
@@ -353,6 +355,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'pulse_surveys', action: 'read' }, { resource: 'pulse_surveys', action: 'create' },
     { resource: 'pulse_surveys', action: 'update' }, { resource: 'pulse_surveys', action: 'export' },
     { resource: 'hr_analytics', action: 'read' }, { resource: 'hr_analytics', action: 'export' },
+    { resource: 'performance_reviews', action: 'read' }, { resource: 'performance_reviews', action: 'create' },
+    { resource: 'performance_reviews', action: 'update' }, { resource: 'performance_reviews', action: 'approve' },
+    { resource: 'performance_reviews', action: 'delete' }, { resource: 'performance_reviews', action: 'export' },
     // Tools
     { resource: 'surveys', action: 'create' }, { resource: 'surveys', action: 'read' },
     { resource: 'surveys', action: 'update' }, { resource: 'surveys', action: 'delete' },
