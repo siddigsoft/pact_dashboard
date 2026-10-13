@@ -57,7 +57,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
-import { usePageManageOverride } from '@/hooks/usePageManageOverride';
+import { usePagePermissions } from '@/hooks/usePageManageOverride';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
@@ -150,16 +150,12 @@ const RetainerManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, users } = useAppContext();
-  const { hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('payroll', 'export');
   const { processMonthlyRetainers, reprocessFallbackRetainers } = useWallet();
 
-  const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
-  const isAdmin = hasAnyRole(['admin', 'Admin']);
-  const isFinancialAdmin = hasAnyRole(['finance_admin', 'Finance Admin']);
-  const roleCanManage = isSuperAdmin || isAdmin || isFinancialAdmin;
-  const overrideCanManage = usePageManageOverride('retainer-management', roleCanManage);
-  const canManage = roleCanManage || overrideCanManage;
+  const pagePerms = usePagePermissions('retainer-management');
+  const canManage = !pagePerms.isBlocked && pagePerms.canCreate;
 
   const [activeTab, setActiveTab] = useState('overview');
   const invalidateRetainer = useInvalidateRetainerQueries();
