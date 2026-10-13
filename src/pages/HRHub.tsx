@@ -13,6 +13,7 @@ import EOSBPanel from '@/components/hr/EOSBPanel';
 import SalaryAdvancesPanel from '@/components/hr/SalaryAdvancesPanel';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { useAuthorization } from '@/hooks/use-authorization';
+import type { ResourceType } from '@/types/roles';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
@@ -145,7 +146,20 @@ function sectionOfTab(tabId: HRTab): HRSection {
   return 'pay';
 }
 
-const ADMIN_ROLES = ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin', 'finance', 'Finance'];
+// Staff-wide (adminOnly) tabs open to holders of `<resource>:update`.
+const TAB_MANAGE_RESOURCE: Partial<Record<HRTab, ResourceType>> = {
+  'payroll-admin': 'payroll', retainer: 'payroll', 'salary-increments': 'payroll',
+  'payroll-summary': 'payroll', 'comp-bands': 'payroll', 'compliance-reports': 'payroll',
+  'pay-equity': 'payroll',
+  eosb: 'hr', 'salary-advances': 'hr', attendance: 'hr', contracts: 'hr', onboarding: 'hr',
+  offboarding: 'hr', recruitment: 'hr', disciplinary: 'hr', headcount: 'hr', equipment: 'hr',
+  'policy-library': 'hr', overview: 'hr',
+  'field-wallet': 'wallets',
+  'leave-calendar': 'leave',
+  performance: 'performance_reviews',
+  'hr-analytics': 'hr_analytics',
+  'wa-broadcast': 'broadcast',
+};
 
 function PanelLoader() {
   return (
@@ -159,8 +173,11 @@ function PanelLoader() {
 export default function HRHub() {
   const isColVisible = useColumnVisibility('hr');
   const [params, setParams] = useSearchParams();
-  const { isSuperAdmin, hasAnyRole } = useAuthorization();
-  const isAdminRole = isSuperAdmin() || hasAnyRole(ADMIN_ROLES);
+  const { checkPermission } = useAuthorization();
+  const canManageTab = (id: HRTab) => {
+    const resource = TAB_MANAGE_RESOURCE[id];
+    return !!resource && checkPermission(resource, 'update');
+  };
   const { isTabBlocked } = useCurrentUserAccess();
   const rawTab = params.get('tab') ?? '';
   const requestedDirectoryPermission = rawTab
@@ -170,8 +187,8 @@ export default function HRHub() {
   // explicit per-user grants).  Let the same action grant through HR's
   // historical admin-only nested checks without making every HR tab visible.
   const canUseRequestedDirectoryTab = Boolean(requestedDirectoryPermission);
-  const canRenderRestrictedTab = isAdminRole
-    || (canUseRequestedDirectoryTab && rawTab !== '');
+  const canSeeTab = (t: TabDef) =>
+    !t.adminOnly || canManageTab(t.id) || (t.id === rawTab && canUseRequestedDirectoryTab);
 
   // Section accent colours (defined early — used in hrSections useMemo)
   const SECTION_ACCENT: Record<HRSection, string> = {
@@ -184,28 +201,22 @@ export default function HRHub() {
   // Sections and tabs visible to this user (role + per-user override)
   const hrSections = useMemo(() =>
     SECTIONS
-      .filter(s =>
-        !s.adminOnly
-        || isAdminRole
-        || s.tabs.some(t => t.id === rawTab && canUseRequestedDirectoryTab)
-      )
+      .filter(s => !s.adminOnly || s.tabs.some(t => t.adminOnly && canSeeTab(t)))
       .map(s => ({
         ...s,
         color: SECTION_ACCENT[s.id as HRSection],
-        tabs: s.tabs.filter(t =>
-          (!t.adminOnly || isAdminRole || (t.id === rawTab && canUseRequestedDirectoryTab))
-          && !isTabBlocked(`hr-hub:${t.id}`),
-        ),
+        tabs: s.tabs.filter(t => canSeeTab(t) && !isTabBlocked(`hr-hub:${t.id}`)),
       }))
       .filter(s => s.tabs.length > 0),
-    [isAdminRole, isTabBlocked, rawTab, canUseRequestedDirectoryTab],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [checkPermission, isTabBlocked, rawTab, canUseRequestedDirectoryTab],
   );
 
   const allVisibleTabs = useMemo(() => hrSections.flatMap(s => s.tabs), [hrSections]);
 
   // Resolve requested tab — handle legacy aliases
   const resolvedTab = (LEGACY_TAB_MAP[rawTab] ?? rawTab) as HRTab;
-  const defaultTab: HRTab = allVisibleTabs[0]?.id as HRTab ?? (isAdminRole ? 'overview' : 'payroll');
+  const defaultTab: HRTab = allVisibleTabs[0]?.id as HRTab ?? 'payroll';
 
   const _savedHR = localStorage.getItem('hub_last_tab_hr') as HRTab | null;
   const _resolvedDefault: HRTab =
@@ -247,42 +258,42 @@ export default function HRHub() {
 
         {/* Pay & Compensation */}
         {tab === 'payroll' && <Suspense fallback={<PanelLoader />}><PayrollPanel embedded /></Suspense>}
-        {tab === 'payroll-admin' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><PayrollAdminPanel /></Suspense>}
-        {tab === 'retainer' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><RetainerPanel /></Suspense>}
-        {tab === 'eosb' && canRenderRestrictedTab && <EOSBPanel />}
-        {tab === 'salary-advances' && canRenderRestrictedTab && <SalaryAdvancesPanel />}
-        {tab === 'salary-increments' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><SalaryIncrPanel /></Suspense>}
-        {tab === 'field-wallet' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><FieldWalletPanel /></Suspense>}
-        {tab === 'payroll-summary' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><PayrollReportPanel /></Suspense>}
-        {tab === 'comp-bands' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><CompensationBandsPanel /></Suspense>}
-        {tab === 'compliance-reports' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><ComplianceReportsPanel /></Suspense>}
+        {tab === 'payroll-admin' && <Suspense fallback={<PanelLoader />}><PayrollAdminPanel /></Suspense>}
+        {tab === 'retainer' && <Suspense fallback={<PanelLoader />}><RetainerPanel /></Suspense>}
+        {tab === 'eosb' && <EOSBPanel />}
+        {tab === 'salary-advances' && <SalaryAdvancesPanel />}
+        {tab === 'salary-increments' && <Suspense fallback={<PanelLoader />}><SalaryIncrPanel /></Suspense>}
+        {tab === 'field-wallet' && <Suspense fallback={<PanelLoader />}><FieldWalletPanel /></Suspense>}
+        {tab === 'payroll-summary' && <Suspense fallback={<PanelLoader />}><PayrollReportPanel /></Suspense>}
+        {tab === 'comp-bands' && <Suspense fallback={<PanelLoader />}><CompensationBandsPanel /></Suspense>}
+        {tab === 'compliance-reports' && <Suspense fallback={<PanelLoader />}><ComplianceReportsPanel /></Suspense>}
 
         {/* Time & Leave */}
         {tab === 'timesheet' && <Suspense fallback={<PanelLoader />}><TimesheetPanel /></Suspense>}
         {tab === 'leave-requests' && <Suspense fallback={<PanelLoader />}><LeaveRequestsPanel /></Suspense>}
-        {tab === 'leave-calendar' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><LeaveCalendarPanel /></Suspense>}
-        {tab === 'attendance' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><AttendancePanel /></Suspense>}
+        {tab === 'leave-calendar' && <Suspense fallback={<PanelLoader />}><LeaveCalendarPanel /></Suspense>}
+        {tab === 'attendance' && <Suspense fallback={<PanelLoader />}><AttendancePanel /></Suspense>}
 
         {/* People & Development */}
-        {tab === 'performance' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><PerformancePanel /></Suspense>}
+        {tab === 'performance' && <Suspense fallback={<PanelLoader />}><PerformancePanel /></Suspense>}
         {tab === 'training' && <Suspense fallback={<PanelLoader />}><TrainingPanel /></Suspense>}
-        {tab === 'contracts' && isAdminRole && <Suspense fallback={<PanelLoader />}><ContractRenewalPanel /></Suspense>}
+        {tab === 'contracts' && <Suspense fallback={<PanelLoader />}><ContractRenewalPanel /></Suspense>}
         {tab === 'positions' && <Suspense fallback={<PanelLoader />}><PositionsPanel /></Suspense>}
-        {tab === 'onboarding' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><OnboardingPanel /></Suspense>}
-        {tab === 'offboarding' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><OffboardingPanel /></Suspense>}
-        {tab === 'recruitment' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><RecruitmentPanel /></Suspense>}
-        {tab === 'disciplinary' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><DisciplinaryPanel /></Suspense>}
+        {tab === 'onboarding' && <Suspense fallback={<PanelLoader />}><OnboardingPanel /></Suspense>}
+        {tab === 'offboarding' && <Suspense fallback={<PanelLoader />}><OffboardingPanel /></Suspense>}
+        {tab === 'recruitment' && <Suspense fallback={<PanelLoader />}><RecruitmentPanel /></Suspense>}
+        {tab === 'disciplinary' && <Suspense fallback={<PanelLoader />}><DisciplinaryPanel /></Suspense>}
         {tab === 'org-chart' && <Suspense fallback={<PanelLoader />}><OrgChartPanel /></Suspense>}
         {tab === 'benefits' && <Suspense fallback={<PanelLoader />}><BenefitsPanel /></Suspense>}
-        {tab === 'headcount' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><HeadcountPanel /></Suspense>}
-        {tab === 'equipment' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><AssetsPanel /></Suspense>}
-        {tab === 'policy-library' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><PolicyLibraryPanel /></Suspense>}
+        {tab === 'headcount' && <Suspense fallback={<PanelLoader />}><HeadcountPanel /></Suspense>}
+        {tab === 'equipment' && <Suspense fallback={<PanelLoader />}><AssetsPanel /></Suspense>}
+        {tab === 'policy-library' && <Suspense fallback={<PanelLoader />}><PolicyLibraryPanel /></Suspense>}
 
         {/* Analytics & Comms */}
-        {tab === 'overview' && canRenderRestrictedTab && <HROverviewPanel />}
-        {tab === 'hr-analytics' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><HRAnalyticsPanel /></Suspense>}
-        {tab === 'pay-equity' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><PayEquityPanel /></Suspense>}
-        {tab === 'wa-broadcast' && canRenderRestrictedTab && <Suspense fallback={<PanelLoader />}><HRBroadcastPanel /></Suspense>}
+        {tab === 'overview' && <HROverviewPanel />}
+        {tab === 'hr-analytics' && <Suspense fallback={<PanelLoader />}><HRAnalyticsPanel /></Suspense>}
+        {tab === 'pay-equity' && <Suspense fallback={<PanelLoader />}><PayEquityPanel /></Suspense>}
+        {tab === 'wa-broadcast' && <Suspense fallback={<PanelLoader />}><HRBroadcastPanel /></Suspense>}
         {tab === 'pulse-surveys' && <Suspense fallback={<PanelLoader />}><PulseSurveysPanel /></Suspense>}
       </div>
     </HubLayout>
