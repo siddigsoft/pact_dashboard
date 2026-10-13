@@ -65,6 +65,7 @@ import {
 import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
 import { useMFA } from "@/hooks/use-mfa";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
+import { isAllowedEmailDomain } from "@/lib/email-domains";
 import { Badge } from "@/components/ui/badge";
 import { NotificationSettings as NotificationSettingsComponent } from "@/components/settings/NotificationSettings";
 import { useViewMode } from "@/context/ViewModeContext";
@@ -276,15 +277,44 @@ const Settings = () => {
       return;
     }
 
+    const newEmail = email.trim().toLowerCase();
+    const emailChanged = newEmail !== (currentUser.email || "").toLowerCase();
+    if (emailChanged && !isAllowedEmailDomain(newEmail)) {
+      toast({
+        title: "Email domain not allowed",
+        description: "Only @pactorg.com or @pactorg.org email addresses are allowed.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
+      // The profile email follows the login email once the change is confirmed.
       const success = await updateUser({
         ...currentUser,
         name,
-        email,
         avatar: avatar || currentUser.avatar,
       });
 
-      if (success) {
+      if (success && emailChanged) {
+        const { error: emailError } = await supabase.auth.updateUser(
+          { email: newEmail },
+          { emailRedirectTo: `${window.location.origin}/settings` },
+        );
+        if (emailError) {
+          toast({
+            title: "Email not changed",
+            description: emailError.message,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Confirm your new email",
+            description: `We sent a confirmation link to ${newEmail}. Your email changes once you open it.`,
+          });
+        }
+        setEmail(currentUser.email || "");
+      } else if (success) {
         toast({
           title: "Profile updated",
           description: "Your profile information has been saved successfully.",
@@ -923,9 +953,12 @@ const Settings = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="h-10"
-                    placeholder="your@email.com"
+                    placeholder="name@pactorg.com"
                     data-testid="input-email"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Must be a @pactorg.com or @pactorg.org address. Changing it sends a confirmation link.
+                  </p>
                 </div>
               </div>
 

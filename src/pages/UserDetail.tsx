@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, Shield, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, ChevronUp, Camera, RefreshCw, History } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
+import { isAllowedEmailDomain } from "@/lib/email-domains";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
 import { sudanStates, getLocalitiesByState, getHubNameForState, hubs, getStatesInHub } from "@/data/sudanStates";
@@ -433,7 +434,7 @@ const UserDetail: FC = () => {
   };
 
   // Classification management
-  const { canManageFinances, isSuperAdmin } = useAuthorization();
+  const { canManageFinances, isSuperAdmin, checkPermission } = useAuthorization();
   const { roles: allDbRoles } = useRoleManagement();
   // Custom DB roles not in the built-in list — these are created via Role Management UI
   const customDbRoles = allDbRoles.filter(r => r.name && !normalizeRole(r.name));
@@ -1320,8 +1321,28 @@ const UserDetail: FC = () => {
       });
       
       let newEmail = editForm.email;
+
+      if (emailChanged && !checkPermission('users', 'update')) {
+        toast({
+          title: "Email not changed",
+          description: "Changing another user's email requires the users:update permission. Users can change their own email from Settings.",
+          variant: "destructive"
+        });
+        setIsSaving(false);
+        return;
+      }
+
+      if (emailChanged && !isAllowedEmailDomain(normalizedEditEmail)) {
+        toast({
+          title: "Email domain not allowed",
+          description: "Only @pactorg.com or @pactorg.org email addresses are allowed.",
+          variant: "destructive"
+        });
+        setIsSaving(false);
+        return;
+      }
       
-      if (emailChanged && isAdmin && adminUpdateUserEmail) {
+      if (emailChanged && adminUpdateUserEmail) {
         // Add timeout for edge function call with extended timeout
         const emailPromise = adminUpdateUserEmail(user.id, editForm.email!);
         const timeoutPromise = new Promise<boolean>((_, reject) => 

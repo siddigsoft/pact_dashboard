@@ -66,31 +66,21 @@ serve(async (req) => {
       }
     })
 
-    const { data: callerProfile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .eq('id', callerUser.id)
-      .single()
+    const { data: hasPermission, error: permissionError } = await supabaseAnon.rpc(
+      'current_user_has_resource_permission',
+      { p_resource: 'users', p_action: 'update' }
+    )
 
-    if (profileError || !callerProfile) {
+    if (permissionError) {
       return new Response(
         JSON.stringify({ success: false, error: 'Could not verify caller permissions' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
       )
     }
 
-    const { data: callerRoles } = await supabaseAdmin
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', callerUser.id)
-
-    const allowedRoles = ['admin', 'superAdmin', 'ict']
-    const hasPermission = allowedRoles.includes(callerProfile.role) ||
-      (callerRoles && callerRoles.some(r => allowedRoles.includes(r.role as string)))
-
-    if (!hasPermission) {
+    if (hasPermission !== true) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Insufficient permissions. Only admins can update user emails.' }),
+        JSON.stringify({ success: false, error: 'Insufficient permissions. Updating user emails requires users:update.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
       )
     }
@@ -128,6 +118,14 @@ serve(async (req) => {
     if (!emailRegex.test(newEmail)) {
       return new Response(
         JSON.stringify({ success: false, error: 'Invalid email format' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    const allowedDomains = ['pactorg.com', 'pactorg.org']
+    if (!allowedDomains.includes(newEmail.split('@')[1]?.toLowerCase())) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Only @pactorg.com or @pactorg.org email addresses are allowed' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
