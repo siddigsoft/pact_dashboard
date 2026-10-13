@@ -893,10 +893,10 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         route: '/training-certifications',
         description: 'Staff training records, certification tracking, skill development plans',
         actions: [
-          { key: 'hr:read',   label: 'View Training Records',  description: 'Browse training and certification history',   resource: 'hr', action: 'read' },
-          { key: 'hr:create', label: 'Add Training Record',    description: 'Log a training session or certification',     resource: 'hr', action: 'create' },
-          { key: 'hr:update', label: 'Edit Training Record',   description: 'Update training completion or certification',  resource: 'hr', action: 'update' },
-          { key: 'hr:export', label: 'Export Training Report', description: 'Download training and certification data',     resource: 'hr', action: 'export' },
+          { key: 'training:read',   label: 'View All Staff Records',   description: 'Browse every staff member\'s training and certifications (staff always see their own)', resource: 'training', action: 'read' },
+          { key: 'training:create', label: 'Add Records for Others',   description: 'Log a training or certification on another staff member',                         resource: 'training', action: 'create', isAdminOnly: true },
+          { key: 'training:update', label: 'Edit Others\' Records',     description: 'Update another staff member\'s training or certification',                        resource: 'training', action: 'update', isAdminOnly: true },
+          { key: 'training:delete', label: 'Delete Others\' Records',   description: 'Remove another staff member\'s training or certification',                        resource: 'training', action: 'delete', isDestructive: true, isAdminOnly: true },
         ],
       },
       {

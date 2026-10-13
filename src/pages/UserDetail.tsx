@@ -3608,7 +3608,7 @@ const UserDetail: FC = () => {
 
             {/* ── TRAINING & CERTIFICATIONS SECTION ────────────────────────── */}
             {activeSection === 'training' && (<div className="p-5 sm:p-6">
-              <EmployeeTrainingTab userId={user.id} isAdmin={!!canEditProfile} />
+              <EmployeeTrainingTab userId={user.id} />
             </div>)}
 
             {/* ── DEPENDENTS SECTION ───────────────────────────────────────── */}

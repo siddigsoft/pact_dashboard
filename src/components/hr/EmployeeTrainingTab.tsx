@@ -9,6 +9,8 @@ import {
   Edit, Trash2, Download, ExternalLink, Save,
 } from "lucide-react";
 import { format, parseISO, isValid, differenceInDays } from "date-fns";
+import { useUser } from "@/context/user/UserContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 
 interface Cert {
   id: string;
@@ -53,8 +55,14 @@ const expiryBadge = (expiry: string | null) => {
   } catch { return null; }
 };
 
-export default function EmployeeTrainingTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
+export default function EmployeeTrainingTab({ userId }: { userId: string }) {
   const { toast } = useToast();
+  const { currentUser } = useUser();
+  const { checkPermission } = useAuthorization();
+  const isOwn = currentUser?.id === userId;
+  const canAdd = isOwn || checkPermission("training", "create");
+  const canEdit = isOwn || checkPermission("training", "update");
+  const canDelete = isOwn || checkPermission("training", "delete");
   const [certs, setCerts] = useState<Cert[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<typeof EMPTY | null>(null);
@@ -180,7 +188,7 @@ export default function EmployeeTrainingTab({ userId, isAdmin }: { userId: strin
             </p>
           </div>
         </div>
-        {isAdmin && !form && (
+        {canAdd && !form && (
           <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={openAdd} data-testid="button-add-cert">
             <Plus className="h-3 w-3" /> Add Record
           </Button>
@@ -254,7 +262,7 @@ export default function EmployeeTrainingTab({ userId, isAdmin }: { userId: strin
           <Award className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
           <p className="text-sm font-medium text-muted-foreground">No training or certification records yet.</p>
           <p className="text-xs text-muted-foreground/60 mt-1">Add training courses, professional certifications, licenses, and workshops.</p>
-          {isAdmin && (
+          {canAdd && (
             <Button size="sm" variant="outline" className="mt-4 gap-1.5 text-xs" onClick={openAdd} data-testid="button-add-cert-empty">
               <Plus className="h-3 w-3" /> Add First Record
             </Button>
@@ -335,9 +343,9 @@ export default function EmployeeTrainingTab({ userId, isAdmin }: { userId: strin
                     )}
                   </div>
 
-                  {/* Admin actions */}
-                  {isAdmin && (
+                  {(canEdit || canDelete) && (
                     <div className="flex gap-1 shrink-0 ml-2">
+                      {canEdit && (
                       <Button
                         variant="ghost" size="sm"
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
@@ -347,6 +355,8 @@ export default function EmployeeTrainingTab({ userId, isAdmin }: { userId: strin
                       >
                         <Edit className="h-3 w-3" />
                       </Button>
+                      )}
+                      {canDelete && (
                       <Button
                         variant="ghost" size="sm"
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
@@ -357,6 +367,7 @@ export default function EmployeeTrainingTab({ userId, isAdmin }: { userId: strin
                       >
                         {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                       </Button>
+                      )}
                     </div>
                   )}
                 </div>
