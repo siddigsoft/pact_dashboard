@@ -74,11 +74,12 @@ const BLANK = {
 
 export default function PositionsPage() {
   const { currentUser } = useAppContext();
-  const { isSuperAdmin, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('hr', 'export');
-  const isSA = isSuperAdmin();
   const { toast } = useToast();
-  const isAdmin = checkPermission('hr', 'update');
+  const canCreate = checkPermission('hr', 'create');
+  const canEdit = checkPermission('hr', 'update');
+  const canDelete = checkPermission('hr', 'delete');
 
   const [positions, setPositions] = useState<Position[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -169,8 +170,8 @@ export default function PositionsPage() {
   }
 
   async function handleDelete(p: Position) {
-    if (!isSA) {
-      toast({ title: 'Permission denied', description: 'Only Super Admin can delete positions.', variant: 'destructive' });
+    if (!canDelete) {
+      toast({ title: 'Permission denied', description: 'You do not have permission to delete positions.', variant: 'destructive' });
       return;
     }
     if (!confirm(`Delete position "${p.title}"? It will go to the Recycle Bin for 28 days.`)) return;
@@ -249,7 +250,7 @@ export default function PositionsPage() {
               <Download className="h-4 w-4 mr-1" /> Export
             </Button>
           </ReportExportGate>}
-          {isAdmin && (
+          {canCreate && (
             <Button size="sm" onClick={openNew} data-testid="button-new-position">
               <Plus className="h-4 w-4 mr-1" /> New position
             </Button>
@@ -295,7 +296,7 @@ export default function PositionsPage() {
             deptFilter={deptFilter} setDeptFilter={setDeptFilter}
             search={search} setSearch={setSearch} depts={depts}
           />
-          <PositionTable visible={visible} profileMap={profileMap} deptMap={deptMap} isAdmin={isAdmin} loading={loading} onEdit={openEdit} onDelete={handleDelete} showSuccession={false} />
+          <PositionTable visible={visible} profileMap={profileMap} deptMap={deptMap} canEdit={canEdit} canDelete={canDelete} loading={loading} onEdit={openEdit} onDelete={handleDelete} showSuccession={false} />
         </TabsContent>
 
         <TabsContent value="critical" className="pt-3">
@@ -309,7 +310,7 @@ export default function PositionsPage() {
               No positions marked as critical. Edit a position to flag it as a critical role.
             </CardContent></Card>
           ) : (
-            <PositionTable visible={visible} profileMap={profileMap} deptMap={deptMap} isAdmin={isAdmin} loading={loading} onEdit={openEdit} onDelete={handleDelete} showSuccession />
+            <PositionTable visible={visible} profileMap={profileMap} deptMap={deptMap} canEdit={canEdit} canDelete={canDelete} loading={loading} onEdit={openEdit} onDelete={handleDelete} showSuccession />
           )}
         </TabsContent>
       </Tabs>
@@ -484,9 +485,9 @@ function FiltersRow({ statusFilter, setStatusFilter, deptFilter, setDeptFilter, 
   );
 }
 
-function PositionTable({ visible, profileMap, deptMap, isAdmin, loading, onEdit, onDelete, showSuccession }: {
+function PositionTable({ visible, profileMap, deptMap, canEdit, canDelete, loading, onEdit, onDelete, showSuccession }: {
   visible: Position[]; profileMap: Record<string, string>; deptMap: Record<string, string>;
-  isAdmin: boolean; loading: boolean; onEdit: (p: Position) => void; onDelete: (p: Position) => void;
+  canEdit: boolean; canDelete: boolean; loading: boolean; onEdit: (p: Position) => void; onDelete: (p: Position) => void;
   showSuccession: boolean;
 }) {
   if (loading) return <PageLoader compact />;
@@ -508,7 +509,7 @@ function PositionTable({ visible, profileMap, deptMap, isAdmin, loading, onEdit,
                 {showSuccession && <th className="text-left p-3">Readiness</th>}
                 {!showSuccession && <th className="text-left p-3">Target fill</th>}
                 {!showSuccession && <th className="text-right p-3">Budget</th>}
-                {isAdmin && <th className="p-3 w-20"></th>}
+                {(canEdit || canDelete) && <th className="p-3 w-20"></th>}
               </tr>
             </thead>
             <tbody>
@@ -569,11 +570,11 @@ function PositionTable({ visible, profileMap, deptMap, isAdmin, loading, onEdit,
                         {p.monthly_budget != null ? `${p.currency ?? 'USD'} ${p.monthly_budget.toLocaleString()}` : '—'}
                       </td>
                     )}
-                    {isAdmin && (
+                    {(canEdit || canDelete) && (
                       <td className="p-3 text-right">
                         <div className="flex justify-end gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => onEdit(p)} data-testid={`button-edit-${p.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => onDelete(p)} data-testid={`button-delete-${p.id}`}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                          {canEdit && <Button size="sm" variant="ghost" onClick={() => onEdit(p)} data-testid={`button-edit-${p.id}`}><Edit2 className="h-3.5 w-3.5" /></Button>}
+                          {canDelete && <Button size="sm" variant="ghost" onClick={() => onDelete(p)} data-testid={`button-delete-${p.id}`}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>}
                         </div>
                       </td>
                     )}
