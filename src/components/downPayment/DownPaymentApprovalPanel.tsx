@@ -251,21 +251,70 @@ function WorkflowTimeline({ request }: { request: DownPaymentRequest }) {
 const VirtualizedRequestList = memo(function VirtualizedRequestList({
   requests,
   renderCard,
+  resetKey,
 }: {
   requests: DownPaymentRequest[];
   renderCard: (request: DownPaymentRequest) => ReactNode;
+  resetKey?: string;
   // Changes whenever row selection changes. The list stays memoized for
   // request/data updates, but must re-render checkboxes and their handlers.
   selectionKey?: string;
 }) {
+  const pageSize = 25;
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'site' | 'amount'>('newest');
+  const listTopRef = useRef<HTMLDivElement>(null);
+  useEffect(() => setPage(1), [resetKey]);
+
+  const sortedRequests = useMemo(() => [...requests].sort((a, b) => {
+    if (sortBy === 'site') return a.siteName.localeCompare(b.siteName) || a.id.localeCompare(b.id);
+    if (sortBy === 'amount') return getDownPaymentBalance(b).approved - getDownPaymentBalance(a).approved || a.id.localeCompare(b.id);
+    const dateDifference = new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime();
+    return (sortBy === 'oldest' ? -dateDifference : dateDifference) || a.id.localeCompare(b.id);
+  }), [requests, sortBy]);
+  const pageCount = Math.max(1, Math.ceil(sortedRequests.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const start = (currentPage - 1) * pageSize;
+  const visibleRequests = sortedRequests.slice(start, start + pageSize);
+  const goToPage = (nextPage: number) => {
+    setPage(nextPage);
+    requestAnimationFrame(() => listTopRef.current?.scrollIntoView({ block: 'start' }));
+  };
+
   if (requests.length === 0) return null;
+  const pageControls = (position: 'top' | 'bottom') => (
+    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300" data-testid={`approval-pagination-${position}`}>
+      <span>Showing {start + 1}–{Math.min(start + pageSize, sortedRequests.length)} of {sortedRequests.length} sites</span>
+      <div className="flex flex-wrap items-center gap-2">
+        {position === 'top' && <label className="flex items-center gap-2">
+          <span>Sort</span>
+          <select value={sortBy} onChange={event => { setSortBy(event.target.value as typeof sortBy); setPage(1); }} aria-label="Sort sites" className="h-8 rounded-md border border-slate-300 bg-white px-2 text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="site">Site name</option>
+            <option value="amount">Highest amount</option>
+          </select>
+        </label>}
+        <Button type="button" variant="outline" size="sm" className="h-8" disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} aria-label="Previous page">Previous</Button>
+        <label className="flex items-center gap-2">
+          <span className="sr-only">Page</span>
+          <select value={currentPage} onChange={event => goToPage(Number(event.target.value))} aria-label="Go to page" className="h-8 rounded-md border border-slate-300 bg-white px-2 text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
+            {Array.from({ length: pageCount }, (_, index) => <option key={index + 1} value={index + 1}>Page {index + 1} of {pageCount}</option>)}
+          </select>
+        </label>
+        <Button type="button" variant="outline" size="sm" className="h-8" disabled={currentPage === pageCount} onClick={() => goToPage(currentPage + 1)} aria-label="Next page">Next</Button>
+      </div>
+    </div>
+  );
   return (
-    <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-slate-200 bg-white divide-y divide-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:divide-slate-700">
-      {requests.map((request) => (
-        <div key={request.id} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 100px' }}>
-          {renderCard(request)}
-        </div>
-      ))}
+    <div ref={listTopRef} className="space-y-3 scroll-mt-28">
+      {pageControls('top')}
+      <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:divide-slate-700">
+        {visibleRequests.map((request) => (
+          <div key={request.id}>{renderCard(request)}</div>
+        ))}
+      </div>
+      {pageCount > 1 && pageControls('bottom')}
     </div>
   );
 });
@@ -3968,6 +4017,7 @@ export function DownPaymentApprovalPanel({
   const selectedRequestBalance = selectedRequest
     ? getDownPaymentBalance(selectedRequest, preFundPaymentEvidence?.get(selectedRequest.id) ?? [])
     : null;
+  const queueResetKey = `${queueSearch}:${activeTab}:${completedSubTab}`;
 
   return (
     <>
@@ -4218,7 +4268,7 @@ export function DownPaymentApprovalPanel({
                   Select All
                 </Button>
           </div>}
-              <VirtualizedRequestList requests={pendingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
+              <VirtualizedRequestList requests={pendingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} resetKey={queueResetKey} />
             </div>
           )}
         </TabsContent>
@@ -4301,7 +4351,7 @@ export function DownPaymentApprovalPanel({
                   Select All ({approvedRequests.length})
                 </Button>
               </div>
-              <VirtualizedRequestList requests={approvedRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
+              <VirtualizedRequestList requests={approvedRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} resetKey={queueResetKey} />
             </div>
           )}
         </TabsContent>
@@ -4566,7 +4616,7 @@ export function DownPaymentApprovalPanel({
                   Select All ({processingRequests.length})
                 </Button>
               </div>
-              <VirtualizedRequestList requests={processingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
+              <VirtualizedRequestList requests={processingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} resetKey={queueResetKey} />
             </div>
           )}
         </TabsContent>
@@ -4652,14 +4702,14 @@ export function DownPaymentApprovalPanel({
                       </div>
                     )}
                   </div>
-                  <VirtualizedRequestList requests={paidWaitingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
+                  <VirtualizedRequestList requests={paidWaitingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} resetKey={queueResetKey} />
                 </div>
               )
             ) : (
               paidConfirmedRequests.length === 0 ? (
                 <Card><CardContent className="py-8 text-center text-muted-foreground">No confirmed requests / لا توجد طلبات مؤكدة</CardContent></Card>
               ) : (
-                <VirtualizedRequestList requests={paidConfirmedRequests} renderCard={renderCardWithConfirmation} />
+                <VirtualizedRequestList requests={paidConfirmedRequests} renderCard={renderCardWithConfirmation} resetKey={queueResetKey} />
               )
             )}
           </div>
@@ -4683,7 +4733,7 @@ export function DownPaymentApprovalPanel({
                   {closedRequests.filter(r => r.status === 'cancelled').length} Cancelled
                 </Badge>
               </div>
-              <VirtualizedRequestList requests={closedRequests} renderCard={renderCardPlain} />
+              <VirtualizedRequestList requests={closedRequests} renderCard={renderCardPlain} resetKey={queueResetKey} />
             </>
           )}
         </TabsContent>
@@ -4693,7 +4743,7 @@ export function DownPaymentApprovalPanel({
           {filteredRequests.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No requests found</CardContent></Card>
           ) : (
-            <VirtualizedRequestList requests={filteredRequests} renderCard={renderCardPlain} />
+            <VirtualizedRequestList requests={filteredRequests} renderCard={renderCardPlain} resetKey={queueResetKey} />
           )}
         </TabsContent>
       </Tabs>
