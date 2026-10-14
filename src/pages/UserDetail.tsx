@@ -165,15 +165,16 @@ const UserDetail: FC = () => {
   const [bankHistory, setBankHistory] = useState<any[]>([]);
   const [bankHistoryOpen, setBankHistoryOpen] = useState(false);
 
-  const roleStr = (currentUser?.role || '').toLowerCase();
-  const isAdminRole = roleStr === 'admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr === 'ict' || roleStr === 'hr_admin';
-  const isAdmin = isAdminRole || (currentUser?.roles && currentUser.roles.some((r: any) => ['admin', 'super_admin', 'superadmin', 'ict', 'hr_admin'].includes(String(r).toLowerCase())));
+  const { canManageFinances, isSuperAdmin, checkPermission } = useAuthorization();
+  const isAdmin = checkPermission('users', 'update');
+  const canApproveUsers = checkPermission('users', 'approve');
+  const canAssignRoles = checkPermission('roles', 'assign');
+  const canViewAllProfiles = isAdmin || checkPermission('users', 'read') || checkPermission('hr', 'read');
 
   // Computed early (before user state loads) so gate checks work during loading.
   const isOwnProfileEarly = currentUser?.id === id;
 
-  // Admins can edit anyone's bank account; users can edit their own.
-  const canEditBankAccount = isAdminRole || isOwnProfileEarly;
+  const canEditBankAccount = isAdmin || isOwnProfileEarly;
 
   // Classification & Compensation is only relevant for field-staff roles.
   // Check the VIEWED user's primary role AND additional roles.
@@ -189,14 +190,7 @@ const UserDetail: FC = () => {
   const showCompensation = FIELD_STAFF_ROLES.includes(viewedUserRole) ||
     viewedUserAdditional.some(r => FIELD_STAFF_ROLES.includes(r));
 
-  // Only Admin, SuperAdmin, and HR_Admin can edit profile data.
-  // ICT and other admin-tier roles are view-only on employee profiles.
-  const EDIT_ROLES = ['admin', 'super_admin', 'superadmin', 'hr_admin'];
-  const canEditProfile = EDIT_ROLES.includes(roleStr)
-    || (currentUser?.roles && currentUser.roles.some((r: any) => EDIT_ROLES.includes(String(r).toLowerCase())));
-  
-  // Debug logging
-  console.log('[UserDetail] currentUser role:', currentUser?.role, 'roleStr:', roleStr, 'isAdminRole:', isAdminRole, 'isAdmin:', isAdmin);
+  const canEditProfile = isAdmin;
 
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState<Partial<User>>({});
@@ -434,7 +428,6 @@ const UserDetail: FC = () => {
   };
 
   // Classification management
-  const { canManageFinances, isSuperAdmin, checkPermission } = useAuthorization();
   const { roles: allDbRoles } = useRoleManagement();
   // Custom DB roles not in the built-in list — these are created via Role Management UI
   const customDbRoles = allDbRoles.filter(r => r.name && !normalizeRole(r.name));
@@ -1537,11 +1530,6 @@ const UserDetail: FC = () => {
     );
   }
 
-  // Roles that can view ANY profile (read-only, no edit)
-  const VIEW_ALL_ROLES = ['countryDirector', 'country_director', 'fom', 'fieldOpManager', 'seniorOperationsLead', 'senior_operations_lead', 'financialAdmin', 'financial_admin', 'projectManager', 'project_manager'];
-  const canViewAllProfiles = VIEW_ALL_ROLES.includes(roleStr)
-    || (currentUser?.roles && currentUser.roles.some((r: any) => VIEW_ALL_ROLES.includes(String(r).toLowerCase())));
-
   // Access control: non-admin, non-viewer users can only see their own profile.
   const isOwnProfile = currentUser?.id === user.id;
   if (!isAdmin && !canViewAllProfiles && !isOwnProfile) {
@@ -1646,7 +1634,7 @@ const UserDetail: FC = () => {
 
               {/* Actions */}
               <div className="flex items-center gap-1 shrink-0">
-                {isAdmin && !editMode && !user.isApproved && (
+                {canApproveUsers && !editMode && !user.isApproved && (
                   <>
                     <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-[#273677] hover:bg-[#1B2758] text-white gap-1 h-8 text-xs px-3 border-0" data-testid="button-approve-user">
                       <UserCheck className="h-3 w-3" /><span className="hidden sm:inline">{isApproving ? 'Approving…' : 'Approve'}</span>
@@ -1883,7 +1871,7 @@ const UserDetail: FC = () => {
               </div>
 
             {/* ── PENDING APPROVAL BANNER — always visible regardless of active tab ── */}
-            {isAdmin && !user.isApproved && (
+            {canApproveUsers && !user.isApproved && (
               <div className="mx-4 mt-3 rounded-xl border border-red-400/50 bg-red-50 dark:bg-red-950/30 dark:border-red-700/50 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex items-start gap-3 flex-1 min-w-0">
                   <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center shrink-0 mt-0.5">
@@ -2222,8 +2210,8 @@ const UserDetail: FC = () => {
                         className="border rounded-lg px-3 py-2 w-full h-11 text-sm bg-background disabled:opacity-60 disabled:cursor-not-allowed"
                         value={editForm.role || ""}
                         onChange={e => handleEditChange("role", e.target.value)}
-                        disabled={isProtectedOwner(user?.id)}
-                        title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
+                        disabled={isProtectedOwner(user?.id) || !canAssignRoles}
+                        title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : !canAssignRoles ? "Changing roles requires the roles:assign permission" : undefined}
                       >
                         <option value="" disabled>Select role</option>
                         {availableRoles.map(role => (
@@ -3632,7 +3620,7 @@ const UserDetail: FC = () => {
                     <div className="flex items-center gap-3 flex-wrap">
                       <RoleBadge role={user.role} size="sm" />
                       <UserClassificationBadge userId={user.id} />
-                      {!editMode && (
+                      {!editMode && canAssignRoles && (
                         <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={handleEdit} data-testid="button-change-role">
                           <Edit className="h-3 w-3" /> Change Role
                         </Button>
@@ -3644,8 +3632,8 @@ const UserDetail: FC = () => {
                           className="border rounded-lg px-3 py-2 w-full h-11 text-sm bg-background disabled:opacity-60 disabled:cursor-not-allowed"
                           value={editForm.role || ""}
                           onChange={e => handleEditChange("role", e.target.value)}
-                          disabled={isProtectedOwner(user?.id)}
-                          title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
+                          disabled={isProtectedOwner(user?.id) || !canAssignRoles}
+                          title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : !canAssignRoles ? "Changing roles requires the roles:assign permission" : undefined}
                         >
                           <option value="" disabled>Select role</option>
                           {availableRoles.map(role => (
