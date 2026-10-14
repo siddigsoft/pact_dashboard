@@ -195,6 +195,11 @@ export type ActionType =
   | 'mark_paid'
   | 'use_for_payment'
   | 'assign_cost'
+  /** Cost submission approval levels (hub supervisor -> FOM -> country director -> final). */
+  | 'approve_hub'
+  | 'approve_field_ops'
+  | 'approve_country'
+  | 'approve_final'
   /** Explicit lifecycle/status and configuration mutations. */
   | 'status'
   | 'settings';
@@ -218,7 +223,9 @@ export const ACTIONS: ActionType[] = [
   'publish', 'send', 'recall', 'revert', 'send_to_finance', 'revert_paid', 'revert_tier',
   'restore', 'override', 'submit', 'export',
   'full_report', 'state_report', 'hub_report',
-  'mark_paid', 'use_for_payment', 'assign_cost', 'status', 'settings',
+  'mark_paid', 'use_for_payment', 'assign_cost',
+  'approve_hub', 'approve_field_ops', 'approve_country', 'approve_final',
+  'status', 'settings',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -254,6 +261,10 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   mark_paid: 'Mark Cost Submission Paid',
   use_for_payment: 'Use Pre-Fund for Payment',
   assign_cost: 'Assign Cost',
+  approve_hub: 'Approve at Hub Level',
+  approve_field_ops: 'Approve at Field Operations Level',
+  approve_country: 'Approve at Country Level',
+  approve_final: 'Final Approval',
   status: 'Change Status',
   settings: 'Manage Settings',
 };
