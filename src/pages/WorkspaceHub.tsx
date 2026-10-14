@@ -4507,7 +4507,7 @@ export default function WorkspaceHub() {
           }}
         >
           {/* Navbar — notification bell, user menu, theme toggle */}
-          <Navbar />
+          <Navbar showSidebarTrigger={false} />
           {/* Full-area drop overlay */}
           {isExternalDragOver && (
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#1D3461]/10 backdrop-blur-[2px] border-4 border-dashed border-[#1D3461]/50 rounded-none pointer-events-none">
