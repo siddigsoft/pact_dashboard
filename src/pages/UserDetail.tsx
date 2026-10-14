@@ -31,7 +31,7 @@ import { useClassification } from "@/context/classification/ClassificationContex
 import { useAuthorization } from "@/hooks/use-authorization";
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Plus } from "lucide-react";
+import { AlertCircle, CheckCircle2, Plus } from "lucide-react";
 import type { ClassificationHistory } from "@/types/classification";
 import { VISIBLE_ROLE_CODES, normalizeRole, toRoleLabel, getRoleHint } from "@/utils/roleMapping";
 import { ProfileCompletenessIndicator } from "@/components/onboarding/ProfileCompletenessIndicator";
@@ -4009,7 +4009,7 @@ const UserDetail: FC = () => {
             id:             user.id,
             name:           user.name,
             role:           user.role || "",
-            roleLabel:      toRoleLabel(user.role || "") || user.role || "",
+            roleLabel:      (() => { const code = normalizeRole(user.role || ""); return code ? toRoleLabel(code) : user.role || ""; })(),
             email:          user.email || undefined,
             phone:          user.phone || undefined,
             avatar:         user.avatar || undefined,
