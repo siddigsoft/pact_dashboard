@@ -1,13 +1,12 @@
 /**
  * TourButton.tsx
  * Renders a "Take a Tour" / ? button for any page that has a tour defined
- * in tourRegistry.ts. Handles auto-launch on first visit and manual replay.
+ * in tourRegistry.ts. Tours open only when the user asks for them.
  *
  * Usage:
  *   <TourButton slug="finance-hub" variant="inline" />   ← inside hub header
  *   <TourButton variant="floating" />                    ← MainLayout floating
  */
-import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { driver } from 'driver.js';
 import { HelpCircle } from 'lucide-react';
@@ -15,7 +14,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   TOUR_REGISTRY,
   HUB_SLUGS,
-  hasTourBeenSeen,
   markTourSeen,
   tourSeenKey,
 } from '@/lib/tourRegistry';
@@ -66,25 +64,11 @@ interface TourButtonProps {
 export function TourButton({ slug: slugProp, variant = 'inline', className }: TourButtonProps) {
   const location  = useLocation();
   const { currentUser } = useAppContext();
-  const autoFired = useRef(false);
 
   // Resolve which slug to use
   const effectiveSlug = slugProp ?? resolveSlug(location.pathname) ?? '';
   const tourDef = TOUR_REGISTRY.find(t => t.slug === effectiveSlug);
   const userId  = currentUser?.id ?? '';
-
-  // Auto-launch: fire once on first visit (800 ms delay to let the page render)
-  useEffect(() => {
-    if (!tourDef || !userId || autoFired.current) return;
-    if (hasTourBeenSeen(effectiveSlug, userId)) return;
-    autoFired.current = true;
-    const t = setTimeout(() => launchTour(effectiveSlug, userId), 800);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveSlug, userId, !!tourDef]);
-
-  // Also reset autoFired when the slug changes (navigating to a new page)
-  useEffect(() => { autoFired.current = false; }, [effectiveSlug]);
 
   // Don't render if no tour exists for this page
   if (!tourDef || !userId) return null;
