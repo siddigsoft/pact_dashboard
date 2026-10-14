@@ -1335,15 +1335,15 @@
                     }}
                     data-testid="group-label-favorites"
                   >
+                    <Star className="h-3.5 w-3.5 fill-[#B94B13] text-[#B94B13] shrink-0" />
+                    <span className="flex-1 truncate normal-case tracking-normal">Favorites</span>
+                    <span className="text-[10px] font-normal tabular-nums text-foreground/40">{favoriteItems.length}</span>
                     <ChevronDown
                       className={cn(
                         "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
                         isFavoritesCollapsed && "-rotate-90"
                       )}
                     />
-                    <Star className="h-3.5 w-3.5 fill-[#B94B13] text-[#B94B13] shrink-0" />
-                    <span className="flex-1 truncate normal-case tracking-normal">Favorites</span>
-                    <span className="text-[10px] font-normal tabular-nums text-foreground/40">{favoriteItems.length}</span>
                   </SidebarGroupLabel>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -1550,9 +1550,9 @@
                         onClick={() => toggleGroupCollapse(parentKey)}
                         data-testid={`group-label-${parentKey}${keySuffix}`}
                       >
-                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-150", isCollapsed && "-rotate-90")} />
                         <Icon className={cn("h-3.5 w-3.5 shrink-0", iconColor)} />
                         <span className="flex-1 truncate">{label}</span>
+                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-150", isCollapsed && "-rotate-90")} />
                       </SidebarGroupLabel>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
@@ -1567,9 +1567,9 @@
                                 className="mt-1 flex min-h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-medium text-foreground/65 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 aria-label={`${moreWorkspaceCollapsed ? 'Show' : 'Hide'} more workspace links`}
                               >
-                                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-150', moreWorkspaceCollapsed && '-rotate-90')} />
                                 <span className="flex-1">More workspace</span>
                                 <span className="tabular-nums text-foreground/40">{moreWorkspaceItems.length}</span>
+                                <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform duration-150', moreWorkspaceCollapsed && '-rotate-90')} />
                               </button>
                             </CollapsibleTrigger>
                             <CollapsibleContent>{renderMenuItems(moreWorkspaceItems, iconColor)}</CollapsibleContent>
