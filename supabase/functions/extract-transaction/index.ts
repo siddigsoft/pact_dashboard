@@ -16,12 +16,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Free-tier models available to this project's API key.
+// gemini-3.5-flash-lite is primary (reliable JSON OCR); Gemma 4 is free but currently flaky (500s).
 const GEMINI_MODELS = [
-  'gemini-2.0-flash-lite',
-  'gemini-2.0-flash',
-  'gemini-2.5-flash-preview-04-17',
-  'gemini-2.5-pro-preview-03-25',
-  'gemini-2.0-flash-exp',
+  'gemini-3.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemma-4-31b-it',
+  'gemma-4-26b-a4b-it',
+  'gemini-2.5-flash',
 ]
 
 const GROQ_MODELS = ['meta-llama/llama-4-scout-17b-16e-instruct']
@@ -83,10 +85,39 @@ Rules:
 5. amount_confidence must be an integer 0–100.`
 }
 
+function extractJsonPayload(text: string): string {
+  const cleaned = text.replace(/```json\n?|```\n?/g, '').trim()
+  try {
+    JSON.parse(cleaned)
+    return cleaned
+  } catch {
+    /* fall through */
+  }
+  const arrayMatch = cleaned.match(/\[[\s\S]*\]/)
+  if (arrayMatch) {
+    try {
+      JSON.parse(arrayMatch[0])
+      return arrayMatch[0]
+    } catch {
+      /* fall through */
+    }
+  }
+  const objectMatch = cleaned.match(/\{[\s\S]*\}/)
+  if (objectMatch) {
+    try {
+      JSON.parse(objectMatch[0])
+      return `[${objectMatch[0]}]`
+    } catch {
+      /* fall through */
+    }
+  }
+  return cleaned
+}
+
 function ocrPostProcess(text: string): string {
   try {
-    const arr = JSON.parse(text)
-    if (!Array.isArray(arr)) return text
+    const parsed = JSON.parse(extractJsonPayload(text))
+    const arr = Array.isArray(parsed) ? parsed : [parsed]
     for (const obj of arr as Record<string, unknown>[]) {
       if (typeof obj.from_account === 'string' || typeof obj.from_account === 'number') {
         obj.from_account = String(obj.from_account).replace(/\s+/g, '')
@@ -97,6 +128,9 @@ function ocrPostProcess(text: string): string {
       if (obj.amount != null) {
         const n = parseFloat(String(obj.amount).replace(/,/g, ''))
         obj.amount = isNaN(n) ? 0 : n
+      }
+      if (typeof obj.amount_confidence === 'number' && obj.amount_confidence > 0 && obj.amount_confidence <= 1) {
+        obj.amount_confidence = Math.round(obj.amount_confidence * 100)
       }
     }
     return JSON.stringify(arr)
