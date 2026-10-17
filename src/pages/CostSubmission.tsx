@@ -73,13 +73,21 @@ import { getStatesInHub, normalizeHubId, hubs, getStateName } from '@/data/sudan
 import { getHubAccessInfo, isStateInAnyHub, getAdditionalSupervisorHubIds } from '@/utils/hubAccessControl';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
-const MGMT_ROLES = [
-  'fom', 'field_operation_manager', 'Field Operation Manager (FOM)',
-  'countryDirector', 'country_director', 'CountryDirector',
-  'superAdmin', 'super_admin', 'SuperAdmin',
-  'admin', 'Admin',
-  'financial_admin', 'finance',
-];
+async function fetchPermissionHolderIds(resource: string, actions: string[]): Promise<string[]> {
+  const { data, error } = await supabase.rpc('users_with_resource_permission', { p_resource: resource, p_actions: actions });
+  if (error) throw error;
+  return ((data || []) as Array<{ user_id: string }>).map(r => r.user_id);
+}
+
+async function fetchPaymentRecipients(): Promise<Array<{ id: string; email: string; name: string; role: string }>> {
+  const ids = await fetchPermissionHolderIds('cost_submissions', ['mark_paid']);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from('profiles').select('id, email, full_name, role').in('id', ids);
+  if (error) throw error;
+  return (data || [])
+    .filter(u => u.email)
+    .map(u => ({ id: u.id, email: u.email as string, name: u.full_name || (u.email as string), role: u.role || '' }));
+}
 
 async function notifyMgmtOfCostEvent(
   eventTitle: string,
@@ -90,14 +98,10 @@ async function notifyMgmtOfCostEvent(
   titleAr?: string,
 ): Promise<void> {
   try {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id')
-      .in('role', MGMT_ROLES)
-      .eq('status', 'approved');
-    (data || []).filter(u => u.id !== excludeUserId).forEach(u => {
+    const ids = await fetchPermissionHolderIds('cost_submissions', ['approve_field_ops', 'approve_country', 'approve_final']);
+    ids.filter(id => id !== excludeUserId).forEach(id => {
       NotificationTriggerService.send({
-        userId: u.id,
+        userId: id,
         title: eventTitle,
         titleAr: titleAr || eventTitle,
         message: eventMessage,
@@ -1774,25 +1778,14 @@ const CostSubmission = () => {
           // Notify next-tier approvers if not final
           if (action === 'approve' && !isFinalG) {
             const nextTierNumG = tier + 1;
-            let nextRolesG: string[] = [];
-            if (hasFourTiers(repSub)) {
-              if (tier === 1) nextRolesG = ['fom', 'Field Operation Manager (FOM)'];
-              if (tier === 2) nextRolesG = ['countryDirector', 'CountryDirector', 'country_director'];
-              if (tier === 3) nextRolesG = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-            } else if (hasThreeTiers(repSub)) {
-              if (tier === 1) nextRolesG = ['fom', 'Field Operation Manager (FOM)'];
-              if (tier === 2) nextRolesG = ['countryDirector', 'CountryDirector', 'country_director'];
-            } else if (isFomSubmission(repSub)) {
-              if (tier === 1) nextRolesG = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-            } else {
-              nextRolesG = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-            }
-            if (nextRolesG.length > 0) {
-              Promise.resolve(supabase.from('profiles').select('id').in('role', nextRolesG).eq('status', 'approved'))
+            const chainG = repSub ? approvalChain(repSub) : [];
+            const nextLevelG = chainG[tier];
+            if (nextLevelG) {
+              Promise.resolve(supabase.rpc('cost_submission_level_approvers', { p_level: nextLevelG }))
                 .then(({ data }) => {
-                  const ids = (data || []).map(r => r.id);
+                  const ids = ((data || []) as Array<{ approver_id: string }>).map(r => r.approver_id);
                   if (!ids.length) return;
-                  const totalTiersG = hasFourTiers(repSub) ? 4 : hasThreeTiers(repSub) ? 3 : 2;
+                  const totalTiersG = chainG.length;
                   const flowPartsG: string[] = [];
                   for (let t = 1; t <= tier; t++) flowPartsG.push(`Tier ${t}: ✓ Approved`);
                   flowPartsG.push(`Tier ${nextTierNumG}: ⏳ Your Review`);
@@ -2104,33 +2097,17 @@ const CostSubmission = () => {
 
         // 2️⃣ When a tier is approved and more remain, notify the next-tier approvers
         if (action === 'approve' && !isFinal) {
-          let nextRoles: string[] = [];
           const nextTierNum = tier + 1;
+          const chain = approvalChain(submission);
+          const nextLevel = chain[tier];
 
-          if (hasFourTiers(submission)) {
-            if (tier === 1) nextRoles = ['fom', 'Field Operation Manager (FOM)'];
-            if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
-            if (tier === 3) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-          } else if (hasThreeTiers(submission)) {
-            if (tier === 1) nextRoles = ['fom', 'Field Operation Manager (FOM)'];
-            if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
-          } else if (isFomSubmission(submission)) {
-            if (tier === 1) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-          } else {
-            if (tier === 1) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-          }
-
-          if (nextRoles.length > 0) {
-            Promise.resolve(supabase
-              .from('profiles')
-              .select('id')
-              .in('role', nextRoles)
-              .eq('status', 'approved'))
+          if (nextLevel) {
+            Promise.resolve(supabase.rpc('cost_submission_level_approvers', { p_level: nextLevel }))
               .then(({ data: nextApprovers }) => {
-                const ids = (nextApprovers || []).map(a => a.id);
+                const ids = ((nextApprovers || []) as Array<{ approver_id: string }>).map(a => a.approver_id);
                 if (ids.length === 0) return;
                 // Build approval flow string: "T1: ✓ Approved → T2: ✓ Approved → T3: ⏳ Your Review → T4: Pending"
-                const totalTiersInd = hasFourTiers(submission) ? 4 : hasThreeTiers(submission) ? 3 : isFomSubmission(submission) ? 2 : 2;
+                const totalTiersInd = chain.length;
                 const flowPartsInd: string[] = [];
                 for (let t = 1; t <= tier; t++) flowPartsInd.push(`Tier ${t}: ✓ Approved`);
                 flowPartsInd.push(`Tier ${nextTierNum}: ⏳ Your Review`);
@@ -3128,29 +3105,18 @@ const CostSubmission = () => {
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
       setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: false, selectedRecipientIds: cached.map(r => r.id), ccEmails: [], availableRecipients: cached }));
-      supabase
-        .from('profiles')
-        .select('id, email, full_name, role')
-        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-        .eq('status', 'approved')
-        .then(({ data }) => {
-          if (data) {
-            const fresh = data.filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
-            cachedRecipientsRef.current = fresh;
-            setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
-          }
-        });
+      fetchPaymentRecipients()
+        .then(fresh => {
+          cachedRecipientsRef.current = fresh;
+          setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
+        })
+        .catch(console.warn);
     } else {
       setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: true, selectedRecipientIds: [], ccEmails: [], availableRecipients: [] }));
       try {
-        const { data: financeUsers } = await supabase
-          .from('profiles')
-          .select('id, email, full_name, role')
-          .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-          .eq('status', 'approved');
-        const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+        const recipients = await fetchPaymentRecipients();
         cachedRecipientsRef.current = recipients;
-        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
       } catch {
         setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
         toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
@@ -3246,14 +3212,9 @@ const CostSubmission = () => {
         setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: cached, selectedRecipientIds: cached.map(r => r.id), loading: false }));
         return;
       }
-      const { data: financeUsers } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, role')
-        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-        .eq('status', 'approved');
-      const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+      const recipients = await fetchPaymentRecipients();
       cachedRecipientsRef.current = recipients;
-      setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
+      setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
     } catch {
       setBulkCostEmailDialog(prev => ({ ...prev, loading: false }));
       toast({ title: "Error / خطأ", description: "Failed to load recipients.", variant: "destructive" });
