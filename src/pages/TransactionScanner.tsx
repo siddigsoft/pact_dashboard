@@ -115,40 +115,44 @@ async function extractBatch(
   onStatus?: (msg: string) => void,
 ): Promise<Array<Partial<TxRow>>> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const ocrSecret = import.meta.env.VITE_OCR_DEV_SECRET;
-    const res = await fetch('/api/extract-transaction', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(ocrSecret ? { 'Authorization': `Bearer ${ocrSecret}` } : {}),
-      },
-      body: JSON.stringify({ images }),
+    await ensureValidSession();
+    const { data, error } = await supabase.functions.invoke('extract-transaction', {
+      body: { images },
     });
-    let data: any;
-    const ct = res.headers.get('content-type') || '';
-    if (ct.includes('application/json')) {
-      data = await res.json().catch(() => ({ error: `Server error (${res.status}) — response could not be parsed` }));
-    } else {
-      const body = await res.text().catch(() => '');
-      const preview = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-      data = { error: `Server error (${res.status})${preview ? `: ${preview}` : ' — try again or retry later'}` };
+
+    let payload: any = data ?? {};
+    let status = 200;
+    if (error) {
+      const ctx = (error as { context?: Response }).context;
+      status = ctx?.status ?? 500;
+      if (ctx) {
+        try {
+          payload = await ctx.json();
+        } catch {
+          payload = { error: error.message || `Server error (${status})` };
+        }
+      } else {
+        payload = { error: error.message || 'OCR request failed' };
+      }
     }
 
-    if (res.status === 503 && data.needsGroqKey) {
+    if (status === 503 && payload.needsGroqKey) {
       throw new Error('__NEEDS_GROQ_KEY__');
     }
-    if (res.status === 429) {
-      if (data.isDailyExhausted) {
+    if (status === 429) {
+      if (payload.isDailyExhausted) {
         throw new Error('All AI models at daily quota. Quotas reset at midnight Pacific time.');
       }
-      const waitSec = Math.min(data.retryAfterSec ?? 30, 60);
+      const waitSec = Math.min(payload.retryAfterSec ?? 30, 60);
       onStatus?.(`Rate limited — waiting ${waitSec}s…`);
       await sleep(waitSec * 1000);
       continue;
     }
-    if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+    if (error || status >= 400) {
+      throw new Error(payload.error || error?.message || `Server error ${status}`);
+    }
 
-    const clean = (data.text || '').replace(/```json\n?|```\n?/g, '').trim();
+    const clean = (payload.text || '').replace(/```json\n?|```\n?/g, '').trim();
     let parsed: any;
     try { parsed = JSON.parse(clean); } catch { throw new Error('Could not parse AI response'); }
 
@@ -982,8 +986,8 @@ export default function TransactionScanner() {
                 </p>
                 <ol className="text-blue-700 dark:text-blue-400 text-xs list-decimal list-inside space-y-0.5">
                   <li>Go to <strong>console.groq.com</strong> → sign up free → API Keys → Create key</li>
-                  <li>In Replit: open <strong>Secrets</strong> (lock icon) → add key <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">GROQ_API_KEY</code></li>
-                  <li>Restart the app, then click <strong>Retry All</strong></li>
+                  <li>In Supabase → Project Settings → Edge Functions → Secrets → add <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">GROQ_API_KEY</code></li>
+                  <li>Click <strong>Retry All</strong></li>
                 </ol>
               </div>
             </div>
