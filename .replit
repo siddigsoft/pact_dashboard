@@ -96,4 +96,4 @@ VITE_SUPABASE_URL = "VITE_SUPABASE_URL=https://abznugnirnlrqnnfkein.supabase.co"
 
 [postMerge]
 path = "scripts/post-merge.sh"
-timeoutMs = 20000
+timeoutMs = 180000

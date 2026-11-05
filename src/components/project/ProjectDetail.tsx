@@ -1955,6 +1955,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <ProjectFieldTasksPanel
             projectId={project.id}
             projectName={project.name}
+            currency={budgetSummary?.currency ?? null}
             currentUserId={currentUser?.id}
             currentUserName={currentUser?.fullName ?? 'A manager'}
             canEdit={!project.archived && canArchive}

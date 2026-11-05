@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { createContext, useContext, useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { assigneeBreakdownRows, assigneeSummaryRows, formatTaskCost, taskAssigneeIds, taskCurrencyLabel } from '@/utils/projectTaskReporting';
 import { useSearchParams } from 'react-router-dom';
 import {
   Plus, X, MapPin, Calendar, User, Flag, Trash2,
   CheckCircle2, Clock, AlertTriangle, Circle, Loader2, Edit2,
-  ChevronDown, ChevronUp, Search, CheckSquare, Link2, DollarSign, Timer,
+  ChevronDown, ChevronUp, Search, CheckSquare, Link2, Coins, Timer,
   LayoutList, Columns, CalendarDays, BarChart2, ArrowRight,
   TrendingUp, TrendingDown, Minus, ExternalLink, Layers, Lock,
   FileDown, GanttChartSquare, MessageCircle, Send, CheckCheck,
@@ -133,9 +134,10 @@ function fmtHours(h: number | null) {
   return h % 1 === 0 ? `${h}h` : `${h.toFixed(1)}h`;
 }
 
-function fmtCost(c: number | null) {
-  if (c === null || c === undefined) return '—';
-  return c.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const TaskCurrencyContext = createContext<string | null>(null);
+function useTaskCostFormatter() {
+  const currency = useContext(TaskCurrencyContext);
+  return (value: number | null | undefined) => formatTaskCost(value, currency);
 }
 
 /** Stage progress: weighted mean of percentComplete for non-cancelled tasks.
@@ -579,6 +581,8 @@ function getDepRelations(
 const EMPTY_TYPED_DEPS: TaskDependency[] = [];
 
 function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = EMPTY_TYPED_DEPS, allTypedDeps = EMPTY_TYPED_DEPS, completedStageIds, defaultStageId, currentUserId, currentUserName, projectId = '', projectName = '', teamCandidates = [] }: TaskFormProps) {
+  const currency = useContext(TaskCurrencyContext);
+  const fmtCost = useTaskCostFormatter();
   const [title,         setTitle]         = useState(initial?.title ?? '');
   const [description,   setDescription]   = useState(initial?.description ?? '');
   const [priority,      setPriority]      = useState<FieldTaskPriority>(initial?.priority ?? 'medium');
@@ -1071,7 +1075,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                             <span className="text-[10px] font-medium text-muted-foreground uppercase">Assignee</span>
                             <span className="text-[10px] font-medium text-muted-foreground uppercase text-center">Est. hrs</span>
                             <span className="text-[10px] font-medium text-muted-foreground uppercase text-center">Act. hrs</span>
-                            <span className="text-[10px] font-medium text-muted-foreground uppercase text-center">Rate $/hr</span>
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase text-center">Rate ({taskCurrencyLabel(currency)}/hr)</span>
                           </div>
                           {/* Rows */}
                           {allAssigneeIds.map((uid, idx) => {
@@ -1236,7 +1240,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                 return (
                   <div className="rounded-lg border bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
                     <div className="flex items-center gap-2">
-                      <DollarSign className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
+                      <Coins className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
                       <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Labour Cost</span>
                       <span className="ml-auto text-[10px] text-muted-foreground">auto-calculated from Time tab</span>
                     </div>
@@ -1283,11 +1287,11 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                 );
               })()}
               <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
-                <p className="text-xs text-muted-foreground">Track the budget and actual spend for this task (in project currency).</p>
+                <p className="text-xs text-muted-foreground">Track the budget and actual spend for this task in {taskCurrencyLabel(currency)}. Amounts are not converted.</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" /> Other Costs
+                      <Coins className="h-3 w-3" /> Other Costs ({taskCurrencyLabel(currency)})
                     </Label>
                     <Input
                       type="number" min="0" step="0.01"
@@ -1300,7 +1304,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" /> Actual Cost
+                      <Coins className="h-3 w-3" /> Actual Cost ({taskCurrencyLabel(currency)})
                     </Label>
                     <Input
                       type="number" min="0" step="0.01"
@@ -1811,6 +1815,7 @@ interface TaskDetailProps {
 }
 
 function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange, currentUserId, currentUserName, projectId, projectName, typedDeps = [], initialTab = 'overview', onSetBaseline, isSettingBaseline = false }: TaskDetailProps & { currentUserId?: string; currentUserName?: string; projectId: string; projectName: string }) {
+  const fmtCost = useTaskCostFormatter();
   if (!task) return null;
   const { toast } = useToast();
   const overdue = isOverdue(task.dueDate, task.status);
@@ -2124,7 +2129,7 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
                   })()}
                 </div>
                 <div className="rounded-lg border p-4 text-center space-y-1">
-                  <DollarSign className="h-5 w-5 text-emerald-500 mx-auto" />
+                  <Coins className="h-5 w-5 text-emerald-500 mx-auto" />
                   <p className="text-2xl font-bold text-foreground">{fmtCost(task.actualCost)}</p>
                   <p className="text-xs text-muted-foreground">Actual Spend</p>
                 </div>
@@ -2506,6 +2511,7 @@ interface TaskCardProps {
 }
 
 function TaskCard({ task, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusChange, typedDeps = [] }: TaskCardProps) {
+  const fmtCost = useTaskCostFormatter();
   const overdue = isOverdue(task.dueDate, task.status);
   const sCfg = STATUS_CFG[task.status];
   const pCfg = PRIORITY_CFG[task.priority];
@@ -2681,7 +2687,7 @@ function TaskCard({ task, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusC
             {hasCost && task.estimatedCost && task.actualCost && (
               <div className="flex-1 space-y-0.5">
                 <div className="flex justify-between text-[9px] text-muted-foreground">
-                  <span className="flex items-center gap-0.5"><DollarSign className="h-2.5 w-2.5" /> Cost</span>
+                  <span className="flex items-center gap-0.5"><Coins className="h-2.5 w-2.5" /> Cost</span>
                   <span>{fmtCost(task.actualCost)}/{fmtCost(task.estimatedCost)}</span>
                 </div>
                 <Progress value={Math.min(100, (task.actualCost / task.estimatedCost) * 100)} className="h-1" />
@@ -3323,27 +3329,33 @@ function GanttView({ tasks, typedDeps = [], onOpen, allStages, customEntries }: 
 // ── Team Health Strip ───────────────────────────────────────────────────────
 
 interface TeamHealthStripProps {
+  names: Map<string, string>;
   tasks: FieldTask[];
   activeMemberId: string | null;
   onMemberClick: (id: string | null) => void;
 }
 
-function TeamHealthStrip({ tasks, activeMemberId, onMemberClick }: TeamHealthStripProps) {
+function TeamHealthStrip({ tasks, activeMemberId, onMemberClick, names }: TeamHealthStripProps) {
   const byMember = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; total: number; done: number; inprogress: number; overdue: number }>();
+    const map = new Map<string, { id: string; name: string; total: number; done: number; inprogress: number; overdue: number; allocated: number | null; actual: number | null }>();
     tasks.forEach(t => {
-      if (!t.assignedTo) return;
-      const entry = map.get(t.assignedTo) ?? { id: t.assignedTo, name: t.assignedToName ?? 'Unknown', total: 0, done: 0, inprogress: 0, overdue: 0 };
-      entry.total++;
-      if (t.status === 'done') entry.done++;
-      else if (t.status === 'inprogress') entry.inprogress++;
-      if (isOverdue(t.dueDate, t.status)) entry.overdue++;
-      map.set(t.assignedTo, entry);
+      if (t.status === 'cancelled') return;
+      for (const id of taskAssigneeIds(t)) {
+        const entry = map.get(id) ?? { id, name: names.get(id) || (id === t.assignedTo ? t.assignedToName : null) || `Unresolved (${id})`, total: 0, done: 0, inprogress: 0, overdue: 0, allocated: null, actual: null };
+        entry.total++;
+        if (t.status === 'done') entry.done++;
+        else if (t.status === 'inprogress') entry.inprogress++;
+        if (isOverdue(t.dueDate, t.status)) entry.overdue++;
+        const hours = t.assigneeHours[id];
+        if (hours?.allocated != null) entry.allocated = (entry.allocated ?? 0) + hours.allocated;
+        if (hours?.actual != null) entry.actual = (entry.actual ?? 0) + hours.actual;
+        map.set(id, entry);
+      }
     });
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [tasks]);
+  }, [tasks, names]);
 
-  const total = tasks.length;
+  const total = tasks.filter(t => t.status !== 'cancelled').length;
   const done  = tasks.filter(t => t.status === 'done').length;
   const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
   const overdue = tasks.filter(t => isOverdue(t.dueDate, t.status)).length;
@@ -3389,7 +3401,7 @@ function TeamHealthStrip({ tasks, activeMemberId, onMemberClick }: TeamHealthStr
                   chipColor,
                   isActive && 'ring-2 ring-[#1D3461] ring-offset-1',
                 )}
-                title={`${m.name} — ${mPct}% complete${m.overdue > 0 ? ` · ${m.overdue} overdue` : ''}`}
+                title={`${m.name} — ${m.done}/${m.total} shared-task participation completed, not individual output credit${m.overdue > 0 ? ` · ${m.overdue} overdue` : ''}`}
               >
                 <div className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
                   {m.name.charAt(0).toUpperCase()}
@@ -3400,8 +3412,9 @@ function TeamHealthStrip({ tasks, activeMemberId, onMemberClick }: TeamHealthStr
                     <div className="w-12 h-1 rounded-full bg-muted overflow-hidden">
                       <div className="h-full rounded-full bg-[#1D3461]" style={{ width: `${mPct}%` }} />
                     </div>
-                    <span className="text-[9px] text-muted-foreground font-medium">{mPct}%</span>
+                    <span className="text-[9px] text-muted-foreground font-medium">{mPct}% tasks</span>
                   </div>
+                  <p className="text-[9px] text-muted-foreground">{fmtHours(m.allocated)} allocated · {fmtHours(m.actual)} actual</p>
                 </div>
                 {m.overdue > 0 && <span className="h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">{m.overdue}</span>}
                 {m.inprogress > 0 && m.overdue === 0 && <span className="h-4 min-w-[16px] px-1 rounded-full bg-[#1D3461] text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">{m.inprogress}</span>}
@@ -3691,13 +3704,24 @@ interface Props {
   completedStageIds?: Set<string>;
   /** Project team (internal + external) — used for assignee pickers */
   teamComposition?: ProjectTeamMember[];
+  currency?: string | null;
 }
 
-export function ProjectFieldTasksPanel({
+export function ProjectFieldTasksPanel(props: Props) {
+  return (
+    <TaskCurrencyContext.Provider value={props.currency?.trim() || null}>
+      <ProjectFieldTasksPanelContent {...props} />
+    </TaskCurrencyContext.Provider>
+  );
+}
+
+function ProjectFieldTasksPanelContent({
   projectId, projectName, currentUserId, currentUserName = 'A manager', canEdit, allStages, customEntries,
   completedStageIds = new Set<string>(),
   teamComposition = [],
 }: Props) {
+  const currency = useContext(TaskCurrencyContext);
+  const fmtCost = useTaskCostFormatter();
   const { checkPermission } = useAuthorization();
   const canExport = checkPermission('projects', 'export');
   const teamCandidates = useMemo(
@@ -3706,8 +3730,12 @@ export function ProjectFieldTasksPanel({
   );
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { tasks, isLoading, createTask, updateTask, deleteTask, setBaseline, isCreating, isUpdating, isSettingBaseline } =
+  const { tasks, isLoading, error, isFetching, refetch, namesError, retryNames, assigneeProfiles, createTask, updateTask, deleteTask, setBaseline, isCreating, isUpdating, isSettingBaseline } =
     useProjectTasks(projectId);
+  const assigneeNames = useMemo(() => new Map([
+    ...assigneeProfiles.filter(profile => profile.full_name).map(profile => [profile.id, profile.full_name] as [string, string]),
+    ...teamCandidates.map(member => [member.id, member.name] as [string, string]),
+  ]), [assigneeProfiles, teamCandidates]);
   const { dependencies: typedDepsAll, upsertDependency, deleteDependency, predecessorsOf } =
     useTaskDependencies(projectId);
 
@@ -3780,8 +3808,8 @@ export function ProjectFieldTasksPanel({
       .filter(t => {
         if (filterStatus !== 'all' && t.status !== filterStatus) return false;
         if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
-        if (filterAssignee === 'mine' && t.assignedTo !== currentUserId) return false;
-        if (filterMemberId && t.assignedTo !== filterMemberId) return false;
+        if (filterAssignee === 'mine' && !taskAssigneeIds(t).includes(currentUserId ?? '')) return false;
+        if (filterMemberId && !taskAssigneeIds(t).includes(filterMemberId)) return false;
         if (search.trim()) {
           const q = search.toLowerCase();
           return t.title.toLowerCase().includes(q) ||
@@ -3893,7 +3921,7 @@ export function ProjectFieldTasksPanel({
   // ── CSV/PDF Export ──
   const exportCSV = () => {
     if (!checkPermission('projects', 'export')) return;
-    const header = ['Title','Status','Priority','Assignee','Start Date','Due Date','State','Locality','Est Hours','Act Hours','Est Cost','Act Cost','Notes'];
+    const header = ['Title','Status','Priority','Assignee','Start Date','Due Date','State','Locality','Est Hours','Act Hours',`Est Cost (${taskCurrencyLabel(currency)})`,`Act Cost (${taskCurrencyLabel(currency)})`,'Notes'];
     const rows = filtered.map(t => [
       t.title, STATUS_CFG[t.status].label, PRIORITY_CFG[t.priority].label,
       t.assignedToName ?? '', t.startDate ?? '', t.dueDate ?? '',
@@ -3918,7 +3946,7 @@ export function ProjectFieldTasksPanel({
     doc.text(`Field Tasks — ${projectName}`, 14, 14);
     doc.setFontSize(9);
     doc.setTextColor(100);
-    doc.text(`Exported ${new Date().toLocaleDateString()} · ${filtered.length} tasks`, 14, 20);
+    doc.text(`Exported ${new Date().toLocaleDateString()} · ${filtered.length} tasks · Currency: ${taskCurrencyLabel(currency)}`, 14, 20);
 
     // Build body rows — task row followed by an optional resource sub-row
     const pdfBody: any[] = [];
@@ -4001,39 +4029,74 @@ export function ProjectFieldTasksPanel({
 
     await exportStandardExcel({
       reportTitle: `Field Tasks — ${projectName}`,
-      subtitleLine: `Exported ${new Date().toLocaleDateString()} · ${filtered.length} tasks`,
+      subtitleLine: `Exported ${new Date().toLocaleDateString()} · ${filtered.length} tasks · ${taskCurrencyLabel(currency)}`,
+      metaLine: 'Hours are recorded per assignee, not split automatically. Shared-task participation is not individual output credit. Cancelled planned hours are excluded; all recorded actual hours remain included. Hour variance compares non-cancelled tasks only. This is a current snapshot, not a historical period report.',
       filenamePrefix: `${projectName.replace(/\s+/g, '_')}_field_tasks`,
       mainSheet: {
         sheetName: 'Tasks',
-        headers: ['Title','Status','Priority','Assignee','Start Date','Due Date','State','Locality','Est Hours','Act Hours','Est Cost','Act Cost','Notes'],
+        headers: ['Title','Status','Priority','Assignee','Start Date','Due Date','State','Locality','Est Hours','Act Hours',`Est Cost (${taskCurrencyLabel(currency)})`,`Act Cost (${taskCurrencyLabel(currency)})`,'Notes'],
         rows: taskRows,
         colWidths: { 0: 35, 12: 30 },
       },
-      ...(resourceRows.length > 0 && {
-        breakdownSheets: [{
+      breakdownSheets: [
+        {
+          title: 'Hours and rates recorded per task assignee — blank means not recorded',
+          sheetName: 'Assignee Breakdown',
+          headers: ['Task ID','Task','Task Status','Assignee ID','Assignee','Assignment Role','Start Date','Due Date','Allocated Hours','Actual Hours','Hourly Rate','Planned Labour Cost','Currency'],
+          rows: assigneeBreakdownRows(filtered, assigneeNames, currency),
+          colWidths: [38, 35, 15, 38, 28, 18, 14, 14, 18, 18, 18, 22, 24],
+        },
+        {
+          title: 'Assignee effort and shared-task participation — not accepted individual output',
+          sheetName: 'Assignee Summary',
+          headers: ['Assignee ID','Assignee','Main Assignments','Co-assignments','Active Tasks','Done Task Participation','Overdue Active Tasks','Allocated Hours (non-cancelled)','Recorded Actual Hours','Actual Minus Allocated (non-cancelled)'],
+          rows: assigneeSummaryRows(filtered, assigneeNames),
+          colWidths: [38, 28, 20, 20, 18, 26, 24, 32, 24, 30],
+        },
+        ...(resourceRows.length > 0 ? [{
           title: 'Task Resources',
           sheetName: 'Resources',
           headers: ['Task Title','Resource Type','Name','Quantity','Unit','Notes'],
           rows: resourceRows,
           colWidths: [35, 15, 20, 10, 12, 25],
-        }],
-      }),
+        }] : []),
+      ],
     });
     toast({ title: 'Excel exported' });
   };
 
   const filtersActive = filterStatus !== 'all' || filterPriority !== 'all' || filterAssignee !== 'all' || !!filterMemberId || !!search.trim();
 
+  const loadError = error ? (
+    <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-2">
+      <p className="font-semibold text-sm">{tasks.length ? 'Could not refresh tasks' : 'Could not load tasks'}</p>
+      <p className="text-xs text-muted-foreground">{error instanceof Error ? error.message : 'A task request failed.'}</p>
+      {tasks.length > 0 && <p className="text-xs">Showing previously loaded tasks. These may be out of date.</p>}
+      <Button type="button" size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>
+        {isFetching ? 'Retrying…' : 'Retry loading tasks'}
+      </Button>
+    </div>
+  ) : null;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading tasks…
+        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading tasks… Requests time out rather than wait indefinitely.
       </div>
     );
   }
 
+  if (error && !tasks.length) return loadError;
+
   return (
     <div className="space-y-4">
+      {loadError}
+      {namesError && !error && (
+        <div role="status" className="rounded-lg border border-amber-300 bg-amber-50/50 p-3 text-xs">
+          Tasks are loaded, but some assignee names could not be resolved. Saved names and IDs remain available.
+          <Button type="button" variant="link" size="sm" onClick={() => void retryNames()}>Retry names</Button>
+        </div>
+      )}
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
@@ -4170,6 +4233,7 @@ export function ProjectFieldTasksPanel({
       {/* ── Team Health Strip ── */}
       <TeamHealthStrip
         tasks={tasks}
+        names={assigneeNames}
         activeMemberId={filterMemberId}
         onMemberClick={setFilterMemberId}
       />
@@ -4195,8 +4259,8 @@ export function ProjectFieldTasksPanel({
           {hasCostData && (
             <div className="rounded-lg border px-4 py-3 space-y-2">
               <div className="flex items-center gap-1.5">
-                <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-                <span className="text-xs font-semibold">Cost Summary</span>
+                <Coins className="h-3.5 w-3.5 text-emerald-500" />
+                <span className="text-xs font-semibold">Cost Summary ({taskCurrencyLabel(currency)})</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Est: {fmtCost(totalEstCost)}</span>

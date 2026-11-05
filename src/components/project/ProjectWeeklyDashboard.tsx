@@ -33,6 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
 import { cn } from '@/lib/utils';
+import { loadActiveTaskCounts, loadActivePersonalTaskCounts } from '@/utils/projectTaskData';
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
 interface Risk {
@@ -197,6 +198,9 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
   const [bulkStatus, setBulkStatus] = useState('closed');
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [taskCounts, setTaskCounts] = useState<Record<string, { project: number; overall: number }>>({});
+  const [taskCountsError, setTaskCountsError] = useState<string | null>(null);
+  const [taskCountsLoading, setTaskCountsLoading] = useState(false);
+  const [taskCountsRevision, setTaskCountsRevision] = useState(0);
   const hasAutoDetectedRef = useRef<string | null>(null);
 
   const refreshRisks = useCallback(async () => {
@@ -364,32 +368,29 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     const userIds = teamComposition.map((m: any) => m.userId).filter(Boolean);
     if (!userIds.length) return;
     let alive = true;
+    const controller = new AbortController();
+    setTaskCounts({});
+    setTaskCountsError(null);
+    setTaskCountsLoading(true);
     (async () => {
       const [projRes, allProjRes, personalRes] = await Promise.all([
-        supabase.from('project_field_tasks')
-          .select('assigned_to')
-          .eq('project_id', project.id)
-          .neq('status', 'completed')
-          .in('assigned_to', userIds),
-        supabase.from('project_field_tasks')
-          .select('assigned_to')
-          .neq('status', 'completed')
-          .in('assigned_to', userIds),
-        supabase.from('personal_tasks')
-          .select('assigned_to')
-          .neq('status', 'completed')
-          .in('assigned_to', userIds),
+        loadActiveTaskCounts(supabase, userIds, project.id, controller.signal),
+        loadActiveTaskCounts(supabase, userIds, undefined, controller.signal),
+        loadActivePersonalTaskCounts(supabase, userIds, controller.signal),
       ]);
       if (!alive) return;
       const counts: Record<string, { project: number; overall: number }> = {};
-      for (const uid of userIds) counts[uid] = { project: 0, overall: 0 };
-      for (const r of projRes.data ?? [])    if (r.assigned_to) counts[r.assigned_to].project  += 1;
-      for (const r of allProjRes.data ?? []) if (r.assigned_to) counts[r.assigned_to].overall  += 1;
-      for (const r of personalRes.data ?? []) if (r.assigned_to) counts[r.assigned_to].overall += 1;
+      for (const uid of userIds) counts[uid] = {
+        project: projRes[uid] ?? 0, overall: (allProjRes[uid] ?? 0) + (personalRes[uid] ?? 0),
+      };
       setTaskCounts(counts);
-    })();
-    return () => { alive = false; };
-  }, [project.id, teamComposition]);
+    })().catch(() => {
+      if (alive) setTaskCountsError('Task counts could not be loaded.');
+    }).finally(() => {
+      if (alive) setTaskCountsLoading(false);
+    });
+    return () => { alive = false; controller.abort(); };
+  }, [project.id, teamComposition, taskCountsRevision]);
 
   useEffect(() => {
     let alive = true;
@@ -1313,9 +1314,14 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                     <div className="flex items-center gap-2 mb-2">
                       <Activity className="h-3.5 w-3.5 text-indigo-500" />
                       <span className="text-xs font-bold">Workload Overview</span>
-                      <span className="text-[9px] text-muted-foreground ml-auto">open tasks</span>
+                      <span className="text-[9px] text-muted-foreground ml-auto">active task participation</span>
                     </div>
-                    <ResponsiveContainer width="100%" height={Math.max(80, workloadData.length * 36)}>
+                    <p className="text-[10px] text-muted-foreground mb-2">Includes main and co-assignees. Task counts are not hours-based capacity.</p>
+                    {taskCountsError ? <div role="alert" className="text-xs text-destructive">{taskCountsError}
+                      <Button type="button" size="sm" variant="outline" className="ml-2" onClick={() => setTaskCountsRevision(value => value + 1)}>Retry task counts</Button>
+                    </div>
+                    : taskCountsLoading ? <p role="status" className="text-xs text-muted-foreground">Loading task counts…</p>
+                    : <ResponsiveContainer width="100%" height={Math.max(80, workloadData.length * 36)}>
                       <BarChart data={workloadData} layout="vertical" margin={{ top: 0, right: 36, left: 4, bottom: 0 }} barCategoryGap="30%">
                         <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
                         <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={56} />
@@ -1330,7 +1336,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                           <LabelList dataKey="overall" position="right" style={{ fontSize: 9, fill: '#64748b', fontWeight: 700 }} />
                         </Bar>
                       </BarChart>
-                    </ResponsiveContainer>
+                    </ResponsiveContainer>}
                     <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                       {[{ c: 'bg-indigo-400', l: 'This project' }, { c: 'bg-slate-400', l: 'Overall (all projects)' }].map(l => (
                         <span key={l.l} className="flex items-center gap-1 text-[9px] text-muted-foreground">

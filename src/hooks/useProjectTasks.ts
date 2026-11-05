@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
+import { loadProjectTasks, loadTaskProfiles } from '@/utils/projectTaskData';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -228,86 +230,37 @@ async function notifyCoAssignees(
 export function useProjectTasks(projectId: string) {
   const qc = useQueryClient();
   const key = ['project_field_tasks', projectId];
+  const invalidateTaskLists = () => {
+    void qc.invalidateQueries({ queryKey: key });
+    void qc.invalidateQueries({ queryKey: ['my_project_field_tasks'] });
+    void qc.invalidateQueries({ queryKey: ['all_project_field_tasks'] });
+  };
 
   const query = useQuery({
     queryKey: key,
-    queryFn: async (): Promise<FieldTask[]> => {
-      const { data, error } = await supabase
-        .from('project_field_tasks')
-        .select(`
-          id, project_id, title, description, priority, status,
-          assigned_to, assigned_to_name, co_assignee_ids, due_date, start_date, state_name, locality_name,
-          stage_id, notes, created_by, created_at, updated_at,
-          estimated_hours, actual_hours, weight, estimated_cost, actual_cost, percent_complete, dependencies, resources, assignee_hours,
-          baseline_start, baseline_due, baseline_hours, baseline_cost, baseline_set_at,
-          creator:profiles!project_field_tasks_created_by_fkey(full_name)
-        `)
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-
-      // Resolve assignee display names: prefer stored snapshot, then profiles lookup.
-      const assigneeIds = Array.from(
-        new Set(
-          (data ?? [])
-            .map((r: any) => r.assigned_to as string | null)
-            .filter((id): id is string => !!id),
-        ),
-      );
-      const profileNameById = new Map<string, { full_name: string; role: string | null }>();
-      if (assigneeIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, role')
-          .in('id', assigneeIds);
-        for (const p of profiles ?? []) {
-          profileNameById.set(p.id, { full_name: p.full_name, role: p.role });
-        }
-      }
-
-      return (data ?? []).map((r: any) => {
-        const profile = r.assigned_to ? profileNameById.get(r.assigned_to) : undefined;
-        return {
-          id: r.id,
-          projectId: r.project_id,
-          title: r.title,
-          description: r.description,
-          priority: r.priority,
-          status: r.status,
-          assignedTo: r.assigned_to,
-          assignedToName: r.assigned_to_name || profile?.full_name || null,
-          assignedToRole: profile?.role ?? null,
-          coAssigneeIds: r.co_assignee_ids ?? [],
-          dueDate: r.due_date,
-          startDate: r.start_date,
-          stateName: r.state_name,
-          localityName: r.locality_name,
-          stageId: r.stage_id,
-          notes: r.notes,
-          estimatedHours: r.estimated_hours ?? null,
-          actualHours: r.actual_hours ?? null,
-          weight: r.weight != null ? Number(r.weight) : null,
-          estimatedCost: r.estimated_cost ?? null,
-          actualCost: r.actual_cost ?? null,
-          percentComplete: r.percent_complete ?? 0,
-          dependencies: r.dependencies ?? [],
-          resources: (r.resources ?? []) as ResourceLine[],
-          assigneeHours: (r.assignee_hours ?? {}) as Record<string, { allocated: number | null; actual: number | null }>,
-          createdBy: r.created_by,
-          createdByName: r.creator?.full_name ?? null,
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
-          baselineStart: r.baseline_start ?? null,
-          baselineDue: r.baseline_due ?? null,
-          baselineHours: r.baseline_hours ?? null,
-          baselineCost: r.baseline_cost ?? null,
-          baselineSetAt: r.baseline_set_at ?? null,
-        };
-      });
-    },
+    queryFn: ({ signal }) => loadProjectTasks(supabase, projectId, signal),
     staleTime: 30_000,
     enabled: !!projectId,
+    retry: 1,
+    retryDelay: 1000,
   });
+
+  const assigneeIds = useMemo(() => [...new Set((query.data ?? []).flatMap(task =>
+    [task.assignedTo, ...task.coAssigneeIds].filter(Boolean) as string[]))].sort(), [query.data]);
+  const profilesQuery = useQuery({
+    queryKey: ['project_field_task_profiles', projectId, assigneeIds],
+    queryFn: ({ signal }) => loadTaskProfiles(supabase, assigneeIds, signal),
+    enabled: query.isSuccess && assigneeIds.length > 0,
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const assigneeProfiles = useMemo(() =>
+    new Map((profilesQuery.data ?? []).map(profile => [profile.id, profile])), [profilesQuery.data]);
+  const resolvedTasks = useMemo(() => (query.data ?? []).map(task => ({
+    ...task,
+    assignedToName: task.assignedToName || assigneeProfiles.get(task.assignedTo ?? '')?.full_name || null,
+    assignedToRole: assigneeProfiles.get(task.assignedTo ?? '')?.role ?? null,
+  })), [query.data, assigneeProfiles]);
 
   const createMutation = useMutation({
     mutationFn: async ({
@@ -389,7 +342,7 @@ export function useProjectTasks(projectId: string) {
       })().catch(() => {});
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+    onSuccess: invalidateTaskLists,
   });
 
   const updateMutation = useMutation({
@@ -576,7 +529,7 @@ export function useProjectTasks(projectId: string) {
       }
       })().catch(() => {});
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+    onSuccess: invalidateTaskLists,
   });
 
   const deleteMutation = useMutation({
@@ -584,7 +537,7 @@ export function useProjectTasks(projectId: string) {
       const { error } = await supabase.from('project_field_tasks').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+    onSuccess: invalidateTaskLists,
   });
 
   const baselineMutation = useMutation({
@@ -605,12 +558,18 @@ export function useProjectTasks(projectId: string) {
         .eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+    onSuccess: invalidateTaskLists,
   });
 
   return {
-    tasks: query.data ?? [],
+    tasks: resolvedTasks,
     isLoading: query.isLoading,
+    error: query.error,
+    isFetching: query.isFetching,
+    refetch: query.refetch,
+    assigneeProfiles: profilesQuery.data ?? [],
+    namesError: profilesQuery.error,
+    retryNames: profilesQuery.refetch,
     createTask: (task: CreateFieldTask, currentUserId: string, projectName: string, currentUserName: string) =>
       createMutation.mutateAsync({ task, currentUserId, projectName, currentUserName }),
     updateTask: (
@@ -654,12 +613,15 @@ export function useMyProjectFieldTasks(userId: string | undefined) {
           assigned_to, assigned_to_name, co_assignee_ids, due_date, created_at
         `)
         .contains('co_assignee_ids', [userId])
-        .neq('assigned_to', userId)
         .neq('status', 'cancelled')
         .order('due_date', { ascending: true, nullsFirst: false });
       if (e2) throw e2;
 
-      const allRows = [...(primary ?? []), ...(coAssigned ?? [])];
+      // A co-assigned task can have no primary assignee. SQL <> would exclude
+      // NULL primaries; fetch co-assignment directly and deduplicate legacy rows
+      // where the same person appears in both assignment fields.
+      const allRows = [...new Map([...(primary ?? []), ...(coAssigned ?? [])]
+        .map(row => [row.id, row])).values()];
 
       const projectIds = [...new Set(
         allRows.map((r: any) => r.project_id).filter(Boolean)
