@@ -11,3 +11,9 @@ When auditing a large surface (e.g. an entire HR hub with 10+ panels) using a pr
 - For each claimed bug, grep/read the actual current implementation before touching it.
 - Only apply a fix once you've confirmed the unsafe path is real (e.g. by tracing the exact null/undefined value through to where it's used unguarded).
 - If a claim doesn't hold up, explicitly note it as a false positive (no fix needed) rather than silently skipping it, so it's clear it was checked.
+
+For project/task/team/reporting changes, do not duplicate features already in the system. Check whether existing features work before recommending additions; repair or extend the existing surfaces first.
+
+**Why:** The user explicitly instructed: "don't duplicate anything that already in the system check if it's workinging ir is not there."
+
+**How to apply:** Trace both saving and loading, not just visible controls. Distinguish code-connected features from live behavior that has actually been verified, and label untested behavior honestly.
