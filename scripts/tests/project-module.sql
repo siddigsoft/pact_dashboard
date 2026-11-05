@@ -41,6 +41,11 @@ CREATE TABLE public.monitoring_page_access(user_id uuid);
 \i supabase/migrations/20261106090000_project_lifecycle_safety.sql
 \i supabase/migrations/20261106091000_project_task_reviews_capacity.sql
 \i supabase/migrations/20261106092000_project_period_reports.sql
+-- Simulate the existing project read policy; production already has its own
+-- scoped projects_select policy, which the new migration leaves unchanged.
+CREATE POLICY fixture_project_read ON public.projects FOR SELECT TO authenticated USING(true);
+\i supabase/migrations/20261106100000_project_review_queue.sql
+\i supabase/migrations/20261106100000_project_review_queue.sql
 CREATE FUNCTION pg_temp.assert_true(value boolean,message text) RETURNS void LANGUAGE plpgsql AS $$
  BEGIN IF NOT coalesce(value,false) THEN RAISE EXCEPTION 'ASSERTION FAILED: %',message; END IF; END $$;
 CREATE FUNCTION pg_temp.must_fail(statement text,pattern text) RETURNS void LANGUAGE plpgsql AS $$
@@ -69,6 +74,13 @@ INSERT INTO public.project_field_tasks(id,project_id,title,status,assigned_to,co
  ARRAY['00000000-0000-4000-8000-000000000001'],true,'00000000-0000-4000-8000-000000000003','Evidence must meet the agreed acceptance criteria.',100,
  '{"00000000-0000-4000-8000-000000000002":{"allocated":12,"actual":10},"00000000-0000-4000-8000-000000000001":{"allocated":4,"actual":3}}',current_date,current_date+4);
 SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
+SELECT pg_temp.assert_true((public.get_my_project_review_queue()->>'total')::integer=1,'reviewer-only work is in the inbox');
+SELECT pg_temp.assert_true(jsonb_array_length(public.get_my_project_review_queue(0,1)->'items')=1,'review queue honors page size');
+SELECT pg_temp.must_fail($s$SELECT public.get_my_project_review_queue(0,101)$s$,'Invalid review page');
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000004',false);
+SELECT pg_temp.assert_true((public.get_my_project_review_queue()->>'total')::integer=0,'unrelated users cannot see review requests');
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
 SELECT pg_temp.assert_true(NOT (public.project_lifecycle_preflight('10000000-0000-4000-8000-000000000001')->>'can_close')::boolean,'required acceptance blocks close');
 SELECT pg_temp.must_fail($s$SELECT public.delete_empty_project_safely('10000000-0000-4000-8000-000000000001','Project 1')$s$,'linked records');
 SELECT pg_temp.must_fail($s$UPDATE public.projects SET archived=true WHERE id='10000000-0000-4000-8000-000000000001'$s$,'not ready');
@@ -83,12 +95,19 @@ SELECT pg_temp.must_fail($s$SELECT public.review_project_task('20000000-0000-400
 SELECT public.review_project_task('20000000-0000-4000-8000-000000000001','accepted','Both documented contributions were verified.',
  '{"00000000-0000-4000-8000-000000000002":"Completed the field work.","00000000-0000-4000-8000-000000000001":"Provided independent data preparation."}');
 SELECT pg_temp.assert_true((public.project_task_review_state('20000000-0000-4000-8000-000000000001')->>'accepted')::boolean,'current task version accepted');
+SELECT pg_temp.assert_true((public.get_my_project_review_queue()->>'total')::integer=0,'accepted versions leave the review queue');
 SELECT pg_temp.must_fail($s$SELECT public.review_project_task('20000000-0000-4000-8000-000000000001','accepted','Both contributions checked again.',
  '{"00000000-0000-4000-8000-000000000002":"Field work.","00000000-0000-4000-8000-000000000001":"Preparation."}')$s$,'already reviewed');
 SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
 UPDATE public.project_field_tasks SET actual_hours=14,updated_at=now() WHERE id='20000000-0000-4000-8000-000000000001';
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
+SELECT pg_temp.assert_true((public.get_my_project_review_queue()->>'total')::integer=1,'edited versions return to the review queue');
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
 SELECT pg_temp.assert_true(NOT (public.project_task_review_state('20000000-0000-4000-8000-000000000001')->>'accepted')::boolean,'editing invalidates previous acceptance');
 SELECT public.archive_project_retaining_records('10000000-0000-4000-8000-000000000001','Retain unfinished records while suspended.');
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
+SELECT pg_temp.assert_true((public.get_my_project_review_queue()->>'total')::integer=0,'archived projects do not produce actionable review requests');
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
 SELECT pg_temp.must_fail($s$UPDATE public.project_field_tasks SET title='Changed after archive' WHERE id='20000000-0000-4000-8000-000000000001'$s$,'Reopen');
 SELECT public.reopen_project('10000000-0000-4000-8000-000000000001','Project resumed for review.');
 SELECT public.delete_empty_project_safely('10000000-0000-4000-8000-000000000002','Project 2');
@@ -136,4 +155,18 @@ SELECT pg_temp.assert_true(jsonb_array_length(public.claim_project_report_delive
 RESET ROLE;
 SELECT pg_temp.assert_true((SELECT status='failed' FROM public.notification_schedules WHERE report_project_id IS NOT NULL),'revoked schedule is paused');
 SELECT pg_temp.assert_true((SELECT last_seen IS NOT NULL FROM public.project_report_worker_health),'worker heartbeat recorded');
+UPDATE public.projects SET team=team||'{"projectManager":"00000000-0000-4000-8000-000000000002"}'::jsonb WHERE id='10000000-0000-4000-8000-000000000006';
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000002',false);
+SELECT pg_temp.assert_true(NOT public.project_module_access('10000000-0000-4000-8000-000000000006',true),'stale legacy manager cannot supersede canonical manager ID');
+SET ROLE authenticated;
+UPDATE public.projects SET name='Stale manager edit' WHERE id='10000000-0000-4000-8000-000000000006';
+RESET ROLE;
+SELECT pg_temp.assert_true((SELECT name='Project 6' FROM public.projects WHERE id='10000000-0000-4000-8000-000000000006'),'direct table RLS also blocks stale manager edits');
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
+SELECT pg_temp.assert_true(public.project_module_access('10000000-0000-4000-8000-000000000006',true),'canonical manager retains project management');
+INSERT INTO public.test_permission_blocks VALUES('00000000-0000-4000-8000-000000000003','projects','read');
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
+SET ROLE authenticated;
+SELECT pg_temp.assert_true((public.get_my_project_review_queue()->>'total')::integer=0,'revoked project access removes review requests');
+RESET ROLE;
 SELECT 'SQL authorization, lifecycle, review, finance, history, calendar and delivery checks passed.' AS result;

@@ -39,5 +39,8 @@ describe('independent task reviews', () => {
       p_contributions: { [task.assignedTo!]: 'Prepared the verified evidence.', [task.coAssigneeIds[0]]: 'Completed the field activity.' },
     }));
     await waitFor(() => expect(mocks.notify).toHaveBeenCalledOnce());
+    expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({
+      actionUrl: '/projects/project?tab=field_tasks&task=task',
+    }));
   });
 });

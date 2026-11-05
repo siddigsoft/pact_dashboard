@@ -7,6 +7,7 @@ Run these files **in order**, manually in Supabase Studio:
 1. `supabase/migrations/20261106090000_project_lifecycle_safety.sql`
 2. `supabase/migrations/20261106091000_project_task_reviews_capacity.sql`
 3. `supabase/migrations/20261106092000_project_period_reports.sql`
+4. `supabase/migrations/20261106100000_project_review_queue.sql`
 
 They require the existing project/task, permission and Recycle Bin schema. They do
 not close, delete, reassign, or settle any existing business record. Reviewed tasks
@@ -42,6 +43,9 @@ this Supabase function or configure its cron schedule.
 6. The named reviewer opens the task's Overview, records a decision and each
    person's actual contribution. Changes requested returns work to In Progress.
    Reviews cannot be rewritten. Editing a task invalidates its old acceptance.
+   **My Tasks → Project work awaiting my acceptance** lists reviewer-only work,
+   with bounded pages and direct links to the correct task. Accepted versions,
+   archived projects and inaccessible projects are excluded.
 
 ## Workload and performance
 
@@ -72,6 +76,14 @@ Repeated saves of the same cadence/recipients reuse the active schedule. Month-e
 anchors and timezone transitions are respected. Stop a schedule from the same
 section. The latest 20 schedules/delivery attempts are displayed there; saved
 report history has pagination.
+
+Financial summaries use the final applicable approval tier, not an intermediate
+approval. Approved costs, advances and Pre-Fund disbursements stay separate and
+are never added together as “Total Spent.” Costs/budget is a commitment comparison,
+not a cash balance or proof of payment. Unknown source currencies are shown as
+unverified, not assumed to match the project currency. Actual expenditure requires
+reconciled accounting evidence. Excel period exports preserve the union of summary,
+task and contribution columns so later-row details are not silently dropped.
 
 “Dispatcher accepted” is not proof that an email reached an inbox. A failed or
 unknown acknowledgement remains visible. Check in-app/email history before

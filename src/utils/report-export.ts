@@ -593,7 +593,9 @@ export function exportToExcel(
     return;
   }
 
-  const headers = Object.keys(data[0]);
+  // Mixed report rows can introduce fields after the first summary row.
+  // Preserve their stable first-seen order instead of silently dropping them.
+  const headers = [...new Set(data.flatMap(row => Object.keys(row)))];
   const rows = data.map(row => headers.map(h => row[h] ?? ''));
 
   const titleRows: (string | number)[][] = [

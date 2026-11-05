@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { loadProjectTasks, loadTaskProfiles } from '@/utils/projectTaskData';
+import { projectTaskUrl } from '@/utils/projectIdentity';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,7 @@ async function notifyFieldTaskActivity(opts: {
   projectId: string;
   projectName: string;
   taskTitle: string;
+  taskId?: string;
   actorName: string;
   actorId?: string | null;
   priority?: 'urgent' | 'high' | 'normal';
@@ -155,7 +157,7 @@ async function notifyFieldTaskActivity(opts: {
     priority: opts.priority ?? 'normal',
     entityType: 'project',
     entityId: opts.projectId,
-    actionUrl: `/projects/${opts.projectId}?tab=field_tasks`,
+    actionUrl: projectTaskUrl(opts.projectId, opts.taskId),
     sendEmail: true,
     triggeredBy: opts.actorId ?? undefined,
     triggeredByName: opts.actorName,
@@ -237,6 +239,7 @@ export function useProjectTasks(projectId: string) {
   const qc = useQueryClient();
   const key = ['project_field_tasks', projectId];
   const invalidateTaskLists = () => {
+    void qc.invalidateQueries({ queryKey: ['project_review_queue'] });
     void qc.invalidateQueries({ queryKey: key });
     void qc.invalidateQueries({ queryKey: ['my_project_field_tasks'] });
     void qc.invalidateQueries({ queryKey: ['all_project_field_tasks'] });
@@ -474,6 +477,7 @@ export function useProjectTasks(projectId: string) {
           const reviewRecipients = needsReview && reviewer ? [...new Set([...recipients, reviewer])] : recipients;
           notifyFieldTaskActivity({
             event: needsReview ? 'project_task_status_changed' : 'project_task_completed',
+            taskId: task.id,
             recipientIds: reviewRecipients,
             titleEn: needsReview ? 'Field task submitted for acceptance' : 'Field task completed',
             titleAr: needsReview ? 'مهمة ميدانية بانتظار المراجعة' : 'اكتملت مهمة ميدانية',

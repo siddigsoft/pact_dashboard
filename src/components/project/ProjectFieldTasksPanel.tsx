@@ -3802,7 +3802,8 @@ function ProjectFieldTasksPanelContent({
   // Deep-link from My Tasks / email: ?tab=field_tasks&task=<id>&panel=files
   useEffect(() => {
     const taskParam = searchParams.get('task');
-    if (!taskParam || isLoading || tasks.length === 0) return;
+    if (!taskParam) { deepLinkHandled.current = null; return; }
+    if (isLoading || tasks.length === 0) return;
     if (deepLinkHandled.current === taskParam) return;
     const found = tasks.find(t => t.id === taskParam);
     if (!found) return;

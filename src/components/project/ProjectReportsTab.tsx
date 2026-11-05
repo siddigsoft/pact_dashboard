@@ -5,6 +5,8 @@
  */
 import { useState, useEffect } from 'react';
 import { ProjectPeriodicReports } from './ProjectPeriodicReports';
+import { projectFinancialSummary } from '@/utils/projectFinancialReporting';
+import type { OperationalCostTierInput } from '@/utils/operationalCostApproval';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,7 +48,7 @@ interface ProjectReportsTabProps {
   };
 }
 
-interface OpsCost {
+interface OpsCost extends OperationalCostTierInput {
   id: string;
   expense_category: string;
   amount_cents: number;
@@ -57,6 +59,7 @@ interface OpsCost {
   created_by_name?: string;
 }
 interface Advance {
+  currency?: string | null;
   id: string;
   status: string;
   total_paid_amount: number;
@@ -73,8 +76,9 @@ interface PreFundRow {
   status: string;
 }
 
-const fmt = (n: number, cur = 'SDG') =>
-  `${cur} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmt = (n: number | null, cur = 'SDG') =>
+  n === null ? 'Not available — source currency unverified' :
+    `${cur} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (d?: string) => d ? format(new Date(d), 'dd MMM yyyy') : '—';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -112,7 +116,7 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
     try {
       const [costsRes, advsRes, pfRes] = await Promise.all([
         supabase.from('operational_cost_submissions')
-          .select('id, expense_category, amount_cents, currency, status, tier1_status, tier2_status, expense_date, description')
+          .select('id, expense_category, amount_cents, currency, status, submitter_role, tier1_status, tier2_status, tier3_status, tier4_status, expense_date, description')
           .eq('project_id', project.id)
           .order('expense_date', { ascending: false }),
         supabase.from('advance_requests')
@@ -140,21 +144,17 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
   // Only count costs whose currency matches the project budget currency to avoid
   // mixing SDG and USD amounts into a single misleading total.
   const budgetCurrency = currency;
-  const sameCurrencyOps = opsCosts.filter(c => (c.currency || 'SDG') === budgetCurrency);
-  const approvedOps     = sameCurrencyOps.filter(c =>
-    c.status === 'approved' || c.tier1_status === 'approved' || c.tier2_status === 'approved'
-  );
-  const opsTotalCents = approvedOps.reduce((s, c) => s + c.amount_cents, 0);
+  const financials = projectFinancialSummary(opsCosts, advances, preFunds, budgetCurrency);
+  const opsTotalCents = financials.approvedCostCents;
 
   // Multi-currency flag — shown when costs use more than one currency
-  const costCurrencies = [...new Set(opsCosts.map(c => c.currency || 'SDG'))];
+  const costCurrencies = financials.currencies;
   const isMultiCurrency = costCurrencies.length > 1;
 
-  const advTotal = advances.reduce((s, a) => s + (a.total_paid_amount || 0), 0);
-  const pfPaid   = preFunds.reduce((s, p) => s + (p.paid_amount || 0), 0);
-  // totalSpent only meaningful when all components are in the same currency
-  const totalSpent = opsTotalCents / 100 + advTotal + pfPaid;
-  const utilPct = totalBudget > 0 ? Math.min(100, (totalSpent / totalBudget) * 100) : 0;
+  const advTotal = financials.advancesPaid;
+  const pfPaid = financials.fundingDisbursed;
+  const approvedCostTotal = opsTotalCents / 100;
+  const approvedBudgetPct = totalBudget > 0 ? approvedCostTotal / totalBudget * 100 : null;
 
   const teamMembers = project.team?.teamComposition || [];
   const membersWithFees = teamMembers.filter(m => m.feeType);
@@ -191,7 +191,7 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
       await exportFormattedExcel({
         reportTitle:   `PACT Command Center — ${project.name} Full Project Report`,
         subtitleLine:  `Type: ${project.type || '—'} | Status: ${project.status || '—'} | Stage: ${flow?.currentStage?.label || '—'} | Generated: ${now}`,
-        metaLine:      `Budget: ${fmt(totalBudget, currency)} | Spent: ${fmt(totalSpent, currency)} | Utilization: ${utilPct.toFixed(1)}% | Team: ${teamMembers.length} members`,
+        metaLine:      `Budget: ${fmt(totalBudget, currency)} | Finally approved costs: ${fmt(approvedCostTotal, currency)} | Not actual expenditure. Funding and advances are shown separately. | Team: ${teamMembers.length} members`,
         filenamePrefix: `${project.name.replace(/\s+/g, '_')}_Report`,
 
         mainSheet: {
@@ -204,7 +204,7 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
             c.amount_cents / 100,
             c.status,
           ]),
-          totalsRow: ['', '', 'TOTAL', opsTotalCents / 100, ''],
+          totalsRow: ['', '', 'FINALLY APPROVED', opsTotalCents / 100, ''],
           colWidths: [14, 22, 40, 18, 14],
         },
 
@@ -220,12 +220,12 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
             ['', ''],
             ['FINANCIAL SUMMARY', ''],
             ['Total Budget', fmt(totalBudget, currency)],
-            ['Operational Costs', fmt(opsTotalCents / 100, currency)],
+            ['Finally Approved Costs', fmt(opsTotalCents / 100, currency)],
             ['Advances Paid', fmt(advTotal, currency)],
             ['Pre-Fund Disbursed', fmt(pfPaid, currency)],
-            ['Total Spent', fmt(totalSpent, currency)],
-            ['Remaining', fmt(Math.max(0, totalBudget - totalSpent), currency)],
-            ['Utilization %', `${utilPct.toFixed(1)}%`],
+            ['Actual Spending', 'Use reconciled accounting records; these sources are not additive.'],
+            ['Budget Less Approved Costs (not a cash balance)', fmt(totalBudget - approvedCostTotal, currency)],
+            ['Approved Costs / Budget', approvedBudgetPct === null ? 'No budget basis' : `${approvedBudgetPct.toFixed(1)}%`],
             ['', ''],
             ['TEAM SUMMARY', ''],
             ['Total Members', teamMembers.length],
@@ -335,8 +335,8 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
       doc.setFont('helvetica', 'bold');
       const kpis = [
         { label: 'Total Budget', value: fmt(totalBudget, currency) },
-        { label: 'Total Spent', value: fmt(totalSpent, currency) },
-        { label: 'Utilization', value: `${utilPct.toFixed(1)}%` },
+        { label: 'Approved Costs', value: fmt(approvedCostTotal, currency) },
+        { label: 'Costs / Budget', value: approvedBudgetPct === null ? 'No budget basis' : `${approvedBudgetPct.toFixed(1)}%` },
         { label: 'Team Members', value: String(teamMembers.length) },
       ];
       kpis.forEach((kpi, i) => {
@@ -370,7 +370,7 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
           fmt(c.amount_cents / 100, currency),
           c.status,
         ]),
-        foot: [['', '', 'TOTAL', fmt(opsTotalCents / 100, currency), '']],
+        foot: [['', '', 'FINALLY APPROVED', fmt(opsTotalCents / 100, currency), '']],
         headStyles: { fillColor: teal, textColor: [255, 255, 255], fontSize: 7 },
         footStyles: { fillColor: navy, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
         bodyStyles: { fontSize: 7 },
@@ -521,8 +521,8 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { icon: DollarSign, label: 'Total Budget',   value: fmt(totalBudget, currency),     color: 'text-blue-600' },
-          { icon: BarChart2,  label: 'Total Spent',    value: fmt(totalSpent, currency),       color: 'text-red-500' },
-          { icon: Target,     label: 'Budget Used',    value: `${utilPct.toFixed(1)}%`,        color: utilPct > 85 ? 'text-red-600' : utilPct > 60 ? 'text-amber-600' : 'text-emerald-600' },
+          { icon: BarChart2,  label: 'Approved Costs', value: fmt(approvedCostTotal, currency), color: 'text-blue-600' },
+          { icon: Target,     label: 'Costs / Budget', value: approvedBudgetPct === null ? 'No budget basis' : `${approvedBudgetPct.toFixed(1)}%`, color: (approvedBudgetPct ?? 0) > 100 ? 'text-red-600' : 'text-muted-foreground' },
           { icon: Users,      label: 'Team Members',   value: String(teamMembers.length),      color: 'text-violet-600' },
         ].map(({ icon: Icon, label, value, color }) => (
           <Card key={label} className="shadow-sm">
@@ -540,10 +540,11 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
       {/* Utilization bar */}
       <div className="space-y-1">
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Budget Utilization</span>
-          <span>{utilPct.toFixed(1)}% used</span>
+          <span>Finally approved costs / budget (not actual spend)</span>
+          <span>{approvedBudgetPct === null ? 'No budget basis' : `${approvedBudgetPct.toFixed(1)}% in finally approved costs`}</span>
         </div>
-        <Progress value={utilPct} className={`h-2 ${utilPct > 85 ? '[&>div]:bg-red-500' : utilPct > 60 ? '[&>div]:bg-amber-500' : '[&>div]:bg-emerald-500'}`} />
+        <Progress value={Math.min(100, Math.max(0, approvedBudgetPct ?? 0))} className="h-2" />
+        <p className="text-xs text-muted-foreground">Approval is not payment. Advances and Pre-Fund disbursements are separate funding movements, not extra expenditure. Currency-unverified amounts are not included in budget-currency totals. Use reconciled accounting records for actual spend and cash balances.</p>
       </div>
 
       {/* ── Sub-tabs ── */}

@@ -149,6 +149,7 @@ export interface Project {
     coordinates?: { latitude: number; longitude: number };
   };
   team?: {
+    projectManagerId?: string;
     projectManager?: string;
     members?: string[];
     teamComposition?: ProjectTeamMember[];

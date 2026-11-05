@@ -28,3 +28,22 @@ Reports must distinguish capture-time task state from recorded period events;
 never invent historical performance before recording started. Capacity can
 aggregate other-project hours for managers without exposing those project names
 or private leave reasons.
+
+Use a canonical manager user ID before legacy manager fields for management
+decisions; legacy values are compatibility fallbacks, not competing owners.
+
+**Why:** Management controls, checked RPCs and direct table writes must agree
+after a reassignment. A stale legacy ID must not retain ownership rights.
+
+**How to apply:** Check the current server authorization as well as the screen
+when changing manager identity handling; do not grant all project managers
+management rights over unrelated projects.
+
+Keep approved costs, advances and funding separate in project financial reports.
+
+**Why:** The same underlying work can appear in all three sources. Adding them
+together does not establish actual expenditure and can count money repeatedly.
+
+**How to apply:** Use the final applicable approval for approved-cost figures.
+Actual spending requires reconciled accounting evidence. Never infer currency
+for an unverified source, or label approved-cost ratios as cash utilization.

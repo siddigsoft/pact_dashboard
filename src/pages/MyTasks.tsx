@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback, type ReactNode } from 'react';
+import { ProjectReviewQueue } from '@/components/project/ProjectReviewQueue';
 import {
   format, isToday, isThisWeek, isBefore, parseISO, isValid,
   startOfDay, addDays, eachDayOfInterval, startOfToday, isAfter,
@@ -4764,6 +4765,7 @@ export default function MyTasks() {
   if (viewMode === 'matrix') {
     return (
       <div className="flex flex-col w-full" style={{ minHeight: 'calc(100vh - 120px)' }}>
+        <ProjectReviewQueue />
         <PriorityMatrix
           personalTasks={personalTasks}
           allPersonalTasks={allPersonalTasks}
@@ -4791,6 +4793,7 @@ export default function MyTasks() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+      <ProjectReviewQueue />
       {/* ── Page Header ── */}
       <div className="flex items-start justify-between gap-4 pb-4 border-b border-border/60">
         <div>

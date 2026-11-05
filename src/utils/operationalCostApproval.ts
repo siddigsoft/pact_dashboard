@@ -54,6 +54,19 @@ export function isFinalTier(oc: OperationalCostTierInput, tier: 1 | 2 | 3 | 4): 
   return tier === 2;
 }
 
+/** Approval is not payment. Use only the final applicable tier; unused tier
+ * defaults (notably tier4) must neither approve nor block other workflows. */
+export function isOperationalCostFinallyApproved(oc: OperationalCostTierInput): boolean {
+  if (['rejected', 'cancelled', 'canceled', 'draft'].includes((oc.status ?? '').toLowerCase())) return false;
+  const tiers = [1, 2, 3, 4] as const;
+  const final = tiers.find(tier => isFinalTier(oc, tier))!;
+  for (const tier of tiers) {
+    if (tier > final) break;
+    if (oc[`tier${tier}_status`] === 'rejected') return false;
+  }
+  return oc[`tier${final}_status`] === 'approved';
+}
+
 export function getPendingCostTierLabel(oc: OperationalCostTierInput): string | null {
   if (oc.tier1_status === 'pending') return 'Tier 1';
   if (oc.tier2_status === 'pending') return 'Tier 2';

@@ -6,6 +6,7 @@ import { taskAssigneeIds } from '@/utils/projectTaskReporting';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { dispatchNotification } from '@/lib/notify';
+import { projectTaskUrl } from '@/utils/projectIdentity';
 
 export function ProjectTaskReviewPanel({ task }: { task: FieldTask }) {
   const qc = useQueryClient();
@@ -34,12 +35,14 @@ export function ProjectTaskReviewPanel({ task }: { task: FieldTask }) {
         titleEn: decision === 'accepted' ? `Work accepted: ${task.title}` : `Changes requested: ${task.title}`,
         titleAr: decision === 'accepted' ? `تم قبول العمل: ${task.title}` : `تعديلات مطلوبة: ${task.title}`,
         messageEn: note, messageAr: note, entityType: 'project_task', entityId: task.id,
-        actionUrl: `/projects/${task.projectId}?tab=tasks`, sendEmail: true,
+        actionUrl: projectTaskUrl(task.projectId, task.id), sendEmail: true,
       }).catch(() => setError('Review saved, but assignee notification delivery could not be confirmed.'));
       setNote(''); setContributions({});
       await qc.invalidateQueries({ queryKey: ['project_task_review', task.id] });
       await qc.invalidateQueries({ queryKey: ['project_field_tasks', task.projectId] });
       await qc.invalidateQueries({ queryKey: ['my_project_field_tasks'] });
+      await qc.invalidateQueries({ queryKey: ['project_review_queue'] });
+      await qc.invalidateQueries({ queryKey: ['all_project_field_tasks'] });
     } catch (e: any) { setError(e.message); } finally { setBusy(false); }
   };
   return <section className="rounded-lg border p-4 space-y-3">

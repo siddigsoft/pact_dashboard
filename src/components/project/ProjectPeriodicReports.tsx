@@ -9,13 +9,14 @@ import type { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ProjectLifecycleDialog } from './ProjectLifecycleDialog';
+import { isAssignedProjectManager } from '@/utils/projectIdentity';
 
 export function ProjectPeriodicReports({ project }: { project: Project }) {
   const { checkPermission } = useAuthorization();
   const { currentUser } = useUser();
   const qc = useQueryClient();
   const canExport = checkPermission('projects', 'export');
-  const canManage = checkPermission('projects', 'update') || [project.team?.projectManager, (project.team as any)?.projectManagerId].includes(currentUser?.id || '');
+  const canManage = checkPermission('projects', 'update') || isAssignedProjectManager(project.team, currentUser);
   const [start, setStart] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [end, setEnd] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [page, setPage] = useState(0);

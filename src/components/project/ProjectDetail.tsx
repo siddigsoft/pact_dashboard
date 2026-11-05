@@ -71,6 +71,7 @@ import ProjectRisksPanel from './ProjectRisksPanel';
 import { ProjectWeeklyDashboard } from './ProjectWeeklyDashboard';
 import { ProjectLifecycleDialog } from './ProjectLifecycleDialog';
 import { ProjectCapacityPanel } from './ProjectCapacityPanel';
+import { isAssignedProjectManager } from '@/utils/projectIdentity';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { logAuditEvent } from '@/utils/audit-logger';
 import { ProjectDeliverablesChecklist } from './ProjectDeliverablesChecklist';
@@ -293,7 +294,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
     closeDrawer: closeChatDrawer,
     loading: chatDrawerLoading,
   } = useProjectChatDrawer(project, currentUser?.id ?? '');
-  const { isSuperAdmin, hasAnyRole, effectiveRole } = useAuthorization();
+  const { isSuperAdmin, hasAnyRole, effectiveRole, checkPermission } = useAuthorization();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const updateProjectCache = useUpdateProjectInCache();
@@ -309,11 +310,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   }, [freshActivities]);
   // FOM is no longer a full admin — they get the limited-viewer tab set (no financial tabs)
   const isAdminUser = isSuperAdmin() || hasAnyRole(['admin']);
-  const isProjectManagerUser =
-    !!project.team?.projectManager &&
-    ((!!currentUser?.id && project.team.projectManager === currentUser.id) ||
-      (!!currentUser?.fullName && project.team.projectManager === currentUser.fullName));
-  const canArchive = isAdminUser || isProjectManagerUser;
+  const isProjectManagerUser = isAssignedProjectManager(project.team, currentUser);
+  const canArchive = checkPermission('projects', 'update') || isProjectManagerUser;
 
   /**
    * Limited project viewers: Employee, FOM, Country Director, HR.
@@ -493,7 +491,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         toast({ title: 'Project Closed', description: `"${project.name}" has been closed and archived.` });
         // Notify all team members about the closure
         const teamIds = [
-          project.team?.projectManager,
+          project.team?.projectManagerId || project.team?.projectManager,
           ...((project.team as any)?.teamComposition ?? []).map((m: any) => m?.userId),
         ].filter((id): id is string => !!id && id !== currentUser?.id);
         if (teamIds.length > 0) {
@@ -532,7 +530,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         toast({ title: 'Project Reopened', description: `"${project.name}" has been restored.` });
         // Notify all team members about the reopen
         const teamIds = [
-          project.team?.projectManager,
+          project.team?.projectManagerId || project.team?.projectManager,
           ...((project.team as any)?.teamComposition ?? []).map((m: any) => m?.userId),
         ].filter((id): id is string => !!id && id !== currentUser?.id);
         if (teamIds.length > 0) {
@@ -1164,7 +1162,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       <p className="text-xs text-muted-foreground uppercase tracking-wide">Project Manager</p>
                       <div className="flex items-center gap-1.5">
                         <UserCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-sm">{project.team?.projectManager || 'Not assigned'}</span>
+                    <span className="text-sm">{project.team?.projectManagerId || project.team?.projectManager || 'Not assigned'}</span>
                       </div>
                     </div>
 
@@ -1804,7 +1802,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 onEditBudget={() => setEditBudgetOpen(true)}
                 currentUserId={currentUser?.id}
                 isAdmin={isAdminUser}
-                projectManagerId={project.team?.projectManager}
+                projectManagerId={project.team?.projectManagerId || project.team?.projectManager}
                 teamComposition={project.team?.teamComposition || []}
               />
               <EditProjectBudgetDialog
@@ -1815,7 +1813,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 open={editBudgetOpen}
                 onOpenChange={setEditBudgetOpen}
                 onSuccess={() => refreshProjectBudgets()}
-                projectManagerId={project.team?.projectManager}
+                projectManagerId={project.team?.projectManagerId || project.team?.projectManager}
                 currentUserId={currentUser?.id}
                 currentUserName={currentUser?.fullName}
                 teamComposition={project.team?.teamComposition || []}
