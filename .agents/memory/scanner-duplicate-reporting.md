@@ -14,3 +14,9 @@ Saved scanner records must retain the complete extracted details, user notes, ve
 **Why:** The user asked to make sure Save keeps all information, including while a scan is slow or incomplete.
 
 **How to apply:** Do not silently drop failed/incomplete rows or repeated transaction IDs. Explain when re-uploading an original image is required instead of implying that a saved data record includes the image itself.
+
+Historical duplicate evidence is advisory, not authority to subtract earlier-session amounts from a current export.
+
+**Why:** Count-once totals describe the exported dataset. Saved sessions can overlap and access permissions may hide other sessions, so historical evidence cannot establish a complete global total.
+
+**How to apply:** Preserve the existing exported-dataset totals and explicitly describe the scope of historical warnings; never claim inaccessible sessions were checked.

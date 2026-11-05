@@ -19,7 +19,7 @@ import { ToastAction } from '@/components/ui/toast';
 import { ensureValidSession } from '@/lib/session-health';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
-import { analyzeTransactionDuplicates } from '@/utils/transactionDuplicates';
+import { analyzeTransactionDuplicates, compareHistoricalTransactions, lookupHistoricalTransactions, transactionDuplicateKey, type HistoricalTransactionMatch } from '@/utils/transactionDuplicates';
 import { appendScannerDuplicateSheets } from '@/utils/scannerDuplicateSheets';
 import { scannerRequest } from '@/utils/scannerRequest';
 import { createScannerQueue, restoreScannerRows, scannerSavedTotal, serializeScannerRows } from '@/utils/scannerSession';
@@ -407,7 +407,7 @@ function computeUniqueRecipients(sourceRows: Array<any>) {
 
 export default function TransactionScanner() {
   const { toast } = useToast();
-  const { checkPermission } = useAuthorization();
+  const { checkPermission, currentUser } = useAuthorization();
   const canExport = checkPermission('transactions', 'export');
 
   const handleExportToExcel = (rows: Array<Partial<TxRow> & Record<string, any>>, sessionName?: string) => {
@@ -421,6 +421,16 @@ export default function TransactionScanner() {
   };
 
   const [rows, setRows] = useState<TxRow[]>([]);
+  const latestRowsRef = useRef(rows);
+  latestRowsRef.current = rows;
+  const sessionLoadRequestRef = useRef(0);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [historyRetry, setHistoryRetry] = useState(0);
+  const [historyState, setHistoryState] = useState<{
+    key: string; loading: boolean; error?: string;
+    matches: HistoricalTransactionMatch[]; limitedIds: string[];
+  }>({ key: '', loading: false, matches: [], limitedIds: [] });
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const [savedSessions, setSavedSessions] = useState<SavedSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
@@ -469,6 +479,38 @@ export default function TransactionScanner() {
   const duplicateAudit = analyzeTransactionDuplicates(doneRows);
   const duplicateIds = new Set(duplicateAudit.details
     .filter(item => item.occurrences > 1).map(item => item.id));
+  const historyIds = JSON.stringify([...new Set(doneRows.map(transactionDuplicateKey).filter(Boolean))].sort());
+  const historyKey = JSON.stringify([historyIds, activeSessionId, currentUser?.id, historyRevision, historyRetry]);
+  const historyCurrent = historyState.key === historyKey;
+  const historyMatches = historyCurrent ? historyState.matches : [];
+  const historicalAudit = doneRows.map(row => ({
+    row, evidence: compareHistoricalTransactions(row, historyMatches),
+  })).filter(item => item.evidence.length > 0);
+  const historicalRowIds = new Set(historicalAudit.map(item => item.row.id));
+
+  useEffect(() => {
+    let cancelled = false;
+    setHistoryState({ key: historyKey, loading: true, matches: [], limitedIds: [] });
+    const timer = setTimeout(async () => {
+      try {
+        const result = await lookupHistoricalTransactions(JSON.parse(historyIds), async batch => {
+          if (cancelled) throw new Error('Historical lookup cancelled');
+          const { data, error } = await supabase.rpc('find_bank_scan_receipt_matches', {
+            p_transaction_ids: batch, p_exclude_session_id: activeSessionId,
+          });
+          if (error) throw error;
+          return (data ?? []) as HistoricalTransactionMatch[];
+        });
+        if (!cancelled) setHistoryState({ key: historyKey, loading: false, ...result });
+      } catch (error) {
+        if (!cancelled) setHistoryState({
+          key: historyKey, loading: false, matches: [], limitedIds: [],
+          error: error instanceof Error ? error.message : String((error as { message?: string })?.message || error),
+        });
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [historyKey, historyIds, activeSessionId]);
 
   // Unique recipients for the filtered export dialog — derived from filterExportSource
   const filterUniqueRecipients = useMemo(() => computeUniqueRecipients(filterExportSource), [filterExportSource]);
@@ -527,7 +569,7 @@ export default function TransactionScanner() {
     try {
       const { data, error } = await supabase
         .from('bank_transaction_scans')
-        .select('id, session_name, scanned_at, receipt_count, total_amount, receipts')
+        .select('id, session_name, scanned_at, receipt_count, total_amount')
         .order('scanned_at', { ascending: false })
         .limit(50);
       if (error) {
@@ -536,6 +578,7 @@ export default function TransactionScanner() {
         return;
       }
       setSavedSessions((data || []) as SavedSession[]);
+      setHistoryRevision(value => value + 1);
     } catch (err: any) {
       console.error('[TransactionScanner] loadSessions caught:', err);
       setSessionsError(err.message || 'Unknown error loading records');
@@ -583,6 +626,7 @@ export default function TransactionScanner() {
       toast({ title: 'Session saved', description: `${receiptsToSave.length} rows saved, including notes, verification, status and duplicates${name ? ` as "${name}"` : ''}.` });
       setSaveDialogOpen(false);
       setAutoSaved(true);
+      setActiveSessionId(data.id);
       await loadSessions();
     } catch (err: any) {
       console.error('[TransactionScanner] Save caught error:', err);
@@ -611,6 +655,7 @@ export default function TransactionScanner() {
       });
       setSaveDialogOpen(false);
       setAutoSaved(true);
+      setActiveSessionId(targetId);
       await loadSessions();
     } catch (err: any) {
       console.error('[TransactionScanner] Append error:', err);
@@ -628,6 +673,7 @@ export default function TransactionScanner() {
     if (error) { toast({ title: 'Delete failed', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Session deleted' });
     setSavedSessions(prev => prev.filter(s => s.id !== id));
+    setHistoryRevision(value => value + 1);
   }, [toast]);
 
   const deleteSession = useCallback((id: string) => {
@@ -638,6 +684,31 @@ export default function TransactionScanner() {
       action: <ToastAction altText="Confirm deletion" onClick={() => doDeleteSession(id)}>Delete</ToastAction>,
     });
   }, [toast, doDeleteSession]);
+
+  const fetchSession = useCallback(async (id: string): Promise<SavedSession> => {
+    const { data, error } = await supabase.from('bank_transaction_scans')
+      .select('id, session_name, scanned_at, receipt_count, total_amount, receipts')
+      .eq('id', id).single();
+    if (error) throw error;
+    return data as SavedSession;
+  }, []);
+
+  const withSavedSession = async (id: string, action: (session: SavedSession) => void, replacingRows = false) => {
+    const snapshot = latestRowsRef.current;
+    const request = replacingRows ? ++sessionLoadRequestRef.current : 0;
+    try {
+      const session = await fetchSession(id);
+      if (replacingRows && request !== sessionLoadRequestRef.current) return;
+      if (replacingRows && snapshot !== latestRowsRef.current) {
+        toast({ title: 'Current scan changed', description: 'The saved session was not loaded because current rows changed while it was opening. Try loading it again.' });
+        return;
+      }
+      action(session);
+    }
+    catch (error) {
+      toast({ title: 'Saved session unavailable', description: (error as { message?: string }).message || 'This session may have been deleted or access changed.', variant: 'destructive' });
+    }
+  };
 
   const loadSession = useCallback((session: SavedSession) => {
     if (processing) {
@@ -660,6 +731,7 @@ export default function TransactionScanner() {
       fileName: r.fileName,
     }));
     setRows(restored);
+    setActiveSessionId(session.id);
     setAutoSaved(true);
     setQuotaError(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -874,7 +946,7 @@ export default function TransactionScanner() {
     }
   }, [doneRows, grandTotal, dateRange, toast]);
 
-  const clearAll = () => { setRows([]); fileMapRef.current.clear(); setQuotaError(null); setAutoSaved(false); setSearchText(''); setFilterRecipient(''); setSortColumn(null); };
+  const clearAll = () => { setRows([]); setActiveSessionId(null); fileMapRef.current.clear(); setQuotaError(null); setAutoSaved(false); setSearchText(''); setFilterRecipient(''); setSortColumn(null); };
 
   const SortTh = ({ col, label, align = 'left' }: { col: string; label: string; align?: string }) => (
     <th
@@ -1030,6 +1102,57 @@ export default function TransactionScanner() {
         )}
 
         {/* Duplicate warning banner */}
+        {doneRows.length > 0 && (
+          <section className="rounded-lg border border-amber-300 bg-amber-50/60 dark:bg-amber-950/20 p-4 space-y-2" aria-label="Saved scan duplicate check">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-semibold text-sm">Matches in other saved scans</h3>
+              <Button variant="ghost" size="sm" onClick={() => setHistoryRetry(value => value + 1)}>Check again</Button>
+            </div>
+            {!historyCurrent || historyState.loading ? (
+              <p className="text-sm" role="status">Checking accessible saved sessions…</p>
+            ) : historyState.error ? (
+              <p className="text-sm text-red-700" role="alert">
+                Historical check unavailable: {historyState.error}. No conclusion about earlier receipts can be made.
+                {' '}If the lookup is missing, apply the scanner historical duplicates SQL migration.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm">
+                  {historicalAudit.length ? `${historicalAudit.length} current receipt rows match other accessible saved scans.` : 'No matching transaction IDs found in other accessible saved scans.'}
+                  {' '}The loaded/saved session itself is excluded. Inaccessible sessions are not checked or disclosed.
+                  {' '}All rows are kept; historical warnings do not change current-dataset count-once export totals.
+                </p>
+                {historyState.limitedIds.length > 0 && (
+                  <p className="text-sm font-medium" role="status">
+                    Showing only the first 20 matching receipts per transaction ID for: {historyState.limitedIds.join(', ')}. More accessible evidence exists.
+                  </p>
+                )}
+                {historicalAudit.map(({ row, evidence }) => (
+                  <details key={row.id} className="text-xs border-t border-amber-200 pt-2">
+                    <summary className="cursor-pointer font-medium">
+                      {row.transaction_id} — {evidence.some(item => item.conflict) ? 'Conflicting OCR/account/amount evidence — review' : 'Repeated evidence'}
+                      {' '}({evidence.length} saved receipt matches; current: {row.from_account || '—'} → {row.to_account || '—'}{isColVisible('amount') ? `, ${String(row.amount)} SDG` : ''})
+                    </summary>
+                    <ul className="space-y-2 pt-2">
+                      {evidence.map(({ match, conflict, differences }) => (
+                        <li key={`${match.session_id}:${match.receipt_ordinal}`} className="break-words">
+                          <strong>{conflict ? `CONFLICT: ${differences.join(', ')}` : 'Repeated evidence — same accounts, amount and OCR values'}</strong>
+                          <div>Transaction: {match.transaction_id} | From: {match.from_account || '—'} | To: {match.to_account || '—'}{isColVisible('amount') && <> | Amount: {match.amount ?? '—'} SDG</>} | Recipient: {match.recipient_name || '—'}</div>
+                          <div>Date/time OCR: {match.transaction_date || '—'} {match.transaction_time || '—'}</div>
+                          <button className="underline text-left" title="Load this saved session, replacing the current rows"
+                            onClick={() => withSavedSession(match.session_id, loadSession, true)}>
+                            Saved session: {match.session_name || 'Untitled scan'} — {match.scanned_at} — {match.session_id} (receipt {match.receipt_ordinal}) · Load
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ))}
+              </>
+            )}
+          </section>
+        )}
+
         {duplicateIds.size > 0 && (
           <div className="rounded-xl border border-amber-400 bg-amber-50 dark:bg-amber-950/20 p-4 flex items-start gap-3">
             <CopyX className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
@@ -1148,7 +1271,7 @@ export default function TransactionScanner() {
                     const isErr = row.status === 'error';
                     const isPending = row.status === 'pending';
                     const isProcessing = row.status === 'processing';
-                    const isDuplicate = isDone && !!row.transaction_id && duplicateIds.has(row.transaction_id.trim());
+                    const isDuplicate = isDone && (duplicateIds.has(row.transaction_id.trim()) || historicalRowIds.has(row.id));
                     const isLowConfidence = isDone && !isDuplicate && row.amount_confidence !== undefined && row.amount_confidence < 90;
                     const isSelected = selectedRowId === row.id;
                     const hasFile = fileMapRef.current.has(row.id);
@@ -1448,28 +1571,31 @@ export default function TransactionScanner() {
                       <td className="px-4 py-2.5">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
-                            onClick={() => loadSession(session)}
+                            onClick={() => withSavedSession(session.id, loadSession, true)}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded text-[#1D3461] bg-[#1D3461]/10 hover:bg-[#1D3461]/20 transition-colors font-medium"
                             title="Load this session"
                           >
                             <FolderOpen className="h-3 w-3" /> Load
                           </button>
                           <button
-                            onClick={() => {
-                              const src = session.receipts || [];
+                            onClick={() => withSavedSession(session.id, loaded => {
+                              const src = loaded.receipts || [];
                               const recs = computeUniqueRecipients(src);
                               setFilterExportSource(src);
                               setFilterExportSessionName(session.session_name || undefined);
                               setSelectedAccounts(new Set(recs.map(r => r.account || r.name)));
                               setFilterExportOpen(true);
-                            }}
+                            })}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors font-medium"
                             title="Filter export by account"
                           >
                             <Filter className="h-3 w-3" /> Filter
                           </button>
                           <button
-                            onClick={() => handleExportToExcel(session.receipts, session.session_name || undefined)}
+                            onClick={() => {
+                              if (checkPermission('transactions', 'export')) void withSavedSession(session.id,
+                                loaded => handleExportToExcel(loaded.receipts, loaded.session_name || undefined));
+                            }}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded text-[#1D3461] bg-[#1D3461]/10 hover:bg-[#1D3461]/20 transition-colors font-medium"
                             title="Download all as Excel"
                           >
