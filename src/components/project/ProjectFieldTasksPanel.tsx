@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { assigneeBreakdownRows, assigneeSummaryRows, formatTaskCost, taskAssigneeIds, taskCurrencyLabel } from '@/utils/projectTaskReporting';
+import { ProjectTaskReviewPanel } from './ProjectTaskReviewPanel';
 import { useSearchParams } from 'react-router-dom';
 import {
   Plus, X, MapPin, Calendar, User, Flag, Trash2,
@@ -604,6 +605,12 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   const [deps,          setDeps]          = useState<string[]>(initial?.dependencies ?? []);
   const [depsMeta, setDepsMeta] = useState<Record<string, { type: DepType; lag: number }>>({});
   const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>(initial?.coAssigneeIds ?? []);
+  const [reviewRequired, setReviewRequired] = useState(initial?.reviewRequired ?? false);
+  const [reviewerId, setReviewerId] = useState(initial?.reviewerId || '');
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState(initial?.acceptanceCriteria || '');
+  useEffect(() => {
+    if (open) { setReviewRequired(initial?.reviewRequired ?? false); setReviewerId(initial?.reviewerId || ''); setAcceptanceCriteria(initial?.acceptanceCriteria || ''); }
+  }, [open, initial?.id, initial?.reviewRequired, initial?.reviewerId, initial?.acceptanceCriteria]);
   const [resources,     setResources]     = useState<ResourceLine[]>(initial?.resources ?? []);
   const [assigneeHours, setAssigneeHours] = useState<Record<string, { allocated: string; actual: string; ratePerHour: string }>>(
     () => Object.fromEntries(
@@ -787,6 +794,9 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
 
     await onSave({
       title: title.trim(),
+      reviewRequired,
+      reviewerId: reviewRequired ? reviewerId || null : null,
+      acceptanceCriteria: reviewRequired ? acceptanceCriteria.trim() : null,
       description: description.trim() || undefined,
       priority, status,
       assignedTo: assignedTo || null,
@@ -854,6 +864,13 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
           <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
             {/* ── BASIC TAB ── */}
             <TabsContent value="basic" className="space-y-4 mt-0">
+              <div className="rounded border p-3 space-y-2 text-xs">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={reviewRequired} onChange={e => setReviewRequired(e.target.checked)} /> Require independent acceptance before project closure</label>
+                {reviewRequired && <>
+                  <AssigneeSelector value={reviewerId || null} candidates={teamCandidates.filter(person => ![assignedTo, ...coAssigneeIds].includes(person.id))} onChange={id => setReviewerId(id || '')} />
+                  <Textarea aria-label="Acceptance criteria" value={acceptanceCriteria} onChange={e => setAcceptanceCriteria(e.target.value)} placeholder="What must be delivered and how should it be verified?" />
+                </>}
+              </div>
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Task Title *</Label>
                 <Input placeholder="e.g. Visit 5 sites in Kassala State" value={title} onChange={e => setTitle(e.target.value)} className="h-9" autoFocus />
@@ -1928,6 +1945,7 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
           <div className="flex-1 overflow-y-auto py-4 pr-1 space-y-4">
             {/* ── OVERVIEW ── */}
             <TabsContent value="overview" className="space-y-4 mt-0">
+              <ProjectTaskReviewPanel task={task} />
               {task.description && (
                 <div className="rounded-lg bg-muted/30 px-4 py-3">
                   <p className="text-sm text-foreground whitespace-pre-wrap">{task.description}</p>

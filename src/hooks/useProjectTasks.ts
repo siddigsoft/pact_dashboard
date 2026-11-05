@@ -21,6 +21,9 @@ export interface ResourceLine {
 }
 
 export interface FieldTask {
+  reviewRequired?: boolean;
+  reviewerId?: string | null;
+  acceptanceCriteria?: string | null;
   id: string;
   projectId: string;
   title: string;
@@ -62,6 +65,9 @@ export interface FieldTask {
 }
 
 export interface CreateFieldTask {
+  reviewRequired?: boolean;
+  reviewerId?: string | null;
+  acceptanceCriteria?: string | null;
   title: string;
   description?: string;
   priority: FieldTaskPriority;
@@ -279,6 +285,9 @@ export function useProjectTasks(projectId: string) {
         .from('project_field_tasks')
         .insert({
           project_id: projectId,
+          review_required: task.reviewRequired ?? false,
+          reviewer_id: task.reviewerId ?? null,
+          acceptance_criteria: task.acceptanceCriteria ?? null,
           title: task.title,
           description: task.description ?? null,
           priority: task.priority,
@@ -364,6 +373,9 @@ export function useProjectTasks(projectId: string) {
       prevCoAssigneeIds?: string[];
     }) => {
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (patch.reviewRequired !== undefined) updates.review_required = patch.reviewRequired;
+      if (patch.reviewerId !== undefined) updates.reviewer_id = patch.reviewerId;
+      if (patch.acceptanceCriteria !== undefined) updates.acceptance_criteria = patch.acceptanceCriteria;
       if (patch.title          !== undefined) updates.title           = patch.title;
       if (patch.description    !== undefined) updates.description     = patch.description;
       if (patch.priority       !== undefined) updates.priority        = patch.priority;
@@ -457,13 +469,16 @@ export function useProjectTasks(projectId: string) {
       if (patch.status !== undefined && task && currentUserName && projectName) {
         const recipients = stakeholderIds(task, currentUserId);
         if (patch.status === 'done') {
+          const needsReview = patch.reviewRequired ?? task.reviewRequired;
+          const reviewer = patch.reviewerId ?? task.reviewerId;
+          const reviewRecipients = needsReview && reviewer ? [...new Set([...recipients, reviewer])] : recipients;
           notifyFieldTaskActivity({
-            event: 'project_task_completed',
-            recipientIds: recipients,
-            titleEn: 'Field task completed',
-            titleAr: 'اكتملت مهمة ميدانية',
-            messageEn: `${currentUserName} marked field task "${task.title}" in "${projectName}" as completed.`,
-            messageAr: `قام ${currentUserName} بتحديد المهمة الميدانية "${task.title}" في "${projectName}" كمنجزة.`,
+            event: needsReview ? 'project_task_status_changed' : 'project_task_completed',
+            recipientIds: reviewRecipients,
+            titleEn: needsReview ? 'Field task submitted for acceptance' : 'Field task completed',
+            titleAr: needsReview ? 'مهمة ميدانية بانتظار المراجعة' : 'اكتملت مهمة ميدانية',
+            messageEn: `${currentUserName} marked "${task.title}" in "${projectName}" as done.${needsReview ? ' Independent acceptance is still required from the designated reviewer.' : ''}`,
+            messageAr: `قام ${currentUserName} بتحديث المهمة "${task.title}" في "${projectName}".${needsReview ? ' بانتظار المراجعة والقبول المستقل.' : ''}`,
             projectId,
             projectName,
             taskTitle: task.title,

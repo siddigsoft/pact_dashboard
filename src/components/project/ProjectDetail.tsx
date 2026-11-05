@@ -69,7 +69,8 @@ import ProjectChangeLogPanel from './ProjectChangeLogPanel';
 import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import ProjectRisksPanel from './ProjectRisksPanel';
 import { ProjectWeeklyDashboard } from './ProjectWeeklyDashboard';
-import { useProjectCloseReadiness } from '@/hooks/useProjectCloseReadiness';
+import { ProjectLifecycleDialog } from './ProjectLifecycleDialog';
+import { ProjectCapacityPanel } from './ProjectCapacityPanel';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { logAuditEvent } from '@/utils/audit-logger';
 import { ProjectDeliverablesChecklist } from './ProjectDeliverablesChecklist';
@@ -365,7 +366,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
   const [isArchiving, setIsArchiving] = useState(false);
   const [showCloseChecklist, setShowCloseChecklist] = useState(false);
-  const projectReadiness = useProjectCloseReadiness(null);
+  const [showProjectRemoval, setShowProjectRemoval] = useState(false);
   const isSuperAdminUser = isSuperAdmin();
   const [teamViewMode, setTeamViewMode] = useState<'grid' | 'list' | 'table'>('grid');
   const [partnerName, setPartnerName] = useState<string | null>(null);
@@ -1001,42 +1002,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </Button>
               )}
               {onDelete && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive"
-                      disabled={!!deleting}
-                    >
-                      <Trash2 className="h-4 w-4 mr-1.5" /> Delete
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Are you sure you want to delete this project?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete the project "{project.name}" and all associated data including activities, team members, and progress tracking.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={onDelete}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        disabled={!!deleting}
-                      >
-                        {deleting ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Deleting...
-                          </>
-                        ) : (
-                          "Delete Project"
-                        )}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <Button variant="outline" size="sm" className="text-destructive" disabled={!!deleting} onClick={() => setShowProjectRemoval(true)}>
+                  <Trash2 className="h-4 w-4 mr-1.5" /> Remove
+                </Button>
               )}
             </div>
           </div>
@@ -1541,6 +1509,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
         
         <TabsContent value="team" className="space-y-4 mt-4">
+          {canArchive && <ProjectCapacityPanel projectId={project.id} archived={isArchived} />}
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold flex items-center gap-2">
               Team Members
@@ -2062,6 +2031,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         </DialogContent>
       </Dialog>
+      <ProjectLifecycleDialog open={showCloseChecklist} mode="close" projectId={project.id} projectName={project.name} onClose={() => setShowCloseChecklist(false)} />
+      <ProjectLifecycleDialog open={showProjectRemoval} mode="delete" projectId={project.id} projectName={project.name} onClose={() => setShowProjectRemoval(false)} onDelete={onDelete} />
       {/* ── Inline project chat drawer ── */}
       <ProjectChatDrawer
         open={chatDrawerOpen}

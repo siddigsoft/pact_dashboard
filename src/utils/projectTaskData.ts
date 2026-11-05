@@ -6,7 +6,7 @@ export const FIELD_TASK_COLUMNS = `
   assigned_to, assigned_to_name, co_assignee_ids, due_date, start_date, state_name, locality_name,
   stage_id, notes, created_by, created_at, updated_at,
   estimated_hours, actual_hours, weight, estimated_cost, actual_cost, percent_complete,
-  dependencies, resources, assignee_hours,
+  dependencies, resources, assignee_hours, review_required, reviewer_id, acceptance_criteria,
   baseline_start, baseline_due, baseline_hours, baseline_cost, baseline_set_at,
   creator:profiles!project_field_tasks_created_by_fkey(full_name)
 `;
@@ -41,6 +41,7 @@ export async function withTaskRequestDeadline<T>(
 
 export function projectTaskFromRow(r: any): FieldTask {
   return {
+    reviewRequired: r.review_required ?? false, reviewerId: r.reviewer_id ?? null, acceptanceCriteria: r.acceptance_criteria ?? null,
     id: r.id, projectId: r.project_id, title: r.title,
     description: r.description, priority: r.priority, status: r.status,
     assignedTo: r.assigned_to, assignedToName: r.assigned_to_name || null,

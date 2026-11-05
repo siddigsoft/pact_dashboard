@@ -4,6 +4,7 @@
  * Exports to formatted Excel (ExcelJS) or PDF (jsPDF).
  */
 import { useState, useEffect } from 'react';
+import { ProjectPeriodicReports } from './ProjectPeriodicReports';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -94,6 +95,7 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
   const [advances, setAdvances] = useState<Advance[]>([]);
   const [preFunds, setPreFunds] = useState<PreFundRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
 
@@ -106,6 +108,7 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
 
   const loadData = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const [costsRes, advsRes, pfRes] = await Promise.all([
         supabase.from('operational_cost_submissions')
@@ -121,11 +124,13 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
           .eq('project_id', project.id)
           .order('created_at', { ascending: false }),
       ]);
+      for (const result of [costsRes, advsRes, pfRes]) if (result.error) throw result.error;
       setOpsCosts((costsRes.data || []) as OpsCost[]);
       setAdvances((advsRes.data || []) as Advance[]);
       setPreFunds((pfRes.data || []) as PreFundRow[]);
     } catch (e) {
       console.error('ProjectReportsTab loadData error:', e);
+      setLoadError(e instanceof Error ? e.message : (e as any)?.message || 'Report data could not be loaded. Refresh to retry.');
     } finally {
       setLoading(false);
     }
@@ -477,6 +482,8 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
 
   return (
     <div className="space-y-5">
+      {loadError && <p role="alert" className="text-sm text-destructive">Report refresh failed: {loadError}. Do not treat missing or previous values as current totals.</p>}
+      <ProjectPeriodicReports project={project} />
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

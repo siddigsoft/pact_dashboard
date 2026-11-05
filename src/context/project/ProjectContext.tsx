@@ -740,15 +740,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteProject = async (id: string) => {
     const session = await ensureValidSession();
-    if (!session.success) return;
+    if (!session.success) throw new Error('Your session expired. Sign in again before deleting.');
     try {
       // Snapshot project info for audit before delete
       const snapshot = projects.find(p => p.id === id);
 
-      const { error } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', id);
+      if (!snapshot?.name) throw new Error('Reload the project before confirming removal.');
+      const { error } = await supabase.rpc('delete_empty_project_safely', {
+        p_id: id, p_confirmation: snapshot.name,
+      });
         
       if (error) {
         throw new Error(error.message);
@@ -808,9 +808,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setError(err instanceof Error ? err.message : 'Failed to delete project');
       toast({
         title: "Error",
-        description: "Failed to delete project. Please try again.",
+        description: err instanceof Error ? err.message : "Failed to delete project.",
         variant: "destructive",
       });
+      throw err;
     }
   };
 
