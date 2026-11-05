@@ -62,12 +62,7 @@ export function MobileNotificationView({
 
   const triggerHaptics = useCallback(async () => {
     if (!hapticsEnabled) return;
-    try {
-      const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
-      await Haptics.impact({ style: ImpactStyle.Medium });
-    } catch {
-      // Haptics not available (web or missing plugin)
-    }
+    if ('vibrate' in navigator) navigator.vibrate(30);
   }, [hapticsEnabled]);
 
   // Detect new notifications and trigger popup, sound, haptics (skip initial render)

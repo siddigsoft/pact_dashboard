@@ -577,7 +577,7 @@ export const ProjectManagerZone: React.FC = () => {
           subtitle={`${siteVisitStats.completionRate}% completed`}
           icon={MapPin}
           color="cyan"
-          onClick={() => navigate('/site-visits')}
+          onClick={() => navigate('/field-ops')}
           data-testid="card-stat-site-visits"
         />
         <GradientStatCard
@@ -1241,7 +1241,7 @@ export const ProjectManagerZone: React.FC = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="cursor-pointer hover:bg-muted/50" onClick={() => navigate('/site-visits')}>
+                <Card className="cursor-pointer hover:bg-muted/50" onClick={() => navigate('/field-ops')}>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <MapPin className="h-5 w-5 text-blue-600" />

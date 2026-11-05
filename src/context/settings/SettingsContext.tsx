@@ -18,6 +18,16 @@ export type QuietHoursSettings = {
   enabled: boolean;
   startHour: number;
   endHour: number;
+  timeZone?: string;
+};
+
+export const isInQuietHours = (quietHours: QuietHoursSettings, now = new Date()): boolean => {
+  if (!quietHours.enabled) return false;
+  const hour = now.getHours();
+  const { startHour, endHour } = quietHours;
+  return startHour <= endHour
+    ? hour >= startHour && hour < endHour
+    : hour >= startHour || hour < endHour;
 };
 
 export type NotificationSettings = {
@@ -201,7 +211,11 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
   
   const updateNotificationSettings = async (settings: NotificationSettings) => {
-    await updateUserSettings({ notificationPreferences: settings });
+    // The server evaluates quiet hours, so it needs the recipient's own time zone.
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    await updateUserSettings({
+      notificationPreferences: { ...settings, quietHours: { ...settings.quietHours, timeZone } },
+    });
   };
   
   const updateAppearanceSettings = async (settings: AppearanceSettings) => {

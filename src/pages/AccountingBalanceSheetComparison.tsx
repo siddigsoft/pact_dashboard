@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -34,9 +33,8 @@ async function fetchBalances(year: number): Promise<Record<string, number>> {
 }
 
 export default function AccountingBalanceSheetComparison() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
 
   const currentYear = new Date().getFullYear();
   const [year1, setYear1] = useState(String(currentYear));
@@ -66,7 +64,7 @@ export default function AccountingBalanceSheetComparison() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void run(); }, [allowed, year1, year2]);
+  useEffect(() => { void run(); }, [year1, year2]);
 
   const groups = useMemo(() => {
     const g: Record<string, BSRow[]> = {};
@@ -78,7 +76,6 @@ export default function AccountingBalanceSheetComparison() {
     (groups[type] ?? []).reduce((s, r) => s + r[field], 0);
 
   if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const TYPE_LABELS: Record<string, string> = { asset: 'Assets', liability: 'Liabilities', equity: 'Equity' };
   const TYPE_COLORS: Record<string, string> = { asset: 'text-blue-700', liability: 'text-rose-700', equity: 'text-emerald-700' };

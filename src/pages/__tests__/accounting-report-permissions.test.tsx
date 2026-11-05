@@ -32,10 +32,6 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
-vi.mock('@/components/financial/PageInfoBanner', () => ({
-  PageInfoBanner: ({ title }: { title: string }) => React.createElement('div', null, title),
-}));
-
 vi.mock('@/components/ui/page-loader', () => ({
   PageLoader: ({ label }: { label?: string }) => React.createElement('div', null, label),
 }));

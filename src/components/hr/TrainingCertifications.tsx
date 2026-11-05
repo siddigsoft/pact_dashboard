@@ -57,8 +57,10 @@ function getExpiryStatus(expiry: string | null): { label: string; color: string;
 export default function TrainingCertifications() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const { hasAnyRole } = useAuthorization();
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
+  const { checkPermission } = useAuthorization();
+  const canViewAll = checkPermission('training', 'read');
+  const canAddForOthers = checkPermission('training', 'create');
+  const canDeleteOthers = checkPermission('training', 'delete');
 
   const [certs, setCerts] = useState<Cert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,11 +73,11 @@ export default function TrainingCertifications() {
   const [users, setUsers] = useState<{ id: string; full_name: string }[]>([]);
   // Left blank for admins so they must explicitly pick a staff member instead of
   // silently defaulting to their own profile and logging the record on themselves.
-  const [targetUserId, setTargetUserId] = useState(isAdmin ? '' : (currentUser?.id ?? ''));
+  const [targetUserId, setTargetUserId] = useState(canAddForOthers ? '' : (currentUser?.id ?? ''));
 
   const load = async () => {
     setLoading(true);
-    const query = (isAdmin && userFilter === 'all')
+    const query = (canViewAll && userFilter === 'all')
       ? supabase.from('staff_certifications').select('*').order('created_at', { ascending: false })
       : supabase.from('staff_certifications').select('*').eq('user_id', currentUser?.id).order('created_at', { ascending: false });
 
@@ -93,12 +95,13 @@ export default function TrainingCertifications() {
   useEffect(() => { load(); }, [currentUser?.id, userFilter]);
 
   useEffect(() => {
-    if (isAdmin && dialogOpen) {
+    if (canAddForOthers && dialogOpen) {
+      setTargetUserId('');
       supabase.from('profiles').select('id, full_name').order('full_name').then(({ data }) => {
         setUsers(data || []);
       });
     }
-  }, [isAdmin, dialogOpen]);
+  }, [canAddForOthers, dialogOpen]);
 
   const filtered = certs.filter(c => {
     if (typeFilter !== 'all' && c.cert_type !== typeFilter) return false;
@@ -127,11 +130,11 @@ export default function TrainingCertifications() {
 
   const submit = async () => {
     if (!form.title.trim()) { toast({ title: 'Title is required', variant: 'destructive' }); return; }
-    if (isAdmin && !targetUserId) { toast({ title: 'Please select a staff member', variant: 'destructive' }); return; }
+    if (canAddForOthers && !targetUserId) { toast({ title: 'Please select a staff member', variant: 'destructive' }); return; }
     setSaving(true);
     try {
       const payload: any = {
-        user_id: isAdmin ? targetUserId : currentUser?.id,
+        user_id: canAddForOthers ? targetUserId : currentUser?.id,
         title: form.title.trim(),
         issuing_org: form.issuing_org.trim() || null,
         cert_type: form.cert_type,
@@ -177,7 +180,7 @@ export default function TrainingCertifications() {
           </div>
         </div>
         <div className="flex gap-2">
-          {isAdmin && (
+          {canViewAll && (
             <Select value={userFilter} onValueChange={setUserFilter}>
               <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -285,7 +288,7 @@ export default function TrainingCertifications() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm text-gray-900 dark:text-white">{cert.title}</span>
                         <Badge className={cn('text-[10px] px-2', typeCfg.color)}>{typeCfg.label}</Badge>
-                        {isAdmin && cert.user_name && (
+                        {canViewAll && cert.user_name && (
                           <Badge variant="outline" className="text-[10px] px-2">{cert.user_name}</Badge>
                         )}
                       </div>
@@ -326,7 +329,7 @@ export default function TrainingCertifications() {
                         </a>
                       </Button>
                     )}
-                    {(isAdmin || cert.user_id === currentUser?.id) && (
+                    {(canDeleteOthers || cert.user_id === currentUser?.id) && (
                       <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteCert(cert.id)}>
                         <X className="h-3.5 w-3.5" />
                       </Button>
@@ -348,7 +351,7 @@ export default function TrainingCertifications() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-            {isAdmin && users.length > 0 && (
+            {canAddForOthers && users.length > 0 && (
               <div>
                 <Label>Staff Member</Label>
                 <Select value={targetUserId} onValueChange={setTargetUserId}>

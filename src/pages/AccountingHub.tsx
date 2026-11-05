@@ -536,7 +536,6 @@ export default function AccountingHub() {
       activeSectionId={section}
       activeTabId={tab}
       activeTabDescription={activeTabDef.description}
-      quickLinks={['dashboard', 'finance', 'reports', 'my-tasks']}
       tourSlug="accounting-hub"
       onSectionClick={id => setTab(id as AcctTab)}
       onTabClick={id => setTab(id as AcctTab)}

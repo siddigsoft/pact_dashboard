@@ -75,13 +75,6 @@ interface TriggerNotificationOptions {
   emailDetails?: Array<{ label: string; value: string }>;
 }
 
-interface QuietHoursSettings {
-  enabled: boolean;
-  startHour: number;
-  endHour: number;
-  timezone?: string;
-}
-
 /**
  * Helper function to get CC emails for super admins and regular admins
  * Returns approved super admin and admin emails
@@ -153,51 +146,20 @@ const getAllCcEmails = async (hubId?: string): Promise<string[]> => {
   return allEmails;
 };
 
-const isWithinQuietHours = (quietHours: QuietHoursSettings): boolean => {
-  if (!quietHours.enabled) return false;
-  
-  const now = new Date();
-  const currentHour = now.getHours();
-  
-  const { startHour, endHour } = quietHours;
-  
-  if (startHour <= endHour) {
-    return currentHour >= startHour && currentHour < endHour;
-  } else {
-    return currentHour >= startHour || currentHour < endHour;
-  }
-};
-
+// Recipients' settings rows are private, so the check runs server-side and returns only yes/no.
 const shouldSendNotification = async (
   userId: string,
   category: NotificationCategory,
   priority: NotificationPriority
 ): Promise<boolean> => {
   try {
-    const { data: settings } = await supabase
-      .from('user_settings')
-      .select('settings')
-      .eq('user_id', userId)
-      .limit(1)
-      .single();
-
-    if (!settings?.settings?.notificationPreferences) {
-      return true;
-    }
-
-    const prefs = settings.settings.notificationPreferences;
-
-    if (!prefs.enabled) return false;
-
-    if (!prefs.categories?.[category]) return false;
-
-    if (prefs.quietHours && priority !== 'urgent') {
-      if (isWithinQuietHours(prefs.quietHours)) {
-        return false;
-      }
-    }
-
-    return true;
+    const { data, error } = await supabase.rpc('should_notify_user' as any, {
+      p_user_id: userId,
+      p_category: category,
+      p_priority: priority,
+    });
+    if (error) throw error;
+    return data !== false;
   } catch (error) {
     console.error('Error checking notification settings:', error);
     return true;

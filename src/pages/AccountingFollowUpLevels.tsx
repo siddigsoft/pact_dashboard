@@ -31,11 +31,10 @@ const ACTION_CONFIG: Record<string,{ label:string; icon: React.ElementType; cls:
 const BLANK = { name_en:'', delay_days:'0', action:'email', description:'', email_template:'', sequence:'10', is_active:true };
 
 export default function AccountingFollowUpLevels() {
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting } = useAuthorization();
   const { currentUser } = useUser();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin','admin','financialAdmin']);
-  const allowed   = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
+  const canManage = canWriteAccounting();
 
   const [levels, setLevels]     = useState<FollowUpLevel[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -51,7 +50,7 @@ export default function AccountingFollowUpLevels() {
     setLevels((data??[]) as FollowUpLevel[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const sf = (k: keyof typeof BLANK, v: any) => setForm(p=>({...p,[k]:v}));
 
@@ -85,7 +84,6 @@ export default function AccountingFollowUpLevels() {
     void load();
   };
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

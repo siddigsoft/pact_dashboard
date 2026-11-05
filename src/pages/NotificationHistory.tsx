@@ -10,7 +10,6 @@ import { useNavigate } from 'react-router-dom';
 import { Notification } from '@/types';
 import { format, isToday, isYesterday, isThisWeek, isThisMonth, subDays } from 'date-fns';
 import { Bell, Search, Download, Filter, Clock, AlertCircle, AlertTriangle, CheckCircle2, Info, ChevronRight, Calendar, X, Eye, EyeOff, Trash2 } from 'lucide-react';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useAuthorization } from '@/hooks/use-authorization';
 
 const ITEMS_PER_PAGE = 25;
@@ -126,11 +125,6 @@ export default function NotificationHistory() {
 
   return (
     <div className="space-y-6 p-6" data-testid="notification-history-page">
-      <PageInfoBanner
-        title="Notification History"
-        description="View and manage all your past notifications"
-        descriptionAr="عرض وإدارة جميع إشعاراتك السابقة"
-      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[

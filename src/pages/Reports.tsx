@@ -47,7 +47,6 @@ import ReportChart, {
   generateMMPProgressChartData,
   generateTeamPerformanceChartData,
 } from "@/components/reports/ReportChart";
-import { useAuthorization } from "@/hooks/use-authorization";
 import { useUserProjects } from "@/hooks/useUserProjects";
 import { ExecutiveDashboard } from "@/components/reports/ExecutiveDashboard";
 import { FinancialReports } from "@/components/reports/FinancialReports";
@@ -67,31 +66,6 @@ const Reports: FC = () => {
   const [activeTab, setActiveTab] = useState("directory");
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { checkPermission, hasAnyRole } = useAuthorization();
-  const canAccess = checkPermission('reports', 'read') || hasAnyRole(['admin']);
-  if (!canAccess) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-destructive">Access Denied</CardTitle>
-            <CardDescription>
-              You don't have permission to access this page.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="outline"
-              onClick={() => navigate('/dashboard')}
-              className="w-full"
-            >
-              Return to Dashboard
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [chartCanvas, setChartCanvas] = useState<HTMLCanvasElement | null>(null);

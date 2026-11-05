@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -21,7 +20,6 @@ import { format } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -64,10 +62,9 @@ const MIGRATION_NOTICE = (
 );
 
 export default function AccountingCostAllocation() {
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-cost-allocation', roleCanEdit);
 
@@ -241,7 +238,6 @@ export default function AccountingCostAllocation() {
   };
 
   if (!authReady) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const activeRulesCount = rules.filter(r => r.is_active).length;
   const rulesWithTargets = rules.filter(r => targets.some(t => t.rule_id === r.id)).length;
@@ -278,11 +274,6 @@ export default function AccountingCostAllocation() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Cost Allocation"
-        description="Define overhead pools with a source GL account and target accounts. Run Allocation securely validates the current fiscal period, posts a balanced allocation journal, and records the run only after posting succeeds."
-        descriptionAr="تعريف مجمعات التكاليف غير المباشرة وتوزيعها على الحسابات المستهدفة مع ترحيل قيود اليومية تلقائياً."
-      />
 
       {migrationNeeded ? MIGRATION_NOTICE : loading ? (
         <PageLoader compact />

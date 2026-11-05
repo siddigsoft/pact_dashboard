@@ -144,10 +144,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const DIRECTORY_STALE_MS = 5 * 60 * 1000;
   const DIRECTORY_FETCHED_KEY = 'pact-users-directory-fetched-at';
   const directoryRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const directoryFetchRef = useRef<Promise<void> | null>(null);
   const appUsersLenRef = useRef(0);
   appUsersLenRef.current = appUsers.length;
 
-  const refreshUsers = async (opts?: { force?: boolean }) => {
+  const fetchUsersDirectory = async (opts?: { force?: boolean }) => {
     try {
       if (!opts?.force) {
         try {
@@ -299,13 +300,20 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Only update if the fresh record has a real name value worth keeping
           const freshName = fresh.fullName || fresh.name;
           if (!freshName || freshName === prev.id) return prev;
+          const fullName = fresh.fullName || prev.fullName;
+          const avatar = fresh.avatar || prev.avatar;
+          const phone = fresh.phone || prev.phone;
+          const employeeId = fresh.employeeId || prev.employeeId;
+          if (prev.name === freshName && prev.fullName === fullName &&
+              prev.avatar === avatar && prev.phone === phone &&
+              prev.employeeId === employeeId) return prev;
           const next = {
             ...prev,
             name: freshName,
-            fullName: fresh.fullName || prev.fullName,
-            avatar: fresh.avatar || prev.avatar,
-            phone: fresh.phone || prev.phone,
-            employeeId: fresh.employeeId || prev.employeeId,
+            fullName,
+            avatar,
+            phone,
+            employeeId,
           };
           try {
             localStorage.setItem('PACTCurrentUser', JSON.stringify(next));
@@ -318,13 +326,19 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  useEffect(() => {
-    // ponytail: only network-fetch the full directory when local cache is empty.
-    // Warm sessions use localStorage seed; Users / admins call refreshUsers({ force: true }).
-    if (appUsersLenRef.current === 0) {
-      void refreshUsers({ force: true });
-    }
+  // Session restoration and SIGNED_IN can both request the directory at once.
+  // Share the in-flight fetch so they do not download and serialize it twice.
+  const refreshUsers = (opts?: { force?: boolean }): Promise<void> => {
+    if (directoryFetchRef.current && !opts?.force) return directoryFetchRef.current;
+    const request = fetchUsersDirectory(opts);
+    directoryFetchRef.current = request;
+    void request.finally(() => {
+      if (directoryFetchRef.current === request) directoryFetchRef.current = null;
+    });
+    return request;
+  };
 
+  useEffect(() => {
     const scheduleDirectoryRefresh = () => {
       if (directoryRefreshTimerRef.current) return;
       // Skip realtime full-table reload when directory was never loaded this session
@@ -605,7 +619,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Fetch user's active classification
       const { data: classificationData } = await supabase
-        .from('user_classifications')
+        .from('user_classification_retainers' as any)
         .select('classification_level, role_scope, has_retainer, retainer_amount_cents, retainer_currency, effective_from, effective_until')
         .eq('user_id', authUser.id)
         .eq('is_active', true)
@@ -831,11 +845,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session?.user) {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) await setUserFromAuthUser(user);
-          // Fetch full user list now that we know the session is live.
-          // refreshUsers() is also called on mount but may have raced ahead
-          // of session restoration and returned early — this guarantees it runs
-          // at least once with a valid session.
-          refreshUsers();
+          // Fetch the directory only after the session is confirmed.
+          void refreshUsers();
         } else {
           // Only clear user if we're online - preserve session when offline
           if (navigator.onLine) {
@@ -1585,8 +1596,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         locality_id: updatedUser.localityId,
         employee_id: updatedUser.employeeId,
         phone: updatedUser.phone,
-        bank_account: (updatedUser as any).bankAccount || null,
       };
+      // undefined = bank details weren't loaded for this user; null = explicit removal.
+      const newBankAccount = updatedUser.bankAccount;
+      if (newBankAccount !== undefined) {
+        updatePayload.bank_account = newBankAccount;
+      }
       // Only include role in the payload for non-protected-owner accounts.
       if (!isProtectedOwner(updatedUser.id)) {
         updatePayload.role = updatedUser.role;
@@ -1631,8 +1646,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // We do this fire-and-forget (no await at top level) so it never blocks
       // the main save path.
       const oldBA  = existingUser ? (existingUser as any).bankAccount ?? null : null;
-      const newBA  = (updatedUser as any).bankAccount ?? null;
+      const newBA  = newBankAccount ?? null;
       const baChanged =
+        newBankAccount !== undefined &&
         JSON.stringify(oldBA ?? null) !== JSON.stringify(newBA ?? null);
       if (baChanged) {
         supabase.from('bank_account_history').insert({

@@ -18,7 +18,6 @@ import {
   format, parseISO, isToday, isYesterday, isThisWeek, isThisMonth, subDays, isAfter,
   formatDistanceToNow, differenceInDays, startOfDay,
 } from 'date-fns';
-import { Navigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -208,10 +207,9 @@ function ActivityChart({ rows }: { rows: AuditRow[] }) {
 }
 
 export default function HierarchyAuditLogPage() {
-  const { hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('audit_logs', 'export');
   const { currentUser } = useUser();
-  const isAdmin = hasAnyRole(['super_admin', 'admin']);
 
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
@@ -222,7 +220,7 @@ export default function HierarchyAuditLogPage() {
   const [rangeFilter, setRangeFilter] = useState<'all' | '7d' | '30d' | 'today'>('all');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  useEffect(() => { if (isAdmin) load(); /* eslint-disable-line */ }, [isAdmin]);
+  useEffect(() => { load(); /* eslint-disable-line */ }, []);
 
   async function load() {
     setLoading(true);
@@ -236,8 +234,6 @@ export default function HierarchyAuditLogPage() {
     if (d.data) setDepts(Object.fromEntries(d.data.map((x: any) => [x.id, x.name])));
     setLoading(false);
   }
-
-  if (!isAdmin) return <Navigate to="/dashboard" replace />;
 
   // ── Filtering ────────────────────────────────────────────────────────────
   const visible = useMemo(() => {

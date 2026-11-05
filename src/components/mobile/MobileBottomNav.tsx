@@ -31,7 +31,7 @@ const getNavItemsForRole = (hasRole: (role: AppRole) => boolean): NavItem[] => {
   // Fixed navigation: Home, Sites, SOS, Wallet - Wallet is available to all field users
   const items: NavItem[] = [
     { icon: LayoutDashboard, label: 'Home', path: '/dashboard', offlineCapable: false },
-    { icon: MapPin, label: 'Sites', path: '/site-visits', offlineCapable: true },
+    { icon: MapPin, label: 'Field Ops', path: '/field-ops', offlineCapable: true },
     { icon: Wallet, label: 'Wallet', path: '/wallet', offlineCapable: false },
   ];
 

@@ -6,6 +6,7 @@ import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
+import { FitNumber } from '@/components/ui/fit-number';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1226,9 +1227,9 @@ export default function PreFundingDistribute() {
                     { label: 'Fund Paid Out',  value: formatNumber(fund.paid_amount, 0),                   icon: TrendingDown, cls: 'text-emerald-600' },
                     { label: 'Fund Available', value: formatNumber(fund.available_balance, 0),             icon: Check,        cls: fund.available_balance <= 0 ? 'text-rose-600' : 'text-teal-600' },
                   ]).map(k => (
-                    <div key={k.label} className="flex flex-col">
+                    <div key={k.label} className="flex min-w-0 flex-col">
                       <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{k.label}</span>
-                      <span className={cn('text-sm font-bold tabular-nums', k.cls)}>{fund.currency} {k.value}</span>
+                      <FitNumber value={`${fund.currency} ${k.value}`} className={cn('text-sm font-bold', k.cls)} />
                     </div>
                   ))}
                 </div>

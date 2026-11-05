@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -23,7 +22,6 @@ import { format, parseISO, subMonths, differenceInDays } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -117,9 +115,8 @@ function scoreEntry(e: JournalEntry): { type: RiskType; score: number } | null {
 
 /* ─── component ───────────────────────────────────────────────────────────── */
 export default function AccountingAMLCompliance() {
-  const { hasAnyRole } = useAuthorization();
-  const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'auditor']);
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin']);
+  const { canWriteAccounting } = useAuthorization();
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-aml', roleCanEdit);
 
@@ -401,7 +398,6 @@ export default function AccountingAMLCompliance() {
     exportToExcel(rows, 'AML Alerts', `aml-alerts-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!allowed) return <Navigate to="/" replace />;
 
   const checkStatus = (s: ComplianceCheck['status']) => {
     if (s === 'pass') return { icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200' };
@@ -442,11 +438,6 @@ export default function AccountingAMLCompliance() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="AML & Compliance Monitoring"
-        description="Automatically flags posted journal entries that match suspicious-activity patterns: large transactions, near-threshold amounts (structuring risk), round-number transactions, and unusual frequency. Use the Watchlist tab to manage sanctioned entities and counterparties."
-        descriptionAr="يرصد تلقائياً القيود المشبوهة: المعاملات الكبيرة، المبالغ القريبة من العتبة (خطر التجزئة)، والمبالغ الكاملة. استخدم قائمة المراقبة لإدارة الأطراف المقيدة."
-      />
 
       {noDataTable && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/10 p-3 flex items-start gap-2">

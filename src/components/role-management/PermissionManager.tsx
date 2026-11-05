@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -11,14 +12,34 @@ import {
 } from '@/components/ui/dialog';
 import {
   Save, Shield, AlertTriangle, ChevronDown, ChevronRight,
-  Users, DollarSign, FolderKanban, Settings, Wrench,
+  Users, DollarSign, FolderKanban, Wrench,
 } from 'lucide-react';
 import {
   RoleWithPermissions, ResourceType, ActionType,
-  ACTIONS, RESOURCE_LABELS, ACTION_LABELS,
+  RESOURCE_LABELS, ACTION_LABELS,
 } from '@/types/roles';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import {
+  buildCapabilityInventory,
+  inventoryPairCount,
+  type CapabilityPair,
+} from '@/lib/capability-inventory';
+import { MODULE_REGISTRY } from '@/types/moduleRegistry';
+
+const PAGES_BY_RESOURCE: Map<string, string[]> = (() => {
+  const map = new Map<string, Set<string>>();
+  for (const mod of MODULE_REGISTRY) {
+    for (const page of mod.pages) {
+      for (const act of page.actions) {
+        const set = map.get(act.resource) ?? new Set<string>();
+        set.add(page.page);
+        map.set(act.resource, set);
+      }
+    }
+  }
+  return new Map([...map].map(([resource, pages]) => [resource, [...pages].sort()]));
+})();
 
 // ── Domain definitions ────────────────────────────────────────────────────────
 
@@ -43,10 +64,10 @@ const DOMAIN_GROUPS: DomainGroup[] = [
   {
     label: 'Programme Management',
     labelAr: 'إدارة البرامج',
-    description: 'Projects, MMP, site visits, portfolio, analytics, field operations',
+    description: 'Projects, MMP, site visits, portfolio, analytics, field operations, coverage map',
     color: 'indigo',
     icon: <FolderKanban className="h-4 w-4" />,
-    resources: ['projects', 'portfolio', 'analytics', 'mmp', 'site_visits', 'hub_operations', 'safety', 'incidents', 'equipment', 'coverage_map'],
+    resources: ['projects', 'portfolio', 'analytics', 'mmp', 'site_visits', 'hub_operations', 'coverage_map'],
   },
   {
     label: 'Finance & Accounting',
@@ -54,7 +75,7 @@ const DOMAIN_GROUPS: DomainGroup[] = [
     description: 'Budgets, wallets, cost submissions, down payments, accounting, procurement, fixed assets',
     color: 'green',
     icon: <DollarSign className="h-4 w-4" />,
-    resources: ['finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions', 'pre_funding', 'procurement', 'fixed_assets', 'transactions'],
+    resources: ['finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions', 'pre_funding', 'procurement', 'fixed_assets', 'transactions', 'incentives'],
   },
   {
     label: 'HR & People',
@@ -62,7 +83,7 @@ const DOMAIN_GROUPS: DomainGroup[] = [
     description: 'Staff records, payroll, leave, benefits, succession, pulse surveys, HR analytics',
     color: 'purple',
     icon: <Users className="h-4 w-4" />,
-    resources: ['hr', 'payroll', 'leave', 'benefits', 'succession', 'pulse_surveys', 'hr_analytics'],
+    resources: ['hr', 'payroll', 'salary_advances', 'leave', 'benefits', 'succession', 'pulse_surveys', 'hr_analytics'],
   },
   {
     label: 'Tools & Communication',
@@ -70,7 +91,7 @@ const DOMAIN_GROUPS: DomainGroup[] = [
     description: 'Surveys, tasks, notifications, broadcast, WhatsApp, calendar, CRM, reports',
     color: 'orange',
     icon: <Wrench className="h-4 w-4" />,
-    resources: ['surveys', 'tasks', 'notifications', 'broadcast', 'whatsapp', 'calendar', 'signatures', 'integrations', 'crm', 'reports'],
+    resources: ['surveys', 'tasks', 'notifications', 'broadcast', 'chat', 'whatsapp', 'calendar', 'signatures', 'integrations', 'crm', 'reports'],
   },
 ];
 
@@ -82,24 +103,22 @@ const DOMAIN_COLORS = {
   orange: { bg: 'bg-orange-50 dark:bg-orange-950/20', border: 'border-orange-200 dark:border-orange-800', text: 'text-orange-700 dark:text-orange-300', badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
 };
 
-// Actions that warrant a warning when "Select All" is triggered
 const SENSITIVE_ACTIONS: ActionType[] = ['delete', 'override', 'restore'];
 const SENSITIVE_RESOURCES: ResourceType[] = ['super_admins', 'system', 'permissions', 'audit_logs'];
 
-function wouldGrantSensitive(resource: ResourceType, currentSelected: Set<string>): ActionType[] {
-  return SENSITIVE_ACTIONS.filter(
-    action => !currentSelected.has(`${resource}:${action}`)
-  ).concat(
-    SENSITIVE_RESOURCES.includes(resource)
-      ? ACTIONS.filter(a => !currentSelected.has(`${resource}:${a}`))
-      : []
-  ).filter((v, i, arr) => arr.indexOf(v) === i);
+function wouldGrantSensitive(
+  resource: ResourceType,
+  actions: ActionType[],
+  currentSelected: Set<string>,
+): ActionType[] {
+  const missing = actions.filter(a => !currentSelected.has(`${resource}:${a}`));
+  if (SENSITIVE_RESOURCES.includes(resource)) return missing;
+  return missing.filter(a => SENSITIVE_ACTIONS.includes(a));
 }
 
-// Action badge colors
 function actionBadgeClass(action: ActionType, selected: boolean): string {
   if (!selected) return 'bg-gray-50 text-gray-400 border border-gray-200 dark:bg-gray-800/40 dark:text-gray-500 dark:border-gray-700';
-  const map: Record<ActionType, string> = {
+  const map: Partial<Record<ActionType, string>> = {
     create: 'bg-green-100 text-green-800 border border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700',
     read:   'bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700',
     update: 'bg-yellow-100 text-yellow-800 border border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700',
@@ -118,45 +137,50 @@ function actionBadgeClass(action: ActionType, selected: boolean): string {
 // ── Resource row ───────────────────────────────────────────────────────────────
 function ResourceRow({
   resource,
+  actions,
   selected,
   onToggle,
   onSelectAll,
   disabled,
 }: {
   resource: ResourceType;
+  actions: ActionType[];
   selected: Set<string>;
   onToggle: (resource: ResourceType, action: ActionType) => void;
   onSelectAll: (resource: ResourceType) => void;
   disabled: boolean;
 }) {
-  const count = ACTIONS.filter(a => selected.has(`${resource}:${a}`)).length;
-  const allSelected = count === ACTIONS.length;
-  const someSelected = count > 0 && count < ACTIONS.length;
+  const count = actions.filter(a => selected.has(`${resource}:${a}`)).length;
+  const allSelected = actions.length > 0 && count === actions.length;
+  const someSelected = count > 0 && count < actions.length;
 
   return (
     <div className="rounded-md border border-muted bg-background p-3 space-y-2">
-      {/* Resource header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Checkbox
             id={`${resource}-all`}
             checked={someSelected ? 'indeterminate' : allSelected}
             onCheckedChange={() => onSelectAll(resource)}
-            disabled={disabled}
+            disabled={disabled || actions.length === 0}
             data-testid={`checkbox-resource-all-${resource}`}
           />
           <Label htmlFor={`${resource}-all`} className="text-sm font-semibold cursor-pointer">
             {RESOURCE_LABELS[resource] ?? resource}
           </Label>
         </div>
+        {(PAGES_BY_RESOURCE.get(resource)?.length ?? 0) > 0 && (
+          <p className="flex-1 min-w-0 px-3 text-[11px] text-muted-foreground truncate" title={PAGES_BY_RESOURCE.get(resource)!.join(', ')}>
+            Pages: {PAGES_BY_RESOURCE.get(resource)!.join(', ')}
+          </p>
+        )}
         <Badge variant="outline" className="text-xs tabular-nums">
-          {count}/{ACTIONS.length}
+          {count}/{actions.length}
         </Badge>
       </div>
 
-      {/* Action checkboxes */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-1.5 pt-1">
-        {ACTIONS.map(action => {
+        {actions.map(action => {
           const key = `${resource}:${action}`;
           const isSelected = selected.has(key);
           return (
@@ -190,24 +214,32 @@ function ResourceRow({
 // ── Domain section ─────────────────────────────────────────────────────────────
 function DomainSection({
   group,
+  inventory,
   selected,
   onToggle,
   onSelectAll,
   disabled,
+  forceOpen = false,
 }: {
   group: DomainGroup;
+  inventory: Map<ResourceType, ActionType[]>;
   selected: Set<string>;
   onToggle: (resource: ResourceType, action: ActionType) => void;
   onSelectAll: (resource: ResourceType) => void;
   disabled: boolean;
+  forceOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
+  const [openState, setOpen] = useState(true);
+  const open = openState || forceOpen;
   const colors = DOMAIN_COLORS[group.color];
 
-  const totalSelected = group.resources.reduce(
-    (sum, r) => sum + ACTIONS.filter(a => selected.has(`${r}:${a}`)).length, 0
+  const resources = group.resources.filter(r => (inventory.get(r)?.length ?? 0) > 0);
+  if (resources.length === 0) return null;
+
+  const totalSelected = resources.reduce(
+    (sum, r) => sum + (inventory.get(r) ?? []).filter(a => selected.has(`${r}:${a}`)).length, 0
   );
-  const totalPossible = group.resources.length * ACTIONS.length;
+  const totalPossible = resources.reduce((sum, r) => sum + (inventory.get(r)?.length ?? 0), 0);
 
   return (
     <Card className={cn('border', colors.border)}>
@@ -231,7 +263,7 @@ function DomainSection({
               <Badge className={cn('text-xs tabular-nums', colors.badge)}>
                 {totalSelected}/{totalPossible}
               </Badge>
-              {totalSelected > 0 && (
+              {totalSelected > 0 && totalPossible > 0 && (
                 <span className={cn(
                   'text-[10px] font-medium px-1.5 py-0.5 rounded',
                   totalSelected === totalPossible
@@ -248,10 +280,11 @@ function DomainSection({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <CardContent className="pt-3 pb-4 space-y-2">
-            {group.resources.map(resource => (
+            {resources.map(resource => (
               <ResourceRow
                 key={resource}
                 resource={resource}
+                actions={inventory.get(resource) ?? []}
                 selected={selected}
                 onToggle={onToggle}
                 onSelectAll={onSelectAll}
@@ -269,13 +302,21 @@ function DomainSection({
 
 interface PermissionManagerProps {
   role: RoleWithPermissions;
-  onUpdatePermissions: (roleId: string, permissions: { resource: ResourceType; action: ActionType }[]) => Promise<boolean>;
+  onUpdatePermissions?: (roleId: string, permissions: { resource: ResourceType; action: ActionType }[]) => Promise<boolean>;
+  /** Controlled mode (e.g. create wizard): every change is reported here and no save buttons are shown. */
+  onChange?: (permissions: { resource: ResourceType; action: ActionType }[]) => void;
   isLoading?: boolean;
 }
+
+const toPermissionList = (keys: Set<string>) => Array.from(keys).map(key => {
+  const [resource, action] = key.split(':') as [ResourceType, ActionType];
+  return { resource, action };
+});
 
 export const PermissionManager: React.FC<PermissionManagerProps> = ({
   role,
   onUpdatePermissions,
+  onChange,
   isLoading = false,
 }) => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -289,21 +330,65 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
     setHasChanges(false);
   }, [role]);
 
+  // Orphan grants (on this role but not in MODULE_REGISTRY) stay visible so they can be cleared.
+  const orphanPairs = useMemo<CapabilityPair[]>(
+    () => role.permissions.map(p => ({
+      resource: p.resource as ResourceType,
+      action: p.action as ActionType,
+    })),
+    [role.permissions],
+  );
+
+  // Matrix = MODULE_REGISTRY pairs ∪ role orphans (not full RESOURCES × ACTIONS).
+  const inventory = useMemo(
+    () => buildCapabilityInventory([], orphanPairs),
+    [orphanPairs],
+  );
+
+  const [search, setSearch] = useState('');
+  const query = search.trim().toLowerCase();
+
+  // Matches keep the full action list per resource so row counts and select-all stay accurate.
+  const visibleInventory = useMemo(() => {
+    if (!query) return inventory;
+    const matches = (text: string | undefined) => !!text && text.toLowerCase().includes(query);
+    const out = new Map<ResourceType, ActionType[]>();
+    for (const group of DOMAIN_GROUPS) {
+      const groupHit = matches(group.label) || matches(group.labelAr) || matches(group.description);
+      for (const resource of group.resources) {
+        const actions = inventory.get(resource);
+        if (!actions?.length) continue;
+        const hit = groupHit
+          || matches(resource)
+          || matches(RESOURCE_LABELS[resource])
+          || (PAGES_BY_RESOURCE.get(resource) ?? []).some(matches)
+          || actions.some(a => matches(a) || matches(ACTION_LABELS[a]));
+        if (hit) out.set(resource, actions);
+      }
+    }
+    return out;
+  }, [inventory, query]);
+
+  const commit = (next: Set<string>) => {
+    setSelected(next);
+    if (onChange) onChange(toPermissionList(next));
+    else setHasChanges(true);
+  };
+
   const handleToggle = (resource: ResourceType, action: ActionType) => {
     const key = `${resource}:${action}`;
     const next = new Set(selected);
     if (next.has(key)) next.delete(key); else next.add(key);
-    setSelected(next);
-    setHasChanges(true);
+    commit(next);
   };
 
   const handleSelectAll = (resource: ResourceType) => {
-    const keys = ACTIONS.map(a => `${resource}:${a}`);
-    const allSelected = keys.every(k => selected.has(k));
+    const actions = inventory.get(resource) ?? [];
+    const keys = actions.map(a => `${resource}:${a}`);
+    const allSelected = keys.length > 0 && keys.every(k => selected.has(k));
 
     if (!allSelected) {
-      // Check if granting would add sensitive permissions
-      const sensitive = wouldGrantSensitive(resource, selected);
+      const sensitive = wouldGrantSensitive(resource, actions, selected);
       if (sensitive.length > 0) {
         setConfirmDialog({ resource, sensitiveMissing: sensitive });
         return;
@@ -313,27 +398,22 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
     const next = new Set(selected);
     if (allSelected) keys.forEach(k => next.delete(k));
     else keys.forEach(k => next.add(k));
-    setSelected(next);
-    setHasChanges(true);
+    commit(next);
   };
 
   const confirmSelectAll = () => {
     if (!confirmDialog) return;
-    const keys = ACTIONS.map(a => `${confirmDialog.resource}:${a}`);
+    const keys = (inventory.get(confirmDialog.resource) ?? []).map(a => `${confirmDialog.resource}:${a}`);
     const next = new Set(selected);
     keys.forEach(k => next.add(k));
-    setSelected(next);
-    setHasChanges(true);
+    commit(next);
     setConfirmDialog(null);
   };
 
   const handleSave = async () => {
+    if (!onUpdatePermissions) return;
     setSaving(true);
-    const permissions = Array.from(selected).map(key => {
-      const [resource, action] = key.split(':') as [ResourceType, ActionType];
-      return { resource, action };
-    });
-    const ok = await onUpdatePermissions(role.id, permissions);
+    const ok = await onUpdatePermissions(role.id, toPermissionList(selected));
     if (ok) {
       setHasChanges(false);
       toast({ title: 'Permissions saved', description: `${role.display_name} permissions updated.` });
@@ -346,12 +426,14 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
     setHasChanges(false);
   };
 
-  const totalSelected = Array.from(selected).length;
-  const totalPossible = DOMAIN_GROUPS.reduce((s, g) => s + g.resources.length, 0) * ACTIONS.length;
+  const totalSelected = Array.from(selected).filter(key => {
+    const [resource, action] = key.split(':') as [ResourceType, ActionType];
+    return (inventory.get(resource) ?? []).includes(action);
+  }).length;
+  const totalPossible = inventoryPairCount(inventory);
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold">
@@ -359,7 +441,7 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
             <span className="ml-2 text-xs text-muted-foreground font-normal" dir="rtl">مصفوفة الصلاحيات</span>
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {totalSelected} of {totalPossible} possible permissions granted
+            {totalSelected} of {totalPossible} grantable capabilities
             {hasChanges && <span className="ml-2 text-amber-600 dark:text-amber-400 font-medium">· Unsaved changes</span>}
           </p>
         </div>
@@ -385,21 +467,34 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
         </Alert>
       )}
 
-      {/* Domain groups */}
+      <div className="sticky top-0 z-10 bg-background py-2">
+        <Input
+          type="search"
+          placeholder="Search by page, area, resource, or action (e.g. Incentives, MMP, approve)…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          data-testid="input-permission-search"
+        />
+      </div>
+
       <div className="space-y-3">
+        {query && visibleInventory.size === 0 && (
+          <p className="text-sm text-muted-foreground">No permissions match “{search}”.</p>
+        )}
         {DOMAIN_GROUPS.map(group => (
           <DomainSection
             key={group.label}
             group={group}
+            inventory={visibleInventory}
             selected={selected}
             onToggle={handleToggle}
             onSelectAll={handleSelectAll}
             disabled={isLoading || saving}
+            forceOpen={!!query}
           />
         ))}
       </div>
 
-      {/* Sticky save bar when changes exist */}
       {hasChanges && (
         <div className="flex justify-between items-center gap-2 pt-4 border-t sticky bottom-0 bg-background pb-2">
           <span className="text-sm text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1.5">
@@ -415,7 +510,6 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
         </div>
       )}
 
-      {/* Confirmation dialog for sensitive Select All */}
       <Dialog open={!!confirmDialog} onOpenChange={() => setConfirmDialog(null)}>
         <DialogContent>
           <DialogHeader>

@@ -74,9 +74,9 @@ export function GlobalSearch() {
                 <FolderOpenDot className="h-4 w-4 text-primary-500" />
                 <span>Projects</span>
               </CommandItem>
-              <CommandItem onSelect={() => onSelect('/site-visits')} className="flex items-center gap-2 py-3">
+              <CommandItem onSelect={() => onSelect('/field-ops')} className="flex items-center gap-2 py-3">
                 <ClipboardList className="h-4 w-4 text-primary-500" />
-                <span>Site Visits</span>
+                <span>Field Ops</span>
               </CommandItem>
               <CommandItem onSelect={() => onSelect('/mmp')} className="flex items-center gap-2 py-3">
                 <Database className="h-4 w-4 text-primary-500" />

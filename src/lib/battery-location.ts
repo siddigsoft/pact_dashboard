@@ -1,5 +1,3 @@
-import { Capacitor } from '@capacitor/core';
-
 export interface BatteryStatus {
   level: number;
   isCharging: boolean;
@@ -130,36 +128,10 @@ export async function initBatteryMonitor(): Promise<{ success: boolean; error?: 
       initError = null;
       console.log('[BatteryLocation] Battery monitor initialized via Battery API');
     } else {
-      batteryMonitorInterval = setInterval(async () => {
-        if (Capacitor.isNativePlatform()) {
-          try {
-            const { Device } = await import('@capacitor/device');
-            const info = await Device.getBatteryInfo();
-
-            const newStatus: BatteryStatus = {
-              level: Math.round((info.batteryLevel || 1) * 100),
-              isCharging: info.isCharging || false,
-              chargingTime: null,
-              dischargingTime: null,
-            };
-
-            if (
-              newStatus.level !== currentBatteryStatus.level ||
-              newStatus.isCharging !== currentBatteryStatus.isCharging
-            ) {
-              currentBatteryStatus = newStatus;
-              notifyBatteryListeners();
-              updateLocationConfigBasedOnBattery();
-            }
-          } catch (error) {
-            console.warn('[BatteryLocation] Failed to get battery info:', error);
-          }
-        }
-      }, 60000);
-
+      // No Battery API — leave defaults; skip native Device plugin
       isInitialized = true;
       initError = null;
-      console.log('[BatteryLocation] Battery monitor initialized via polling');
+      console.log('[BatteryLocation] Battery API not available; using defaults');
     }
 
     return { success: true };

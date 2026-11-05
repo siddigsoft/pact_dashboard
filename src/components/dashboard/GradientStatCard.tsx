@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FitNumber } from '@/components/ui/fit-number';
 import { LucideIcon, Sparkles, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +49,7 @@ export function GradientStatCard({
         <Icon className="h-5 w-5 text-white/80" />
       </CardHeader>
       <CardContent>
-        <div className="text-3xl font-bold text-white">{value}</div>
+        <FitNumber value={value} className="text-3xl font-bold text-white" />
         {subtitle && (
           <p className="text-xs text-white/80 mt-1">
             {subtitle}

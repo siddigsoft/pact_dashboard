@@ -1,5 +1,3 @@
-import { Capacitor } from '@capacitor/core';
-
 export interface AppVersion {
   version: string;
   build: number;
@@ -26,20 +24,8 @@ let currentAppVersion: string = '1.0.0';
 let currentBuildNumber: number = 1;
 
 export async function initAppVersion(): Promise<void> {
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const { App } = await import('@capacitor/app');
-      const info = await App.getInfo();
-      currentAppVersion = info.version;
-      currentBuildNumber = parseInt(info.build, 10) || 1;
-    } catch (error) {
-      console.warn('[AppUpdate] Failed to get app info:', error);
-    }
-  } else {
-    currentAppVersion = import.meta.env.VITE_APP_VERSION || '1.0.0';
-    currentBuildNumber = parseInt(import.meta.env.VITE_BUILD_NUMBER || '1', 10);
-  }
-
+  currentAppVersion = import.meta.env.VITE_APP_VERSION || '1.0.0';
+  currentBuildNumber = parseInt(import.meta.env.VITE_BUILD_NUMBER || '1', 10);
   console.log(`[AppUpdate] Current version: ${currentAppVersion} (${currentBuildNumber})`);
 }
 
@@ -73,7 +59,7 @@ function isVersionSupported(currentVer: string, minSupportedVer: string): boolea
 
 async function fetchLatestVersion(): Promise<AppVersion | null> {
   try {
-    const platform = Capacitor.getPlatform();
+    const platform = 'web';
     const versionEndpoint = import.meta.env.VITE_VERSION_CHECK_URL || '/api/version';
 
     const response = await fetch(`${versionEndpoint}?platform=${platform}`, {
@@ -157,37 +143,8 @@ export function clearSkippedVersion(): void {
 }
 
 export async function openAppStore(): Promise<{ success: boolean; error?: string }> {
-  const platform = Capacitor.getPlatform();
-  let storeUrl = '';
-
-  if (platform === 'ios') {
-    const appId = import.meta.env.VITE_IOS_APP_ID || '';
-    storeUrl = `https://apps.apple.com/app/id${appId}`;
-  } else if (platform === 'android') {
-    const packageName = import.meta.env.VITE_ANDROID_PACKAGE || 'com.pact.workflow';
-    storeUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
-  }
-
-  if (!storeUrl) {
-    console.warn('[AppUpdate] No store URL configured for platform:', platform);
-    return { success: false, error: 'App store URL not configured' };
-  }
-
-  try {
-    if (Capacitor.isNativePlatform()) {
-      window.open(storeUrl, '_system');
-    } else {
-      const newWindow = window.open(storeUrl, '_blank');
-      if (!newWindow) {
-        console.warn('[AppUpdate] Pop-up blocked, providing link');
-        return { success: false, error: 'Pop-up blocked. Please allow pop-ups to update.' };
-      }
-    }
-    return { success: true };
-  } catch (error: any) {
-    console.error('[AppUpdate] Failed to open app store:', error);
-    return { success: false, error: error?.message || 'Failed to open app store' };
-  }
+  // Web: no native store
+  return { success: false, error: 'App store updates are not available on web' };
 }
 
 export function formatReleaseNotes(notes: string[]): string {
@@ -229,19 +186,6 @@ export async function registerForAutoUpdateCheck(
   await check();
 
   const interval = setInterval(check, intervalMs);
-
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const { App } = await import('@capacitor/app');
-      App.addListener('appStateChange', async ({ isActive }) => {
-        if (isActive) {
-          await check();
-        }
-      });
-    } catch (error) {
-      console.warn('[AppUpdate] Failed to add app state listener:', error);
-    }
-  }
 
   return () => clearInterval(interval);
 }

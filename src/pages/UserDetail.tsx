@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef, type FC } from "react";
 import { format, parseISO } from "date-fns";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "@/context/user/UserContext";
 import { isProtectedOwner } from "@/lib/protected-accounts";
 import { AdminRoleConfirmDialog } from "@/components/ui/AdminRoleConfirmDialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, ChevronUp, Info, Camera, RefreshCw, History } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, Shield, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, ChevronUp, Camera, RefreshCw, History } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
+import { isAllowedEmailDomain } from "@/lib/email-domains";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
 import { sudanStates, getLocalitiesByState, getHubNameForState, hubs, getStatesInHub } from "@/data/sudanStates";
@@ -30,7 +31,7 @@ import { useClassification } from "@/context/classification/ClassificationContex
 import { useAuthorization } from "@/hooks/use-authorization";
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Plus } from "lucide-react";
+import { AlertCircle, CheckCircle2, Plus } from "lucide-react";
 import type { ClassificationHistory } from "@/types/classification";
 import { VISIBLE_ROLE_CODES, normalizeRole, toRoleLabel, getRoleHint } from "@/utils/roleMapping";
 import { ProfileCompletenessIndicator } from "@/components/onboarding/ProfileCompletenessIndicator";
@@ -63,7 +64,7 @@ const availableRoles = VISIBLE_ROLE_CODES;
 
 const TAB_GROUPS = [
   {
-    id: 'profile', label: 'Profile', color: '#3b82f6', Icon: UserIcon,
+    id: 'profile', label: 'Profile', color: '#273677', Icon: UserIcon,
     tabs: [
       { id: 'overview',    emoji: '🏠', label: 'Overview',              description: 'General info — name, contact details, employee ID, role, and account status at a glance.' },
       { id: 'employment',  emoji: '💼', label: 'Employment & Contract',  description: 'Contract type, department, hub assignment, employment start/end dates, and terms.' },
@@ -72,7 +73,7 @@ const TAB_GROUPS = [
     ],
   },
   {
-    id: 'background', label: 'Background', color: '#8b5cf6', Icon: GraduationCap,
+    id: 'background', label: 'Background', color: '#273677', Icon: GraduationCap,
     tabs: [
       { id: 'education',   emoji: '🎓', label: 'Education & Experience', description: 'Academic qualifications, institutions, graduation years, and prior work experience history.' },
       { id: 'documents',   emoji: '📁', label: 'Document Vault',         description: 'Uploaded staff documents — contracts, national IDs, certificates, and other files.' },
@@ -84,7 +85,7 @@ const TAB_GROUPS = [
     ],
   },
   {
-    id: 'finance', label: 'Finance', color: '#D97706', Icon: CreditCard,
+    id: 'finance', label: 'Finance', color: '#EC6A1F', Icon: CreditCard,
     tabs: [
       { id: 'compensation', emoji: '💰', label: 'Compensation & Bank',   description: 'Salary grade, bank account details, payment method, and pay history for this staff member.' },
       { id: 'performance',  emoji: '📊', label: 'Performance',           description: 'Performance review scores, quarterly objectives, and development notes from review cycles.' },
@@ -92,7 +93,7 @@ const TAB_GROUPS = [
     ],
   },
   {
-    id: 'system', label: 'System', color: '#ef4444', Icon: ShieldCheck,
+    id: 'system', label: 'System', color: '#273677', Icon: ShieldCheck,
     tabs: [
       { id: 'access',      emoji: '🔒', label: 'Access & Security',       description: 'User role assignment, login history, two-factor authentication status, and page-level permission overrides.' },
       { id: 'it-accounts', emoji: '💻', label: 'IT Accounts', adminOnly: true, description: 'Provisioned system accounts, usernames, and access status across organizational tools.' },
@@ -164,15 +165,16 @@ const UserDetail: FC = () => {
   const [bankHistory, setBankHistory] = useState<any[]>([]);
   const [bankHistoryOpen, setBankHistoryOpen] = useState(false);
 
-  const roleStr = (currentUser?.role || '').toLowerCase();
-  const isAdminRole = roleStr === 'admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr === 'ict' || roleStr === 'hr_admin';
-  const isAdmin = isAdminRole || (currentUser?.roles && currentUser.roles.some((r: any) => ['admin', 'super_admin', 'superadmin', 'ict', 'hr_admin'].includes(String(r).toLowerCase())));
+  const { canManageFinances, isSuperAdmin, checkPermission } = useAuthorization();
+  const isAdmin = checkPermission('users', 'update');
+  const canApproveUsers = checkPermission('users', 'approve');
+  const canAssignRoles = checkPermission('roles', 'assign');
+  const canViewAllProfiles = isAdmin || checkPermission('users', 'read') || checkPermission('hr', 'read');
 
   // Computed early (before user state loads) so gate checks work during loading.
   const isOwnProfileEarly = currentUser?.id === id;
 
-  // Admins can edit anyone's bank account; users can edit their own.
-  const canEditBankAccount = isAdminRole || isOwnProfileEarly;
+  const canEditBankAccount = isAdmin || isOwnProfileEarly;
 
   // Classification & Compensation is only relevant for field-staff roles.
   // Check the VIEWED user's primary role AND additional roles.
@@ -188,14 +190,7 @@ const UserDetail: FC = () => {
   const showCompensation = FIELD_STAFF_ROLES.includes(viewedUserRole) ||
     viewedUserAdditional.some(r => FIELD_STAFF_ROLES.includes(r));
 
-  // Only Admin, SuperAdmin, and HR_Admin can edit profile data.
-  // ICT and other admin-tier roles are view-only on employee profiles.
-  const EDIT_ROLES = ['admin', 'super_admin', 'superadmin', 'hr_admin'];
-  const canEditProfile = EDIT_ROLES.includes(roleStr)
-    || (currentUser?.roles && currentUser.roles.some((r: any) => EDIT_ROLES.includes(String(r).toLowerCase())));
-  
-  // Debug logging
-  console.log('[UserDetail] currentUser role:', currentUser?.role, 'roleStr:', roleStr, 'isAdminRole:', isAdminRole, 'isAdmin:', isAdmin);
+  const canEditProfile = isAdmin;
 
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState<Partial<User>>({});
@@ -320,89 +315,6 @@ const UserDetail: FC = () => {
   const savedDepartmentIdRef = useRef<string | null>(null);
   const [allUsers, setAllUsers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
 
-  // ── Additional / secondary roles ─────────────────────────────────────────
-  // ── Additional roles stored as JSONB on profiles.additional_roles ──────────
-  // Schema: [{role, hub_id, assigned_at, assigned_by}]
-  // Migration (run once in Supabase SQL Editor):
-  //   ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS additional_roles jsonb DEFAULT '[]'::jsonb;
-  interface AdditionalRole { role: string; hub_id: string | null; assigned_at: string | null; assigned_by?: string | null }
-  const [additionalRoles, setAdditionalRoles] = useState<AdditionalRole[]>([]);
-  const [addRoleMode, setAddRoleMode]           = useState(false);
-  const [newRolePick, setNewRolePick]           = useState('');
-  const [newRoleHub, setNewRoleHub]             = useState('');
-  const [addRoleSaving, setAddRoleSaving]       = useState(false);
-  const [rolesNeedsMigration, setRolesNeedsMigration] = useState(false);
-
-  const fetchAdditionalRoles = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('additional_roles')
-      .eq('id', userId)
-      .single();
-    if (error?.message?.includes('additional_roles')) {
-      // Column not yet added — migration not applied
-      setRolesNeedsMigration(true);
-      setAdditionalRoles([]);
-    } else if (error) {
-      setAdditionalRoles([]);
-    } else {
-      const arr = Array.isArray(data?.additional_roles) ? data.additional_roles : [];
-      setAdditionalRoles(arr as AdditionalRole[]);
-      setRolesNeedsMigration(false);
-    }
-  };
-
-  const saveAdditionalRoles = async (updated: AdditionalRole[]) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ additional_roles: updated })
-      .eq('id', user!.id);
-    if (error?.message?.includes('additional_roles')) {
-      setRolesNeedsMigration(true);
-      throw new Error('Migration needed — see panel for instructions.');
-    }
-    if (error) throw error;
-    setAdditionalRoles(updated);
-  };
-
-  const handleAddRole = async () => {
-    if (!user || !newRolePick) return;
-    setAddRoleSaving(true);
-    try {
-      const alreadyExists = additionalRoles.some(r => r.role === newRolePick);
-      if (alreadyExists) {
-        toast({ title: 'Role already assigned', description: `${toRoleLabel(newRolePick)} is already an additional role for this user.`, variant: 'destructive' });
-        return;
-      }
-      const newEntry: AdditionalRole = {
-        role: newRolePick,
-        hub_id: newRoleHub || null,
-        assigned_at: new Date().toISOString(),
-        assigned_by: currentUser?.id ?? null,
-      };
-      await saveAdditionalRoles([...additionalRoles, newEntry]);
-      toast({ title: 'Role added', description: `${toRoleLabel(newRolePick)} added as an additional role.` });
-      setAddRoleMode(false);
-      setNewRolePick('');
-      setNewRoleHub('');
-    } catch (e: any) {
-      toast({ title: 'Error adding role', description: e.message, variant: 'destructive' });
-    } finally {
-      setAddRoleSaving(false);
-    }
-  };
-
-  const handleRemoveAdditionalRole = async (roleToRemove: string) => {
-    if (!user) return;
-    try {
-      const updated = additionalRoles.filter(r => r.role !== roleToRemove);
-      await saveAdditionalRoles(updated);
-      toast({ title: 'Role removed' });
-    } catch (e: any) {
-      toast({ title: 'Error removing role', description: e.message, variant: 'destructive' });
-    }
-  };
-
   // ── Location personal data (city/address for non-field staff) ───────────
   const [locPersonal, setLocPersonal] = useState({ address_line1: '', address_line2: '', city: '', country: '' });
   const [locPersonalId, setLocPersonalId] = useState<string | null>(null);
@@ -516,7 +428,6 @@ const UserDetail: FC = () => {
   };
 
   // Classification management
-  const { canManageFinances, isSuperAdmin } = useAuthorization();
   const { roles: allDbRoles } = useRoleManagement();
   // Custom DB roles not in the built-in list — these are created via Role Management UI
   const customDbRoles = allDbRoles.filter(r => r.name && !normalizeRole(r.name));
@@ -1200,11 +1111,6 @@ const UserDetail: FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  useEffect(() => {
-    if (user?.id && activeSection === 'access') fetchAdditionalRoles(user.id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, activeSection]);
-
   // Classification history is now derived directly from the context's allClassifications
   // — no separate useEffect or DB query needed.
 
@@ -1251,7 +1157,7 @@ const UserDetail: FC = () => {
   const handleDeleteBankAccount = async () => {
     if (!user || !updateUser) return;
     setIsDeletingBankAccount(true);
-    const updatedUser: User = { ...user, bankAccount: undefined };
+    const updatedUser: User = { ...user, bankAccount: null };
     try {
       const success = await updateUser(updatedUser);
       if (success) {
@@ -1408,8 +1314,28 @@ const UserDetail: FC = () => {
       });
       
       let newEmail = editForm.email;
+
+      if (emailChanged && !checkPermission('users', 'update')) {
+        toast({
+          title: "Email not changed",
+          description: "Changing another user's email requires the users:update permission. Users can change their own email from Settings.",
+          variant: "destructive"
+        });
+        setIsSaving(false);
+        return;
+      }
+
+      if (emailChanged && !isAllowedEmailDomain(normalizedEditEmail)) {
+        toast({
+          title: "Email domain not allowed",
+          description: "Only @pactorg.com or @pactorg.org email addresses are allowed.",
+          variant: "destructive"
+        });
+        setIsSaving(false);
+        return;
+      }
       
-      if (emailChanged && isAdmin && adminUpdateUserEmail) {
+      if (emailChanged && adminUpdateUserEmail) {
         // Add timeout for edge function call with extended timeout
         const emailPromise = adminUpdateUserEmail(user.id, editForm.email!);
         const timeoutPromise = new Promise<boolean>((_, reject) => 
@@ -1604,11 +1530,6 @@ const UserDetail: FC = () => {
     );
   }
 
-  // Roles that can view ANY profile (read-only, no edit)
-  const VIEW_ALL_ROLES = ['countryDirector', 'country_director', 'fom', 'fieldOpManager', 'seniorOperationsLead', 'senior_operations_lead', 'financialAdmin', 'financial_admin', 'projectManager', 'project_manager'];
-  const canViewAllProfiles = VIEW_ALL_ROLES.includes(roleStr)
-    || (currentUser?.roles && currentUser.roles.some((r: any) => VIEW_ALL_ROLES.includes(String(r).toLowerCase())));
-
   // Access control: non-admin, non-viewer users can only see their own profile.
   const isOwnProfile = currentUser?.id === user.id;
   if (!isAdmin && !canViewAllProfiles && !isOwnProfile) {
@@ -1631,13 +1552,13 @@ const UserDetail: FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-muted/20 pb-24">
+    <div className="min-h-screen bg-[#F7F8FB] dark:bg-[#12182B] pb-24">
 
       {/* ── Compact Page Header (scrolls with page — not sticky) ─────────── */}
       {/* Hidden file input for avatar upload */}
       <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
 
-      <div className="shadow-lg" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 60%, #0f2240 100%)' }}>
+      <div className="border-b border-[#D8DDE9] bg-[#FDFDFD] dark:border-[#354064] dark:bg-[#1B2543]">
 
         {/* Single identity row — breadcrumb + avatar + name + actions */}
         {(() => {
@@ -1645,18 +1566,18 @@ const UserDetail: FC = () => {
           const pct = Math.round((fields.filter(Boolean).length / fields.length) * 100);
           const initials = user.name?.split(' ').map((n: string) => n[0]).slice(0,2).join('').toUpperCase() || '??';
           return (
-            <div className="px-4 py-2.5 flex items-center gap-3">
+            <div className="px-4 py-4 sm:px-6 flex flex-wrap items-center gap-3">
 
               {/* Back breadcrumb */}
               <button
                 onClick={() => navigate(-1)}
-                className="flex items-center gap-1 text-[11px] text-white/50 hover:text-white/80 transition-colors shrink-0"
+                className="flex items-center gap-1 text-sm text-[#566079] hover:text-[#273677] dark:text-[#AEB9D1] transition-colors shrink-0"
                 data-testid="button-back-users"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Back</span>
               </button>
-              <span className="text-white/20 text-xs shrink-0">›</span>
+              <span className="text-[#D8DDE9] text-xs shrink-0">›</span>
 
               {/* Avatar — click to upload (own profile or admin only) */}
               {(() => {
@@ -1668,13 +1589,12 @@ const UserDetail: FC = () => {
                     title={canUploadPhoto ? 'Click to change photo' : undefined}
                   >
                     <div
-                      className="h-9 w-9 rounded-lg flex items-center justify-center text-white font-extrabold text-sm shadow-md ring-2 ring-white/15 overflow-hidden"
-                      style={{ background: `linear-gradient(135deg, ${accent}cc, ${accent}88)` }}
+                      className="h-12 w-12 rounded-full flex items-center justify-center bg-[#273677] text-white font-semibold text-sm overflow-hidden"
                     >
                       {avatarUploading
                         ? <Loader2 className="h-4 w-4 animate-spin text-white" />
                         : user.avatar
-                          ? <img src={user.avatar} alt={user.name} className="h-9 w-9 object-cover" />
+                          ? <img src={user.avatar} alt={user.name} className="h-12 w-12 object-cover" />
                           : initials}
                     </div>
                     {/* Upload overlay on hover — only shown when upload is allowed */}
@@ -1683,7 +1603,7 @@ const UserDetail: FC = () => {
                         <Camera className="h-3.5 w-3.5 text-white" />
                       </div>
                     )}
-                    <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0a1628] ${user.isApproved ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                    <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${user.isApproved ? 'bg-[#273677]' : 'bg-[#EC6A1F]'}`} />
                   </div>
                 );
               })()}
@@ -1691,32 +1611,32 @@ const UserDetail: FC = () => {
               {/* Name + badges */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-white font-bold text-[13px] leading-tight truncate max-w-[200px]">{user.name}</span>
+                  <span className="text-[#202943] dark:text-[#F7F8FB] font-semibold text-lg leading-tight truncate max-w-[280px]">{user.name}</span>
                   <RoleBadge role={user.role} size="sm" />
                   <UserClassificationBadge userId={user.id} />
-                  <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${user.isApproved ? 'bg-emerald-400/20 text-emerald-300' : 'bg-amber-400/20 text-amber-300'}`}>
-                    ● {user.isApproved ? 'Active' : 'Pending'}
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${user.isApproved ? 'bg-[#273677]/10 text-[#273677] dark:text-[#CBD4EF]' : 'bg-[#EC6A1F]/10 text-[#B94B13]'}`}>
+                    {user.isApproved ? 'Active' : 'Pending'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-white/40 text-[10px] truncate capitalize">
+                  <p className="text-[#566079] dark:text-[#AEB9D1] text-xs truncate capitalize">
                     {empType || 'Staff Member'}{user.email ? ` · ${user.email}` : ''}
                   </p>
                   {/* Inline profile completeness */}
                   <div className="hidden md:flex items-center gap-1.5 shrink-0">
-                    <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${pct >= 80 ? 'bg-emerald-400' : 'bg-amber-400'}`} style={{ width: `${pct}%` }} />
+                    <div className="w-16 h-1 bg-[#D8DDE9] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-[#273677]" style={{ width: `${pct}%` }} />
                     </div>
-                    <span className={`text-[9px] font-bold ${pct >= 80 ? 'text-emerald-400' : 'text-amber-400'}`}>{pct}%</span>
+                    <span className="text-[10px] font-medium text-[#566079] dark:text-[#AEB9D1]">{pct}%</span>
                   </div>
                 </div>
               </div>
 
               {/* Actions */}
               <div className="flex items-center gap-1 shrink-0">
-                {isAdmin && !editMode && !user.isApproved && (
+                {canApproveUsers && !editMode && !user.isApproved && (
                   <>
-                    <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 h-7 text-[11px] px-2 border-0" data-testid="button-approve-user">
+                    <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-[#273677] hover:bg-[#1B2758] text-white gap-1 h-8 text-xs px-3 border-0" data-testid="button-approve-user">
                       <UserCheck className="h-3 w-3" /><span className="hidden sm:inline">{isApproving ? 'Approving…' : 'Approve'}</span>
                     </Button>
                     <Button onClick={handleReject} disabled={isRejecting} size="sm" variant="destructive" className="gap-1 h-7 text-[11px] px-2" data-testid="button-reject-user">
@@ -1724,7 +1644,7 @@ const UserDetail: FC = () => {
                     </Button>
                   </>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => navigate(`/signatures?user=${user.id}`)} className="text-white/60 hover:text-white hover:bg-white/10 gap-1 h-7 text-[11px] px-2" data-testid="button-goto-signatures">
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/signatures?user=${user.id}`)} className="text-[#566079] hover:text-[#273677] hover:bg-[#EFF1F7] gap-1 h-8 text-xs px-2 dark:text-[#AEB9D1]" data-testid="button-goto-signatures">
                   <FileSignature className="h-3 w-3" /><span className="hidden md:inline">Signatures</span>
                 </Button>
 
@@ -1733,7 +1653,7 @@ const UserDetail: FC = () => {
                   <button
                     disabled={cvExporting}
                     onClick={() => setShowCvMenu(v => !v)}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-emerald-300 bg-emerald-400/10 hover:bg-emerald-400/20 border border-emerald-400/20 rounded-lg px-2 h-7 transition-all disabled:opacity-50"
+                    className="flex items-center gap-1 text-xs font-medium text-[#273677] bg-[#EFF1F7] hover:bg-[#E4E8F2] border border-[#D8DDE9] rounded-md px-3 h-8 transition-colors disabled:opacity-50 dark:text-[#CBD4EF] dark:bg-[#273677]/20 dark:border-[#354064]"
                     data-testid="button-export-cv"
                     title="Export CV"
                   >
@@ -1801,7 +1721,7 @@ const UserDetail: FC = () => {
                 {user.employeeId && user.name && (
                   <button
                     onClick={() => setShowBadgeDialog(true)}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-amber-300 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/20 rounded-lg px-2 h-7 transition-all"
+                    className="flex items-center gap-1 text-xs font-medium text-[#273677] bg-[#EFF1F7] hover:bg-[#E4E8F2] border border-[#D8DDE9] rounded-md px-3 h-8 transition-colors"
                     data-testid="button-generate-badge"
                     title="Generate Employee Badge"
                   >
@@ -1817,16 +1737,16 @@ const UserDetail: FC = () => {
                 )}
 
                 {canEditProfile && !editMode && (
-                  <Button onClick={handleEdit} size="sm" className="bg-white text-[#0d1f3c] hover:bg-white/90 gap-1 h-7 text-[11px] px-2.5 font-semibold shadow" data-testid="button-edit-user">
+                  <Button onClick={handleEdit} size="sm" className="bg-[#273677] text-white hover:bg-[#1B2758] gap-1 h-8 text-xs px-3 font-semibold shadow-none" data-testid="button-edit-user">
                     <Edit className="h-3 w-3" />Edit
                   </Button>
                 )}
                 {editMode && (
                   <>
-                    <Button onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white h-7 text-[11px] px-2.5 font-semibold shadow border-0">
+                    <Button onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving} size="sm" className="bg-[#273677] hover:bg-[#1B2758] text-white h-8 text-xs px-3 font-semibold shadow-none border-0">
                       {isSaving ? 'Saving…' : 'Save'}
                     </Button>
-                    <Button onClick={handleEditCancel} size="sm" variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10 h-7 text-[11px] px-2">Cancel</Button>
+                    <Button onClick={handleEditCancel} size="sm" variant="ghost" className="text-[#566079] hover:text-[#273677] hover:bg-[#EFF1F7] h-8 text-xs px-2">Cancel</Button>
                   </>
                 )}
               </div>
@@ -1835,7 +1755,7 @@ const UserDetail: FC = () => {
         })()}
 
         {/* ── Level 2: Group tabs ── */}
-        <div className="px-5 pt-3 flex items-end gap-1.5">
+        <div className="px-4 sm:px-6 flex items-end gap-1 overflow-x-auto">
           {TAB_GROUPS.map(g => {
             const visibleTabs = g.tabs.filter(t => {
               if ((t as any).adminOnly && !isAdmin) return false;
@@ -1849,15 +1769,12 @@ const UserDetail: FC = () => {
                 key={g.id}
                 type="button"
                 onClick={() => { setActiveSection(visibleTabs[0].id); setDropOpen(false); }}
-                className={`group relative flex items-center gap-2 px-4 pt-2.5 pb-3 rounded-t-xl text-sm font-semibold transition-all duration-150 border border-b-0 shrink-0 ${isActive ? 'text-white' : 'text-gray-400 border-transparent hover:text-gray-200 hover:border-white/10'}`}
-                style={isActive ? { backgroundColor: `${g.color}1e`, borderColor: `${g.color}40` } : {}}
+                className={`relative flex items-center gap-2 px-3 py-3 text-sm font-medium border-b-2 shrink-0 transition-colors ${isActive ? 'border-[#273677] text-[#273677] dark:text-[#F7F8FB]' : 'border-transparent text-[#566079] hover:text-[#273677] dark:text-[#AEB9D1]'}`}
               >
-                {isActive && <span className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full" style={{ backgroundColor: g.color }} />}
-                <g.Icon className="h-3.5 w-3.5 shrink-0" style={isActive ? { color: g.color } : {}} />
+                <g.Icon className="h-4 w-4 shrink-0" />
                 <span>{g.label}</span>
                 <span
-                  className={`ml-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold px-1 ${isActive ? '' : 'text-gray-500 bg-white/5'}`}
-                  style={isActive ? { backgroundColor: `${g.color}44`, color: g.color } : {}}
+                  className="ml-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-[#EFF1F7] px-1 text-[10px] text-[#566079] dark:bg-[#273677]/30 dark:text-[#AEB9D1]"
                 >
                   {visibleTabs.length}
                 </span>
@@ -1868,38 +1785,30 @@ const UserDetail: FC = () => {
 
         {/* ── Level 3: Sub-tab dropdown ── */}
         <div
-          className="relative px-4 py-2 border-t flex items-center gap-3"
-          style={{ borderColor: `${accent}30`, backgroundColor: `${accent}0a` }}
+          className="relative px-4 py-3 sm:px-6 border-t border-[#D8DDE9] dark:border-[#354064] flex items-center gap-3"
           ref={dropRef}
         >
           <button
             type="button"
             onClick={() => setDropOpen(v => !v)}
-            className={`flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all duration-150 border min-w-0 flex-1 max-w-sm ${dropOpen ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-gray-200 hover:bg-white/8 hover:text-white'}`}
+            className="flex items-center gap-2.5 px-3.5 py-2 rounded-md text-sm font-medium border border-[#D8DDE9] bg-[#FDFDFD] text-[#202943] hover:bg-[#EFF1F7] dark:border-[#354064] dark:bg-[#1B2543] dark:text-[#F7F8FB] min-w-0 flex-1 max-w-sm"
           >
-            <span className="text-[13px] leading-none shrink-0">{activeTabInGroup.emoji}</span>
             <span className="truncate">{activeTabInGroup.label}</span>
             <ChevronDown className={`h-4 w-4 shrink-0 ml-auto opacity-60 transition-transform duration-150 ${dropOpen ? 'rotate-180' : ''}`} />
           </button>
-          <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-400 shrink-0">
-            <span className="px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${accent}22`, color: accent }}>
+          <div className="hidden sm:flex items-center gap-1.5 text-xs text-[#566079] dark:text-[#AEB9D1] shrink-0">
+            <span className="px-2 py-1 rounded-full bg-[#EFF1F7] dark:bg-[#273677]/30 font-medium">
               {activeGroup.tabs.findIndex(t => t.id === activeSection) + 1} / {activeGroup.tabs.length}
             </span>
-            <span className="opacity-50">{activeGroup.label}</span>
+            <span>{activeGroup.label}</span>
           </div>
           {dropOpen && (
             <div
-              className="absolute top-full left-4 right-4 mt-1 rounded-xl border shadow-2xl overflow-hidden z-50"
-              style={{
-                background: 'linear-gradient(135deg, #0d1f3c 0%, #0f2240 100%)',
-                borderColor: `${accent}35`,
-                boxShadow: `0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px ${accent}25`,
-              }}
+              className="absolute top-full left-4 right-4 mt-1 rounded-lg border border-[#D8DDE9] bg-[#FDFDFD] shadow-lg dark:border-[#354064] dark:bg-[#1B2543] overflow-hidden z-50"
             >
-              <div className="px-4 py-2.5 border-b flex items-center gap-2" style={{ borderColor: `${accent}25`, backgroundColor: `${accent}12` }}>
-                <span className="text-[13px]">{activeTabInGroup.emoji}</span>
-                <span className="text-[12px] font-bold text-white tracking-wide">{activeGroup.label}</span>
-                <span className="ml-auto text-[10px] text-gray-400">{activeGroup.tabs.filter(t => !((t as any).adminOnly && !isAdmin) && !((t as any).fieldStaffOnly && !showCompensation)).length} pages</span>
+              <div className="px-4 py-2.5 border-b border-[#D8DDE9] dark:border-[#354064] flex items-center gap-2">
+                <span className="text-xs font-semibold text-[#202943] dark:text-[#F7F8FB]">{activeGroup.label}</span>
+                <span className="ml-auto text-xs text-[#566079] dark:text-[#AEB9D1]">{activeGroup.tabs.filter(t => !((t as any).adminOnly && !isAdmin) && !((t as any).fieldStaffOnly && !showCompensation)).length} pages</span>
               </div>
               <div className="p-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {activeGroup.tabs.filter(t => !((t as any).adminOnly && !isAdmin) && !((t as any).fieldStaffOnly && !showCompensation)).map(t => {
@@ -1909,10 +1818,8 @@ const UserDetail: FC = () => {
                       key={t.id}
                       type="button"
                       onClick={() => { setActiveSection(t.id); setDropOpen(false); }}
-                      className={`flex items-start gap-2 px-3 py-2.5 rounded-lg text-left transition-all duration-100 ${isActive ? 'text-white' : 'text-gray-400 hover:text-gray-100 hover:bg-white/5'}`}
-                      style={isActive ? { backgroundColor: `${accent}28`, outline: `1px solid ${accent}50` } : {}}
+                      className={`flex items-start gap-2 px-3 py-2.5 rounded-md text-left transition-colors ${isActive ? 'bg-[#EFF1F7] text-[#273677] dark:bg-[#273677]/30 dark:text-[#F7F8FB]' : 'text-[#566079] hover:text-[#273677] hover:bg-[#EFF1F7] dark:text-[#AEB9D1]'}`}
                     >
-                      <span className="text-[13px] leading-none shrink-0 mt-0.5" style={{ opacity: isActive ? 1 : 0.6 }}>{t.emoji}</span>
                       <span className="text-[12px] font-medium leading-tight">{t.label}</span>
                     </button>
                   );
@@ -1923,34 +1830,19 @@ const UserDetail: FC = () => {
         </div>
       </div>
 
-      {/* ── Description strip ── */}
-      <div
-        className="flex items-start gap-3 px-5 py-2.5 border-b border-l-[3px]"
-        style={{ borderLeftColor: accent, backgroundColor: `${accent}08`, borderBottomColor: `${accent}20` }}
-      >
-        <Info className="h-4 w-4 mt-0.5 shrink-0" style={{ color: accent }} />
-        <p className="text-[12.5px] text-muted-foreground leading-relaxed">{activeTabInGroup.description}</p>
-      </div>
-
       {/* ── Full-width Content ──────────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 pb-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-16">
         <div className="w-full">
 
             {/* ── Content card ──────────────────────────────────────────── */}
-            <Card className="shadow-xl border-0 overflow-hidden rounded-2xl">
+            <Card className="border-[#D8DDE9] bg-[#FDFDFD] shadow-none overflow-hidden rounded-xl dark:border-[#354064] dark:bg-[#1B2543]">
 
               {/* Section header bar */}
-              <div
-                className="border-b px-5 py-3 flex items-center justify-between border-l-[3px]"
-                style={{ borderLeftColor: accent, backgroundColor: `${accent}06`, borderBottomColor: `${accent}18` }}
-              >
+              <div className="border-b border-[#D8DDE9] px-5 py-4 flex flex-wrap items-center justify-between gap-3 dark:border-[#354064]">
                 <div className="flex items-center gap-2.5">
-                  <div className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${accent}18` }}>
-                    <span className="text-sm leading-none">{activeTabInGroup.emoji}</span>
-                  </div>
                   <div>
-                    <h2 className="font-bold text-sm text-foreground leading-none">{activeTabInGroup.label}</h2>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{activeGroup.label} section</p>
+                    <h2 className="font-semibold text-base text-[#202943] dark:text-[#F7F8FB]">{activeSection === 'overview' ? 'Profile details' : activeTabInGroup.label}</h2>
+                    <p className="text-xs text-[#566079] dark:text-[#AEB9D1] mt-0.5">{activeTabInGroup.description}</p>
                   </div>
                 </div>
                 {(activeSection === 'overview' || activeSection === 'location') && canEditProfile && !editMode && (
@@ -1979,7 +1871,7 @@ const UserDetail: FC = () => {
               </div>
 
             {/* ── PENDING APPROVAL BANNER — always visible regardless of active tab ── */}
-            {isAdmin && !user.isApproved && (
+            {canApproveUsers && !user.isApproved && (
               <div className="mx-4 mt-3 rounded-xl border border-red-400/50 bg-red-50 dark:bg-red-950/30 dark:border-red-700/50 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex items-start gap-3 flex-1 min-w-0">
                   <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center shrink-0 mt-0.5">
@@ -2051,42 +1943,36 @@ const UserDetail: FC = () => {
                 const created = (user as any).createdAt ? new Date((user as any).createdAt) : null;
                 const daysOn = created ? Math.floor((Date.now() - created.getTime()) / 86400000) : null;
                 const checks = [
-                  { label: 'Phone number',     done: !!user.phone,                              section: 'overview',     emoji: '📞' },
-                  { label: 'Employee ID',      done: !!user.employeeId,                         section: 'overview',     emoji: '🪪' },
-                  { label: 'Department set',   done: !!empDepartmentId,                         section: 'employment',   emoji: '🏢' },
-                  { label: 'Bank account',     done: !!user.bankAccount,                        section: 'compensation', emoji: '🏦' },
-                  { label: 'Personal details', done: hasPersonalDetails,                         section: 'personal',     emoji: '👤' },
-                  { label: 'Documents',        done: docsVerified.total > 0,                    section: 'documents',    emoji: '📁' },
+                  { label: 'Phone number',     done: !!user.phone,                              section: 'overview' },
+                  { label: 'Employee ID',      done: !!user.employeeId,                         section: 'overview' },
+                  { label: 'Department',       done: !!empDepartmentId,                         section: 'employment' },
+                  { label: 'Bank account',     done: !!user.bankAccount,                        section: 'compensation' },
+                  { label: 'Personal details', done: hasPersonalDetails,                         section: 'personal' },
+                  { label: 'Documents',        done: docsVerified.total > 0,                    section: 'documents' },
                 ];
                 const doneCnt = checks.filter(c => c.done).length;
                 const pct = Math.round(doneCnt / checks.length * 100);
-                const barColor = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500';
-                const textColor = pct >= 80 ? 'text-green-600 dark:text-green-400' : pct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
                 return (
-                  <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 space-y-3">
+                  <div className="rounded-lg border border-[#D8DDE9] bg-[#F7F8FB] p-4 space-y-3 dark:border-[#354064] dark:bg-[#1B2543]">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-bold text-sm">Profile Completeness</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{doneCnt} of {checks.length} key fields filled{daysOn !== null ? ` · ${daysOn.toLocaleString()} days on record` : ''}</p>
+                        <p className="font-semibold text-sm text-[#202943] dark:text-[#F7F8FB]">Profile completeness</p>
+                        <p className="text-xs text-[#566079] dark:text-[#AEB9D1] mt-0.5">{doneCnt} of {checks.length} key fields filled{daysOn !== null ? ` · ${daysOn.toLocaleString()} days on record` : ''}</p>
                       </div>
-                      <span className={`text-2xl font-black ${textColor}`}>{pct}%</span>
+                      <span className="text-xl font-semibold tabular-nums text-[#273677] dark:text-[#CBD4EF]">{pct}%</span>
                     </div>
-                    <div className="h-1.5 rounded-full bg-primary/10 overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                    <div className="h-1.5 rounded-full bg-[#D8DDE9] dark:bg-[#354064] overflow-hidden" role="progressbar" aria-label="Profile completeness" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+                      <div className="h-full rounded-full bg-[#273677]" style={{ width: `${pct}%` }} />
                     </div>
-                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-1.5 pt-0.5">
                       {checks.map(c => (
                         <button
                           key={c.label}
                           onClick={() => setActiveSection(c.section)}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors
-                            ${c.done
-                              ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800'
-                              : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-950/50 cursor-pointer'}`}
+                          className="flex items-center justify-between gap-2 rounded-md border border-[#D8DDE9] bg-[#FDFDFD] px-3 py-2 text-left text-xs font-medium text-[#202943] hover:border-[#273677]/40 dark:border-[#354064] dark:bg-[#202B4D] dark:text-[#F7F8FB]"
                         >
-                          <span>{c.emoji}</span>
                           <span>{c.label}</span>
-                          <span className="opacity-60">{c.done ? '✓' : '→'}</span>
+                          <span className={c.done ? 'text-[#273677] dark:text-[#CBD4EF]' : 'text-[#B94B13]'}>{c.done ? 'Complete' : 'Add →'}</span>
                         </button>
                       ))}
                     </div>
@@ -2324,8 +2210,8 @@ const UserDetail: FC = () => {
                         className="border rounded-lg px-3 py-2 w-full h-11 text-sm bg-background disabled:opacity-60 disabled:cursor-not-allowed"
                         value={editForm.role || ""}
                         onChange={e => handleEditChange("role", e.target.value)}
-                        disabled={isProtectedOwner(user?.id)}
-                        title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
+                        disabled={isProtectedOwner(user?.id) || !canAssignRoles}
+                        title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : !canAssignRoles ? "Changing roles requires the roles:assign permission" : undefined}
                       >
                         <option value="" disabled>Select role</option>
                         {availableRoles.map(role => (
@@ -3710,7 +3596,7 @@ const UserDetail: FC = () => {
 
             {/* ── TRAINING & CERTIFICATIONS SECTION ────────────────────────── */}
             {activeSection === 'training' && (<div className="p-5 sm:p-6">
-              <EmployeeTrainingTab userId={user.id} isAdmin={!!canEditProfile} />
+              <EmployeeTrainingTab userId={user.id} />
             </div>)}
 
             {/* ── DEPENDENTS SECTION ───────────────────────────────────────── */}
@@ -3734,7 +3620,7 @@ const UserDetail: FC = () => {
                     <div className="flex items-center gap-3 flex-wrap">
                       <RoleBadge role={user.role} size="sm" />
                       <UserClassificationBadge userId={user.id} />
-                      {!editMode && (
+                      {!editMode && canAssignRoles && (
                         <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={handleEdit} data-testid="button-change-role">
                           <Edit className="h-3 w-3" /> Change Role
                         </Button>
@@ -3746,8 +3632,8 @@ const UserDetail: FC = () => {
                           className="border rounded-lg px-3 py-2 w-full h-11 text-sm bg-background disabled:opacity-60 disabled:cursor-not-allowed"
                           value={editForm.role || ""}
                           onChange={e => handleEditChange("role", e.target.value)}
-                          disabled={isProtectedOwner(user?.id)}
-                          title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
+                          disabled={isProtectedOwner(user?.id) || !canAssignRoles}
+                          title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : !canAssignRoles ? "Changing roles requires the roles:assign permission" : undefined}
                         >
                           <option value="" disabled>Select role</option>
                           {availableRoles.map(role => (
@@ -3778,180 +3664,18 @@ const UserDetail: FC = () => {
                   </div>
                 )}
 
-                {/* ── Additional / Secondary Roles ────────────────────────── */}
-                {isAdmin && (() => {
-                  const MIGRATION_SQL = `-- Run once in Supabase SQL Editor (safe to re-run)
-ALTER TABLE public.profiles
-  ADD COLUMN IF NOT EXISTS additional_roles jsonb DEFAULT '[]'::jsonb;`;
-
-                  return (
-                    <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                          <Plus className="h-3.5 w-3.5" /> Additional Roles
-                        </h4>
-                        {!addRoleMode && !rolesNeedsMigration && (
-                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setAddRoleMode(true)}>
-                            <Plus className="h-3 w-3" /> Add Role
-                          </Button>
-                        )}
-                      </div>
-
-                      {/* ── Migration required banner ── */}
-                      {rolesNeedsMigration ? (
-                        <div className="rounded-lg border border-amber-400/40 bg-amber-50/60 dark:bg-amber-900/20 p-3 space-y-3">
-                          <div className="flex items-start gap-2">
-                            <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">One-time database setup required</p>
-                              <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
-                                One quick SQL change is needed on your <strong>profiles</strong> table to store additional roles.
-                                Run the two-line SQL below in your <strong>Supabase SQL Editor</strong>, then click <em>I've run it, try again</em>.
-                              </p>
-                              <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-1 font-medium">
-                                💡 If you see <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">"column already exists"</code> — that means it's done! Click <em>I've run it, try again</em> below.
-                              </p>
-                            </div>
-                          </div>
-                          <div className="relative">
-                            <pre className="text-[10px] leading-relaxed font-mono bg-[#0d1117] text-green-300 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{MIGRATION_SQL}</pre>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(MIGRATION_SQL);
-                                toast({ title: 'SQL copied!', description: 'Paste it into Supabase SQL Editor and click Run.' });
-                              }}
-                              className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-semibold bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded transition-colors"
-                            >
-                              <Upload className="h-3 w-3" /> Copy SQL
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <a
-                              href="https://supabase.com/dashboard/project/_/sql/new"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
-                            >
-                              <Globe className="h-3 w-3" /> Open Supabase SQL Editor ↗
-                            </a>
-                            <span className="text-muted-foreground text-[10px]">—</span>
-                            <button
-                              onClick={async () => {
-                                setRolesNeedsMigration(false);
-                                await fetchAdditionalRoles(user.id);
-                                setAddRoleMode(true);
-                              }}
-                              className="text-[11px] text-muted-foreground hover:text-foreground underline"
-                            >
-                              I've run it, try again
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-[11px] text-muted-foreground">
-                            Secondary roles this user holds in addition to their primary role — optionally scoped to a specific hub.
-                          </p>
-
-                          {additionalRoles.length === 0 && !addRoleMode && (
-                            <p className="text-xs text-muted-foreground italic">No additional roles assigned.</p>
-                          )}
-                          <div className="space-y-2">
-                            {additionalRoles.map(ar => (
-                              <div key={ar.role} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border bg-background text-sm">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Badge variant="secondary" className="text-xs font-medium">
-                                    {toRoleLabel(ar.role) || ar.role}
-                                  </Badge>
-                                  {ar.hub_id && (
-                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                      <MapPin className="h-3 w-3" /> {hubs.find(h => h.id === ar.hub_id)?.name || ar.hub_id}
-                                    </span>
-                                  )}
-                                  {ar.assigned_at && (
-                                    <span className="text-[10px] text-muted-foreground">
-                                      Since {new Date(ar.assigned_at).toLocaleDateString()}
-                                    </span>
-                                  )}
-                                </div>
-                                <Button size="sm" variant="ghost"
-                                  className="h-6 w-6 p-0 text-red-500 hover:bg-red-50 hover:text-red-600 shrink-0"
-                                  onClick={() => handleRemoveAdditionalRole(ar.role)}
-                                  title="Remove this role">
-                                  <UserX className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-
-                          {addRoleMode && (
-                            <div className="rounded-lg border bg-background p-3 space-y-3">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                  <label className="text-xs font-medium">Role</label>
-                                  <select
-                                    className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
-                                    value={newRolePick}
-                                    onChange={e => setNewRolePick(e.target.value)}
-                                  >
-                                    <option value="">Select role…</option>
-                                    {(VISIBLE_ROLE_CODES as readonly string[])
-                                      .filter(r => normalizeRole(r) !== normalizeRole(user.role || ''))
-                                      .map(r => (
-                                        <option key={r} value={r}>{toRoleLabel(r) || r}</option>
-                                      ))}
-                                    {customDbRoles.map(r => (
-                                      <option key={r.id} value={r.name}>{r.display_name || r.name}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div className="space-y-1.5">
-                                  <label className="text-xs font-medium">
-                                    Hub Scope
-                                    {['supervisor','hubSupervisor','hub_supervisor'].some(s => normalizeRole(newRolePick) === normalizeRole(s)) && (
-                                      <span className="text-red-500 ml-1">*</span>
-                                    )}
-                                  </label>
-                                  <select
-                                    className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
-                                    value={newRoleHub}
-                                    onChange={e => setNewRoleHub(e.target.value)}
-                                  >
-                                    <option value="">— Select hub —</option>
-                                    {hubs.map(h => (
-                                      <option key={h.id} value={h.id}>{h.name}</option>
-                                    ))}
-                                  </select>
-                                  {['supervisor','hubSupervisor','hub_supervisor'].some(s => normalizeRole(newRolePick) === normalizeRole(s)) && !newRoleHub && (
-                                    <p className="text-[10px] text-red-500">Hub is required for Supervisor role</p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={handleAddRole}
-                                  disabled={
-                                    !newRolePick ||
-                                    addRoleSaving ||
-                                    (['supervisor','hubSupervisor','hub_supervisor'].some(s => normalizeRole(newRolePick) === normalizeRole(s)) && !newRoleHub)
-                                  }
-                                  className="gap-1.5"
-                                >
-                                  {addRoleSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                                  {addRoleSaving ? 'Saving…' : 'Add Role'}
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => { setAddRoleMode(false); setNewRolePick(''); setNewRoleHub(''); }}>
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })()}
+                {isAdmin && (
+                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      <Shield className="h-3.5 w-3.5" /> Role policy
+                    </h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Each person has exactly one role. Change it above or assign users from{' '}
+                      <Link to="/role-management" className="underline font-medium text-foreground">Role Management</Link>
+                      — additional / secondary roles are no longer used.
+                    </p>
+                  </div>
+                )}
 
                 <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
                   <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
@@ -4235,7 +3959,6 @@ ALTER TABLE public.profiles
             onSubmit={handleBankAccountSubmit}
             isSubmitting={false}
             existingDetails={user?.bankAccount as any}
-            currentUserRole={currentUser?.role}
           />
         </DialogContent>
       </Dialog>
@@ -4286,7 +4009,7 @@ ALTER TABLE public.profiles
             id:             user.id,
             name:           user.name,
             role:           user.role || "",
-            roleLabel:      toRoleLabel(user.role || "") || user.role || "",
+            roleLabel:      (() => { const code = normalizeRole(user.role || ""); return code ? toRoleLabel(code) : user.role || ""; })(),
             email:          user.email || undefined,
             phone:          user.phone || undefined,
             avatar:         user.avatar || undefined,

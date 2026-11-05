@@ -77,15 +77,15 @@ BEGIN
       e.claimed_by,e.accepted_at,e.dispatched_at,e.enumerator_fee,e.transport_fee,
       e.created_at,coalesce(e.main_activity,e.activity_at_site) main_activity,
       e.mmp_file_id,e.hub_office,
-      coalesce(c.effective_claimant_id::text,nullif(e.accepted_by,''),nullif(e.claimed_by,''),
+      coalesce(c.effective_claimant_id::text,nullif(e.accepted_by,''),nullif(e.claimed_by::text,''),
         e.additional_data->>'claimed_by',e.additional_data->>'assigned_to') claimant_key,
       coalesce(nullif(p.full_name,''),nullif(p.username,''),nullif(p.email,''),
-        c.effective_claimant_id::text,e.accepted_by,e.claimed_by,
+        c.effective_claimant_id::text,e.accepted_by,e.claimed_by::text,
         e.additional_data->>'claimed_by',e.additional_data->>'assigned_to') effective_claimant_name,
-      coalesce(m.name,m.project_name,m.mmp_id) mmp_name
+      coalesce(m.name,m.title,m.mmp_id) mmp_name
     FROM mmp_site_entries e
     LEFT JOIN site_effective_claimants c ON c.site_entry_id=e.id
-    LEFT JOIN profiles p ON p.id::text=coalesce(c.effective_claimant_id::text,nullif(e.accepted_by,''),nullif(e.claimed_by,''),
+    LEFT JOIN profiles p ON p.id::text=coalesce(c.effective_claimant_id::text,nullif(e.accepted_by,''),nullif(e.claimed_by::text,''),
       e.additional_data->>'claimed_by',e.additional_data->>'assigned_to')
     LEFT JOIN mmp_files m ON m.id=e.mmp_file_id
     WHERE public.superadmin_is_claimed_status(e.status)
@@ -135,14 +135,14 @@ BEGIN
   RETURN (WITH base AS (
     SELECT e.state,e.locality,coalesce(e.main_activity,e.activity_at_site) activity,
       public.superadmin_claimed_status_key(e.status) status_key,e.mmp_file_id,
-      coalesce(c.effective_claimant_id::text,nullif(e.accepted_by,''),nullif(e.claimed_by,''),
+      coalesce(c.effective_claimant_id::text,nullif(e.accepted_by,''),nullif(e.claimed_by::text,''),
         e.additional_data->>'claimed_by',e.additional_data->>'assigned_to') claimant_key,
       coalesce(e.site_name,'') site_name,coalesce(e.site_code,'') site_code,
       coalesce(nullif(p.full_name,''),nullif(p.username,''),nullif(p.email,''),
-        c.effective_claimant_id::text,e.accepted_by,e.claimed_by,e.additional_data->>'claimed_by',e.additional_data->>'assigned_to') claimant_name,
-      coalesce(m.name,m.project_name,m.mmp_id) mmp_name,e.transport_fee
+        c.effective_claimant_id::text,e.accepted_by,e.claimed_by::text,e.additional_data->>'claimed_by',e.additional_data->>'assigned_to') claimant_name,
+      coalesce(m.name,m.title,m.mmp_id) mmp_name,e.transport_fee
     FROM mmp_site_entries e LEFT JOIN site_effective_claimants c ON c.site_entry_id=e.id
-      LEFT JOIN profiles p ON p.id::text=coalesce(c.effective_claimant_id::text,nullif(e.accepted_by,''),nullif(e.claimed_by,''),e.additional_data->>'claimed_by',e.additional_data->>'assigned_to')
+      LEFT JOIN profiles p ON p.id::text=coalesce(c.effective_claimant_id::text,nullif(e.accepted_by,''),nullif(e.claimed_by::text,''),e.additional_data->>'claimed_by',e.additional_data->>'assigned_to')
       LEFT JOIN mmp_files m ON m.id=e.mmp_file_id
     WHERE public.superadmin_is_claimed_status(e.status)
   ), searched AS (

@@ -14,7 +14,6 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronDown, ChevronRight, RotateCcw, Save, Workflow } from 'lucide-react';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface OverrideRow {
   id?: string;
@@ -307,8 +306,8 @@ function StageEditor({
 }
 
 export default function AdminProjectFlowStages() {
-  const { hasAnyRole } = useAuthorization();
-  const isAdmin = hasAnyRole(['admin', 'super_admin']);
+  const { checkPermission } = useAuthorization();
+  const canConfigure = checkPermission('projects', 'settings');
   const [selectedType, setSelectedType] = useState<string>('tpm');
 
   const overridesQuery = useQuery({
@@ -320,7 +319,7 @@ export default function AdminProjectFlowStages() {
       if (error) return [];
       return (data ?? []) as OverrideRow[];
     },
-    enabled: isAdmin,
+    enabled: canConfigure,
   });
 
   const flow = PROJECT_FLOWS[selectedType] ?? PROJECT_FLOWS.other;
@@ -331,12 +330,12 @@ export default function AdminProjectFlowStages() {
     );
   }, [overridesQuery.data, selectedType]);
 
-  if (!isAdmin) {
+  if (!canConfigure) {
     return (
       <div className="container mx-auto p-6">
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
-            Access restricted to administrators.
+            You need the Configure Project Workflow permission to open this page.
           </CardContent>
         </Card>
       </div>
@@ -345,10 +344,6 @@ export default function AdminProjectFlowStages() {
 
   return (
     <div className="container mx-auto space-y-4 p-4 md:p-6">
-      <PageInfoBanner
-        title="Project Flow Stages"
-        description="Override the hard-coded labels, descriptions, key outputs, durations or visibility for any stage of any project type. Anything you leave blank falls back to the built-in default. Changes apply immediately to all matching projects."
-      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">

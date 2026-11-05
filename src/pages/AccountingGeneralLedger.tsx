@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
@@ -16,7 +16,6 @@ import {
   normalBalanceFromLedgerNet,
 } from '@/lib/accountingBalances';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import {
   useGlBootstrapQuery,
   useGlLedgerQuery,
@@ -30,12 +29,11 @@ const PAGE_SIZE = 100;
 
 export default function AccountingGeneralLedger() {
   const isColVisible = useColumnVisibility('accounting-general-ledger');
-  const { hasAnyRole, isAuthenticated, checkPermission } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated, checkPermission } = useAuthorization();
   const canExport = checkPermission('accounting', 'export');
   const [searchParams] = useSearchParams();
 
-  const bootstrapQuery = useGlBootstrapQuery(allowed && isAuthenticated);
+  const bootstrapQuery = useGlBootstrapQuery(isAuthenticated);
   const accounts = bootstrapQuery.data?.accounts ?? [];
   const years = bootstrapQuery.data?.years ?? [];
   const periods = bootstrapQuery.data?.periods ?? [];
@@ -186,7 +184,6 @@ export default function AccountingGeneralLedger() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
   if (bootstrap) return <PageLoader label="Loading general ledger…" />;
 
   return (
@@ -218,11 +215,6 @@ export default function AccountingGeneralLedger() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="General Ledger"
-        description="Shows every posted transaction for a selected account within a fiscal period, with a running balance column. Select an account and period, then click Run Ledger. Use the CSV export for reconciliation or auditor requests."
-        descriptionAr="يعرض كل معاملة مرحّلة لحساب محدد خلال فترة مالية مع عمود الرصيد الجاري. اختر الحساب والفترة ثم انقر 'تشغيل دفتر الأستاذ'. استخدم تصدير CSV للتسوية أو طلبات المراجعين."
-      />
 
       {/* Filters */}
       <Card className="mb-4">

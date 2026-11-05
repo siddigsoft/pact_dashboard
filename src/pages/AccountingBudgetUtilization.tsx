@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -36,9 +35,8 @@ function statusLabel(pct: number): string {
 }
 
 export default function AccountingBudgetUtilization() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
 
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(String(currentYear));
@@ -80,7 +78,7 @@ export default function AccountingBudgetUtilization() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void run(); }, [allowed, year, groupBy]);
+  useEffect(() => { void run(); }, [year, groupBy]);
 
   const filtered = useMemo(() => statusFilter === 'all' ? rows : rows.filter(r => r.status === statusFilter), [rows, statusFilter]);
   const totals = useMemo(() => filtered.reduce((s, r) => ({ budget: s.budget + r.budget, actual: s.actual + r.actual }), { budget: 0, actual: 0 }), [filtered]);
@@ -88,7 +86,6 @@ export default function AccountingBudgetUtilization() {
   const atRiskCount = rows.filter(r => r.pct >= 85 && r.pct < 100).length;
 
   if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-4 p-4">

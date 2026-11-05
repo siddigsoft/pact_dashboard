@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useNotifications } from '@/context/notifications/NotificationContext';
-import { useSettings } from '@/context/settings/SettingsContext';
+import { useSettings, isInQuietHours } from '@/context/settings/SettingsContext';
 import { useNavigate } from 'react-router-dom';
 
 const BrowserNotificationListener = () => {
@@ -43,6 +43,10 @@ const BrowserNotificationListener = () => {
       newNotification.message
     );
     if (!notificationSettings.categories[category]) {
+      return;
+    }
+
+    if (newNotification.priority !== 'urgent' && isInQuietHours(notificationSettings.quietHours)) {
       return;
     }
 

@@ -12,6 +12,15 @@ dist
 PACT_MOBILE
 dist-ssr
 *.local
+coverage/
+.vite/
+.playwright-cli/
+.codex_artifacts/
+
+# Flutter generated files (legacy — mobile app removed)
+# mobile/.dart_tool/
+
+# Editor / env
 /.env
 /.env.local
 /.env.*.local

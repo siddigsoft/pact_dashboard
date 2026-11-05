@@ -10,10 +10,10 @@ import { useAuthorization } from '@/hooks/use-authorization';
 const CreateSiteVisit = () => {
   const navigate = useNavigate();
   const { currentUser } = useAppContext();
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
 
   // Check if user has permission (admin bypass)
-  const canAccess = checkPermission('site_visits', 'create') || hasAnyRole(['admin']);
+  const canAccess = checkPermission('site_visits', 'create');
   if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -27,7 +27,7 @@ const CreateSiteVisit = () => {
           <CardContent>
             <Button
               variant="outline"
-              onClick={() => navigate('/site-visits')}
+              onClick={() => navigate('/field-ops')}
               className="w-full"
             >
               Return to Site Visits
@@ -44,7 +44,7 @@ const CreateSiteVisit = () => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate("/site-visits")}
+          onClick={() => navigate("/field-ops")}
           className="mr-2"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />

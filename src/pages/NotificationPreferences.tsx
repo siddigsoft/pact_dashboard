@@ -10,7 +10,6 @@ import { Bell, Mail, Smartphone, Volume2, VolumeX, Moon, Clock, Save, RotateCcw,
 import { useDoNotDisturb } from '@/hooks/use-do-not-disturb';
 import { useNotificationSound } from '@/hooks/use-notification-sound';
 import { toast } from '@/hooks/toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface CategoryPreference {
   inApp: boolean;
@@ -49,7 +48,30 @@ const DEFAULT_PREFERENCES: NotificationPreferencesState = {
 const loadPreferences = (): NotificationPreferencesState => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return { ...DEFAULT_PREFERENCES, ...JSON.parse(stored) };
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const savedCategories = parsed.categories && typeof parsed.categories === 'object' && !Array.isArray(parsed.categories)
+          ? parsed.categories
+          : {};
+        return {
+          categories: Object.fromEntries(CATEGORIES.map(({ key }) => [
+            key,
+            { ...DEFAULT_PREFERENCES.categories[key], ...(
+              savedCategories[key] && typeof savedCategories[key] === 'object' && !Array.isArray(savedCategories[key])
+                ? savedCategories[key]
+                : {}
+            ) },
+          ])),
+          digestFrequency: ['none', 'daily', 'weekly'].includes(parsed.digestFrequency)
+            ? parsed.digestFrequency
+            : DEFAULT_PREFERENCES.digestFrequency,
+          cleanupThresholdDays: [7, 14, 30, 60, 90].includes(parsed.cleanupThresholdDays)
+            ? parsed.cleanupThresholdDays
+            : DEFAULT_PREFERENCES.cleanupThresholdDays,
+        };
+      }
+    }
   } catch {}
   return DEFAULT_PREFERENCES;
 };
@@ -88,11 +110,6 @@ export default function NotificationPreferences() {
 
   return (
     <div className="space-y-6 p-6 max-w-4xl mx-auto" data-testid="notification-preferences-page">
-      <PageInfoBanner
-        title="Notification Preferences"
-        description="Customize how and when you receive notifications"
-        descriptionAr="تخصيص كيفية ووقت تلقي الإشعارات"
-      />
 
       <Card>
         <CardHeader>

@@ -134,7 +134,7 @@ export function ActionableNotificationProvider({
           if (notification.entityId) {
             navigate(`/site-visits/${notification.entityId}`);
           } else {
-            navigate('/site-visits');
+            navigate('/field-ops');
           }
           break;
         case 'approval':

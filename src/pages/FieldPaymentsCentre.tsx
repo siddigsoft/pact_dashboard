@@ -334,8 +334,9 @@ export default function FieldPaymentsCentre() {
   const tab = searchParams.get('tab') ?? 'fees';
   const mmpFilter = searchParams.get('mmp') ?? '';
 
-  const userRole = currentUser?.role?.toLowerCase() ?? '';
-  const isFinance = isSuperAdmin || ['admin', 'financialadmin', 'superadmin', 'accountant'].includes(userRole);
+  // Page access is enforced by the route guard; row visibility by RLS.
+  const canRecordFeePayments = isSuperAdmin || checkPermission('finances', 'update');
+  const canExecuteExceptions = isSuperAdmin || checkPermission('down_payments', 'update');
   const financeScopeIdentity = JSON.stringify({
     role: currentUser?.role ?? '',
     roles: [...(currentUser?.roles ?? [])].sort(),
@@ -442,7 +443,7 @@ export default function FieldPaymentsCentre() {
     setExceptionsLoadError(null);
     setRecoveryLoadError(null);
 
-    if (!currentUser?.id || !isFinance) {
+    if (!currentUser?.id) {
       return;
     }
 
@@ -473,7 +474,7 @@ export default function FieldPaymentsCentre() {
         dataLoadGeneration.current += 1;
       }
     };
-  }, [currentUser?.id, isFinance, financeScopeIdentity]);
+  }, [currentUser?.id, financeScopeIdentity]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Tab 1: Load enumerator fees
@@ -1652,19 +1653,6 @@ export default function FieldPaymentsCentre() {
   // Render
   // ─────────────────────────────────────────────────────────────────────────
 
-  if (!isFinance) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh] p-8">
-        <Alert className="max-w-md border-red-200 bg-red-50">
-          <Lock className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">
-            Access restricted. Finance roles only.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -1865,7 +1853,7 @@ export default function FieldPaymentsCentre() {
                 {exportingTab === 'fees' ? 'Exporting…' : 'Export Excel'}
               </Button>
             </ReportExportGate>
-            {feeSelected.size > 0 && (
+            {canRecordFeePayments && feeSelected.size > 0 && (
               <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => openPayDialog(filteredFees.filter(r => feeSelected.has(r.id)))}>
                 <Banknote className="h-3 w-3 mr-1" /> Pay {feeSelected.size} selected
               </Button>
@@ -1967,7 +1955,7 @@ export default function FieldPaymentsCentre() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {row.feePaidStatus !== 'paid' && row.netPayable > 0 && row.cycleStatus !== 'closed' && (
+                        {canRecordFeePayments && row.feePaidStatus !== 'paid' && row.netPayable > 0 && row.cycleStatus !== 'closed' && (
                           <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => openPayDialog([row])}>
                             <Banknote className="h-3 w-3 mr-1" /> Pay
                           </Button>
@@ -2237,7 +2225,7 @@ export default function FieldPaymentsCentre() {
                           <ExternalLink className="h-3 w-3" /> Receipt
                         </a>
                       )}
-                      {!action.executed && !action.reopenedFromActionId && (
+                      {canExecuteExceptions && !action.executed && !action.reopenedFromActionId && (
                         <Button size="sm" className="h-7 text-xs" onClick={() => openExcDialog(action)}>
                           Execute →
                         </Button>

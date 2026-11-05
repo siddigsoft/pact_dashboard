@@ -1,6 +1,3 @@
-import { Device } from '@capacitor/device';
-import { Network } from '@capacitor/network';
-
 interface DeviceFingerprint {
   deviceId: string;
   platform: string;
@@ -36,12 +33,9 @@ const KNOWN_DEVICES_KEY = 'pact_known_devices';
 const MAX_STORED_DEVICES = 10;
 
 async function generateDeviceId(): Promise<string> {
-  const info = await Device.getInfo();
   const components = [
-    info.platform,
-    info.model,
-    info.manufacturer,
-    info.osVersion,
+    'web',
+    navigator.userAgent,
     navigator.language,
     Intl.DateTimeFormat().resolvedOptions().timeZone,
     screen.width,
@@ -57,62 +51,40 @@ async function generateDeviceId(): Promise<string> {
 }
 
 export async function getDeviceFingerprint(): Promise<DeviceFingerprint> {
-  try {
-    const [deviceInfo, networkStatus] = await Promise.all([
-      Device.getInfo(),
-      Network.getStatus(),
-    ]);
+  let batteryLevel: number | undefined;
+  let isCharging: boolean | undefined;
 
-    let batteryLevel: number | undefined;
-    let isCharging: boolean | undefined;
-
-    if ('getBattery' in navigator) {
-      try {
-        const battery = await (navigator as any).getBattery();
-        batteryLevel = Math.round(battery.level * 100);
-        isCharging = battery.charging;
-      } catch {
-      }
+  if ('getBattery' in navigator) {
+    try {
+      const battery = await (navigator as any).getBattery();
+      batteryLevel = Math.round(battery.level * 100);
+      isCharging = battery.charging;
+    } catch {
+      // ignore
     }
-
-    const deviceId = await generateDeviceId();
-
-    return {
-      deviceId,
-      platform: deviceInfo.platform,
-      osVersion: deviceInfo.osVersion,
-      model: deviceInfo.model,
-      manufacturer: deviceInfo.manufacturer,
-      isVirtual: deviceInfo.isVirtual,
-      memoryUsed: (performance as any).memory?.usedJSHeapSize,
-      batteryLevel,
-      isCharging,
-      networkType: networkStatus.connectionType,
-      screenWidth: screen.width,
-      screenHeight: screen.height,
-      pixelRatio: window.devicePixelRatio,
-      language: navigator.language,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      timestamp: Date.now(),
-    };
-  } catch (error) {
-    console.warn('Could not get full device fingerprint:', error);
-    return {
-      deviceId: await generateDeviceId(),
-      platform: 'web',
-      osVersion: navigator.userAgent,
-      model: 'unknown',
-      manufacturer: 'unknown',
-      isVirtual: false,
-      networkType: 'unknown',
-      screenWidth: screen.width,
-      screenHeight: screen.height,
-      pixelRatio: window.devicePixelRatio,
-      language: navigator.language,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      timestamp: Date.now(),
-    };
   }
+
+  const deviceId = await generateDeviceId();
+  const connection = (navigator as any).connection;
+
+  return {
+    deviceId,
+    platform: 'web',
+    osVersion: navigator.userAgent,
+    model: 'browser',
+    manufacturer: 'browser',
+    isVirtual: false,
+    memoryUsed: (performance as any).memory?.usedJSHeapSize,
+    batteryLevel,
+    isCharging,
+    networkType: connection?.effectiveType || (navigator.onLine ? 'online' : 'offline'),
+    screenWidth: screen.width,
+    screenHeight: screen.height,
+    pixelRatio: window.devicePixelRatio,
+    language: navigator.language,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timestamp: Date.now(),
+  };
 }
 
 function getStoredDevices(): string[] {
@@ -129,30 +101,19 @@ function storeDevice(deviceId: string): void {
     const devices = getStoredDevices();
     if (!devices.includes(deviceId)) {
       devices.unshift(deviceId);
-      if (devices.length > MAX_STORED_DEVICES) {
-        devices.pop();
-      }
+      if (devices.length > MAX_STORED_DEVICES) devices.pop();
       localStorage.setItem(KNOWN_DEVICES_KEY, JSON.stringify(devices));
     }
   } catch {
+    // ignore
   }
 }
 
 function calculateTrustScore(fingerprint: DeviceFingerprint, isKnown: boolean): number {
   let score = 50;
-
   if (isKnown) score += 30;
-
   if (!fingerprint.isVirtual) score += 10;
-
-  if (fingerprint.platform === 'android' || fingerprint.platform === 'ios') {
-    score += 5;
-  }
-
-  if (fingerprint.batteryLevel !== undefined) {
-    score += 5;
-  }
-
+  if (fingerprint.batteryLevel !== undefined) score += 5;
   return Math.min(100, score);
 }
 
@@ -164,11 +125,7 @@ export async function createLoginAnalytics(
   const knownDevices = getStoredDevices();
   const isNewDevice = !knownDevices.includes(fingerprint.deviceId);
 
-  if (isNewDevice) {
-    storeDevice(fingerprint.deviceId);
-  }
-
-  const trustScore = calculateTrustScore(fingerprint, !isNewDevice);
+  if (isNewDevice) storeDevice(fingerprint.deviceId);
 
   return {
     fingerprintId: fingerprint.deviceId,
@@ -177,7 +134,7 @@ export async function createLoginAnalytics(
     location,
     deviceInfo: fingerprint,
     isNewDevice,
-    trustScore,
+    trustScore: calculateTrustScore(fingerprint, !isNewDevice),
   };
 }
 

@@ -1,4 +1,4 @@
-import { canSeePage, isProjectMembershipDetailPath, resolveRouteAccessTarget, type RoutePermission } from '@/lib/page-roles';
+import { canSeePage, isOwnSettingsPath, isOwnUserProfilePath, isProjectMembershipDetailPath, resolveRouteAccessTarget, type RoutePermission } from '@/lib/page-roles';
 import { isSuperAdminRole } from '@/lib/effectiveAccess';
 import { ACCESS_TARGET_REGISTRY, getAccessTargetDependencies } from '@/lib/access-target-registry';
 import { PAGE_DEFS, type PageDef } from '@/lib/access-registry';
@@ -58,16 +58,23 @@ export function evaluateManifestPageAccess(
   slug: string,
   routePermission?: RoutePermission | null,
 ): ManifestAccessDecision {
-  const configuredRoles = manifest.page_role_configs[slug];
-  const roleBaseline = routePermission
-    ? false
-    : manifest.roles.some(role => canSeePage(slug, role, configuredRoles));
-
   const pageOverride = manifest.page_overrides[slug];
   if (manifestPageHasExplicitDenial(manifest, slug) ||
     getAccessTargetDependencies(slug).some(parent => manifestPageHasExplicitDenial(manifest, parent))) {
     return { allowed: false, source: 'page_override' };
   }
+
+  // Profile / assigned Super Admin matches canSeePage() and the route guard:
+  // allow every page that is not explicitly blocked, including action-gated
+  // destinations (e.g. /mmp → mmp:read via the reports directory map).
+  if (manifest.roles.some(isSuperAdminRole)) {
+    return { allowed: true, source: 'role_baseline' };
+  }
+
+  const configuredRoles = manifest.page_role_configs[slug];
+  const roleBaseline = routePermission
+    ? false
+    : manifest.roles.some(role => canSeePage(slug, role, configuredRoles));
 
   if (routePermission) {
     const override = manifest.action_overrides[`${routePermission.resource}:${routePermission.action}`];
@@ -139,7 +146,11 @@ export function manifestHasExplicitActionGrant(
  *
  * Project membership detail (/projects/:id) is reachable with either org-wide
  * Projects or My Projects — so members can open their own project without the
- * org catalogue grant. Edit/create/team routes still require Projects. */
+ * org catalogue grant. Edit/create/team routes still require Projects.
+ *
+ * Own user profile (/users/:id matching manifest.user_id) is always reachable
+ * without User Management — even when the users page is explicitly blocked.
+ * The same applies to the user's own Settings page (/settings). */
 export function evaluateManifestRouteAccess(manifest: CurrentUserAccessManifest, pathname: string, search = '', hash = ''): boolean {
   const target = resolveRouteAccessTarget(pathname, search, hash);
   if (!target) return false;
@@ -153,6 +164,16 @@ export function evaluateManifestRouteAccess(manifest: CurrentUserAccessManifest,
   ) {
     allowed = true;
   }
+  if (
+    !allowed &&
+    target.slug === 'users' &&
+    isOwnUserProfilePath(pathname, manifest.user_id)
+  ) {
+    allowed = true;
+  }
+  if (!allowed && target.slug === 'settings' && isOwnSettingsPath(pathname)) {
+    allowed = true;
+  }
   if (!allowed) return false;
 
   const tabId = new URLSearchParams(search).get('tab');
@@ -160,6 +181,27 @@ export function evaluateManifestRouteAccess(manifest: CurrentUserAccessManifest,
   const hub = ACCESS_TARGET_REGISTRY.find(candidate => candidate.page.path === pathname);
   const tab = hub?.tabs.find(candidate => candidate.tabId === tabId);
   return !tab || !manifestIsTabBlocked(manifest, tab.slug);
+}
+
+/** Hub roots whose in-module tabs are reached from HubLayout, not the sidebar. */
+const HUB_NAV_ROOTS = new Set([
+  '/finance-hub',
+  '/accounting',
+  '/pre-funding',
+  '/hr',
+  '/programme-hub',
+  '/field-ops',
+  '/crm',
+  '/communication-hub',
+  '/analytics',
+  '/admin-hub',
+  '/super-admin-hub',
+]);
+
+/** True when path is a hub `?tab=` leaf — sidebar shows the hub door only. */
+export function isHubTabNavigationPath(path: string): boolean {
+  if (!path.includes('?tab=')) return false;
+  return HUB_NAV_ROOTS.has(path.split('?')[0]);
 }
 
 /** Registry-driven navigation for a signed-in user. Personal preferences can
@@ -171,6 +213,8 @@ export function getManifestNavigationPages(manifest: CurrentUserAccessManifest):
     // re-admit a page that is explicitly blocked on its canonical identity.
     if (!evaluateManifestPageAccess(manifest, page.slug).allowed) return [];
     const path = PAGE_ACCESS_REDIRECTS.find(redirect => redirect.fromPath === page.path)?.toPath ?? page.path;
+    // Sidebar is cross-app only — hub tabs are navigated inside HubLayout.
+    if (isHubTabNavigationPath(path)) return [];
     const url = new URL(path, 'https://access.invalid');
     if (destinations.has(path) || !evaluateManifestRouteAccess(manifest, url.pathname, url.search, url.hash)) return [];
     destinations.add(path);

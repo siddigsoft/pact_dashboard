@@ -8,10 +8,10 @@ import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-  Plus, ClipboardList, BarChart2, Users, Clock,
+  Plus, ClipboardList, Users, Clock,
   Trash2, ExternalLink, Edit3, Copy, Loader2, Search, Archive,
   PlayCircle, FileText, Link2, LayoutGrid, List, TrendingUp,
-  Sparkles, ChevronRight, AlertCircle, ArrowUpDown,
+  ChevronRight, AlertCircle, ArrowUpDown,
   Share2, QrCode, CheckCircle2, XCircle, Send, AlarmClock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -52,12 +52,12 @@ function getDeadlineInfo(survey: Survey) {
   const dl = new Date(String(raw));
   if (isNaN(dl.getTime())) return null;
   const diffMs = dl.getTime() - Date.now();
-  if (diffMs < 0) return { label: 'Deadline passed', badgeCls: 'bg-red-100 text-red-700 border-red-200', passed: true };
+  if (diffMs < 0) return { label: 'Deadline passed', badgeCls: 'bg-orange-50 text-[#B94B13] border-orange-200', passed: true };
   const diffH = Math.floor(diffMs / 3_600_000);
   const diffD = Math.floor(diffMs / 86_400_000);
-  if (diffH < 24) return { label: `Closes in ${diffH}h`, badgeCls: 'bg-red-100 text-red-700 border-red-200', passed: false };
-  if (diffD <= 2) return { label: `Closes in ${diffD}d`, badgeCls: 'bg-orange-100 text-orange-700 border-orange-200', passed: false };
-  if (diffD <= 7) return { label: `Closes in ${diffD}d`, badgeCls: 'bg-amber-100 text-amber-700 border-amber-200', passed: false };
+  if (diffH < 24) return { label: `Closes in ${diffH}h`, badgeCls: 'bg-orange-50 text-[#B94B13] border-orange-200', passed: false };
+  if (diffD <= 2) return { label: `Closes in ${diffD}d`, badgeCls: 'bg-orange-50 text-[#B94B13] border-orange-200', passed: false };
+  if (diffD <= 7) return { label: `Closes in ${diffD}d`, badgeCls: 'bg-orange-50 text-[#B94B13] border-orange-200', passed: false };
   return { label: `Closes ${format(dl, 'dd MMM')}`, badgeCls: 'bg-slate-100 text-slate-500 border-slate-200', passed: false };
 }
 
@@ -67,40 +67,40 @@ const STATUS_CFG: Record<SurveyStatus, {
   dot: string;
   accent: string;
   icon: React.ElementType;
-  glow: string;
+  hover: string;
 }> = {
   draft: {
     label: 'Draft',
     badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
     dot: 'bg-slate-400',
-    accent: 'border-l-slate-300 bg-gradient-to-br from-slate-50 to-white',
+    accent: 'border-l-slate-300 bg-white',
     icon: Edit3,
-    glow: 'hover:border-l-slate-400',
+    hover: 'hover:border-l-slate-400',
   },
   active: {
     label: 'Active',
-    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    dot: 'bg-emerald-500',
-    accent: 'border-l-emerald-400 bg-gradient-to-br from-emerald-50/40 to-white',
+    badgeClass: 'bg-[#F0F2FA] text-[#273677] border-[#D5DBED]',
+    dot: 'bg-[#273677]',
+    accent: 'border-l-[#273677] bg-white',
     icon: PlayCircle,
-    glow: 'hover:border-l-emerald-500',
+    hover: 'hover:border-l-[#1B2758]',
   },
   closed: {
     label: 'Closed',
-    badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
-    dot: 'bg-orange-400',
-    accent: 'border-l-orange-300 bg-gradient-to-br from-orange-50/40 to-white',
+    badgeClass: 'bg-orange-50 text-[#B94B13] border-orange-200',
+    dot: 'bg-[#EC6A1F]',
+    accent: 'border-l-[#EC6A1F] bg-white',
     icon: Archive,
-    glow: 'hover:border-l-orange-400',
+    hover: 'hover:border-l-[#B94B13]',
   },
 };
 
 const STAT_CARDS = [
-  { key: 'total' as const,     label: 'Total Surveys', icon: ClipboardList, gradient: 'from-indigo-500 to-indigo-600', bg: 'from-indigo-50 to-indigo-100/60',   text: 'text-indigo-700', sub: 'text-indigo-500' },
-  { key: 'active' as const,    label: 'Active',        icon: PlayCircle,    gradient: 'from-emerald-500 to-emerald-600', bg: 'from-emerald-50 to-emerald-100/60', text: 'text-emerald-700', sub: 'text-emerald-500' },
-  { key: 'draft' as const,     label: 'Drafts',        icon: Edit3,         gradient: 'from-slate-400 to-slate-500',   bg: 'from-slate-50 to-slate-100/60',     text: 'text-slate-700',   sub: 'text-slate-400' },
-  { key: 'closed' as const,    label: 'Closed',        icon: Archive,       gradient: 'from-orange-400 to-orange-500', bg: 'from-orange-50 to-orange-100/60',   text: 'text-orange-700',  sub: 'text-orange-400' },
-  { key: 'responses' as const, label: 'Responses',     icon: Users,         gradient: 'from-violet-500 to-violet-600', bg: 'from-violet-50 to-violet-100/60',   text: 'text-violet-700',  sub: 'text-violet-500' },
+  { key: 'total' as const, label: 'Total surveys', icon: ClipboardList },
+  { key: 'active' as const, label: 'Active', icon: PlayCircle },
+  { key: 'draft' as const, label: 'Drafts', icon: Edit3 },
+  { key: 'closed' as const, label: 'Closed', icon: Archive },
+  { key: 'responses' as const, label: 'Responses', icon: Users },
 ];
 
 function sortSurveys(surveys: Survey[], key: SortKey): Survey[] {
@@ -305,25 +305,15 @@ export default function SurveysPage() {
       });
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+      <div className="min-h-screen bg-[#F7F8FB]">
         {/* Header */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 px-6 py-8 md:px-10 md:py-10">
-          <div className="absolute -top-10 -right-10 w-64 h-64 bg-white/5 rounded-full pointer-events-none" />
-          <div className="absolute top-4 right-32 w-32 h-32 bg-white/5 rounded-full pointer-events-none" />
-          <div className="relative max-w-3xl mx-auto">
-            <div className="flex items-center gap-3 mb-1.5">
-              <div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center">
-                <ClipboardList className="w-5 h-5 text-white" />
-              </div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Available Forms</h1>
-            </div>
-            <p className="text-indigo-200 text-sm">Select a form below to fill and submit your response.</p>
+        <div className="border-b border-[#DDE2ED] bg-white px-5 py-7 md:px-10">
+          <div className="max-w-5xl mx-auto border-l-[3px] border-[#EC6A1F] pl-4">
+            <h1 className="text-2xl font-semibold tracking-tight text-[#1B2758]">Available Forms</h1>
+            <p className="mt-1 text-sm text-slate-600">Select a form to fill and submit your response.</p>
             {!isLoading && activeSurveys.length > 0 && (
-              <div className="flex items-center gap-1.5 mt-3">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs text-emerald-300 font-medium">
+              <div className="mt-2 text-xs font-medium text-[#273677]">
                   {activeSurveys.length} form{activeSurveys.length !== 1 ? 's' : ''} available
-                </span>
               </div>
             )}
           </div>
@@ -361,7 +351,7 @@ export default function SurveysPage() {
                 {search ? 'No forms match your search.' : 'There are no active forms to fill right now.'}
               </p>
               {search && (
-                <button onClick={() => setSearch('')} className="mt-3 text-sm text-indigo-600 hover:underline">
+                <button onClick={() => setSearch('')} className="mt-3 text-sm text-[#273677] hover:underline">
                   Clear search
                 </button>
               )}
@@ -375,15 +365,15 @@ export default function SurveysPage() {
                     key={survey.id}
                     href={`/s/${survey.id}`}
                     className={cn(
-                      'group flex items-start justify-between gap-4 bg-white rounded-2xl',
-                      'border border-l-4 border-slate-200 border-l-emerald-400 p-5',
-                      'hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 no-underline',
+                      'group flex items-start justify-between gap-4 bg-white rounded-lg',
+                      'border border-l-[3px] border-[#DDE2ED] border-l-[#273677] p-5',
+                      'hover:border-[#B6C1DE] transition-colors no-underline',
                     )}
                     data-testid={`card-fill-${survey.id}`}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#273677] shrink-0" />
                         <h3 className="font-semibold text-slate-800 text-[15px] leading-snug">{survey.title}</h3>
                       </div>
                       {survey.description && (
@@ -395,8 +385,8 @@ export default function SurveysPage() {
                           {survey._q_count ?? 0} question{(survey._q_count ?? 0) !== 1 ? 's' : ''}
                         </span>
                         {draft.hasDraft && (
-                          <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-[#B94B13]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#EC6A1F]" />
                             Draft saved{draft.savedAt ? ` · ${formatDistanceToNow(draft.savedAt, { addSuffix: true })}` : ''}
                           </span>
                         )}
@@ -405,8 +395,8 @@ export default function SurveysPage() {
                     <div className={cn(
                       'shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors',
                       draft.hasDraft
-                        ? 'bg-amber-50 text-amber-700 border border-amber-200 group-hover:bg-amber-100'
-                        : 'bg-indigo-600 text-white group-hover:bg-indigo-700',
+                        ? 'bg-orange-50 text-[#B94B13] border border-orange-200 group-hover:bg-orange-100'
+                        : 'bg-[#273677] text-white group-hover:bg-[#1B2758]',
                     )}>
                       {draft.hasDraft ? 'Continue' : 'Fill Form'}
                       <ChevronRight className="w-3.5 h-3.5" />
@@ -423,30 +413,17 @@ export default function SurveysPage() {
 
   return (
     <TooltipProvider>
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30" data-testid="page-surveys">
+    <div className="min-h-screen bg-[#F7F8FB]" data-testid="page-surveys">
 
-      {/* ── Hero Header ── */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 px-6 py-8 md:px-10 md:py-10">
-        <div className="absolute -top-10 -right-10 w-64 h-64 bg-white/5 rounded-full pointer-events-none" />
-        <div className="absolute top-4 right-32 w-32 h-32 bg-white/5 rounded-full pointer-events-none" />
-        <div className="absolute -bottom-8 left-1/3 w-48 h-48 bg-white/5 rounded-full pointer-events-none" />
-        <div className="relative max-w-5xl mx-auto flex items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1.5">
-              <div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center">
-                <ClipboardList className="w-5 h-5 text-white" />
-              </div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Surveys</h1>
-            </div>
-            <p className="text-indigo-200 text-sm md:text-base">
-              Create, distribute, and analyse surveys across your teams
-            </p>
+      {/* ── Page heading ── */}
+      <div className="border-b border-[#DDE2ED] bg-white px-5 py-7 md:px-10">
+        <div className="max-w-5xl mx-auto flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="border-l-[3px] border-[#EC6A1F] pl-4">
+            <h1 className="text-2xl font-semibold tracking-tight text-[#1B2758]">Surveys</h1>
+            <p className="mt-1 text-sm text-slate-600">Create surveys, track responses, and manage publication.</p>
             {stats.active > 0 && (
-              <div className="flex items-center gap-1.5 mt-3">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs text-emerald-300 font-medium">
+              <div className="mt-2 text-xs font-medium text-[#273677]">
                   {stats.active} active survey{stats.active !== 1 ? 's' : ''} collecting responses
-                </span>
               </div>
             )}
           </div>
@@ -454,7 +431,7 @@ export default function SurveysPage() {
             <Button
               onClick={() => setCreateOpen(true)}
               data-testid="btn-new-survey"
-              className="bg-white text-indigo-700 hover:bg-indigo-50 font-semibold gap-2 shadow-lg shrink-0"
+              className="bg-[#273677] text-white hover:bg-[#1B2758] font-medium gap-2 shrink-0"
             >
               <Plus className="w-4 h-4" />New Survey
             </Button>
@@ -462,27 +439,22 @@ export default function SurveysPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-5">
 
-        {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 -mt-2">
-          {STAT_CARDS.map(({ key, label, icon: Icon, bg, text, sub, gradient }) => (
+        {/* ── One quiet metrics strip ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 overflow-hidden rounded-lg border border-[#DDE2ED] bg-white divide-x divide-y divide-[#DDE2ED] sm:divide-y-0">
+          {STAT_CARDS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setStatusFilter(key === 'responses' || key === 'total' ? 'all' : key)}
               className={cn(
-                'rounded-2xl border border-white/80 bg-gradient-to-br p-4 text-left shadow-sm',
-                'hover:shadow-md hover:-translate-y-0.5 transition-all duration-200',
-                bg,
-                (statusFilter === key || (key === 'total' && statusFilter === 'all')) ? 'ring-2 ring-offset-1 ring-indigo-400' : '',
+                'min-w-0 p-4 text-left transition-colors hover:bg-[#F5F6FA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#273677]',
+                (statusFilter === key || (key === 'total' && statusFilter === 'all')) && 'bg-[#F0F2FA] border-t-[3px] border-t-[#273677]',
               )}
               data-testid={`kpi-${key}`}
             >
-              <div className={cn('w-8 h-8 rounded-xl bg-gradient-to-br flex items-center justify-center mb-3', gradient)}>
-                <Icon className="w-4 h-4 text-white" />
-              </div>
-              <p className={cn('text-2xl font-bold', text)}>{stats[key]}</p>
-              <p className={cn('text-[11px] font-medium mt-0.5 uppercase tracking-wide', sub)}>{label}</p>
+              <div className="flex items-center gap-2 text-slate-500"><Icon className="h-4 w-4" /><span className="truncate text-xs font-medium">{label}</span></div>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-[#1B2758]">{stats[key]}</p>
             </button>
           ))}
         </div>
@@ -496,7 +468,7 @@ export default function SurveysPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search surveys…"
-              className="pl-8 h-9 text-sm bg-white border-slate-200 focus:border-indigo-300"
+              className="pl-8 h-9 text-sm bg-white border-[#DDE2ED] focus:border-[#273677]"
               data-testid="input-survey-search"
             />
           </div>
@@ -510,7 +482,7 @@ export default function SurveysPage() {
                 data-testid={`btn-filter-${f}`}
                 className={cn(
                   'px-3 py-1.5 rounded-md text-xs font-medium transition-all capitalize',
-                  statusFilter === f ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50',
+                  statusFilter === f ? 'bg-[#273677] text-white' : 'text-slate-600 hover:text-[#273677] hover:bg-[#F0F2FA]',
                 )}
               >
                 {f === 'all' ? 'All' : STATUS_CFG[f as SurveyStatus].label}
@@ -547,7 +519,7 @@ export default function SurveysPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button onClick={() => setViewMode('grid')} data-testid="btn-view-grid"
-                  className={cn('p-1.5 rounded-md transition-colors', viewMode === 'grid' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600')}>
+                  className={cn('p-1.5 rounded-md transition-colors', viewMode === 'grid' ? 'bg-[#273677] text-white' : 'text-slate-500 hover:text-[#273677]')}>
                   <LayoutGrid className="w-3.5 h-3.5" />
                 </button>
               </TooltipTrigger>
@@ -556,7 +528,7 @@ export default function SurveysPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button onClick={() => setViewMode('list')} data-testid="btn-view-list"
-                  className={cn('p-1.5 rounded-md transition-colors', viewMode === 'list' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600')}>
+                  className={cn('p-1.5 rounded-md transition-colors', viewMode === 'list' ? 'bg-[#273677] text-white' : 'text-slate-500 hover:text-[#273677]')}>
                   <List className="w-3.5 h-3.5" />
                 </button>
               </TooltipTrigger>
@@ -569,7 +541,7 @@ export default function SurveysPage() {
         {!isLoading && filtered.length > 0 && (
           <p className="text-xs text-slate-400 -mt-2">
             Showing <span className="font-medium text-slate-600">{filtered.length}</span> of {surveys.length} surveys
-            {search && <> matching <span className="font-medium text-indigo-600">"{search}"</span></>}
+            {search && <> matching <span className="font-medium text-[#273677]">"{search}"</span></>}
           </p>
         )}
 
@@ -628,19 +600,18 @@ export default function SurveysPage() {
 
         {/* Analytics tip */}
         {stats.responses > 0 && (
-          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50 p-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shrink-0">
-              <TrendingUp className="w-5 h-5 text-white" />
+          <div className="rounded-lg border border-[#DDE2ED] bg-white p-4 flex items-center gap-4">
+            <div className="w-9 h-9 rounded-md bg-[#F0F2FA] flex items-center justify-center shrink-0">
+              <TrendingUp className="w-4 h-4 text-[#273677]" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-indigo-800">
+              <p className="text-sm font-semibold text-[#1B2758]">
                 {stats.responses.toLocaleString()} total response{stats.responses !== 1 ? 's' : ''} collected
               </p>
-              <p className="text-xs text-indigo-500 mt-0.5">
+              <p className="text-xs text-slate-600 mt-0.5">
                 Click any survey and open the Analytics tab to view response breakdowns, charts, and insights.
               </p>
             </div>
-            <BarChart2 className="w-5 h-5 text-indigo-300 shrink-0" />
           </div>
         )}
       </div>
@@ -650,8 +621,8 @@ export default function SurveysPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-1">
-              <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-indigo-600" />
+              <div className="w-10 h-10 rounded-md bg-[#F0F2FA] flex items-center justify-center">
+                <ClipboardList className="w-5 h-5 text-[#273677]" />
               </div>
               <div>
                 <DialogTitle className="text-lg">New Survey</DialogTitle>
@@ -661,23 +632,23 @@ export default function SurveysPage() {
           </DialogHeader>
           <div className="space-y-4 py-1">
             <div className="space-y-1.5">
-              <Label htmlFor="new-title">Title <span className="text-red-500">*</span></Label>
+              <Label htmlFor="new-title">Title <span className="text-[#B94B13]">*</span></Label>
               <Input id="new-title" value={newTitle} onChange={e => setNewTitle(e.target.value)}
                 placeholder="e.g. Staff Satisfaction Q2 2026" data-testid="input-new-survey-title"
                 onKeyDown={e => { if (e.key === 'Enter' && newTitle.trim()) createSurvey.mutate(); }}
-                className="focus:border-indigo-300" />
+                className="focus:border-[#273677]" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="new-desc">Description <span className="text-slate-400 font-normal text-xs">(optional)</span></Label>
               <Textarea id="new-desc" value={newDesc} onChange={e => setNewDesc(e.target.value)}
                 placeholder="Brief description shown to respondents…" rows={3}
-                data-testid="input-new-survey-desc" className="resize-none focus:border-indigo-300" />
+                data-testid="input-new-survey-desc" className="resize-none focus:border-[#273677]" />
             </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button onClick={() => createSurvey.mutate()} disabled={!newTitle.trim() || createSurvey.isPending}
-              data-testid="btn-create-survey-confirm" className="bg-indigo-600 hover:bg-indigo-700">
+              data-testid="btn-create-survey-confirm" className="bg-[#273677] hover:bg-[#1B2758]">
               {createSurvey.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Plus className="w-4 h-4 mr-1.5" />}
               Create & Build
             </Button>
@@ -690,8 +661,8 @@ export default function SurveysPage() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-5 h-5 text-red-600" />
+              <div className="w-10 h-10 rounded-md bg-orange-50 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-[#B94B13]" />
               </div>
               <DialogTitle>Delete Survey?</DialogTitle>
             </div>
@@ -772,9 +743,9 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
   return (
     <div
       className={cn(
-        'group rounded-2xl border border-l-4 border-slate-200 p-5 cursor-pointer',
-        'hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col',
-        cfg.accent, cfg.glow,
+        'group rounded-lg border border-l-[3px] border-[#DDE2ED] p-5 cursor-pointer',
+        'hover:border-[#B6C1DE] transition-colors flex flex-col',
+        cfg.accent, cfg.hover,
       )}
       onClick={onOpen}
       data-testid={`card-survey-${survey.id}`}
@@ -783,11 +754,11 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
           <div className={cn(
-            'w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
-            survey.status === 'active' ? 'bg-emerald-100' : survey.status === 'closed' ? 'bg-orange-100' : 'bg-slate-100',
+            'w-9 h-9 rounded-md flex items-center justify-center shrink-0',
+            survey.status === 'active' ? 'bg-[#F0F2FA]' : survey.status === 'closed' ? 'bg-orange-50' : 'bg-slate-100',
           )}>
             <StatusIcon className={cn('w-[18px] h-[18px]',
-              survey.status === 'active' ? 'text-emerald-600' : survey.status === 'closed' ? 'text-orange-500' : 'text-slate-500',
+              survey.status === 'active' ? 'text-[#273677]' : survey.status === 'closed' ? 'text-[#B94B13]' : 'text-slate-500',
             )} />
           </div>
           <Badge variant="outline" className={cn('text-[10px] px-2 py-0.5 border font-medium', cfg.badgeClass)}>
@@ -795,7 +766,7 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
             {cfg.label}
           </Badge>
         </div>
-        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
+        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#273677] transition-colors shrink-0 mt-0.5" />
       </div>
 
       {/* Deadline badge */}
@@ -819,24 +790,24 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
       {/* Draft-in-progress banner */}
       {localDraft.hasDraft && (
         <div
-          className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mb-2"
+          className="flex items-center justify-between gap-2 bg-orange-50 border border-orange-200 rounded-md px-2.5 py-1.5 mb-2"
           onClick={e => e.stopPropagation()}
         >
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
-            <span className="text-[11px] text-amber-800 font-medium truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#EC6A1F] shrink-0" />
+            <span className="text-[11px] text-[#B94B13] font-medium truncate">
               Draft saved
               {localDraft.savedAt && (
-                <span className="font-normal text-amber-600"> · {formatDistanceToNow(localDraft.savedAt, { addSuffix: true })}</span>
+                <span className="font-normal text-[#B94B13]"> · {formatDistanceToNow(localDraft.savedAt, { addSuffix: true })}</span>
               )}
             </span>
             {localDraft.answeredCount > 0 && (
-              <span className="text-[10px] text-amber-500 shrink-0">{localDraft.answeredCount}q answered</span>
+              <span className="text-[10px] text-[#B94B13] shrink-0">{localDraft.answeredCount}q answered</span>
             )}
           </div>
           <a
             href={`/s/${survey.id}`}
-            className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:text-amber-900 shrink-0"
+            className="flex items-center gap-1 text-[11px] font-semibold text-[#B94B13] hover:text-[#8C380A] shrink-0"
             data-testid={`btn-continue-draft-${survey.id}`}
           >
             Continue <ChevronRight className="w-3 h-3" />
@@ -850,7 +821,7 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
           <FileText className="w-3 h-3 text-slate-400" />
           {survey._q_count ?? 0}q
         </span>
-        <span className={cn('flex items-center gap-1 text-[11px]', hasResponses ? 'text-indigo-600 font-medium' : 'text-slate-400')}>
+        <span className={cn('flex items-center gap-1 text-[11px]', hasResponses ? 'text-[#273677] font-medium' : 'text-slate-400')}>
           <Users className="w-3 h-3" />
           {survey._r_count ?? 0} response{(survey._r_count ?? 0) !== 1 ? 's' : ''}
         </span>
@@ -867,7 +838,7 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
             <button
               onClick={() => onChangeStatus('active')}
               disabled={statusChanging}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#F0F2FA] text-[#273677] hover:bg-[#E4E9F7] border border-[#D5DBED] transition-colors"
               data-testid={`btn-publish-${survey.id}`}
             >
               <Send className="w-3 h-3" />Publish
@@ -887,7 +858,7 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
             <button
               onClick={() => onChangeStatus('active')}
               disabled={statusChanging}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#F0F2FA] text-[#273677] hover:bg-[#E4E9F7] border border-[#D5DBED] transition-colors"
               data-testid={`btn-reopen-${survey.id}`}
             >
               <CheckCircle2 className="w-3 h-3" />Re-open
@@ -912,7 +883,7 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
           <Tooltip>
             <TooltipTrigger asChild>
               <button onClick={onOpen}
-                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-indigo-600 hover:bg-indigo-50 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium text-[#273677] hover:bg-[#F0F2FA] transition-colors"
                 data-testid={`btn-edit-${survey.id}`}>
                 <Edit3 className="w-3 h-3" />
                 {survey.status === 'draft' ? 'Edit' : 'View'}
@@ -926,7 +897,7 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button onClick={onShare}
-                    className="flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                    className="flex items-center justify-center p-1.5 rounded-md text-slate-500 hover:text-[#273677] hover:bg-[#F0F2FA] transition-colors"
                     data-testid={`btn-share-${survey.id}`}>
                     <Share2 className="w-3.5 h-3.5" />
                   </button>
@@ -936,7 +907,7 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
               <Tooltip>
                 <TooltipTrigger asChild>
                   <a href={`/s/${survey.id}`} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                    className="flex items-center justify-center p-1.5 rounded-md text-slate-500 hover:text-[#273677] hover:bg-[#F0F2FA] transition-colors"
                     data-testid={`btn-open-fill-${survey.id}`}>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
@@ -961,7 +932,7 @@ function SurveyCard({ survey, canCreate, canUpdate, canDelete, canChangeStatus, 
               {canDelete && <Tooltip>
                 <TooltipTrigger asChild>
                   <button onClick={onDelete}
-                    className="flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                    className="flex items-center justify-center p-1.5 rounded-md text-slate-500 hover:text-[#B94B13] hover:bg-orange-50 transition-colors"
                     data-testid={`btn-delete-survey-${survey.id}`}>
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -986,9 +957,9 @@ function SurveyRow({ survey, canCreate, canUpdate, canDelete, canChangeStatus, o
   return (
     <div
       className={cn(
-        'group bg-white rounded-xl border border-l-4 border-slate-200 px-4 py-3.5',
-        'flex items-center gap-4 cursor-pointer hover:shadow-sm transition-all',
-        cfg.accent, cfg.glow,
+        'group bg-white rounded-lg border border-l-[3px] border-[#DDE2ED] px-4 py-3.5',
+        'flex items-center gap-4 cursor-pointer hover:border-[#B6C1DE] transition-colors',
+        cfg.accent, cfg.hover,
       )}
       onClick={onOpen}
       data-testid={`row-survey-${survey.id}`}
@@ -1008,7 +979,7 @@ function SurveyRow({ survey, canCreate, canUpdate, canDelete, canChangeStatus, o
           <span className="flex items-center gap-1 text-[11px] text-slate-400">
             <FileText className="w-3 h-3" />{survey._q_count ?? 0}q
           </span>
-          <span className={cn('flex items-center gap-1 text-[11px]', (survey._r_count ?? 0) > 0 ? 'text-indigo-600 font-medium' : 'text-slate-400')}>
+          <span className={cn('flex items-center gap-1 text-[11px]', (survey._r_count ?? 0) > 0 ? 'text-[#273677] font-medium' : 'text-slate-400')}>
             <Users className="w-3 h-3" />{survey._r_count ?? 0} responses
           </span>
           <span className="flex items-center gap-1 text-[11px] text-slate-400">
@@ -1018,10 +989,10 @@ function SurveyRow({ survey, canCreate, canUpdate, canDelete, canChangeStatus, o
             <a
               href={`/s/${survey.id}`}
               onClick={e => e.stopPropagation()}
-              className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-800"
+              className="flex items-center gap-1 text-[11px] font-semibold text-[#B94B13] hover:text-[#8C380A]"
               data-testid={`btn-continue-draft-row-${survey.id}`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#EC6A1F]" />
               Draft saved · Continue
             </a>
           )}
@@ -1043,7 +1014,7 @@ function SurveyRow({ survey, canCreate, canUpdate, canDelete, canChangeStatus, o
         <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
           {survey.status === 'draft' && (
             <button onClick={() => onChangeStatus('active')} disabled={statusChanging}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-[#F0F2FA] text-[#273677] hover:bg-[#E4E9F7] border border-[#D5DBED] transition-colors"
               data-testid={`btn-publish-row-${survey.id}`}>
               <Send className="w-3 h-3" />Publish
             </button>
@@ -1057,7 +1028,7 @@ function SurveyRow({ survey, canCreate, canUpdate, canDelete, canChangeStatus, o
           )}
           {survey.status === 'closed' && (
             <button onClick={() => onChangeStatus('active')} disabled={statusChanging}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-[#F0F2FA] text-[#273677] hover:bg-[#E4E9F7] border border-[#D5DBED] transition-colors"
               data-testid={`btn-reopen-row-${survey.id}`}>
               <CheckCircle2 className="w-3 h-3" />Re-open
             </button>
@@ -1071,7 +1042,7 @@ function SurveyRow({ survey, canCreate, canUpdate, canDelete, canChangeStatus, o
             <Tooltip>
               <TooltipTrigger asChild>
                 <button onClick={onShare}
-                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors"
+                  className="p-2 rounded-md hover:bg-[#F0F2FA] text-slate-500 hover:text-[#273677] transition-colors"
                   data-testid={`btn-share-row-${survey.id}`}>
                   <Share2 className="w-3.5 h-3.5" />
                 </button>
@@ -1081,7 +1052,7 @@ function SurveyRow({ survey, canCreate, canUpdate, canDelete, canChangeStatus, o
             <Tooltip>
               <TooltipTrigger asChild>
                 <a href={`/s/${survey.id}`} target="_blank" rel="noopener noreferrer"
-                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-emerald-600 transition-colors"
+                  className="p-2 rounded-md hover:bg-[#F0F2FA] text-slate-500 hover:text-[#273677] transition-colors"
                   data-testid={`btn-open-fill-row-${survey.id}`}>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
@@ -1105,7 +1076,7 @@ function SurveyRow({ survey, canCreate, canUpdate, canDelete, canChangeStatus, o
               {canDelete && <Tooltip>
               <TooltipTrigger asChild>
                 <button onClick={onDelete}
-                  className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                  className="p-2 rounded-md hover:bg-orange-50 text-slate-500 hover:text-[#B94B13] transition-colors"
                   data-testid={`btn-delete-row-${survey.id}`}>
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -1114,7 +1085,7 @@ function SurveyRow({ survey, canCreate, canUpdate, canDelete, canChangeStatus, o
               </Tooltip>}
           </>
         )}
-        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 transition-colors ml-1" />
+        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#273677] transition-colors ml-1" />
       </div>
     </div>
   );
@@ -1153,8 +1124,8 @@ function ShareDialog({ survey, onClose, onCopy }: { survey: Survey; onClose: () 
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
-              <Share2 className="w-5 h-5 text-indigo-600" />
+            <div className="w-10 h-10 rounded-md bg-[#F0F2FA] flex items-center justify-center shrink-0">
+              <Share2 className="w-5 h-5 text-[#273677]" />
             </div>
             <div>
               <DialogTitle className="text-base">Share Survey</DialogTitle>
@@ -1165,13 +1136,13 @@ function ShareDialog({ survey, onClose, onCopy }: { survey: Survey; onClose: () 
 
         {/* QR Code */}
         <div className="flex flex-col items-center gap-3 py-2">
-          <div className="p-4 bg-white rounded-2xl border-2 border-slate-100 shadow-sm">
+          <div className="p-4 bg-white rounded-md border border-[#DDE2ED]">
             <QRCodeSVG
               id="survey-qr-svg"
               value={fillUrl}
               size={180}
               bgColor="#ffffff"
-              fgColor="#4338ca"
+              fgColor="#273677"
               level="M"
               includeMargin={false}
             />
@@ -1190,8 +1161,8 @@ function ShareDialog({ survey, onClose, onCopy }: { survey: Survey; onClose: () 
             className={cn(
               'shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all',
               copied
-                ? 'bg-emerald-100 text-emerald-700'
-                : 'bg-indigo-600 text-white hover:bg-indigo-700',
+                ? 'bg-[#F0F2FA] text-[#273677]'
+                : 'bg-[#273677] text-white hover:bg-[#1B2758]',
             )}
             data-testid="btn-share-copy-link"
           >
@@ -1203,7 +1174,7 @@ function ShareDialog({ survey, onClose, onCopy }: { survey: Survey; onClose: () 
           <Button variant="outline" size="sm" onClick={handleDownloadQR} data-testid="btn-download-qr">
             <QrCode className="w-3.5 h-3.5 mr-1.5" />Download QR
           </Button>
-          <Button size="sm" onClick={onClose} className="bg-indigo-600 hover:bg-indigo-700">Done</Button>
+          <Button size="sm" onClick={onClose} className="bg-[#273677] hover:bg-[#1B2758]">Done</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1217,14 +1188,14 @@ function EmptyState({ hasSearch, canManage, onClear, onCreate }: {
   hasSearch: boolean; canManage: boolean; onClear: () => void; onCreate: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[#C8D0E3] bg-white px-6 py-16 text-center gap-4">
       <div className="relative">
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-100 to-violet-100 flex items-center justify-center">
-          <ClipboardList className="w-9 h-9 text-indigo-400" />
+        <div className="w-12 h-12 rounded-md bg-[#F0F2FA] flex items-center justify-center">
+          <ClipboardList className="w-6 h-6 text-[#273677]" />
         </div>
         {hasSearch && (
-          <div className="absolute -top-2 -right-2 w-7 h-7 bg-orange-100 rounded-full flex items-center justify-center border-2 border-white">
-            <Search className="w-3.5 h-3.5 text-orange-500" />
+          <div className="absolute -top-2 -right-2 w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center border border-white">
+            <Search className="w-3 h-3 text-[#B94B13]" />
           </div>
         )}
       </div>
@@ -1241,7 +1212,7 @@ function EmptyState({ hasSearch, canManage, onClear, onCreate }: {
       <div className="flex items-center gap-2">
         {hasSearch && <Button variant="outline" size="sm" onClick={onClear}>Clear filters</Button>}
         {canManage && !hasSearch && (
-          <Button size="sm" onClick={onCreate} className="bg-indigo-600 hover:bg-indigo-700">
+          <Button size="sm" onClick={onCreate} className="bg-[#273677] hover:bg-[#1B2758]">
             <Plus className="w-3.5 h-3.5 mr-1.5" />Create Survey
           </Button>
         )}

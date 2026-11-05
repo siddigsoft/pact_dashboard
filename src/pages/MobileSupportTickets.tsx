@@ -17,7 +17,6 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { 
   MessageSquare, 
   Clock, 
@@ -497,23 +496,6 @@ export default function MobileSupportTickets() {
       </div>
 
       <div className="container mx-auto px-4 md:px-6 py-4 md:py-6">
-        <PageInfoBanner
-          title="Mobile Support Tickets"
-          description="This page manages support tickets submitted from the mobile app and web. Admins can view, reply, assign, categorize, and resolve tickets. Use filters to find specific issues and export data for reporting."
-          descriptionAr="تدير هذه الصفحة تذاكر الدعم المقدمة من تطبيق الجوال والويب. يمكن للمسؤولين عرض التذاكر والرد عليها وتعيينها وتصنيفها وحلها. استخدم الفلاتر للعثور على مشاكل محددة وتصدير البيانات للتقارير."
-          workflowSteps={[
-            { step: 1, role: 'Mobile User', action: 'Submits ticket', description: 'User creates a support ticket from the mobile app describing their issue.' },
-            { step: 2, role: 'Admin', action: 'Reviews & assigns', description: 'Admin reviews the ticket, sets priority/category, and assigns it to a team member.' },
-            { step: 3, role: 'Support Team', action: 'Responds & resolves', description: 'Support team communicates with the user and resolves the issue.' },
-            { step: 4, role: 'System', action: 'Tracks metrics', description: 'Response times, resolution rates, and category trends are tracked automatically.' },
-          ]}
-          workflowStepsAr={[
-            { step: 1, role: 'مستخدم الجوال', action: 'يقدم تذكرة', description: 'ينشئ المستخدم تذكرة دعم من تطبيق الجوال يصف فيها مشكلته.' },
-            { step: 2, role: 'المسؤول', action: 'يراجع ويعين', description: 'يراجع المسؤول التذكرة ويحدد الأولوية والفئة ويعينها لعضو في الفريق.' },
-            { step: 3, role: 'فريق الدعم', action: 'يرد ويحل', description: 'يتواصل فريق الدعم مع المستخدم ويحل المشكلة.' },
-            { step: 4, role: 'النظام', action: 'يتتبع المقاييس', description: 'يتم تتبع أوقات الاستجابة ومعدلات الحل واتجاهات الفئات تلقائياً.' },
-          ]}
-        />
 
         <div className="flex flex-wrap gap-3 mb-4 mt-4">
           <div className="flex-1 min-w-[220px]">

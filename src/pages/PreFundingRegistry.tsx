@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { exportToExcel } from '@/utils/report-export';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -35,7 +34,6 @@ import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { activatePreFund } from '@/utils/preFundActivation';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
@@ -949,15 +947,11 @@ async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
 }
 
 export default function PreFundingRegistry() {
-  const { hasAnyRole, isSuperAdmin } = useAuthorization();
-  const { canViewOrgPreFunds } = usePreFundOrgAccess();
+  const { checkPermission, isSuperAdmin } = useAuthorization();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const isSuper = isSuperAdmin();
-  const canManage = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  // Access Control grant unlocks org-wide fund list; create/edit stay canManage.
-  const canAccess = canManage || canViewOrgPreFunds;
-
+  const canManage = checkPermission('pre_funding', 'create');
   // Pre-filter by project when arriving from ProjectCostTab "View / Manage" button
   const [searchParams] = useSearchParams();
   const urlProjectId = searchParams.get('project_id') || '';
@@ -2304,40 +2298,8 @@ export default function PreFundingRegistry() {
     `fund-registry-${format(new Date(), 'yyyy-MM-dd')}.xlsx`
   );
 
-  if (!canAccess) {
-    return (
-      <div className="p-8 text-center">
-        <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
-        <p className="text-muted-foreground">Access denied.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-5 p-4 md:p-6">
-
-      {/* ── Page info banner ─────────────────────────────────────────────────── */}
-      <PageInfoBanner
-        title="Pre-Funding Fund Registry"
-        description="This page is for managing pre-fund requests — money received from donors or headquarters BEFORE it is spent. You can create a fund, set its amount and currency, configure an approval chain, upload the receipt to activate it, and allocate portions to specific staff members. Funds must be approved and activated before they can be used to cover operational expenses. Only Finance Admins and Super Admins can create, activate, or allocate funds. Admins can view and submit for approval. Regular staff cannot access this page."
-        descriptionAr="هذه الصفحة لإدارة طلبات التمويل المسبق — الأموال الواردة من المانحين أو المقر الرئيسي قبل إنفاقها. يمكنك إنشاء صندوق، تحديد المبلغ والعملة، إعداد سلسلة الموافقات، رفع الإيصال لتفعيله، وتخصيص أجزاء منه لموظفين محددين. يجب الموافقة على الأموال وتفعيلها قبل استخدامها لتغطية النفقات التشغيلية. يختص مدير المالية والمشرف العام بإنشاء الأموال وتفعيلها وتخصيصها. يمكن للمديرين العرض والتقديم للموافقة. لا يمكن للموظفين العاديين الوصول إلى هذه الصفحة."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Creates fund', description: 'Finance creates a new pre-fund request with name, amount, currency, dates, and links it to a project or grant.' },
-          { step: 2, role: 'Finance Admin', action: 'Submits for approval', description: 'The draft fund is submitted to the approval queue. Finance approvers are notified via the Approvals Hub.' },
-          { step: 3, role: 'Admin', action: 'Approves the fund', description: 'An admin or super admin reviews and approves the fund in the Approval Flow Manager tab.' },
-          { step: 4, role: 'Finance Admin', action: 'Uploads receipt & activates', description: 'Once approved, Finance uploads the bank receipt. The system posts a GL journal entry and creates a bank statement line, making the fund active and spendable.' },
-          { step: 5, role: 'Finance Admin', action: 'Allocates to staff', description: 'Finance assigns portions of the active fund to specific staff members so they can draw from it for expenses.' },
-          { step: 6, role: 'System', action: 'Tracks spending & alerts', description: 'The system deducts from each allocation as expenses are linked. Alerts fire when a fund nears the threshold or expiry date.' },
-        ]}
-        workflowStepsAr={[
-          { step: 1, role: 'مدير المالية', action: 'إنشاء الصندوق', description: 'ينشئ قسم المالية طلب تمويل مسبق جديد بالاسم والمبلغ والعملة والتواريخ، ويربطه بمشروع أو منحة.' },
-          { step: 2, role: 'مدير المالية', action: 'التقديم للموافقة', description: 'يُرسل الصندوق المسودة إلى قائمة الموافقات. يتلقى المعتمدون إشعارًا عبر مركز الموافقات.' },
-          { step: 3, role: 'المدير', action: 'الموافقة على الصندوق', description: 'يراجع المدير أو المشرف العام الصندوق ويوافق عليه في تبويب إدارة سلسلة الموافقات.' },
-          { step: 4, role: 'مدير المالية', action: 'رفع الإيصال والتفعيل', description: 'بعد الموافقة، يرفع قسم المالية إيصال البنك. يُسجّل النظام قيد دفتري وينشئ سطر كشف حساب بنكي، مما يُفعّل الصندوق ويجعله قابلاً للصرف.' },
-          { step: 5, role: 'مدير المالية', action: 'التخصيص للموظفين', description: 'يُخصّص قسم المالية أجزاءً من الصندوق النشط لموظفين محددين حتى يتمكنوا من السحب منه للنفقات.' },
-          { step: 6, role: 'النظام', action: 'تتبع الإنفاق والتنبيهات', description: 'يخصم النظام من كل مخصص عند ربط النفقات. تُرسل تنبيهات عندما يقترب الصندوق من حد التنبيه أو تاريخ الانتهاء.' },
-        ]}
-      />
 
       {/* ── Page header ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b">

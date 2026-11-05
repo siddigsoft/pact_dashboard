@@ -1,5 +1,6 @@
 import { isValidElement, createElement, type ReactNode } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import { FitNumber } from '@/components/ui/fit-number';
 import { type LucideIcon } from 'lucide-react';
 
 type GradientColor = 'blue' | 'green' | 'purple' | 'orange' | 'cyan' | 'pink' | 'indigo' | 'teal' | 'red';
@@ -80,9 +81,7 @@ export function GradientStatCard({
             <p className={`font-medium text-gray-500 dark:text-gray-400 truncate ${isSmall ? 'text-[11px]' : 'text-sm'}`}>
               {title}
             </p>
-            <p className={`font-bold text-gray-900 dark:text-white mt-0.5 ${isSmall ? 'text-lg' : 'text-2xl'}`}>
-              {value}
-            </p>
+            <FitNumber value={value} className={`font-bold text-gray-900 dark:text-white mt-0.5 ${isSmall ? 'text-lg' : 'text-2xl'}`} />
             {subtitle && (
               <p className={`text-gray-500 dark:text-gray-400 mt-0.5 ${isSmall ? 'text-[10px]' : 'text-xs'}`}>
                 {subtitle}

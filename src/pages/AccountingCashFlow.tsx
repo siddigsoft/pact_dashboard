@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +10,6 @@ import { Loader2, Activity, Download, RefreshCw, ChevronDown, ChevronRight } fro
 import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportStandardExcel } from '@/utils/standardExcelExport';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, Legend } from 'recharts';
 import jsPDF from 'jspdf';
@@ -40,8 +38,7 @@ function classifyCF(accountType: string, subtype: string | null): CFCategory {
 interface CfSection { label: string; labelAr: string; items: { account_id: string; code: string; name: string; inflow: number; outflow: number; net: number }[]; totalInflow: number; totalOutflow: number; total: number }
 
 export default function AccountingCashFlow() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated } = useAuthorization();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -191,7 +188,6 @@ export default function AccountingCashFlow() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const SectionBlock = ({ sectionKey, sec }: { sectionKey: string; sec: CfSection }) => {
     const expanded = expandedSections.has(sectionKey);
@@ -275,11 +271,6 @@ export default function AccountingCashFlow() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Cash Flow Statement"
-        description="Shows cash inflows and outflows for the selected period, classified into Operating (revenue & expense accounts), Investing (asset accounts), and Financing (liability & equity accounts). Based on posted journal entries. Click any section header to expand or collapse."
-        descriptionAr="تُظهر التدفقات النقدية الداخلة والخارجة للفترة المحددة مصنفةً إلى: تشغيلية (إيرادات ومصروفات)، واستثمارية (أصول)، وتمويلية (التزامات وحقوق ملكية). مبنية على القيود المحاسبية المرحّلة."
-      />
 
       {error && <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">{error}</div>}
 

@@ -1,5 +1,4 @@
 import { useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -19,7 +18,6 @@ import {
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
 import { exportToExcel } from '@/utils/report-export';
 import jsPDF from 'jspdf';
@@ -79,16 +77,15 @@ const BLANK_EXPENSE = { expense_date: '', amount: '', description: '' };
 const BLANK_MILESTONE = { title: '', due_date: '', status: 'pending', submitted_date: '', notes: '' };
 
 export default function AccountingGrants() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-grants', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();
 
-  const query = useGrantsWithSpendQuery(allowed && isAuthenticated);
+  const query = useGrantsWithSpendQuery(isAuthenticated);
   const migrationNeeded = query.data?.migrationNeeded ?? false;
   const preFundPipelineTotal = query.data?.preFundPipelineTotal ?? 0;
   const loading = query.isLoading;
@@ -400,7 +397,6 @@ export default function AccountingGrants() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
   if (loading && !query.data) return <PageLoader label="Loading grants…" />;
 
   return (
@@ -424,11 +420,6 @@ export default function AccountingGrants() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Grant Tracking"
-        description="Monitor donor grants: awarded vs spent vs remaining, burn rate, expiry, and reporting milestones. Click any grant row to record expenses and manage milestone submissions."
-        descriptionAr="مراقبة المنح: المبلغ الممنوح مقابل المنفق والمتبقي ومعدل الصرف والمراحل."
-      />
 
       {migrationNeeded ? MIGRATION_NOTICE : (
         <>

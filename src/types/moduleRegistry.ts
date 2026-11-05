@@ -39,10 +39,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     color: 'blue',
     description: 'User accounts, roles, permissions, system settings, and access control',
     pages: [
-      { page: 'Permissions Management', route: '/permissions-management', description: 'Review and manage access permissions', actions: [
-        { key: 'permissions:read', label: 'View Permissions', description: 'Review access configuration', resource: 'permissions', action: 'read' },
-      ] },
-
       {
         page: 'User Management',
         route: '/admin-hub',
@@ -58,8 +54,8 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       },
       {
         page: 'Role Management',
-        route: '/admin-hub?tab=role-management',
-        description: 'Create, edit, delete roles and assign granular permissions',
+        route: '/role-management',
+        description: 'Create, edit, delete roles and assign page/action/tab baselines',
         actions: [
           { key: 'roles:read', label: 'View Roles', description: 'See all roles and their permissions', resource: 'roles', action: 'read' },
           { key: 'roles:create', label: 'Create Role', description: 'Define a new custom role', resource: 'roles', action: 'create', isAdminOnly: true },
@@ -67,7 +63,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'roles:delete', label: 'Delete Role', description: 'Remove a custom role', resource: 'roles', action: 'delete', isDestructive: true, isAdminOnly: true },
           { key: 'roles:assign', label: 'Assign Role to User', description: 'Put a user into a role', resource: 'roles', action: 'assign', isAdminOnly: true },
           { key: 'permissions:read', label: 'View Permission Matrix', description: 'See the full Access Map', resource: 'permissions', action: 'read' },
-          { key: 'permissions:override', label: 'Override User Permissions', description: 'Grant or block individual permissions per user', resource: 'permissions', action: 'override', isSuperAdminOnly: true },
         ],
       },
       {
@@ -92,16 +87,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         ],
       },
       {
-        page: 'Audit & Security',
-        route: '/audit',
-        description: 'System audit logs, login analytics, hierarchy changes',
-        actions: [
-          { key: 'audit_logs:read', label: 'View Audit Logs', description: 'Read system audit trail', resource: 'audit_logs', action: 'read' },
-          { key: 'audit_logs:export', label: 'Export Audit Logs', description: 'Download audit logs as Excel', resource: 'audit_logs', action: 'export' },
-          { key: 'audit_logs:restore', label: 'Restore Deleted Records', description: 'Un-delete soft-deleted data', resource: 'audit_logs', action: 'restore', isSuperAdminOnly: true },
-        ],
-      },
-      {
         page: 'Super Admin Hub',
         route: '/super-admin-hub',
         description: 'System-level controls, super admin management, advanced overrides',
@@ -120,6 +105,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'users:read',   label: 'View Users',        description: 'Browse all user accounts',         resource: 'users', action: 'read' },
           { key: 'users:create', label: 'Create User',       description: 'Add a new user account',           resource: 'users', action: 'create' },
           { key: 'users:update', label: 'Edit User',         description: 'Update user profile and details',  resource: 'users', action: 'update' },
+          { key: 'users:approve', label: 'Approve / Reject Accounts', description: 'Approve or reject pending sign-ups', resource: 'users', action: 'approve' },
           { key: 'users:delete', label: 'Deactivate User',   description: 'Deactivate or remove a user',      resource: 'users', action: 'delete', isDestructive: true },
           { key: 'users:export', label: 'Export User List',  description: 'Download user data to CSV/Excel',  resource: 'users', action: 'export' },
         ],
@@ -143,17 +129,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'settings:create', label: 'Create Department',  description: 'Add a new department',            resource: 'settings', action: 'create', isAdminOnly: true },
           { key: 'settings:update', label: 'Edit Department',    description: 'Rename or update a department',   resource: 'settings', action: 'update', isAdminOnly: true },
           { key: 'settings:delete', label: 'Delete Department',  description: 'Remove a department',             resource: 'settings', action: 'delete', isDestructive: true, isAdminOnly: true },
-        ],
-      },
-      {
-        page: 'Role Management',
-        route: '/role-management',
-        description: 'Standalone role management page — create and configure custom roles',
-        actions: [
-          { key: 'roles:read',   label: 'View Roles',   description: 'See all roles and their permissions',  resource: 'roles', action: 'read' },
-          { key: 'roles:create', label: 'Create Role',  description: 'Define a new custom role',             resource: 'roles', action: 'create', isAdminOnly: true },
-          { key: 'roles:update', label: 'Edit Role',    description: 'Modify a role permission set',         resource: 'roles', action: 'update', isAdminOnly: true },
-          { key: 'roles:delete', label: 'Delete Role',  description: 'Remove a custom role',                 resource: 'roles', action: 'delete', isDestructive: true, isAdminOnly: true },
         ],
       },
       {
@@ -187,6 +162,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'tasks:update', label: 'Edit Any Task',     description: 'Modify or reassign any task',               resource: 'tasks', action: 'update', isAdminOnly: true },
           { key: 'tasks:delete', label: 'Delete Any Task',   description: 'Remove any task',                           resource: 'tasks', action: 'delete', isDestructive: true, isAdminOnly: true },
           { key: 'tasks:assign', label: 'Bulk Assign Tasks', description: 'Reassign tasks to different users in bulk', resource: 'tasks', action: 'assign', isAdminOnly: true },
+          { key: 'tasks:approve', label: 'Approve Task Rewards', description: 'Approve or reject task reward payouts and view task payroll', resource: 'tasks', action: 'approve', isAdminOnly: true },
           { key: 'tasks:export', label: 'Export Task Data',  description: 'Download task audit data to Excel',         resource: 'tasks', action: 'export' },
         ],
       },
@@ -211,29 +187,11 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         ],
       },
       {
-        page: 'Access Management',
-        route: '/super-admin-hub?tab=user-access',
-        description: 'Authoritative access admin — role baselines and per-user typed overrides (legacy screen JSON retired)',
-        actions: [
-          { key: 'permissions:read',     label: 'View Access',     description: 'See effective access and overrides',         resource: 'permissions', action: 'read' },
-          { key: 'permissions:override', label: 'Override Access', description: 'Grant or revoke per-user page/action access',   resource: 'permissions', action: 'override', isSuperAdminOnly: true },
-        ],
-      },
-      {
         page: 'Role Perspective',
         route: '/role-perspective',
         description: 'Preview the application UI as any other role — impersonation for QA and support',
         actions: [
           { key: 'roles:read', label: 'View Role Perspective', description: 'Switch the UI to simulate another role', resource: 'roles', action: 'read', isAdminOnly: true },
-        ],
-      },
-      {
-        page: 'Page Access Control',
-        route: '/page-access',
-        description: 'Grant or restrict page-level access for individual users or role groups',
-        actions: [
-          { key: 'permissions:read',     label: 'View Page Access',   description: 'See per-user page grants',                resource: 'permissions', action: 'read' },
-          { key: 'permissions:override', label: 'Manage Page Access', description: 'Grant or block page-level access per user', resource: 'permissions', action: 'override', isSuperAdminOnly: true },
         ],
       },
       {
@@ -251,10 +209,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         route: '/admin/project-flow-stages',
         description: 'Configure project workflow stage templates used across all projects',
         actions: [
-          { key: 'projects:read',   label: 'View Flow Stages', description: 'See all project workflow templates',  resource: 'projects', action: 'read', isSuperAdminOnly: true },
-          { key: 'projects:create', label: 'Add Stage',        description: 'Add a new workflow stage template',   resource: 'projects', action: 'create', isSuperAdminOnly: true },
-          { key: 'projects:update', label: 'Edit Stage',       description: 'Rename or reorder a stage template',  resource: 'projects', action: 'update', isSuperAdminOnly: true },
-          { key: 'projects:delete', label: 'Delete Stage',     description: 'Remove a workflow stage template',    resource: 'projects', action: 'delete', isDestructive: true, isSuperAdminOnly: true },
+          { key: 'projects:settings', label: 'Configure Project Workflow', description: 'Edit, disable or reset workflow stage templates for every project of a type', resource: 'projects', action: 'settings', isAdminOnly: true },
         ],
       },
     ],
@@ -301,6 +256,14 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         ],
       },
       {
+        page: 'Field Ops Hub',
+        route: '/field-ops',
+        description: 'Unified field operations hub — field team, MMP, map',
+        actions: [
+          { key: 'site_visits:read', label: 'View Field Ops', description: 'Open the Field Ops hub', resource: 'site_visits', action: 'read' },
+        ],
+      },
+      {
         page: 'MMP Management',
         route: '/mmp',
         description: 'Monthly Monitoring Plans — upload, verify, approve, dispatch, cycle close',
@@ -320,7 +283,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       },
       {
         page: 'Site Visits',
-        route: '/site-visits',
+        route: '/site-visits/create',
         description: 'Field site visit tracking, start / complete / approve visits',
         actions: [
           { key: 'site_visits:read', label: 'View Site Visits', description: 'Browse all site visits', resource: 'site_visits', action: 'read' },
@@ -329,6 +292,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'site_visits:submit', label: 'Submit Visit', description: 'Submit visit for review', resource: 'site_visits', action: 'submit' },
           { key: 'site_visits:approve', label: 'Approve Visit / Rate Quality', description: 'Approve or reject a completed visit', resource: 'site_visits', action: 'approve' },
           { key: 'site_visits:assign', label: 'Assign Enumerators', description: 'Assign staff to visit sites', resource: 'site_visits', action: 'assign' },
+          { key: 'site_visits:assign_cost', label: 'Assign Visit Cost', description: 'Set transport, meal and accommodation costs on a site visit', resource: 'site_visits', action: 'assign_cost' },
           { key: 'site_visits:delete', label: 'Delete Visit Record', description: 'Remove a site visit record', resource: 'site_visits', action: 'delete', isDestructive: true },
           { key: 'site_visits:export', label: 'Export Visit Data', description: 'Download site visit reports', resource: 'site_visits', action: 'export' },
         ],
@@ -429,6 +393,10 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'cost_submissions:submit', label: 'Submit Cost Request', description: 'Create and submit a cost request', resource: 'cost_submissions', action: 'submit' },
           { key: 'cost_submissions:create', label: 'Create on Behalf Of', description: 'Admin creates submission for another user', resource: 'cost_submissions', action: 'create', isAdminOnly: true },
           { key: 'cost_submissions:approve', label: 'Approve / Mark Paid', description: 'Tier-approve or mark a request as paid', resource: 'cost_submissions', action: 'approve' },
+          { key: 'cost_submissions:approve_hub', label: 'Approve at Hub Level', description: 'First approval for coordinator and data collector submissions in your hubs', resource: 'cost_submissions', action: 'approve_hub' },
+          { key: 'cost_submissions:approve_field_ops', label: 'Approve at Field Operations Level', description: 'FOM-level approval; also covers hub level when a hub has no supervisor', resource: 'cost_submissions', action: 'approve_field_ops' },
+          { key: 'cost_submissions:approve_country', label: 'Approve at Country Level', description: 'Country Director-level approval', resource: 'cost_submissions', action: 'approve_country' },
+          { key: 'cost_submissions:approve_final', label: 'Final Approval', description: 'Last approval step before payment', resource: 'cost_submissions', action: 'approve_final' },
           { key: 'cost_submissions:mark_paid', label: 'Mark Cost Submission Paid', description: 'Open the payment workflow for an approved submission', resource: 'cost_submissions', action: 'mark_paid' },
           { key: 'cost_submissions:update', label: 'Edit Submission', description: 'Edit a pending submission', resource: 'cost_submissions', action: 'update' },
           { key: 'cost_submissions:delete', label: 'Delete Submission', description: 'Remove a cost submission', resource: 'cost_submissions', action: 'delete', isDestructive: true },
@@ -484,8 +452,10 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         actions: [
           { key: 'pre_funding:read', label: 'View Pre-Funding', description: 'See pre-fund requests and releases', resource: 'pre_funding', action: 'read' },
           { key: 'pre_funding:create', label: 'Create Pre-Fund Request', description: 'Submit a pre-funding request', resource: 'pre_funding', action: 'create' },
+          { key: 'pre_funding:update', label: 'Edit Pre-Fund', description: 'Adjust pre-fund balances or correct linked disbursements', resource: 'pre_funding', action: 'update' },
           { key: 'pre_funding:approve', label: 'Approve Pre-Fund Release', description: 'Approve a fund release', resource: 'pre_funding', action: 'approve' },
           { key: 'pre_funding:use_for_payment', label: 'Use Pre-Fund for Payment', description: 'Debit an eligible shared Pre-Fund while recording a payment', resource: 'pre_funding', action: 'use_for_payment' },
+          { key: 'pre_funding:delete', label: 'Remove Pre-Fund Payment Link', description: 'Remove an operational cost payment from a pre-fund reconciliation', resource: 'pre_funding', action: 'delete', isDestructive: true },
           { key: 'pre_funding:export', label: 'Export Pre-Funding Report', description: 'Download pre-funding data', resource: 'pre_funding', action: 'export' },
         ],
       },
@@ -518,7 +488,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       },
       {
         page: 'Transaction Scanner',
-        route: '/transactions',
+        route: '/super-admin-hub?tab=transaction-scanner',
         description: 'AI-powered OCR for transaction screenshots',
         actions: [
           { key: 'transactions:read', label: 'View Transactions', description: 'See scanned transaction records', resource: 'transactions', action: 'read' },
@@ -903,12 +873,12 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         route: '/performance-reviews',
         description: 'Staff performance appraisals — create cycles, rate competencies, track goals',
         actions: [
-          { key: 'hr_analytics:read',   label: 'View Performance Reviews', description: 'Browse all appraisal records',          resource: 'hr_analytics', action: 'read' },
-          { key: 'hr_analytics:create', label: 'Create Review Cycle',      description: 'Launch a new performance review period', resource: 'hr_analytics', action: 'create', isAdminOnly: true },
-          { key: 'hr_analytics:update', label: 'Submit / Rate Review',     description: 'Complete a performance appraisal form',  resource: 'hr_analytics', action: 'update' },
-          { key: 'hr_analytics:approve', label: 'Approve Review',          description: 'Sign off on a completed appraisal',      resource: 'hr_analytics', action: 'approve', isAdminOnly: true },
-          { key: 'hr_analytics:delete', label: 'Delete Review',            description: 'Remove an eligible appraisal record',     resource: 'hr_analytics', action: 'delete', isDestructive: true, isAdminOnly: true },
-          { key: 'hr_analytics:export', label: 'Export Reviews',           description: 'Download performance review data',       resource: 'hr_analytics', action: 'export' },
+          { key: 'performance_reviews:read',    label: 'View All Performance Reviews', description: 'Browse every appraisal record (staff always see reviews they give or receive)', resource: 'performance_reviews', action: 'read' },
+          { key: 'performance_reviews:create',  label: 'Create Review',                description: 'Start a performance review for a staff member',                  resource: 'performance_reviews', action: 'create', isAdminOnly: true },
+          { key: 'performance_reviews:update',  label: 'Edit Any Review',              description: 'Edit or rate any appraisal, not just ones you review',          resource: 'performance_reviews', action: 'update', isAdminOnly: true },
+          { key: 'performance_reviews:approve', label: 'Approve & Calibrate Reviews',  description: 'Sign off appraisals, manage peer nominations and calibration',  resource: 'performance_reviews', action: 'approve', isAdminOnly: true },
+          { key: 'performance_reviews:delete',  label: 'Delete Review',                description: 'Remove an appraisal record',                                     resource: 'performance_reviews', action: 'delete', isDestructive: true, isAdminOnly: true },
+          { key: 'performance_reviews:export',  label: 'Export Reviews',               description: 'Download performance review data',                               resource: 'performance_reviews', action: 'export' },
         ],
       },
       {
@@ -928,10 +898,10 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
         route: '/training-certifications',
         description: 'Staff training records, certification tracking, skill development plans',
         actions: [
-          { key: 'hr:read',   label: 'View Training Records',  description: 'Browse training and certification history',   resource: 'hr', action: 'read' },
-          { key: 'hr:create', label: 'Add Training Record',    description: 'Log a training session or certification',     resource: 'hr', action: 'create' },
-          { key: 'hr:update', label: 'Edit Training Record',   description: 'Update training completion or certification',  resource: 'hr', action: 'update' },
-          { key: 'hr:export', label: 'Export Training Report', description: 'Download training and certification data',     resource: 'hr', action: 'export' },
+          { key: 'training:read',   label: 'View All Staff Records',   description: 'Browse every staff member\'s training and certifications (staff always see their own)', resource: 'training', action: 'read' },
+          { key: 'training:create', label: 'Add Records for Others',   description: 'Log a training or certification on another staff member',                         resource: 'training', action: 'create', isAdminOnly: true },
+          { key: 'training:update', label: 'Edit Others\' Records',     description: 'Update another staff member\'s training or certification',                        resource: 'training', action: 'update', isAdminOnly: true },
+          { key: 'training:delete', label: 'Delete Others\' Records',   description: 'Remove another staff member\'s training or certification',                        resource: 'training', action: 'delete', isDestructive: true, isAdminOnly: true },
         ],
       },
       {
@@ -1264,41 +1234,8 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     module: 'Field Operations',
     icon: 'MapPin',
     color: 'red',
-    description: 'Safety hub, incident reports, equipment tracking, field team operations',
+    description: 'Monitoring forms, coverage map, field team operations',
     pages: [
-      {
-        page: 'Safety Hub',
-        route: '/field-ops',
-        description: 'Safety briefings, alerts, field safety status',
-        actions: [
-          { key: 'safety:read', label: 'View Safety Hub', description: 'Access safety information', resource: 'safety', action: 'read' },
-          { key: 'safety:update', label: 'Update Safety Status', description: 'Post safety updates and alerts', resource: 'safety', action: 'update' },
-          { key: 'safety:create', label: 'Create Safety Alert', description: 'Issue a new safety alert', resource: 'safety', action: 'create' },
-        ],
-      },
-      {
-        page: 'Incident Reports',
-        route: '/field-ops?tab=incidents',
-        description: 'Field incident logging and management',
-        actions: [
-          { key: 'incidents:read', label: 'View Incidents', description: 'See all incident reports', resource: 'incidents', action: 'read' },
-          { key: 'incidents:create', label: 'Report Incident', description: 'Submit a new incident report', resource: 'incidents', action: 'create' },
-          { key: 'incidents:update', label: 'Update Incident', description: 'Modify an existing incident record', resource: 'incidents', action: 'update' },
-          { key: 'incidents:delete', label: 'Delete Incident', description: 'Remove an incident report', resource: 'incidents', action: 'delete', isDestructive: true },
-          { key: 'incidents:export', label: 'Export Incident Report', description: 'Download incident data', resource: 'incidents', action: 'export' },
-        ],
-      },
-      {
-        page: 'Equipment',
-        route: '/field-ops?tab=equipment',
-        description: 'Equipment registry, assignment, and maintenance tracking',
-        actions: [
-          { key: 'equipment:read', label: 'View Equipment', description: 'Browse equipment registry', resource: 'equipment', action: 'read' },
-          { key: 'equipment:create', label: 'Add Equipment', description: 'Register new equipment', resource: 'equipment', action: 'create' },
-          { key: 'equipment:update', label: 'Update Equipment', description: 'Edit equipment records', resource: 'equipment', action: 'update' },
-          { key: 'equipment:delete', label: 'Remove Equipment', description: 'Delete an equipment record', resource: 'equipment', action: 'delete', isDestructive: true },
-        ],
-      },
       {
         page: 'Monitoring Form',
         route: '/monitoring-form',
@@ -1307,42 +1244,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
           { key: 'site_visits:read',   label: 'View Monitoring Form', description: 'Access the monitoring form interface',     resource: 'site_visits', action: 'read' },
           { key: 'site_visits:create', label: 'Submit Monitoring Form', description: 'Fill in and submit a monitoring form',   resource: 'site_visits', action: 'create' },
           { key: 'site_visits:update', label: 'Edit Draft Form',       description: 'Update a saved draft monitoring form',    resource: 'site_visits', action: 'update' },
-        ],
-      },
-      {
-        page: 'Safety Hub',
-        route: '/safety-hub',
-        description: 'Standalone safety hub — safety briefings, SOP repository, safety status board',
-        actions: [
-          { key: 'safety:read',   label: 'View Safety Hub',     description: 'Access safety information and SOPs',  resource: 'safety', action: 'read' },
-          { key: 'safety:create', label: 'Create Safety Alert', description: 'Issue a new safety alert',            resource: 'safety', action: 'create', isAdminOnly: true },
-          { key: 'safety:update', label: 'Update Safety Status', description: 'Post safety updates and briefings',  resource: 'safety', action: 'update', isAdminOnly: true },
-          { key: 'safety:export', label: 'Export Safety Report', description: 'Download safety status report',      resource: 'safety', action: 'export' },
-        ],
-      },
-      {
-        page: 'Incident Reports',
-        route: '/incident-reports',
-        description: 'Standalone incident report list — log, track, and resolve field incidents',
-        actions: [
-          { key: 'incidents:read',   label: 'View Incidents',        description: 'See all incident reports',               resource: 'incidents', action: 'read' },
-          { key: 'incidents:create', label: 'Report Incident',       description: 'Submit a new incident report',           resource: 'incidents', action: 'create' },
-          { key: 'incidents:update', label: 'Update Incident',       description: 'Modify or resolve an incident record',   resource: 'incidents', action: 'update' },
-          { key: 'incidents:delete', label: 'Delete Incident',       description: 'Remove an incident report',              resource: 'incidents', action: 'delete', isDestructive: true },
-          { key: 'incidents:export', label: 'Export Incident Report', description: 'Download incident data to Excel',        resource: 'incidents', action: 'export' },
-        ],
-      },
-      {
-        page: 'Equipment',
-        route: '/equipment',
-        description: 'Standalone equipment registry — asset tracking, assignment, maintenance',
-        actions: [
-          { key: 'equipment:read',   label: 'View Equipment',    description: 'Browse the equipment registry',        resource: 'equipment', action: 'read' },
-          { key: 'equipment:create', label: 'Add Equipment',     description: 'Register new equipment or assets',     resource: 'equipment', action: 'create' },
-          { key: 'equipment:update', label: 'Update Equipment',  description: 'Edit equipment records and status',    resource: 'equipment', action: 'update' },
-          { key: 'equipment:assign', label: 'Assign Equipment',  description: 'Assign equipment to a staff member',   resource: 'equipment', action: 'assign' },
-          { key: 'equipment:delete', label: 'Remove Equipment',  description: 'Delete an equipment record',           resource: 'equipment', action: 'delete', isDestructive: true },
-          { key: 'equipment:export', label: 'Export Equipment',  description: 'Download equipment registry to Excel', resource: 'equipment', action: 'export' },
         ],
       },
       {
@@ -1397,8 +1298,11 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     color: 'sky',
     description: 'Personal dashboard, project list, and user workspace',
     pages: [
-      { page: 'My Incentives', route: '/incentives', description: 'View personal incentive records', actions: [
-        { key: 'mmp:read', label: 'View Incentives', description: 'Read incentive records', resource: 'mmp', action: 'read' },
+      { page: 'My Incentives', route: '/incentives', description: 'Incentive overview — own payments, or all MMP incentives with permission', actions: [
+        { key: 'incentives:read', label: 'View All Incentives', description: 'See incentive snapshots and payments for all staff', resource: 'incentives', action: 'read', isAdminOnly: true },
+      ] },
+      { page: 'Incentive Settings', route: '/mmp/incentive-settings', description: 'Incentive rules, hub overrides, and incentive reports', actions: [
+        { key: 'incentives:update', label: 'Manage Incentive Settings', description: 'Edit incentive percentages, thresholds, and hub overrides', resource: 'incentives', action: 'update', isAdminOnly: true },
       ] },
 
       {

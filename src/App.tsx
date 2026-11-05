@@ -40,7 +40,6 @@ const Calls = lazy(() => import('./pages/Calls'));
 const CallAnalytics = lazy(() => import('./pages/CallAnalytics'));
 const Chat = lazy(() => import('./pages/Chat'));
 const FieldTeam = lazy(() => import('./pages/FieldTeam'));
-const Finance = lazy(() => import('./pages/Finance'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Projects = lazy(() => import('./pages/Projects'));
 const ProjectAnalytics = lazy(() => import('./pages/ProjectAnalytics'));
@@ -53,7 +52,6 @@ const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const EditProject = lazy(() => import('./pages/EditProject'));
 const ProjectTeamManagement = lazy(() => import('./pages/ProjectTeamManagement'));
 const Settings = lazy(() => import('./pages/Settings'));
-const SiteVisits = lazy(() => import('./pages/SiteVisits'));
 const SiteVisitDetail = lazy(() => import('./pages/SiteVisitDetail'));
 const EditSiteVisit = lazy(() => import('./pages/EditSiteVisit'));
 const CreateSiteVisit = lazy(() => import('./pages/CreateSiteVisit'));
@@ -139,9 +137,6 @@ const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
 
 const DataExportCenter = lazy(() => import('./pages/DataExportCenter'));
-const SafetyHub = lazy(() => import('./pages/SafetyHub'));
-const IncidentReports = lazy(() => import('./pages/IncidentReports'));
-const EquipmentPage = lazy(() => import('./pages/Equipment'));
 const MonitoringForm = lazy(() => import('./pages/MonitoringForm'));
 const CRMPartners = lazy(() => import('./pages/CRMPartners'));
 const CRMDashboard = lazy(() => import('./pages/CRMDashboard'));
@@ -259,22 +254,16 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { useFCM } from './hooks/useFCM';
 import { useAuthorization } from './hooks/use-authorization';
 import { useCurrentUserAccessManifest } from './hooks/useCurrentUserAccessManifest';
-import { useViewAs } from './context/ViewAsContext';
 import {
-  canSeePage,
-  canSeePageWithOverridesResult,
-  canSeeRoutePermission,
   resolveRouteAccessTarget,
   getPageLabel,
-  type RoutePermission,
 } from './lib/page-roles';
 import { evaluateManifestRouteAccess } from './lib/current-user-access';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 import SessionManager from './components/layout/SessionManager';
 import { ActivityTrackingProvider } from './context/activity/ActivityTrackingContext';
-import EmailPreviewPage from './pages/EmailPreviewPage';
-import StaffOnboarding from './pages/StaffOnboarding';
+const EmailPreviewPage = lazy(() => import('./pages/EmailPreviewPage'));
 
 
 // Loading component for Suspense fallback
@@ -349,81 +338,13 @@ const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// ── Universal Page Route Guard ────────────────────────────────────────────────
-// Single component that enforces PAGE_DEFS access rules for every protected
-// route.  Two enforcement layers:
-//   1. Synchronous role check via canSeePage()  (instant, no DB call)
-//   2. Async per-user override via canSeePageWithOverrides()  (DB override set
-//      by Security Panel — blocks even role-allowed users if admin blocked them)
-// SuperAdmin always bypasses both layers.
-//
-// Dynamic segments (e.g. /mmp/abc123/edit) are resolved to their parent slug
-// (/mmp) via resolveSlug(), so new sub-routes are automatically protected.
-//
-// New pages: add an entry to PAGE_DEFS in PageAccessControl.tsx — the guard
-// and the Security Panel both read from there automatically.
-const PageRouteGuardAsync = ({
-  slug,
-  roleKey,
-  userId,
-  children,
-  routePermission,
-  routeBaseline,
-}: {
-  slug: string;
-  roleKey: string;
-  userId: string | null | undefined;
-  children: React.ReactNode;
-  routePermission?: RoutePermission | null;
-  routeBaseline?: boolean;
-}) => {
-  // Resolve role defaults and explicit overrides before mounting children so
-  // a configured block never flashes or starts protected data queries.
-  const [status, setStatus] = useState<'ok' | 'checking' | 'denied'>('checking');
-
-  useEffect(() => {
-    setStatus('checking');
-    if (!userId) {
-      setStatus('denied');
-      return;
-    }
-    canSeePageWithOverridesResult(
-      slug,
-      roleKey ? roleKey.split('|') : [],
-      userId,
-      routePermission ?? undefined,
-      routeBaseline,
-    ).then(({ allowed }) => {
-      setStatus(allowed ? 'ok' : 'denied');
-    });
-  }, [
-    slug,
-    roleKey,
-    userId,
-    routePermission?.resource,
-    routePermission?.action,
-    routeBaseline,
-  ]);
-
-  if (status === 'denied') {
-    return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
-  }
-  if (status === 'checking') {
-    // Show nothing (blank) while we verify the grant — avoids a flash of
-    // content that would immediately be replaced by "Access Restricted".
-    return null;
-  }
-  return <>{children}</>;
-};
-
 const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { currentUser } = useAppContext();
-  const { isSuperAdmin, checkPermission } = useAuthorization();
-  const { viewAs } = useViewAs();
+  const { isSuperAdmin } = useAuthorization();
   const viewingAsSuperAdmin = isSuperAdmin();
   const { data: currentAccessManifest, isLoading: isManifestLoading, isError: isManifestError } = useCurrentUserAccessManifest(
-    !!currentUser?.id && !viewAs && !viewingAsSuperAdmin,
+    !!currentUser?.id && !viewingAsSuperAdmin,
   );
 
   // SuperAdmin bypasses all page-level checks
@@ -438,50 +359,24 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   // Public routes sit outside this tree. Protected routes need a registered
   // target; a missing definition must not become an authorization exemption.
   if (!target) return <PageAccessDenied reason="role" />;
-  const { slug, routePermission } = target;
+  const { slug } = target;
 
-  // Normal navigation is evaluated exclusively from the server-derived
-  // manifest. Do not silently fall back to profile roles or browser-side
-  // override queries: a missing/failed manifest must not create a bypass.
-  if (!viewAs) {
-    if (isManifestLoading) return null;
-    if (isManifestError || !currentAccessManifest) {
-      return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
-    }
-    const allowed = evaluateManifestRouteAccess(
-      currentAccessManifest,
-      location.pathname,
-      location.search,
-      location.hash,
-    );
-    return allowed
-      ? <>{children}</>
-      : <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
+  // Navigation is evaluated exclusively from the server-derived manifest
+  // (the previewed target's manifest during View As). A missing/failed
+  // manifest must not create a bypass.
+  if (isManifestLoading) return null;
+  if (isManifestError || !currentAccessManifest) {
+    return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
   }
-
-  // View As is an administrator preview, not another authenticated session.
-  // It intentionally retains the admin-only lookup path until the server can
-  // issue an evaluated manifest for an impersonated target.
-  const guardRoles = Array.from(new Set([
-    viewAs.role,
-  ].filter((roleName): roleName is string => Boolean(roleName))));
-  const roleAllowed = routePermission
-    ? checkPermission(routePermission.resource, routePermission.action) ||
-      guardRoles.some(roleName => canSeeRoutePermission(routePermission, roleName))
-    : guardRoles.some(roleName => canSeePage(slug, roleName));
-
-  return (
-    <PageRouteGuardAsync
-      key={`${slug}:${guardRoles.join(',')}:${viewAs.userId ?? currentUser?.id ?? ''}:${routePermission?.resource ?? ''}:${routePermission?.action ?? ''}`}
-      slug={slug}
-      roleKey={guardRoles.join('|')}
-      userId={viewAs.mode === 'user' ? viewAs.userId : undefined}
-      routePermission={routePermission}
-      routeBaseline={routePermission ? roleAllowed : undefined}
-    >
-      {children}
-    </PageRouteGuardAsync>
+  const allowed = evaluateManifestRouteAccess(
+    currentAccessManifest,
+    location.pathname,
+    location.search,
+    location.hash,
   );
+  return allowed
+    ? <>{children}</>
+    : <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
 };
 
 // Notification display component
@@ -630,7 +525,7 @@ const AppRoutes = () => {
         <Route path="/communication-hub" element={<CommunicationHub />} />
         <Route path="/call-analytics" element={<CallAnalytics />} />
         <Route path="/field-team" element={<Navigate to="/field-ops?tab=field-team" replace />} />
-        <Route path="/finance" element={<Finance />} />
+        <Route path="/finance" element={<Navigate to="/finance-hub" replace />} />
         <Route path="/financial-operations" element={<Navigate to="/finance-hub?tab=financial-ops" replace />} />
         <Route path="/data-visibility" element={<Navigate to="/analytics?tab=data-visibility" replace />} />
         <Route path="/chat" element={<Navigate to="/communication-hub?tab=chat" replace />} />
@@ -659,7 +554,7 @@ const AppRoutes = () => {
         <Route path="/notification-preferences" element={<NotificationPreferences />} />
         <Route path="/notification-history" element={<NotificationHistory />} />
         <Route path="/notification-analytics" element={<NotificationAnalytics />} />
-        <Route path="/settings" element={<Navigate to="/admin-hub?tab=settings" replace />} />
+        <Route path="/settings" element={<PageWrapper><Settings /></PageWrapper>} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/payroll" element={<Navigate to="/hr?tab=payroll" replace />} />
         <Route path="/hr" element={<HRHub />} />
@@ -693,7 +588,7 @@ const AppRoutes = () => {
         <Route path="/mobile-cost-submission" element={<MobileCostSubmission />} />
         {/* ── Field Ops Hub ── */}
         <Route path="/field-ops" element={<FieldOpsHub />} />
-        <Route path="/site-visits" element={<SiteVisits />} />
+        <Route path="/site-visits" element={<Navigate to="/field-ops" replace />} />
         <Route path="/site-visits/create" element={<CreateSiteVisit />} />
         <Route path="/site-visits/create/mmp" element={<CreateSiteVisitMMP />} />
         <Route path="/site-visits/create/mmp/:id" element={<CreateSiteVisitMMPDetail />} />
@@ -713,7 +608,7 @@ const AppRoutes = () => {
         <Route path="/archive" element={<Navigate to="/analytics?tab=archive" replace />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/role-management" element={<RoleManagement />} />
-        <Route path="/page-access" element={<Navigate to="/super-admin-hub?tab=user-access" replace />} />
+        <Route path="/page-access" element={<Navigate to="/role-management" replace />} />
         {/* ── Super Admin Hub ── */}
         <Route path="/super-admin-hub" element={<SuperAdminHub />} />
         <Route path="/super-admin-management" element={<Navigate to="/super-admin-hub?tab=super-admin" replace />} />
@@ -746,7 +641,7 @@ const AppRoutes = () => {
         <Route path="/task-admin" element={<Navigate to="/admin-hub?tab=task-admin" replace />} />
         <Route path="/admin/project-flow-stages" element={<Navigate to="/admin-hub?tab=project-flow-stages" replace />} />
         <Route path="/admin/transaction-scanner" element={<Navigate to="/super-admin-hub?tab=transaction-scanner" replace />} />
-        <Route path="/permissions-management" element={<Navigate to="/super-admin-hub?tab=user-access" replace />} />
+        <Route path="/permissions-management" element={<Navigate to="/role-management" replace />} />
         <Route path="/role-perspective" element={<RolePerspectiveViewer />} />
         <Route path="/support-contacts" element={<SupportContacts />} />
         <Route path="/mobile-support-tickets" element={<MobileSupportTickets />} />
@@ -755,9 +650,9 @@ const AppRoutes = () => {
         <Route path="/mobile-call-scheduling" element={<Navigate to="/super-admin-hub?tab=mobile-call-scheduling" replace />} />
         <Route path="/mobile-document-sync" element={<Navigate to="/super-admin-hub?tab=mobile-document-sync" replace />} />
         <Route path="/reconciliation-dashboard" element={<Navigate to="/finance-hub?tab=reconciliation" replace />} />
-        <Route path="/safety-hub" element={<Navigate to="/field-ops?tab=safety-hub" replace />} />
-        <Route path="/incident-reports" element={<Navigate to="/field-ops?tab=incident-reports" replace />} />
-        <Route path="/equipment" element={<Navigate to="/field-ops?tab=equipment" replace />} />
+        <Route path="/safety-hub" element={<Navigate to="/field-ops" replace />} />
+        <Route path="/incident-reports" element={<Navigate to="/field-ops" replace />} />
+        <Route path="/equipment" element={<Navigate to="/field-ops" replace />} />
         <Route path="/monitoring-form" element={<Navigate to="/field-ops?tab=monitoring-form" replace />} />
         <Route path="/coverage-map" element={<Navigate to="/field-ops?tab=coverage-map" replace />} />
         <Route path="/field-operation-manager" element={<Navigate to="/field-ops?tab=field-operation-manager" replace />} />
@@ -809,6 +704,11 @@ const AppRoutes = () => {
         <Route path="/recycle-bin" element={<SuperAdminRoute><RecycleBin /></SuperAdminRoute>} />
         <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
         <Route path="/accounting" element={<AccountingHub />} />
+        {/* Legacy misnamed hub URLs (bookmarks / old links) */}
+        <Route path="/accounting-hub" element={<Navigate to="/accounting" replace />} />
+        <Route path="/field-ops-hub" element={<Navigate to="/field-ops" replace />} />
+        <Route path="/analytics-hub" element={<Navigate to="/analytics" replace />} />
+        <Route path="/hr-hub" element={<Navigate to="/hr" replace />} />
         <Route path="/pre-funding" element={<PreFundingRoute><PageWrapper><PreFundingHub /></PageWrapper></PreFundingRoute>} />
         <Route path="/pre-funding/overview" element={<Navigate to="/pre-funding?tab=overview" replace />} />
         <Route path="/pre-funding/registry" element={<Navigate to="/pre-funding?tab=registry" replace />} />
@@ -838,7 +738,7 @@ const AppRoutes = () => {
         <Route path="/accounting/ap-invoices" element={<Navigate to="/accounting?tab=ap-invoices" replace />} />
         <Route path="/accounting/cheque-register" element={<Navigate to="/accounting?tab=cheque-register" replace />} />
         <Route path="/accounting/period-close" element={<Navigate to="/accounting?tab=period-close" replace />} />
-        <Route path="/executive" element={<SuperAdminRoute><PageWrapper><ExecutiveDashboard /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/executive" element={<PageWrapper><ExecutiveDashboard /></PageWrapper>} />
         <Route path="/accounting/tax" element={<Navigate to="/accounting?tab=tax" replace />} />
         <Route path="/accounting/multi-currency" element={<Navigate to="/accounting?tab=multi-currency" replace />} />
         <Route path="/accounting/budget-encumbrance" element={<Navigate to="/accounting?tab=budget-encumbrance" replace />} />

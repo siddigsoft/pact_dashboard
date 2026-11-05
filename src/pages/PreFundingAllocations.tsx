@@ -5,6 +5,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FitNumber } from '@/components/ui/fit-number';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -460,9 +461,7 @@ export default function PreFundingAllocations() {
                   </div>
                 </div>
                 {/* Number on its own row — full width, never clipped */}
-                <div className="text-xl font-bold tabular-nums leading-none tracking-tight">
-                  {k.value}
-                </div>
+                <FitNumber value={k.value} className="text-xl font-bold leading-none tracking-tight" />
                 <div className="text-[10px] text-muted-foreground mt-1">{k.sub}</div>
               </CardContent>
             </Card>

@@ -13,7 +13,6 @@ import { Loader2, RefreshCw, Download, AlertTriangle, CheckCircle2, RotateCcw } 
 import { format, differenceInMonths, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
@@ -61,10 +60,9 @@ function calcDepr(a: Asset): AssetWithDepr {
 }
 
 export default function AccountingDepreciationRun() {
-  const { checkPermission, hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = checkPermission('fixed_assets', 'read');
+  const { checkPermission, loading: authLoading, canWriteAccounting } = useAuthorization();
   const canExport = checkPermission('fixed_assets', 'export');
-  const canRun = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const canRun = canWriteAccounting();
   const { toast } = useToast();
 
   const [assets, setAssets] = useState<AssetWithDepr[]>([]);
@@ -82,7 +80,6 @@ export default function AccountingDepreciationRun() {
   const [unifiedLoading, setUnifiedLoading] = useState(false);
 
   const loadUnifiedRuns = useCallback(async () => {
-    if (!allowed) return;
     setUnifiedLoading(true);
     const { data } = await supabase
       .from('asset_depreciation_runs' as any)
@@ -91,10 +88,9 @@ export default function AccountingDepreciationRun() {
       .limit(50);
     setUnifiedRuns((data ?? []) as UnifiedDepRun[]);
     setUnifiedLoading(false);
-  }, [allowed]);
+  }, []);
 
   const load = useCallback(async () => {
-    if (!allowed) return;
     setLoading(true);
     const [assetRes, runRes] = await Promise.all([
       supabase.from('acct_fixed_assets').select('id, asset_name, asset_code, category, acquisition_cost, salvage_value, useful_life_months, acquisition_date, status').eq('status', 'active').limit(1000),
@@ -120,9 +116,9 @@ export default function AccountingDepreciationRun() {
       setGlLogMap(map);
     }
     setLoading(false);
-  }, [allowed]);
+  }, []);
 
-  useEffect(() => { if (allowed) { void load(); void loadUnifiedRuns(); } }, [allowed, load, loadUnifiedRuns]);
+  useEffect(() => { void load(); void loadUnifiedRuns(); }, [load, loadUnifiedRuns]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -167,7 +163,6 @@ export default function AccountingDepreciationRun() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="depreciation-run-page">
@@ -192,7 +187,6 @@ export default function AccountingDepreciationRun() {
         </div>
       </div>
 
-      <PageInfoBanner title="Depreciation Run" description="Uses straight-line depreciation: (Cost − Salvage) ÷ Useful Life Months per asset. Click 'Run Depreciation' to post a batch journal entry for the current period. Fully depreciated assets (elapsed ≥ life) are excluded automatically." descriptionAr="يستخدم طريقة القسط الثابت: (التكلفة − قيمة الإنقاذ) ÷ العمر الإنتاجي بالأشهر. انقر لتشغيل جدولة الاستهلاك." />
 
       {migrationNeeded ? MIGRATION_NOTICE : loading ? (
         <PageLoader compact />

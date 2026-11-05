@@ -141,12 +141,12 @@ function PhaseBadge({ phase }: { phase: string }) {
 export default function PerformanceReviews() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const { hasAnyRole, checkPermission } = useAuthorization();
-  const canExport = checkPermission('hr_analytics', 'export');
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_admin', 'manager']);
-  const canCreate = isAdmin && checkPermission('hr_analytics', 'create');
-  const canUpdate = checkPermission('hr_analytics', 'update');
-  const canApprove = isAdmin && checkPermission('hr_analytics', 'approve');
+  const { checkPermission } = useAuthorization();
+  const canExport = checkPermission('performance_reviews', 'export');
+  const isAdmin = checkPermission('performance_reviews', 'approve');
+  const canCreate = checkPermission('performance_reviews', 'create');
+  const canUpdate = checkPermission('performance_reviews', 'update');
+  const canApprove = isAdmin;
 
   // ── Core data ──────────────────────────────────────────────────────────────
   const [reviews, setReviews]   = useState<Review[]>([]);
@@ -267,12 +267,8 @@ export default function PerformanceReviews() {
 
   // Calibration scope: HR/admin see all team reviews in calibration; managers see only the
   // reviews they own (reviewer_id = currentUser.id) to enforce team-scoped calibration.
-  const isHrOrAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_admin']);
   const calibrationReviews = isAdmin
-    ? reviews.filter(r =>
-        r.cycle_phase === 'calibration' &&
-        (isHrOrAdmin || r.reviewer_id === currentUser?.id)
-      )
+    ? reviews.filter(r => r.cycle_phase === 'calibration')
     : [];
 
   const filtered = (
@@ -457,7 +453,7 @@ export default function PerformanceReviews() {
   }
 
   async function deleteReview(id: string) {
-    if (!checkPermission('hr_analytics', 'delete')) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
+    if (!checkPermission('performance_reviews', 'delete')) { toast({ title: 'Not authorized', variant: 'destructive' }); return; }
     const { error } = await supabase.from('performance_reviews').delete().eq('id', id);
     if (error) { toast({ title: 'Failed to delete', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Review deleted' });
@@ -719,7 +715,7 @@ export default function PerformanceReviews() {
 
   // ── Export ─────────────────────────────────────────────────────────────────
   function exportReviews() {
-    if (!checkPermission('hr_analytics', 'export')) return;
+    if (!checkPermission('performance_reviews', 'export')) return;
     exportToExcel(filtered.map(r => ({
       'Employee': r.reviewee_name ?? '',
       'Review Period': r.review_period,
@@ -787,47 +783,27 @@ export default function PerformanceReviews() {
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Award className="h-6 w-6 text-amber-500" />
-            Performance Reviews
-          </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">360° appraisals, self-assessment & calibration</p>
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-4">
+      {/* Hub already names this page; keep only counts + primary actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-muted-foreground">
+          <span><span className="font-medium text-foreground tabular-nums">{stats.total}</span> my reviews</span>
+          <span><span className="font-medium text-foreground tabular-nums">{stats.completed}</span> completed</span>
+          <span><span className="font-medium text-foreground tabular-nums">{stats.avgRating ? stats.avgRating.toFixed(1) : '—'}</span> avg rating</span>
+          <span><span className="font-medium text-foreground tabular-nums">{stats.pending}</span> pending</span>
         </div>
         <div className="flex gap-2">
           {isAdmin && calibrationReviews.length > 0 && (
-            <Button variant="outline" onClick={openCalibration} data-testid="btn-calibrate">
+            <Button variant="outline" size="sm" onClick={openCalibration} data-testid="btn-calibrate">
               <Sliders className="h-4 w-4 mr-1" />Calibrate Team
             </Button>
           )}
-          <Button onClick={openNew} data-testid="btn-new-review">
+          <Button size="sm" onClick={openNew} data-testid="btn-new-review">
             <Plus className="h-4 w-4 mr-1" />Start Review
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'My Reviews',     value: stats.total,     icon: <FileText     className="h-4 w-4" />, color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-900/20' },
-          { label: 'Completed',      value: stats.completed, icon: <CheckCircle2 className="h-4 w-4" />, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-          { label: 'Avg Rating',     value: stats.avgRating ? stats.avgRating.toFixed(1) + ' ★' : '—', icon: <Star className="h-4 w-4" />, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-          { label: 'Pending Review', value: stats.pending,   icon: <Clock        className="h-4 w-4" />, color: 'text-orange-600',  bg: 'bg-orange-50 dark:bg-orange-900/20' },
-        ].map(s => (
-          <div key={s.label} className={cn('rounded-lg p-3 flex items-center gap-3', s.bg)}>
-            <span className={s.color}>{s.icon}</span>
-            <div>
-              <p className={cn('text-xl font-bold', s.color)}>{s.value}</p>
-              <p className="text-xs text-muted-foreground">{s.label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Tab Bar */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <Tabs value={tab} onValueChange={v => setTab(v as ReviewTab)}>
           <TabsList className="flex-wrap h-auto gap-1">
@@ -835,20 +811,22 @@ export default function PerformanceReviews() {
             {pendingSelfAssess.length > 0 && (
               <TabsTrigger value="self-assess" className="gap-1">
                 Self-Assess
-                <Badge className="h-4 px-1 text-[10px] bg-blue-500 text-white">{pendingSelfAssess.length}</Badge>
+                <Badge variant="secondary" className="h-4 px-1.5 text-[10px] tabular-nums">{pendingSelfAssess.length}</Badge>
               </TabsTrigger>
             )}
             {pendingPeerFeedback.length > 0 && (
               <TabsTrigger value="peer" className="gap-1">
                 Peer Feedback
-                <Badge className="h-4 px-1 text-[10px] bg-purple-500 text-white">{pendingPeerFeedback.length}</Badge>
+                <Badge variant="secondary" className="h-4 px-1.5 text-[10px] tabular-nums">{pendingPeerFeedback.length}</Badge>
               </TabsTrigger>
             )}
             {isAdmin && <TabsTrigger value="all">All Staff</TabsTrigger>}
             {isAdmin && (
               <TabsTrigger value="pending" className="gap-1">
                 Pending
-                {pendingReviews.length > 0 && <Badge className="h-4 px-1 text-[10px] bg-amber-500 text-white">{pendingReviews.length}</Badge>}
+                {pendingReviews.length > 0 && (
+                  <Badge variant="secondary" className="h-4 px-1.5 text-[10px] tabular-nums">{pendingReviews.length}</Badge>
+                )}
               </TabsTrigger>
             )}
             {isAdmin && <TabsTrigger value="calibrate">Calibration</TabsTrigger>}
@@ -862,7 +840,7 @@ export default function PerformanceReviews() {
               <Input className="pl-8 w-44" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
             </div>
           )}
-          {canExport && <ReportExportGate resource="hr_analytics">
+          {canExport && <ReportExportGate resource="performance_reviews">
             <Button size="sm" variant="outline" onClick={exportReviews} data-testid="button-export-reviews">
               <Download className="h-4 w-4 mr-1" />Export
             </Button>
@@ -874,10 +852,10 @@ export default function PerformanceReviews() {
       {tab === 'pending' && isAdmin && nominations.filter(n => n.approved === null).length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <UserCheck className="h-4 w-4 text-purple-500" />
-            <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Pending Peer Nomination Approvals
-              <Badge className="ml-2 bg-purple-500 text-white h-4 px-1.5 text-[10px]">
+            <UserCheck className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">
+              Pending peer nomination approvals
+              <Badge variant="secondary" className="ml-2 h-4 px-1.5 text-[10px] tabular-nums">
                 {nominations.filter(n => n.approved === null).length}
               </Badge>
             </p>
@@ -887,7 +865,7 @@ export default function PerformanceReviews() {
               <CardContent className="p-4 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">
-                    <span className="text-purple-600">{profiles.find(p => p.id === nom.nominee_id)?.full_name ?? '—'}</span>
+                    <span className="text-foreground">{profiles.find(p => p.id === nom.nominee_id)?.full_name ?? '—'}</span>
                     {' '}nominated as peer for{' '}
                     <span className="font-semibold">{nom.reviewee_name}</span>
                   </p>
@@ -919,10 +897,10 @@ export default function PerformanceReviews() {
               <p>No pending peer feedback requests.</p>
             </div>
           ) : pendingPeerFeedback.map(nom => (
-            <Card key={nom.id} className="hover:shadow-md transition-shadow">
+            <Card key={nom.id}>
               <CardContent className="p-4 flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-semibold">{nom.reviewee_name}</p>
+                  <p className="font-medium text-foreground">{nom.reviewee_name}</p>
                   <p className="text-sm text-muted-foreground">{nom.review_period}</p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                     <EyeOff className="h-3 w-3" />Your feedback is anonymous to the reviewee
@@ -982,7 +960,7 @@ export default function PerformanceReviews() {
                   </div>
                   <div className="space-y-2">
                     {phReviews.map(rev => (
-                      <Card key={rev.id} className="hover:shadow cursor-pointer" onClick={() => { setViewing(rev); setDetailOpen(true); }}>
+                      <Card key={rev.id} className="cursor-pointer hover:bg-muted/30 transition-colors duration-150" onClick={() => { setViewing(rev); setDetailOpen(true); }}>
                         <CardContent className="p-3 space-y-1">
                           <p className="text-sm font-medium truncate">{rev.reviewee_name}</p>
                           <p className="text-xs text-muted-foreground">{rev.review_period}</p>
@@ -1023,21 +1001,21 @@ export default function PerformanceReviews() {
               const mySa  = selfAssessments.find(sa => sa.review_id === rev.id && sa.user_id === currentUser?.id);
               const myNoms = nominations.filter(n => n.review_id === rev.id && n.reviewee_id === currentUser?.id);
               return (
-                <Card key={rev.id} className="hover:shadow-md transition-shadow cursor-pointer"
+                <Card key={rev.id} className="cursor-pointer hover:bg-muted/30 transition-colors duration-150"
                   onClick={() => { setViewing(rev); setDetailOpen(true); }}
                   data-testid={`review-card-${rev.id}`}>
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold">{rev.reviewee_name}</p>
+                          <p className="font-medium text-foreground">{rev.reviewee_name}</p>
                           <Badge variant="outline" className="capitalize text-xs">{rev.review_type.replace('_', ' ')}</Badge>
-                          <span className={cn('flex items-center gap-1 text-xs px-2 py-0.5 rounded-full', st.badge)}>
+                          <span className={cn('flex items-center gap-1 text-xs px-2 py-0.5 rounded-md', st.badge)}>
                             {st.icon}<span>{st.label}</span>
                           </span>
                           <PhaseBadge phase={rev.cycle_phase} />
-                          {rev.self_assessment_enabled && <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">Self-Assess</Badge>}
-                          {rev.peer_feedback_enabled && <Badge variant="outline" className="text-xs text-purple-600 border-purple-300">360°</Badge>}
+                          {rev.self_assessment_enabled && <Badge variant="secondary" className="text-xs">Self-Assess</Badge>}
+                          {rev.peer_feedback_enabled && <Badge variant="secondary" className="text-xs">360°</Badge>}
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">{rev.review_period}</p>
                         <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
@@ -1052,14 +1030,14 @@ export default function PerformanceReviews() {
                       <div className="flex gap-1 shrink-0 flex-wrap justify-end" onClick={e => e.stopPropagation()}>
                         {/* Self-assess button for employee */}
                         {rev.self_assessment_enabled && rev.reviewee_id === currentUser?.id && !mySa?.submitted_at && (
-                          <Button size="sm" variant="outline" className="text-blue-600 border-blue-300 text-xs"
+                          <Button size="sm" variant="outline" className="text-xs"
                             onClick={() => openSelfAssess(rev)} data-testid={`btn-self-assess-${rev.id}`}>
                             <BookOpen className="h-3.5 w-3.5 mr-1" />Self-Assess
                           </Button>
                         )}
                         {/* Nominate peers button for employee */}
                         {rev.peer_feedback_enabled && rev.reviewee_id === currentUser?.id && rev.cycle_phase === 'peer_feedback' && (
-                          <Button size="sm" variant="outline" className="text-purple-600 border-purple-300 text-xs"
+                          <Button size="sm" variant="outline" className="text-xs"
                             onClick={() => openNominate(rev)} data-testid={`btn-nominate-${rev.id}`}>
                             <Users className="h-3.5 w-3.5 mr-1" />Nominate Peers
                           </Button>
@@ -1325,7 +1303,7 @@ export default function PerformanceReviews() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-purple-500" />Nominate Peers — {nomReview?.review_period}
+              <Users className="h-5 w-5 text-muted-foreground" />Nominate Peers: {nomReview?.review_period}
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground py-1">Select 2–5 colleagues who can provide meaningful feedback on your work.</p>

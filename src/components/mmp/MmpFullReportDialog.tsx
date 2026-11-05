@@ -1185,6 +1185,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName, reportKind }: Prop
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent
+        hideCloseButton
         className="max-w-5xl w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden bg-gray-50 border-0 shadow-2xl text-foreground"
         onInteractOutside={e => e.preventDefault()}
       >

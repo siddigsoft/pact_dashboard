@@ -137,7 +137,6 @@ const MMPDetailView = () => {
   const isDataTeam = hasAnyRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
   const isCountryDirector = hasAnyRole(['countryDirector', 'country_director', 'CountryDirector']);
   const canAccessQuestionnaires = isSuperAdmin() || isAdmin || isDataTeam || isFOM || isCountryDirector;
-  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isSupervisor || isDataTeam || isCountryDirector;
   const canEdit = (checkPermission('mmp', 'update') || isAdmin || isCoordinator || isSupervisor) ? true : false;
   // Only Super Admins may delete MMPs — permission checks and isAdmin are insufficient alone.
   const canDelete = isSuperAdmin();
@@ -227,27 +226,6 @@ const MMPDetailView = () => {
     };
     loadSiteEntries();
   }, [id, mmpFile?.siteEntries?.length, fetchSiteEntriesForMMP]);
-
-  // EARLY RETURNS - After all hooks
-  if (!canRead) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-destructive">Access Denied</CardTitle>
-            <CardDescription>
-              You don't have permission to view this MMP.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" onClick={() => navigate('/mmp')} className="w-full">
-              Back to MMP List
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   const handleArchive = async () => {
     if (id) {

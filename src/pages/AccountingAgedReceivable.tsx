@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -25,10 +24,7 @@ interface AgingRow {
 const BUCKETS = ['Current (0–30)', '31–60 Days', '61–90 Days', 'Over 90 Days', 'Total'];
 
 export default function AccountingAgedReceivable() {
-  const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
-
-  const [invoices, setInvoices] = useState<APInvoice[]>([]);
+    const [invoices, setInvoices] = useState<APInvoice[]>([]);
   const [loading, setLoading]   = useState(true);
   const [asOf, setAsOf]         = useState(new Date().toISOString().slice(0,10));
   const [search, setSearch]     = useState('');
@@ -44,7 +40,7 @@ export default function AccountingAgedReceivable() {
     setInvoices((data ?? []) as APInvoice[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const agingRows = useMemo((): AgingRow[] => {
     const asOfDate = new Date(asOf);
@@ -81,7 +77,6 @@ export default function AccountingAgedReceivable() {
 
   const pct = (v:number) => totals.total > 0 ? ((v/totals.total)*100).toFixed(0)+'%' : '0%';
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

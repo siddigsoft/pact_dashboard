@@ -523,13 +523,6 @@ export default function PreFundingApprovalFlow() {
     exportToExcel(rows, 'Pre-Fund Approval Flows', `pre-fund-approvals-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
-  if (!canAccess) return (
-    <div className="p-8 text-center">
-      <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
-      <p className="text-muted-foreground">Access denied.</p>
-    </div>
-  );
-
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (

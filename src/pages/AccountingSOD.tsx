@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -18,7 +17,6 @@ import { format, parseISO, subMonths } from 'date-fns';
 import { downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -47,7 +45,6 @@ const DATE_RANGES = [
 
 export default function AccountingSOD() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed     = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'auditor']);
   const canToggle   = hasAnyRole(['super_admin']);
   const { toast }   = useToast();
 
@@ -89,7 +86,7 @@ export default function AccountingSOD() {
     setLoading(false);
   }, [dateRange]);
 
-  useEffect(() => { if (allowed) void load(); }, [allowed, dateRange]);
+  useEffect(() => { void load(); }, [dateRange]);
 
   const getName = (id: string) => {
     const p = profiles.find(p => p.id === id);
@@ -155,22 +152,11 @@ export default function AccountingSOD() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
 
   const isEnforcing = sodFlag?.is_enabled ?? false;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1050px]">
-      <PageInfoBanner
-        title="Segregation of Duties (SOD)"
-        description="Detects journal entries where the same user both created and posted (self-approved). SOD violations indicate a control weakness — either enforce mode (blocks posting) or log-only mode."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Create Journal',          description: 'User A creates and submits a journal entry.' },
-          { step: 2, role: 'Finance Admin', action: 'Review & Approve',        description: 'A different user (User B) must review and approve the entry.' },
-          { step: 3, role: 'System',        action: 'Detect Violation',        description: 'System flags a violation if the creator and approver are the same person.' },
-          { step: 4, role: 'System',        action: 'Enforce SOD',             description: 'Action taken (log or block) based on the SOD enforcement flag setting.' },
-        ]}
-      />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

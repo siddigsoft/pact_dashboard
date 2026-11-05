@@ -17,7 +17,6 @@ import {
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format, parseISO } from 'date-fns';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { exportToExcel } from '@/utils/report-export';
@@ -45,10 +44,9 @@ const TYPE_LABEL: Record<string, { label: string; color: string }> = {
 };
 
 export default function AccountingBudgetPlanning() {
-  const { checkPermission, hasAnyRole } = useAuthorization();
-  const allowed  = checkPermission('finances', 'read');
+  const { checkPermission, canWriteAccounting } = useAuthorization();
   const canExport = checkPermission('finances', 'export');
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-budget', roleCanEdit);
 
@@ -84,7 +82,6 @@ export default function AccountingBudgetPlanning() {
 
   /* ── bootstrap ── */
   useEffect(() => {
-    if (!allowed) return;
     (async () => {
       const [yRes, pRes, fRes, aRes, cRes] = await Promise.all([
         supabase.from('acct_fiscal_years').select('id, code, name_en').order('code', { ascending: false }),
@@ -108,33 +105,33 @@ export default function AccountingBudgetPlanning() {
       }
       setLoading(false);
     })();
-  }, [allowed]);
+  }, []);
 
 
   /* ── load budget lines for selected period/fund ── */
   const loadBudgetLines = useCallback(async (pid: string, fid: string) => {
-    if (!allowed || !pid) return;
+    if (!pid) return;
     const q = supabase.from('acct_budget_lines').select('id, account_id, period_id, fund_id, fiscal_year_id, budget_amount, obr_id, obr_notes').eq('period_id', pid);
     if (fid !== 'all') (q as any).eq('fund_id', fid);
     const { data, error } = await q;
     if (error?.code === '42P01') { setTableExists(false); return; }
     setTableExists(true);
     setBudgetLines((data ?? []) as BudgetLine[]);
-  }, [allowed]);
+  }, []);
 
-  useEffect(() => { if (allowed && periodId) void loadBudgetLines(periodId, fundId); }, [allowed, periodId, fundId, loadBudgetLines]);
+  useEffect(() => { if (periodId) void loadBudgetLines(periodId, fundId); }, [periodId, fundId, loadBudgetLines]);
 
   /* ── load approval record for current period/fund ── */
   const loadApproval = useCallback(async (pid: string, fid: string) => {
-    if (!allowed || !pid || !approvalTableExists) return;
+    if (!pid || !approvalTableExists) return;
     const q = supabase.from('acct_budget_approvals' as any).select('*').eq('period_id', pid);
     if (fid !== 'all') (q as any).eq('fund_id', fid); else (q as any).is('fund_id', null);
     const { data, error } = await (q as any).maybeSingle();
     if (error?.code === '42P01') { setApprovalTableExists(false); return; }
     setApprovalRecord((data as any) ?? null);
-  }, [allowed, approvalTableExists]);
+  }, [approvalTableExists]);
 
-  useEffect(() => { if (allowed && periodId) void loadApproval(periodId, fundId); }, [allowed, periodId, fundId, loadApproval]);
+  useEffect(() => { if (periodId) void loadApproval(periodId, fundId); }, [periodId, fundId, loadApproval]);
 
   /* ── budget approval actions ── */
   const submitForApproval = async () => {
@@ -480,20 +477,9 @@ export default function AccountingBudgetPlanning() {
   };
 
   if (loading) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1200px]">
-      <PageInfoBanner
-        title="Budget Planning"
-        description="Set and manage budget targets for each account per fiscal period and fund. Budget lines feed directly into the Budget vs Actual variance analysis."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Select Period & Fund',    description: 'Choose the fiscal period and fund to plan against.' },
-          { step: 2, role: 'Finance Admin', action: 'Enter Budget Targets',    description: 'Set budget amounts per GL account line.' },
-          { step: 3, role: 'Finance Admin', action: 'Save & Submit',           description: 'Budget lines are saved and submitted for approval.' },
-          { step: 4, role: 'Finance Admin', action: 'Track vs Actual',         description: 'Monitor spend against plan in the Budget vs Actual report.' },
-        ]}
-      />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -642,7 +628,7 @@ export default function AccountingBudgetPlanning() {
                   Submit for Approval
                 </Button>
               )}
-              {approvalRecord?.status === 'submitted' && hasAnyRole(['super_admin', 'admin', 'financialAdmin']) && (
+              {approvalRecord?.status === 'submitted' && canWriteAccounting() && (
                 <>
                   <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => reviewBudget('approved')} disabled={approvingBudget} data-testid="button-approve-budget">
                     {approvingBudget ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <ShieldCheck className="h-3.5 w-3.5 mr-1" />}

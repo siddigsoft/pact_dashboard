@@ -25,7 +25,7 @@ const getActionLabel = (action: ActionType): string =>
   ACTION_LABELS[action] ?? action.charAt(0).toUpperCase() + action.slice(1);
 
 // Action → badge color
-const ACTION_COLORS: Record<ActionType, string> = {
+const ACTION_COLORS: Partial<Record<ActionType, string>> = {
   create:  'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   read:    'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
   update:  'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',

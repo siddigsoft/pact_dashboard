@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ConnectedPagesBar } from "@/components/ui/connected-pages-bar";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { insertNotificationsToDb } from "@/services/notification-insert";
@@ -2718,9 +2717,6 @@ export default function Departments() {
       </div>
 
       <div className="p-4 sm:p-6 flex flex-col gap-6">
-      {/* Quick Navigation */}
-      <ConnectedPagesBar exclude="departments" />
-
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="h-auto p-1 bg-[#0F2041]/8 border border-[#1D3461]/20 rounded-xl mb-4 flex-wrap">
           <TabsTrigger value="overview" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm font-medium data-[state=active]:bg-[#1D3461] data-[state=active]:text-white data-[state=active]:shadow-sm" data-testid="tab-overview">

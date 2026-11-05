@@ -25,7 +25,7 @@ import { ShieldCheck, UserPlus, UserX, Shield, AlertTriangle, CheckCircle2, XCir
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import { isProtectedOwner, PROTECTED_OWNER_EMAIL } from '@/lib/protected-accounts';
+import { isProtectedOwner } from '@/lib/protected-accounts';
 import { EmailNotificationService } from '@/services/email-notification.service';
 
 export function SuperAdminManagementPage() {
@@ -67,8 +67,6 @@ export function SuperAdminManagementPage() {
 
   const emailService = EmailNotificationService;
 
-  const isOwner = isProtectedOwner(currentUser?.id);
-
   const resetCreateDialog = () => {
     setShowCreateDialog(false);
     setSelectedUserId('');
@@ -82,8 +80,13 @@ export function SuperAdminManagementPage() {
   const handleCreate = async () => {
     if (!currentUser || !selectedUserId) return;
 
-    if (!isOwner) {
-      toast({ title: 'Not Authorised', description: 'Only the platform owner can appoint super administrators.', variant: 'destructive' });
+    if (!isSuperAdmin) {
+      toast({ title: 'Not Authorised', description: 'Only an active Super Admin can appoint super administrators.', variant: 'destructive' });
+      return;
+    }
+
+    if (!currentUser.email) {
+      toast({ title: 'Email required', description: 'Your account needs an email address to confirm this appointment.', variant: 'destructive' });
       return;
     }
 
@@ -92,7 +95,7 @@ export function SuperAdminManagementPage() {
       return;
     }
 
-    // Generate 6-digit OTP and send to owner email
+    // Send the confirmation to the Super Admin making the appointment.
     setSendingOtp(true);
     try {
       const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -100,9 +103,9 @@ export function SuperAdminManagementPage() {
       const targetUser = users.find(u => u.id === selectedUserId);
 
       await emailService.sendEmail({
-        to: PROTECTED_OWNER_EMAIL,
+        to: currentUser.email,
         subject: '🔐 Super Admin Appointment Confirmation',
-        recipientName: currentUser.name || 'Platform Owner',
+        recipientName: currentUser.name || 'Super Admin',
         priority: 'urgent',
         html: `
           <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
@@ -124,7 +127,7 @@ export function SuperAdminManagementPage() {
       setOtpExpiry(expiry);
       setOtpInput('');
       setOtpStep(true);
-      toast({ title: 'Code Sent', description: `A confirmation code was sent to ${PROTECTED_OWNER_EMAIL}` });
+      toast({ title: 'Code Sent', description: `A confirmation code was sent to ${currentUser.email}` });
     } catch (err: any) {
       toast({ title: 'Failed to Send Code', description: err.message || 'Could not send confirmation email', variant: 'destructive' });
     } finally {
@@ -340,7 +343,7 @@ export function SuperAdminManagementPage() {
             Manage super-admin accounts with complete system control
           </p>
         </div>
-        {canAddSuperAdmin && isOwner && (
+        {canAddSuperAdmin && (
           <Button onClick={() => setShowCreateDialog(true)} data-testid="button-add-super-admin">
             <UserPlus className="h-4 w-4 mr-2" />
             Add Super-Admin
@@ -643,7 +646,7 @@ export function SuperAdminManagementPage() {
                       Check your email
                     </p>
                     <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                      A 6-digit confirmation code was sent to <strong>{PROTECTED_OWNER_EMAIL}</strong>. Enter it below to confirm the appointment.
+                      A 6-digit confirmation code was sent to <strong>{currentUser?.email}</strong>. Enter it below to confirm the appointment.
                     </p>
                     <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
                       Expires at {otpExpiry ? otpExpiry.toLocaleTimeString() : ''}

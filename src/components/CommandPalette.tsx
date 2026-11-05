@@ -71,12 +71,8 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'Surveys', url: '/surveys', icon: ClipboardList, group: 'Planning & Setup', keywords: ['survey', 'questionnaire', 'form'] },
 
   // ── Field Operations ───────────────────────────────────────────────────────
-  { title: 'Site Visits', url: '/site-visits', icon: ClipboardList, group: 'Field Operations', keywords: ['visit', 'field'] },
   { title: 'Create Site Visit', url: '/site-visits/create', icon: ClipboardList, group: 'Field Operations', keywords: ['new visit'] },
   { title: 'Field Team', url: '/field-team', icon: Activity, group: 'Field Operations', keywords: ['team', 'map'] },
-  { title: 'Safety Hub', url: '/safety-hub', icon: Shield, group: 'Field Operations', keywords: ['safety', 'incident', 'risk'] },
-  { title: 'Equipment Tracking', url: '/equipment', icon: Package, group: 'Field Operations', keywords: ['equipment', 'asset', 'device'] },
-
   // ── Verification ───────────────────────────────────────────────────────────
   { title: 'Site Verification', url: '/coordinator/sites', icon: CheckCircle, group: 'Verification', keywords: ['verify', 'coordinator'] },
   { title: 'Coordinator Dashboard', url: '/coordinator-dashboard', icon: CheckCircle, group: 'Verification', keywords: ['coordinator'] },
@@ -201,7 +197,7 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'Classifications', url: '/classifications', icon: Award, group: 'Administration', keywords: ['class', 'grade'] },
   { title: 'Classification Fees', url: '/classification-fees', icon: DollarSign, group: 'Administration', keywords: ['fee', 'rate'] },
   { title: 'Settings', url: '/settings', icon: Settings, group: 'Administration', keywords: ['config', 'preferences'] },
-  { title: 'Access Management', url: '/super-admin-hub?tab=user-access', icon: ShieldCheck, group: 'Administration', keywords: ['access', 'permission', 'roles', 'users'] },
+  { title: 'Access Management', url: '/role-management', icon: ShieldCheck, group: 'Administration', keywords: ['access', 'permission', 'roles', 'baselines'] },
   { title: 'Role Perspective Viewer', url: '/role-perspective', icon: ShieldCheck, group: 'Administration', keywords: ['simulate', 'perspective'] },
   { title: 'Task Admin', url: '/task-admin', icon: CheckSquare, group: 'Administration', keywords: ['task', 'admin', 'template'] },
   { title: 'Staff Directory', url: '/admin/staff-profiles', icon: Users, group: 'Administration', keywords: ['staff', 'profiles', 'directory', 'team', 'bank', 'account'] },

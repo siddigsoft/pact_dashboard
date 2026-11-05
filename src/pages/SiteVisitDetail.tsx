@@ -65,7 +65,8 @@ const SiteVisitDetail = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [costDialogOpen, setCostDialogOpen] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
+  const canAssignCost = checkPermission('site_visits', 'assign_cost');
   const { reconcileSiteVisitFee } = useWallet();
   
   useEffect(() => {
@@ -100,7 +101,7 @@ const SiteVisitDetail = () => {
       setIsDeleting(true);
       const ok = await deleteSiteVisit(siteVisit.id);
       if (ok) {
-        navigate('/site-visits');
+        navigate('/field-ops');
       }
     } finally {
       setIsDeleting(false);
@@ -242,7 +243,7 @@ const SiteVisitDetail = () => {
           <p className="text-muted-foreground text-sm">
             The site visit you're looking for doesn't exist or has been removed.
           </p>
-          <Button onClick={() => navigate('/site-visits')} className="mt-4">
+          <Button onClick={() => navigate('/field-ops')} className="mt-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Site Visits
           </Button>
@@ -265,7 +266,7 @@ const SiteVisitDetail = () => {
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => navigate('/site-visits')}
+            onClick={() => navigate('/field-ops')}
             data-testid="button-back"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -551,7 +552,7 @@ const SiteVisitDetail = () => {
       {/* Mobile Bottom Action Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t p-4 lg:hidden z-50">
         <div className="flex items-center gap-2 max-w-lg mx-auto">
-          {hasAnyRole(['admin', 'ict']) && (
+          {canAssignCost && (
             <Button 
               variant="outline"
               size="sm"
@@ -620,7 +621,7 @@ const SiteVisitDetail = () => {
       {/* Desktop Action Buttons - Hidden on Mobile */}
       <div className="hidden lg:block fixed bottom-6 right-6 z-50">
         <div className="flex items-center gap-2 bg-background/95 backdrop-blur border rounded-lg p-2 shadow-lg">
-          {hasAnyRole(['admin', 'ict']) && (
+          {canAssignCost && (
             <Button 
               variant="outline"
               size="sm"

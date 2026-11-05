@@ -50,7 +50,6 @@ const menuSections: MenuSection[] = [
     title: 'Core Features',
     items: [
       { id: 'dashboard', icon: Home, label: 'Dashboard', path: '/dashboard', description: 'Overview and stats' },
-      { id: 'site-visits', icon: MapPin, label: 'Site Visits', path: '/site-visits', description: 'Manage field visits' },
       { id: 'field-team', icon: Map, label: 'Field Team Map', path: '/field-team', description: 'Live team locations' },
       { id: 'chat', icon: MessageSquare, label: 'Team Chat', path: '/chat', description: 'Messages and calls' },
       { id: 'notifications', icon: Bell, label: 'Notifications', path: '/notifications', description: 'All alerts' },
@@ -75,7 +74,7 @@ const menuSections: MenuSection[] = [
       { id: 'wallet', icon: Wallet, label: 'My Wallet', path: '/wallet', description: 'Balance and transactions' },
       { id: 'cost-submission', icon: Receipt, label: 'Submit Costs', path: '/cost-submission', description: 'Expense submissions',
         roles: ['SuperAdmin', 'Admin', 'DataCollector', 'Coordinator', 'Supervisor'] },
-      { id: 'finance', icon: DollarSign, label: 'Finance Overview', path: '/finance', description: 'Financial dashboard',
+      { id: 'finance', icon: DollarSign, label: 'Finance Hub', path: '/finance-hub', description: 'Financial dashboard',
         roles: ['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead'] },
       { id: 'financial-ops', icon: TrendingUp, label: 'Financial Operations', path: '/financial-operations', description: 'Advanced finance',
         roles: ['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)'] },

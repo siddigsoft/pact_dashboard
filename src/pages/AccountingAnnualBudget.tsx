@@ -39,9 +39,9 @@ const HUBS = ['Blue Nile', 'South Kordofan', 'North Kordofan', 'East Sudan', 'Kh
 const CATEGORIES = ['Personnel', 'Travel', 'Equipment', 'Supplies', 'Contractual', 'Other Direct', 'Indirect'];
 
 export default function AccountingAnnualBudget() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const canEdit    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
-  const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
+  const canEdit    = canWriteAccounting();
+  const canApprove = canWriteAccounting();
 
   const [budgets, setBudgets] = useState<AnnualBudget[]>([]);
   const [lines, setLines] = useState<BudgetLine[]>([]);

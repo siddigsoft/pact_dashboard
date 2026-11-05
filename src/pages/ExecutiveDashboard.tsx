@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FitNumber } from '@/components/ui/fit-number';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -71,9 +71,7 @@ function KPICard({
             {loading ? (
               <div className="h-7 w-16 bg-muted animate-pulse rounded" />
             ) : (
-              <p className={cn('text-2xl font-bold tabular-nums', color)} data-testid={`kpi-${title.toLowerCase().replace(/\s+/g, '-')}`}>
-                {value}
-              </p>
+              <FitNumber value={value} className={cn('text-2xl font-bold', color)} data-testid={`kpi-${title.toLowerCase().replace(/\s+/g, '-')}`} />
             )}
             {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
             {trend && trendLabel && (
@@ -96,9 +94,6 @@ function KPICard({
 }
 
 export default function ExecutiveDashboard() {
-  const { hasAnyRole } = useAuthorization();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'Admin', 'country_director', 'countryDirector', 'fom', 'FOM']);
-
   const [org, setOrg] = useState<OrgKPIs | null>(null);
   const [proj, setProj] = useState<ProjectKPIs | null>(null);
   const [fin, setFin] = useState<FinKPIs | null>(null);
@@ -124,8 +119,8 @@ export default function ExecutiveDashboard() {
         supabase.from('projects').select('id, status, health_score').limit(1000),
         supabase.from('acct_budget_lines').select('account_id, budget_amount').limit(5000),
         supabase.rpc('acct_trial_balance' as any, { p_period_id: null, p_branch_id: null, p_fund_id: null } as any).limit(5000),
-        supabase.from('master_sites').select('id, latitude, longitude').limit(3000),
-        supabase.from('site_visits').select('id, site_id, status').limit(5000),
+        supabase.from('sites_registry').select('id, site_code, gps_latitude, gps_longitude').limit(3000),
+        supabase.from('mmp_site_entries').select('id, site_code, status').limit(5000),
         supabase.from('mmp_files').select('id, status').limit(100),
         supabase.from('site_visit_cost_submissions').select('total_amount, submitted_at, created_at').in('status', ['approved', 'paid']).gte('created_at', sixMonthsAgo).limit(5000),
         supabase.from('hr_leave_requests').select('id, status, from_date, to_date').in('status', ['pending', 'approved']).limit(500),
@@ -179,16 +174,25 @@ export default function ExecutiveDashboard() {
 
       setFin({ totalBudget, totalSpent, utilizationPct, overBudgetCount: 0, monthlyTrend });
 
-      // MMP KPIs
+      // MMP KPIs (sites_registry + mmp_site_entries; master_sites / site_visits removed)
       const sitesData = siteRes.data ?? [];
       const visitsData = visitRes.data ?? [];
-      const visitedSiteIds = new Set(
-        visitsData.filter((v: any) => v.status === 'completed').map((v: any) => v.site_id)
+      const DONE = new Set(['completed', 'submitted', 'wfp_confirmed', 'done', 'visited']);
+      const visitedCodes = new Set(
+        visitsData
+          .filter((v: any) => DONE.has(String(v.status ?? '').toLowerCase().trim()))
+          .map((v: any) => String(v.site_code ?? '').trim().toLowerCase())
+          .filter(Boolean),
       );
-      const visitedSites = sitesData.filter((s: any) => visitedSiteIds.has(s.id)).length;
+      const visitedSites = sitesData.filter((s: any) =>
+        visitedCodes.has(String(s.site_code ?? '').trim().toLowerCase()),
+      ).length;
       const cyclesData = cycleRes.data ?? [];
       const activeCycles = cyclesData.filter((c: any) => c.status === 'active' || c.status === 'open').length;
-      const pendingVisits = visitsData.filter((v: any) => v.status === 'planned' || v.status === 'scheduled').length;
+      const pendingVisits = visitsData.filter((v: any) => {
+        const st = String(v.status ?? '').toLowerCase().trim();
+        return st === 'pending' || st === 'assigned' || st === 'dispatched' || st === 'accepted';
+      }).length;
       setMMP({
         totalSites: sitesData.length,
         visitedSites,
@@ -218,12 +222,6 @@ export default function ExecutiveDashboard() {
 
   useEffect(() => { void load(); }, [load]);
   const handleRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
-
-  if (!canAccess) return (
-    <div className="flex items-center justify-center h-64">
-      <p className="text-muted-foreground">Access restricted to senior management.</p>
-    </div>
-  );
 
   const overallScore = [
     mmp ? mmp.coveragePct : 0,

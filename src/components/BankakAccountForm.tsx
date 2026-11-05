@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { User } from "@/types";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { Building2, CreditCard, Globe, Info, Save, CheckCircle2 } from "lucide-react";
 
 // ── Major international currencies always shown in the dropdown ──────────────
@@ -209,7 +210,6 @@ interface BankakAccountFormProps {
   isSubmitting: boolean;
   existingDetails?: User['bankAccount'];
   isEditable?: boolean;
-  currentUserRole?: string;
 }
 
 function FieldTag({ type }: { type: "required" | "recommended" }) {
@@ -245,13 +245,9 @@ export function BankakAccountForm({
   isSubmitting,
   existingDetails,
   isEditable = true,
-  currentUserRole,
 }: BankakAccountFormProps) {
-  const canEditBankDetails =
-    currentUserRole === "admin" ||
-    currentUserRole === "superAdmin" ||
-    currentUserRole === "ict" ||
-    !existingDetails;
+  const { checkPermission } = useAuthorization();
+  const canEditBankDetails = !existingDetails || checkPermission("users", "update");
 
   const disabled = !canEditBankDetails || !isEditable;
 

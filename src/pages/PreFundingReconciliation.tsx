@@ -736,14 +736,14 @@ async function uploadPdfToStorage(blob: Blob, filename: string, fundId: string):
 }
 
 export default function PreFundingReconciliation() {
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, checkPermission } = useAuthorization();
   const { canViewOrgPreFunds } = usePreFundOrgAccess();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const isCD = hasAnyRole(['countryDirector']);
   const canAccess = canViewOrgPreFunds || isCD;
-  const canManageExceptions = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  const canRemoveOperationalCostPayment = hasAnyRole(['super_admin', 'admin']);
+  const canManageExceptions = checkPermission('pre_funding', 'update');
+  const canRemoveOperationalCostPayment = checkPermission('pre_funding', 'delete');
 
   const [funds, setFunds]             = useState<PreFundSummary[]>([]);
   const [fundsComputedAvail, setFundsComputedAvail] = useState<Map<string, number>>(new Map());
@@ -2382,10 +2382,6 @@ export default function PreFundingReconciliation() {
   const totalUnreconciled = accountingTxns.filter(t => !t.reconciled).reduce((s, t) => s + t.amount, 0);
   // Unattributed = payment txns with no user_id assigned
   const filteredUnattributedPayments = filteredTransactions.filter(t => t.transaction_type === 'payment' && !t.user_id);
-
-  if (!canAccess) return (
-    <div className="p-8 text-center"><AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" /><p className="text-muted-foreground">Access denied.</p></div>
-  );
 
   return (
     <div className="space-y-5 p-4 md:p-6">

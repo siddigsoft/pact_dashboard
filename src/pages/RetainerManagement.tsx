@@ -57,12 +57,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
-import { usePageManageOverride } from '@/hooks/usePageManageOverride';
+import { usePagePermissions } from '@/hooks/usePageManageOverride';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { format, subMonths } from 'date-fns';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import {
   useInvalidateRetainerQueries,
@@ -151,26 +150,17 @@ const RetainerManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, users } = useAppContext();
-  const { hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('payroll', 'export');
   const { processMonthlyRetainers, reprocessFallbackRetainers } = useWallet();
 
-  const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
-  const isAdmin = hasAnyRole(['admin', 'Admin']);
-  const isFinancialAdmin = hasAnyRole(['finance_admin', 'Finance Admin']);
-  const roleCanManage = isSuperAdmin || isAdmin || isFinancialAdmin;
-  const overrideCanManage = usePageManageOverride('retainer-management', roleCanManage);
-  // The page's directory destination is payroll:read.  A read grant must
-  // expose the fetched payment history without granting any processing
-  // controls; manage remains role/page-override based.
-  const canRead = checkPermission('payroll', 'read');
-  const canView = roleCanManage || overrideCanManage || canRead;
-  const canManage = roleCanManage || overrideCanManage;
+  const pagePerms = usePagePermissions('retainer-management');
+  const canManage = !pagePerms.isBlocked && pagePerms.canCreate;
 
   const [activeTab, setActiveTab] = useState('overview');
   const invalidateRetainer = useInvalidateRetainerQueries();
-  const retainerQuery = useRetainerBundleQuery(canView);
-  const loading = canView && retainerQuery.isLoading;
+  const retainerQuery = useRetainerBundleQuery(true);
+  const loading = retainerQuery.isLoading;
   const transactions = (retainerQuery.data?.transactions ?? []) as RetainerTransaction[];
   const eligibleUsers = (retainerQuery.data?.eligibleUsers ?? []) as EligibleUser[];
   const [searchQuery, setSearchQuery] = useState('');
@@ -201,9 +191,8 @@ const RetainerManagement = () => {
   };
 
   const fetchData = useCallback(async () => {
-    if (!canView) return;
     await invalidateRetainer();
-  }, [canView, invalidateRetainer]);
+  }, [invalidateRetainer]);
 
   const userNameMap = useMemo(() => {
     const map: Record<string, { name: string; email: string }> = {};
@@ -672,19 +661,6 @@ const RetainerManagement = () => {
     );
   }, [eligibleUsers, fxWarnings]);
 
-  if (!canView) {
-    return (
-      <div className="container mx-auto p-6">
-        <Alert variant="destructive">
-          <AlertTriangle className="h-5 w-5" />
-          <AlertDescription>
-            Access Denied: You do not have permission to view retainer management. This page is restricted to administrators and financial admins.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
   if (loading && !retainerQuery.data) {
     return <PageLoader label="Loading retainers…" />;
   }
@@ -720,23 +696,6 @@ const RetainerManagement = () => {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Retainer Management - Monthly Fixed Payments"
-        description="This page handles RETAINER PAYMENTS -- fixed monthly amounts paid to classified team members as part of their ongoing engagement. This is DIFFERENT from cost submissions (reimbursement for expenses), wallet withdrawals (taking out earned money), and transportation advances (upfront travel money). Retainers are regular, recurring payments that go directly into team members' wallets each month. The system prevents duplicate payments for the same period."
-        descriptionAr="تتعامل هذه الصفحة مع مدفوعات المكافآت الشهرية -- مبالغ شهرية ثابتة تُدفع لأعضاء الفريق المصنفين كجزء من ارتباطهم المستمر. هذه الصفحة مختلفة عن طلبات التكاليف (استرداد المصاريف)، وسحب المحفظة (سحب الأموال المكتسبة)، والسلف المسبقة للنقل (أموال مقدمة للسفر). المكافآت الشهرية هي مدفوعات منتظمة ومتكررة تُضاف مباشرة لمحافظ أعضاء الفريق كل شهر. يمنع النظام تكرار الدفع لنفس الفترة."
-        workflowSteps={[
-          { step: 1, role: 'Admin', action: 'Reviews eligible members', description: 'Check which team members are classified for retainer payments and eligible this month.' },
-          { step: 2, role: 'Finance Admin', action: 'Previews payment batch', description: 'Review the list of recipients and amounts before processing -- verify everything looks correct.' },
-          { step: 3, role: 'Finance Admin', action: 'Processes batch payment', description: 'Execute the batch payment, which credits the retainer amount to each eligible member\'s wallet.' },
-          { step: 4, role: 'System', action: 'Records & prevents duplicates', description: 'Each payment is logged with a full audit trail. The system blocks duplicate payments for the same month.' },
-        ]}
-        workflowStepsAr={[
-          { step: 1, role: 'المدير', action: 'يراجع الأعضاء المؤهلين', description: 'يتحقق من أعضاء الفريق المصنفين لاستحقاق المكافآت الشهرية والمؤهلين لهذا الشهر.' },
-          { step: 2, role: 'مدير المالية', action: 'يعاين دفعة المدفوعات', description: 'يراجع قائمة المستفيدين والمبالغ قبل المعالجة -- يتحقق من صحة كل شيء.' },
-          { step: 3, role: 'مدير المالية', action: 'يعالج الدفعة الجماعية', description: 'ينفذ الدفعة الجماعية التي تُضيف مبلغ المكافأة الشهرية لمحفظة كل عضو مؤهل.' },
-          { step: 4, role: 'النظام', action: 'يسجّل ويمنع التكرار', description: 'يُسجَّل كل دفعة مع مسار تدقيق كامل. يمنع النظام تكرار الدفع لنفس الشهر.' },
-        ]}
-      />
 
       <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

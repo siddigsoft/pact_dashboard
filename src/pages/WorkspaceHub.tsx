@@ -46,7 +46,7 @@ import { NavBadgeCountsProvider } from '@/context/NavBadgeCountsContext';
 import Navbar from '@/components/Navbar';
 import { WorkspaceAccessGate } from '@/components/workspace/WorkspaceAccessGate';
 import { WorkspaceAccessManager } from '@/components/workspace/WorkspaceAccessManager';
-import { startWorkspaceTour, hasCompletedWorkspaceTour, markWorkspaceTourCompleted } from '@/components/onboarding/workspaceTour';
+import { startWorkspaceTour, markWorkspaceTourCompleted } from '@/components/onboarding/workspaceTour';
 import { openGoogleDrivePicker, type GoogleDrivePickedFile } from '@/lib/googleDrivePicker';
 import {
   CLEARANCE_ORDER,
@@ -2195,17 +2195,6 @@ export default function WorkspaceHub() {
   // Pending "open share for this file" — set by file menu Share item, consumed by FileDetailPanel
   const [openShareForFileId, setOpenShareForFileId] = useState<string | null>(null);
   const [shareFileTarget, setShareFileTarget] = useState<WFile | null>(null);
-
-  // First-visit product tour — see src/components/onboarding/workspaceTour.ts.
-  // Delayed slightly so the KPI tiles / sidebar it points at have mounted.
-  useEffect(() => {
-    if (!userId || hasCompletedWorkspaceTour(userId)) return;
-    const t = setTimeout(() => {
-      startWorkspaceTour({ isAdmin, isSuperAdmin }, () => markWorkspaceTourCompleted(userId));
-    }, 700);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
 
   // Fetch current user's security clearance
   const { data: myClearance } = useQuery<SecurityLevel>({
@@ -4507,7 +4496,7 @@ export default function WorkspaceHub() {
           }}
         >
           {/* Navbar — notification bell, user menu, theme toggle */}
-          <Navbar />
+          <Navbar showSidebarTrigger={false} />
           {/* Full-area drop overlay */}
           {isExternalDragOver && (
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#1D3461]/10 backdrop-blur-[2px] border-4 border-dashed border-[#1D3461]/50 rounded-none pointer-events-none">

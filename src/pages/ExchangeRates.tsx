@@ -28,8 +28,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { format, parseISO, startOfDay, isToday, isYesterday, differenceInHours, differenceInDays } from 'date-fns';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface ExchangeRateRecord {
   id: string;
@@ -55,6 +55,10 @@ const RATE_TYPE_OPTIONS = [
 ];
 
 export default function ExchangeRates() {
+  const { checkPermission, canWriteAccounting } = useAuthorization();
+  const canAddRate = canWriteAccounting();
+  const canEditRate = checkPermission('accounting', 'update');
+  const canDeleteRate = checkPermission('accounting', 'delete');
   const [rates, setRates] = useState<ExchangeRateRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -277,21 +281,6 @@ export default function ExchangeRates() {
         </Button>
       </div>
 
-      <PageInfoBanner
-        title="Exchange Rates - Currency Conversion Settings"
-        description="This page is for managing the USD to SDG exchange rates used across the entire platform. When cost submissions, budgets, and financial reports need to convert between currencies, they use the rate set here. This is a SETTINGS page for Finance Admins only -- it does not process payments or approvals. Changing the rate here affects how all future cost calculations are displayed on other financial pages."
-        descriptionAr="هذه الصفحة مخصصة لإدارة أسعار صرف الدولار الأمريكي إلى الجنيه السوداني المستخدمة في جميع أنحاء المنصة. عندما تحتاج طلبات التكاليف والميزانيات والتقارير المالية إلى تحويل بين العملات، تستخدم السعر المحدد هنا. هذه صفحة إعدادات لمديري المالية فقط -- لا تعالج مدفوعات أو موافقات. تغيير السعر هنا يؤثر على كيفية عرض جميع حسابات التكاليف المستقبلية في الصفحات المالية الأخرى."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Updates exchange rate', description: 'Enter the current USD to SDG exchange rate. You can source it from different banks.' },
-          { step: 2, role: 'System', action: 'Applies to all calculations', description: 'All cost submissions, budget reports, and financial dashboards automatically use the latest rate for currency conversions.' },
-          { step: 3, role: 'Finance Admin', action: 'Reviews history', description: 'View how the exchange rate has changed over time to understand impact on cost reporting.' },
-        ]}
-        workflowStepsAr={[
-          { step: 1, role: 'مدير المالية', action: 'يُحدّث سعر الصرف', description: 'أدخل سعر صرف الدولار الأمريكي إلى الجنيه السوداني الحالي. يمكنك الحصول عليه من بنوك مختلفة.' },
-          { step: 2, role: 'النظام', action: 'يُطبّق على جميع الحسابات', description: 'تستخدم جميع طلبات التكاليف وتقارير الميزانية ولوحات المعلومات المالية تلقائياً أحدث سعر لتحويل العملات.' },
-          { step: 3, role: 'مدير المالية', action: 'يراجع السجل', description: 'اعرض كيف تغير سعر الصرف بمرور الوقت لفهم تأثيره على تقارير التكاليف.' },
-        ]}
-      />
 
       {!loading && stalenessInfo.status === 'warning' && (
         <Alert className="border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950" data-testid="alert-rates-warning">
@@ -438,7 +427,7 @@ export default function ExchangeRates() {
                     />
                     <Button 
                       onClick={handleAddRate} 
-                      disabled={saving || !newRate.usd_to_sdg}
+                      disabled={saving || !newRate.usd_to_sdg || !canAddRate}
                       data-testid="button-add-rate"
                     >
                       {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -543,19 +532,21 @@ export default function ExchangeRates() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => {
-                                  setEditingId(rate.id);
-                                  setEditValue(Number(rate.rate));
-                                }}
-                                disabled={editingId !== null}
-                                data-testid={`button-edit-rate-${rate.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              {pendingDeleteId === rate.id ? (
+                              {canEditRate && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setEditingId(rate.id);
+                                    setEditValue(Number(rate.rate));
+                                  }}
+                                  disabled={editingId !== null}
+                                  data-testid={`button-edit-rate-${rate.id}`}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {!canDeleteRate ? null : pendingDeleteId === rate.id ? (
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs text-muted-foreground">Sure?</span>
                                   <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" onClick={() => { handleDeleteRate(rate.id); setPendingDeleteId(null); }} data-testid={`button-confirm-delete-rate-${rate.id}`}>Yes</Button>

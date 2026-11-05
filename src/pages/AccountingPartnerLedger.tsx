@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,10 +21,7 @@ interface JournalLine {
 interface PartnerGroup { name: string; lines: JournalLine[]; totalDebit: number; totalCredit: number; balance: number }
 
 export default function AccountingPartnerLedger() {
-  const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
-
-  const [lines, setLines]       = useState<JournalLine[]>([]);
+    const [lines, setLines]       = useState<JournalLine[]>([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -63,7 +59,7 @@ export default function AccountingPartnerLedger() {
     setLines(mapped);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   function extractPartner(desc: string | null): string {
     if (!desc) return 'Unknown Partner';
@@ -107,7 +103,6 @@ export default function AccountingPartnerLedger() {
     })), 'Partner Ledger', 'partner-ledger.xlsx'
   );
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

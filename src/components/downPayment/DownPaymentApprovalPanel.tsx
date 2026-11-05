@@ -251,21 +251,70 @@ function WorkflowTimeline({ request }: { request: DownPaymentRequest }) {
 const VirtualizedRequestList = memo(function VirtualizedRequestList({
   requests,
   renderCard,
+  resetKey,
 }: {
   requests: DownPaymentRequest[];
   renderCard: (request: DownPaymentRequest) => ReactNode;
+  resetKey?: string;
   // Changes whenever row selection changes. The list stays memoized for
   // request/data updates, but must re-render checkboxes and their handlers.
   selectionKey?: string;
 }) {
+  const pageSize = 25;
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'site' | 'amount'>('newest');
+  const listTopRef = useRef<HTMLDivElement>(null);
+  useEffect(() => setPage(1), [resetKey]);
+
+  const sortedRequests = useMemo(() => [...requests].sort((a, b) => {
+    if (sortBy === 'site') return a.siteName.localeCompare(b.siteName) || a.id.localeCompare(b.id);
+    if (sortBy === 'amount') return getDownPaymentBalance(b).approved - getDownPaymentBalance(a).approved || a.id.localeCompare(b.id);
+    const dateDifference = new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime();
+    return (sortBy === 'oldest' ? -dateDifference : dateDifference) || a.id.localeCompare(b.id);
+  }), [requests, sortBy]);
+  const pageCount = Math.max(1, Math.ceil(sortedRequests.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const start = (currentPage - 1) * pageSize;
+  const visibleRequests = sortedRequests.slice(start, start + pageSize);
+  const goToPage = (nextPage: number) => {
+    setPage(nextPage);
+    requestAnimationFrame(() => listTopRef.current?.scrollIntoView({ block: 'start' }));
+  };
+
   if (requests.length === 0) return null;
+  const pageControls = (position: 'top' | 'bottom') => (
+    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300" data-testid={`approval-pagination-${position}`}>
+      <span>Showing {start + 1}–{Math.min(start + pageSize, sortedRequests.length)} of {sortedRequests.length} sites</span>
+      <div className="flex flex-wrap items-center gap-2">
+        {position === 'top' && <label className="flex items-center gap-2">
+          <span>Sort</span>
+          <select value={sortBy} onChange={event => { setSortBy(event.target.value as typeof sortBy); setPage(1); }} aria-label="Sort sites" className="h-8 rounded-md border border-slate-300 bg-white px-2 text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="site">Site name</option>
+            <option value="amount">Highest amount</option>
+          </select>
+        </label>}
+        <Button type="button" variant="outline" size="sm" className="h-8" disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} aria-label="Previous page">Previous</Button>
+        <label className="flex items-center gap-2">
+          <span className="sr-only">Page</span>
+          <select value={currentPage} onChange={event => goToPage(Number(event.target.value))} aria-label="Go to page" className="h-8 rounded-md border border-slate-300 bg-white px-2 text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
+            {Array.from({ length: pageCount }, (_, index) => <option key={index + 1} value={index + 1}>Page {index + 1} of {pageCount}</option>)}
+          </select>
+        </label>
+        <Button type="button" variant="outline" size="sm" className="h-8" disabled={currentPage === pageCount} onClick={() => goToPage(currentPage + 1)} aria-label="Next page">Next</Button>
+      </div>
+    </div>
+  );
   return (
-    <div className="max-h-[70vh] overflow-y-auto rounded-md space-y-3 pr-1">
-      {requests.map((request) => (
-        <div key={request.id} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 250px' }}>
-          {renderCard(request)}
-        </div>
-      ))}
+    <div ref={listTopRef} className="space-y-3 scroll-mt-28">
+      {pageControls('top')}
+      <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:divide-slate-700">
+        {visibleRequests.map((request) => (
+          <div key={request.id}>{renderCard(request)}</div>
+        ))}
+      </div>
+      {pageCount > 1 && pageControls('bottom')}
     </div>
   );
 });
@@ -413,6 +462,7 @@ export function DownPaymentApprovalPanel({
   const { toast } = useToast();
   const { isFilterVisible } = useCurrentUserAccess();
   const requests = externalRequests ?? contextRequests;
+  const [queueSearch, setQueueSearch] = useState('');
 
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
@@ -448,6 +498,7 @@ export function DownPaymentApprovalPanel({
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState<{ url: string; label: string } | null>(null);
   const [showFilters, setShowFilters] = useState(true);
+  const [showTotals, setShowTotals] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [approvalType, setApprovalType] = useState<ApprovalType>('full');
@@ -622,8 +673,17 @@ export function DownPaymentApprovalPanel({
 
   const effectiveFilters = externalFilters ?? filters;
   const filteredRequests = useMemo(
-    () => externalRequestsAreFiltered ? requests : filterDownPayments(requests, effectiveFilters),
-    [requests, effectiveFilters, externalRequestsAreFiltered],
+    () => {
+      const base = externalRequestsAreFiltered ? requests : filterDownPayments(requests, effectiveFilters);
+      const term = queueSearch.trim().toLocaleLowerCase();
+      if (!term) return base;
+      return base.filter(request => [
+        request.siteName, request.projectName, request.hubName, request.stateName,
+        request.localityName, request.mmpName, request.requestedByName,
+        request.id,
+      ].some(value => value?.toLocaleLowerCase().includes(term)));
+    },
+    [requests, effectiveFilters, externalRequestsAreFiltered, queueSearch],
   );
 
   const approvedForPayment = useMemo(() =>
@@ -2713,6 +2773,8 @@ export function DownPaymentApprovalPanel({
       canApproveActions, canApprovePendingAdminOnly, canMarkPaid,
     } = _cardCtxRef.current;
     const [showAuditDetails, setShowAuditDetails] = useState(false);
+    const [showRequestDetails, setShowRequestDetails] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
     const [resending, setResending] = useState(false);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
     const shortId = request.id.substring(0, 8).toUpperCase();
@@ -2747,13 +2809,12 @@ export function DownPaymentApprovalPanel({
     return (
     <Card
       key={request.id}
-      className={`hover-elevate${hasApprovedSibling ? ' border-red-500 dark:border-red-600' : isDuplicate ? ' border-amber-400 dark:border-amber-500' : ''}`}
-      style={hasApprovedSibling ? { background: 'rgba(239,68,68,0.04)' } : isDuplicate ? { background: 'rgba(251,191,36,0.06)' } : undefined}
+      className={`rounded-none border-0 shadow-none transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50${isExpanded ? ' bg-slate-50/70 dark:bg-slate-800/40' : ''}${hasApprovedSibling ? ' border-l-[3px] border-l-red-500' : isDuplicate ? ' border-l-[3px] border-l-amber-500' : ''}`}
       data-testid={`card-request-${request.id}`}
     >
-      <CardContent className="p-4">
-        <div className="space-y-3">
-          {isDuplicate && (
+      <CardContent className="px-4 py-3">
+        <div className="space-y-2">
+          {isExpanded && isDuplicate && (
             <div className="space-y-2">
               {/* ── Duplicate warning banner ── */}
               {hasApprovedSibling ? (
@@ -2913,8 +2974,8 @@ export function DownPaymentApprovalPanel({
               )}
             </div>
           )}
-          <div className="flex justify-between items-start gap-2">
-            <div className="flex items-start gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
               {showCheckbox && (
                 <Checkbox
                   checked={selectedIds.has(request.id)}
@@ -2923,15 +2984,15 @@ export function DownPaymentApprovalPanel({
                   data-testid={`checkbox-select-${request.id}`}
                 />
               )}
-              <div className="space-y-1">
-                <h4 className="font-semibold flex items-center gap-2 flex-wrap">
-                  <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  {request.siteName}
-                  {request.projectName && (
+              <div className="min-w-0 space-y-1">
+                <h4 className="flex min-w-0 items-center gap-2 font-semibold">
+                  <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate" title={request.siteName}>{request.siteName}</span>
+                  {isExpanded && request.projectName && (
                     <span className="text-xs text-muted-foreground font-normal">{request.projectName}</span>
                   )}
                 </h4>
-                {preFundNames.length > 0 && (
+                {isExpanded && preFundNames.length > 0 && (
                   <Badge
                     variant="outline"
                     className="w-fit gap-1 border-teal-200 bg-teal-50 text-[10px] font-medium text-teal-700 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-300"
@@ -2942,7 +3003,7 @@ export function DownPaymentApprovalPanel({
                     Pre-Fund: {preFundNames[0]}{preFundNames.length > 1 ? ` +${preFundNames.length - 1}` : ''}
                   </Badge>
                 )}
-                {hasRecordedPayment && preFundNames.length === 0 && (
+                {isExpanded && hasRecordedPayment && preFundNames.length === 0 && (
                   <Badge
                     variant="outline"
                     className="w-fit gap-1 border-amber-200 bg-amber-50 text-[10px] font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
@@ -2952,7 +3013,7 @@ export function DownPaymentApprovalPanel({
                     No Pre-Fund
                   </Badge>
                 )}
-                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                {isExpanded && <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1 font-mono" data-testid={`text-request-id-${request.id}`}>
                     <Hash className="h-3 w-3" />
                     ID: {shortId}
@@ -2965,8 +3026,8 @@ export function DownPaymentApprovalPanel({
                     <Calendar className="h-3 w-3" />
                     {format(new Date(request.requestedAt), 'MMM d, yyyy')}
                   </span>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                </div>}
+                {isExpanded && <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                   {request.hubName && (
                     <span className="flex items-center gap-1">
                       <Building className="h-3 w-3" />
@@ -2985,12 +3046,20 @@ export function DownPaymentApprovalPanel({
                       {request.activityType}
                     </span>
                   )}
-                </div>
+                </div>}
+                {!isExpanded && <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                  <span className="truncate">{requesterName}</span>
+                  {request.hubName && <><span aria-hidden="true">·</span><span className="truncate">{request.hubName}</span></>}
+                  {request.mmpName && <><span aria-hidden="true">·</span><span className="truncate max-w-[18rem]" title={request.mmpName}>{request.mmpName}</span></>}
+                  {hasApprovedSibling && <span className="font-semibold text-red-700 dark:text-red-400">Double payment risk</span>}
+                  {isDuplicate && !hasApprovedSibling && <span className="font-medium text-amber-700 dark:text-amber-400">Duplicate site</span>}
+                  {(request.enumeratorFee || request.transportFee) && request.feePaidStatus !== 'paid' && <span className="font-medium text-amber-700 dark:text-amber-400">Transport fee unpaid</span>}
+                </div>}
               </div>
             </div>
-            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+            <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
               <div className="flex flex-col items-end" data-testid={`text-amount-${request.id}`}>
-                <span className="text-lg font-bold">
+                <span className="text-base font-bold tabular-nums">
                   SDG {balance.approved.toLocaleString()}
                 </span>
                 {balance.approved > 0 && request.approvedAmount != null && request.approvedAmount !== request.requestedAmount && (
@@ -3000,95 +3069,43 @@ export function DownPaymentApprovalPanel({
                 )}
               </div>
               {getStatusBadge(request.status)}
-              {request.feePaidStatus === 'paid' ? (
-                <Badge className="gap-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 border-emerald-300" data-testid={`badge-fee-paid-${request.id}`}>
-                  <CheckCircle2 className="h-3 w-3" />
-                  Fees Paid{request.feePaidAmount ? ` (${request.feePaidAmount.toLocaleString()} SDG)` : ''}
-                </Badge>
-              ) : (request.enumeratorFee || request.transportFee) ? (
-                <Badge variant="outline" className="gap-1 text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400" data-testid={`badge-fee-unpaid-${request.id}`}>
-                  <AlertTriangle className="h-3 w-3" />
-                  Transport Fee Not Paid
-                </Badge>
-              ) : null}
+              <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 gap-1" onClick={() => setIsExpanded(value => !value)} aria-expanded={isExpanded} aria-label={`${isExpanded ? 'Close' : 'Review'} ${request.siteName}`} data-testid={`button-expand-request-${request.id}`}>
+                {isExpanded ? 'Close' : 'Review'}
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+              </Button>
             </div>
           </div>
 
-          {/* ── MMP Focus Block (D2 — Grounded) ── */}
+          {isExpanded && <div className="space-y-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+
+          {/* Keep programme context visible without a second card inside each request. */}
           {request.mmpName && (
             <div
-              style={{
-                marginTop: 10,
-                background: '#F0F4FA',
-                borderLeft: '5px solid #1D3461',
-                borderRadius: 8,
-                boxShadow: '0 2px 8px rgba(29,52,97,0.10), inset 0 0 0 1px rgba(29,52,97,0.08)',
-                padding: '9px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 11,
-              }}
+              className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-slate-200 pt-2 text-xs dark:border-slate-700"
               data-testid={`mmp-block-${request.id}`}
             >
-              {/* Icon */}
-              <div style={{
-                width: 34, height: 34, borderRadius: 8,
-                background: '#1D3461',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-                outline: '3px solid rgba(29,52,97,0.15)',
-                outlineOffset: 2,
-              }}>
-                <FileText className="h-4 w-4 text-white" />
-              </div>
-              {/* Text */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                  <span style={{
-                    background: '#1D3461', color: '#fff',
-                    fontSize: 8.5, fontWeight: 700,
-                    letterSpacing: 0.9, textTransform: 'uppercase',
-                    borderRadius: 999, padding: '2px 7px',
-                  }}>MMP</span>
-                  <span style={{
-                    background: 'rgba(29,52,97,0.1)', color: '#1D3461',
-                    fontSize: 9, fontWeight: 600,
-                    borderRadius: 999, padding: '2px 8px',
-                    letterSpacing: 0.3,
-                  }}>
-                    {format(new Date(request.requestedAt), 'MMM yyyy')}
-                  </span>
-                </div>
-                <div style={{
-                  fontSize: 17, fontWeight: 900, color: '#0F2041',
-                  letterSpacing: 0.15,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {request.mmpName}
-                </div>
-              </div>
-              {/* Arrow button */}
-              <button
-                style={{
-                  flexShrink: 0,
-                  background: '#1D3461',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: 7,
-                  width: 28, height: 28,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 4px rgba(29,52,97,0.3)',
-                }}
-                title="View MMP"
-                data-testid={`btn-view-mmp-${request.id}`}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
+              <FileText className="h-3.5 w-3.5 shrink-0 text-[#273677] dark:text-[#AAB7EC]" />
+              <span className="font-medium text-slate-500 dark:text-slate-400">MMP</span>
+              <span className="min-w-0 truncate font-semibold text-[#273677] dark:text-[#AAB7EC]">{request.mmpName}</span>
+              <span className="text-slate-500 dark:text-slate-400">· {format(new Date(request.requestedAt), 'MMM yyyy')}</span>
             </div>
           )}
 
-          <div className="mt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 w-fit px-0 text-xs text-[#273677] hover:bg-transparent hover:text-[#1B2758] dark:text-[#AAB7EC]"
+            onClick={() => setShowRequestDetails(value => !value)}
+            aria-expanded={showRequestDetails}
+            data-testid={`button-toggle-request-details-${request.id}`}
+          >
+            {showRequestDetails ? 'Hide request details' : 'Review request details'}
+            <ChevronDown className={`ml-1 h-3.5 w-3.5 transition-transform ${showRequestDetails ? 'rotate-180' : ''}`} />
+          </Button>
+
+          {showRequestDetails && <div className="space-y-3 border-t border-slate-200 pt-3 dark:border-slate-700" data-testid={`request-details-${request.id}`}>
+          <div>
             <WorkflowTimeline request={request} />
           </div>
 
@@ -3267,6 +3284,7 @@ export function DownPaymentApprovalPanel({
               </div>
             )}
           </div>
+          </div>}
 
           {(request.enumeratorFee || request.transportFee) && (
             <div
@@ -3605,9 +3623,10 @@ export function DownPaymentApprovalPanel({
               </Button>
             )}
           </div>
+          </div>}
         </div>
 
-        {showConfirmationDetails && isConfirmed && (
+        {isExpanded && showConfirmationDetails && isConfirmed && (
           <div className="mt-3 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 space-y-3" data-testid={`panel-confirmation-details-${request.id}`}>
             <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
               <CheckCircle2 className="h-4 w-4" />
@@ -3998,6 +4017,7 @@ export function DownPaymentApprovalPanel({
   const selectedRequestBalance = selectedRequest
     ? getDownPaymentBalance(selectedRequest, preFundPaymentEvidence?.get(selectedRequest.id) ?? [])
     : null;
+  const queueResetKey = `${queueSearch}:${activeTab}:${completedSubTab}`;
 
   return (
     <>
@@ -4012,7 +4032,13 @@ export function DownPaymentApprovalPanel({
         </Alert>
       )}
 
-      <StatsCards />
+      <div className="mb-3">
+        <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-[#273677] dark:text-[#AAB7EC]" onClick={() => setShowTotals(value => !value)} aria-expanded={showTotals} data-testid="button-toggle-approval-totals">
+          Programme totals
+          <ChevronDown className={`ml-1.5 h-4 w-4 transition-transform ${showTotals ? 'rotate-180' : ''}`} />
+        </Button>
+        {showTotals && <div className="mt-2"><StatsCards /></div>}
+      </div>
       {reconciliationRequests.length > 0 && (
         <Alert className="mb-4 border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" data-testid="alert-reconciliation-warning">
           <AlertTriangle className="h-4 w-4" />
@@ -4052,7 +4078,7 @@ export function DownPaymentApprovalPanel({
                 <ChevronDown className="h-4 w-4 ml-1" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-40 p-1">
+            <PopoverContent className="w-56 p-1">
               <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleExport('csv'); }} data-testid="button-export-csv">
                 <FileDown className="h-4 w-4 mr-2" />
                 CSV
@@ -4076,35 +4102,31 @@ export function DownPaymentApprovalPanel({
                 <FileText className="h-4 w-4 mr-2" />
                 PDF
               </Button>
+              <div className="my-1 border-t px-3 pt-2 text-xs font-medium text-muted-foreground">Bank statement / كشف مالي</div>
+              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleStatementExport('pdf'); }} disabled={activeExportSelection.data.length === 0} data-testid="button-statement-pdf">
+                <Banknote className="h-4 w-4 mr-2" />PDF statement
+              </Button>
+              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setExportMenuOpen(false); void handleStatementExport('excel'); }} disabled={activeExportSelection.data.length === 0} data-testid="button-statement-excel">
+                <FileSpreadsheet className="h-4 w-4 mr-2" />Excel statement
+              </Button>
             </PopoverContent>
           </Popover>}
-          {!isStandaloneExplicit && canExportActions && <span className="text-xs text-muted-foreground whitespace-nowrap">Bank Statement / كشف مالي:</span>}
-          {!isStandaloneExplicit && canExportActions && <>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void handleStatementExport('pdf')}
-            disabled={activeExportSelection.data.length === 0}
-            data-testid="button-statement-pdf"
-          >
-            <Banknote className="h-4 w-4 mr-1" />
-            PDF
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void handleStatementExport('excel')}
-            disabled={activeExportSelection.data.length === 0}
-            data-testid="button-statement-excel"
-          >
-            <FileSpreadsheet className="h-4 w-4 mr-1" />
-            Excel
-          </Button>
-          </>}
         </div>
       </div>
 
       {!hideFiltersBar && showFilters && <FilterPanel />}
+
+      <div className="relative mb-3 max-w-md">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <Input
+          value={queueSearch}
+          onChange={event => setQueueSearch(event.target.value)}
+          placeholder="Find a site, requester, hub, or MMP"
+          aria-label="Search requests in this queue"
+          className="h-9 pl-9"
+          data-testid="input-search-approval-queue"
+        />
+      </div>
 
       <Tabs
         value={isStandaloneExplicit ? activeTab : activeTab}
@@ -4151,7 +4173,7 @@ export function DownPaymentApprovalPanel({
         </TabsList>
 
         <TabsContent value="pending">
-          <TabFilterBar testIdPrefix="pending" />
+          {!hideFiltersBar && <TabFilterBar testIdPrefix="pending" />}
           {!isStandaloneExplicit && selectedIds.size > 0 && pendingRequests.length > 0 && (
             <Card className="mb-4 border-primary">
               <CardContent className="p-3 flex items-center justify-between gap-4">
@@ -4246,13 +4268,13 @@ export function DownPaymentApprovalPanel({
                   Select All
                 </Button>
           </div>}
-              <VirtualizedRequestList requests={pendingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
+              <VirtualizedRequestList requests={pendingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} resetKey={queueResetKey} />
             </div>
           )}
         </TabsContent>
 
         <TabsContent value="approved">
-          <TabFilterBar testIdPrefix="approved" />
+          {!hideFiltersBar && <TabFilterBar testIdPrefix="approved" />}
           {selectedIds.size > 0 && approvedRequests.length > 0 && (() => {
             const selectedApproved = approvedRequests.filter(r => selectedIds.has(r.id));
             const totalAmount = selectedApproved.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
@@ -4329,7 +4351,7 @@ export function DownPaymentApprovalPanel({
                   Select All ({approvedRequests.length})
                 </Button>
               </div>
-              <VirtualizedRequestList requests={approvedRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
+              <VirtualizedRequestList requests={approvedRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} resetKey={queueResetKey} />
             </div>
           )}
         </TabsContent>
@@ -4594,14 +4616,14 @@ export function DownPaymentApprovalPanel({
                   Select All ({processingRequests.length})
                 </Button>
               </div>
-              <VirtualizedRequestList requests={processingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
+              <VirtualizedRequestList requests={processingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} resetKey={queueResetKey} />
             </div>
           )}
         </TabsContent>
 
         <TabsContent value="completed">
           <div className="space-y-4">
-            <TabFilterBar testIdPrefix="completed" />
+            {!hideFiltersBar && <TabFilterBar testIdPrefix="completed" />}
             <div className="flex gap-2 flex-wrap">
               <Button
                 variant={completedSubTab === 'paid_waiting' ? 'default' : 'outline'}
@@ -4680,21 +4702,21 @@ export function DownPaymentApprovalPanel({
                       </div>
                     )}
                   </div>
-                  <VirtualizedRequestList requests={paidWaitingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
+                  <VirtualizedRequestList requests={paidWaitingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} resetKey={queueResetKey} />
                 </div>
               )
             ) : (
               paidConfirmedRequests.length === 0 ? (
                 <Card><CardContent className="py-8 text-center text-muted-foreground">No confirmed requests / لا توجد طلبات مؤكدة</CardContent></Card>
               ) : (
-                <VirtualizedRequestList requests={paidConfirmedRequests} renderCard={renderCardWithConfirmation} />
+                <VirtualizedRequestList requests={paidConfirmedRequests} renderCard={renderCardWithConfirmation} resetKey={queueResetKey} />
               )
             )}
           </div>
         </TabsContent>
 
         <TabsContent value="closed">
-          <TabFilterBar testIdPrefix="closed" />
+          {!hideFiltersBar && <TabFilterBar testIdPrefix="closed" />}
           {closedRequests.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
@@ -4711,17 +4733,17 @@ export function DownPaymentApprovalPanel({
                   {closedRequests.filter(r => r.status === 'cancelled').length} Cancelled
                 </Badge>
               </div>
-              <VirtualizedRequestList requests={closedRequests} renderCard={renderCardPlain} />
+              <VirtualizedRequestList requests={closedRequests} renderCard={renderCardPlain} resetKey={queueResetKey} />
             </>
           )}
         </TabsContent>
 
         <TabsContent value="all">
-          <TabFilterBar testIdPrefix="all" />
+          {!hideFiltersBar && <TabFilterBar testIdPrefix="all" />}
           {filteredRequests.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No requests found</CardContent></Card>
           ) : (
-            <VirtualizedRequestList requests={filteredRequests} renderCard={renderCardPlain} />
+            <VirtualizedRequestList requests={filteredRequests} renderCard={renderCardPlain} resetKey={queueResetKey} />
           )}
         </TabsContent>
       </Tabs>

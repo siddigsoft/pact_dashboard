@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +11,6 @@ import { Loader2, Building2, RefreshCw, Download, AlertTriangle } from 'lucide-r
 import { format, startOfYear, endOfYear, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import {
@@ -29,8 +27,7 @@ interface ConsolidatedRow { account_type: string; total_debit: number; total_cre
 interface ElimEntry { desc: string; amount: number; entity_a: string; entity_b: string; account: string }
 
 export default function AccountingConsolidation() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated } = useAuthorization();
 
   const [lines, setLines] = useState<JournalLine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,7 +134,6 @@ export default function AccountingConsolidation() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
@@ -164,7 +160,6 @@ export default function AccountingConsolidation() {
         </div>
       </div>
 
-      <PageInfoBanner title="Financial Consolidation" description="Aggregates posted GL entries across all entities (countries/branches). Accounts scoped to a country are grouped as that entity; unscoped accounts appear as 'Unassigned'. Inter-entity Eliminations flags accounts used by 2+ entities — post manual elimination journal entries to remove double-counting." descriptionAr="يجمع قيود دفتر الأستاذ العام عبر جميع الكيانات ويحدد معاملات البنود البينية للإلغاء." />
 
       {error && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/10 p-3 flex items-start gap-2">

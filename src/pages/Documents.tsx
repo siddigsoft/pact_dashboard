@@ -2203,7 +2203,7 @@ const DocumentsPage = () => {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" size="sm" asChild data-testid="link-site-visits">
-            <Link to="/site-visits">
+            <Link to="/field-ops">
               <MapPin className="h-4 w-4 mr-2" />
               Site Visits
             </Link>

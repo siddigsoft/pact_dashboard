@@ -566,7 +566,7 @@ export const FOMZone: React.FC = () => {
           subtitle={`${completionRate}% completed`}
           icon={MapPin}
           color="cyan"
-          onClick={() => navigate('/site-visits')}
+          onClick={() => navigate('/field-ops')}
         />
 
         <GradientStatCard

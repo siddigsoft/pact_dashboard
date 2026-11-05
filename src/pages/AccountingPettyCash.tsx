@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -31,11 +30,10 @@ const REPLEN_COLORS: Record<string, string> = {
 };
 
 export default function AccountingPettyCash() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canManage = canWriteAccounting();
 
   const [boxes, setBoxes]         = useState<CashBox[]>([]);
   const [txns, setTxns]           = useState<CashTxn[]>([]);
@@ -73,7 +71,7 @@ export default function AccountingPettyCash() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const activeTxns  = useMemo(() => txns.filter(t => t.box_id === selectedBox), [txns, selectedBox]);
   const activeReplens = useMemo(() => replenishments.filter(r => r.box_id === selectedBox), [replenishments, selectedBox]);
@@ -135,7 +133,6 @@ export default function AccountingPettyCash() {
   };
 
   if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-4 p-4">

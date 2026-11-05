@@ -6,7 +6,7 @@ import {
   BarChart3, MessageSquare, Calendar, Bell, Search, UserX, UserCheck,
   ChevronRight, Info, Lock, Unlock, Loader2, CreditCard, Banknote,
   FileText, Archive, Map, ClipboardList, Database, ClipboardCheck,
-  TrendingUp, Receipt, DollarSign, Siren, AlertTriangle, Package,
+  TrendingUp, Receipt, DollarSign, Siren, Package,
   ScrollText, Award,
   Phone, Mail, Calculator, Landmark, Briefcase, GraduationCap,
   CalendarCheck, PieChart, LineChart, Target, Globe, RefreshCcw,
@@ -77,9 +77,9 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['all', 'SMT'], note:'Org-wide project catalogue. Independent from My Projects. Grant/remove via Access Control; edit/write still guarded in-page.' },
   { slug:'portfolio',           label:'Portfolio Dashboard',    path:'/portfolio',              icon:LayoutDashboard, group:'Programme Management',
     roles:['superAdmin','admin','fom','countryDirector','projectManager','seniorOperationsLead','SMT'] },
-  { slug:'mmp',                 label:'MMP Management',         path:'/mmp',                    icon:Database, group:'Programme Management',
-    roles:['superAdmin','admin','ict','dataTeam','fom','coordinator','supervisor','dataCollector','countryDirector','projectManager','seniorOperationsLead'] },
-  { slug:'mmp-full-report',     label:'MMP Full Report',        path:'/mmp#full-report',        icon:BarChart2, group:'Programme Management',
+  { slug:'mmp',                 label:'MMP Management',         path:'/mmp',                    icon:Database, group:'Field Operations',
+    roles:['superAdmin','admin','ict','dataTeam','fom','coordinator','supervisor','dataCollector','countryDirector','projectManager','seniorOperationsLead'], note:'All sites / monthly monitoring plans — primary Field Ops surface' },
+  { slug:'mmp-full-report',     label:'MMP Full Report',        path:'/mmp#full-report',        icon:BarChart2, group:'Field Operations',
     roles:['superAdmin','countryDirector','supervisor'], note:'Supervisors receive a secured report limited to their assigned hubs' },
   { slug:'project-updates',     label:'Project Updates',        path:'/project-updates',        icon:ClipboardList, group:'Programme Management',
     roles:['superAdmin','admin','fom','projectManager','coordinator','supervisor','countryDirector','seniorOperationsLead'] },
@@ -89,16 +89,8 @@ export const PAGE_DEFS: PageDef[] = [
   // ── Field Operations ──────────────────────────────────────────────────────
   { slug:'field-ops',           label:'Field Ops Hub',          path:'/field-ops',              icon:Compass, group:'Field Operations',
     roles:['superAdmin','admin','fom','supervisor','coordinator','dataTeam','seniorOperationsLead'], note:'Unified hub: Field Team, Incidents, Equipment, Map' },
-  { slug:'site-visits',         label:'Site Visits',            path:'/site-visits',            icon:ClipboardList, group:'Field Operations',
-    roles:['superAdmin','admin','ict','fom','coordinator','supervisor','dataCollector','dataTeam','seniorOperationsLead'] },
   { slug:'monitoring-form',     label:'Monitoring Form',        path:'/monitoring-form',        icon:ClipboardCheck, group:'Field Operations',
     roles:['superAdmin','admin','dataCollector','coordinator','supervisor','fom'] },
-  { slug:'safety-hub',          label:'Safety Hub',             path:'/safety-hub',             icon:Siren, group:'Field Operations',
-    roles:['superAdmin','admin','ict','fom','coordinator','supervisor','dataCollector','dataTeam'] },
-  { slug:'incident-reports',    label:'Incident Reports',       path:'/incident-reports',       icon:AlertTriangle, group:'Field Operations',
-    roles:['superAdmin','admin','ict','fom','coordinator','supervisor','dataTeam'] },
-  { slug:'equipment',           label:'Equipment Tracking',     path:'/equipment',              icon:Package, group:'Field Operations',
-    roles:['superAdmin','admin','fom'] },
   { slug:'field-operation-manager', label:'Field Operation Manager', path:'/field-operation-manager', icon:Compass, group:'Field Operations',
     roles:['superAdmin','admin','fom'] },
   { slug:'coverage-map',        label:'Coverage Map',           path:'/coverage-map',           icon:Map, group:'Field Operations',
@@ -124,8 +116,6 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin','financialAdmin','auditor','fom','countryDirector','seniorOperationsLead'], note:'Unified hub: financial ops, wallets admin, advances report' },
   { slug:'finance-subscriptions', label:'Subscriptions',         path:'/finance-hub?tab=subscriptions', icon:CreditCard, group:'Finance',
     roles:['superAdmin','admin','financialAdmin','auditor'] },
-  { slug:'finance',             label:'Finance (Legacy)',        path:'/finance',                icon:Banknote, group:'Finance',
-    roles:['superAdmin','admin','financialAdmin','auditor'], note:'Legacy finance page; most functionality moved to Finance Hub' },
   { slug:'mobile-cost-submission', label:'Mobile Cost Submission', path:'/mobile-cost-submission', icon:Smartphone, group:'Finance',
     roles:['superAdmin','admin','supervisor','fom','coordinator','dataCollector'] },
   { slug:'budget-requests',     label:'Budget Requests',        path:'/budget-requests',        icon:DollarSign, group:'Finance',
@@ -340,7 +330,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'integrations',        label:'Integrations',           path:'/integrations',           icon:PlugZap, group:'Administration',
     roles:['superAdmin','admin','ict'] },
   { slug:'permissions-management', label:'Permissions Management', path:'/permissions-management', icon:Key, group:'Administration',
-    roles:['superAdmin'] },
+    roles:['superAdmin'], note:'Legacy slug; App redirects to /role-management. Not grantable in role baselines.' },
   { slug:'role-perspective',    label:'Role Perspective',       path:'/role-perspective',       icon:Eye, group:'Administration',
     roles:['superAdmin','admin'] },
   { slug:'documentation',       label:'Documentation',          path:'/documentation',          icon:BookOpen, group:'Administration',
@@ -351,8 +341,8 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin','ict'] },
   { slug:'changelog',           label:'Changelog',              path:'/changelog',              icon:History, group:'Administration',
     roles:['superAdmin','admin','ict'] },
-  { slug:'page-access',         label:'Page Access Control',    path:'/page-access',            icon:Lock, group:'Administration',
-    roles:['superAdmin'] },
+  { slug:'page-access',         label:'Page Access Control',    path:'/page-access', icon:Lock, group:'Administration',
+    roles:['superAdmin'], note:'Legacy slug; App redirects to /role-management. Per-user exceptions UI removed. Not grantable in role baselines.' },
   { slug:'system-diagrams',     label:'System Diagrams',        path:'/system-diagrams',        icon:GitBranch, group:'Administration',
     roles:['superAdmin'] },
   { slug:'helpline',            label:'Helpline',               path:'/helpline',               icon:Phone, group:'Administration',
@@ -380,8 +370,6 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin'], note:'Live URL for Approval Dashboard. Linked with Finance Approval Dashboard — grants cascade together.' },
 
   // Permissions & Audit section
-  { slug:'sa-permissions-mgmt', label:'User Access (SA)',       path:'/super-admin-hub?tab=user-access', icon:Lock, group:'Super Admin',
-    roles:['superAdmin'], note:'Canonical Users workspace. Legacy Screen Permissions and Page Grants URLs redirect here.' },
   { slug:'sa-audit-logs',       label:'System Audit Logs (SA)', path:'/super-admin-hub?tab=audit-logs', icon:ScrollText, group:'Super Admin',
     roles:['superAdmin','admin'] },
   { slug:'sa-button-registry',  label:'Button Registry',        path:'/super-admin-hub?tab=button-registry', icon:LayoutList, group:'Super Admin',
@@ -469,6 +457,28 @@ export function getPageDefinition(slug: string): PageDef | undefined {
 
 export function getPageNavigationGroup(group: string) {
   return PAGE_NAVIGATION_GROUPS[group];
+}
+
+/** Legacy redirect-only PAGE_DEFS — hide from Role Management baseline checklists. */
+const NON_GRANTABLE_PAGE_SLUGS = new Set([
+  'page-access',
+  'permissions-management',
+]);
+
+/** Pages admins can toggle as role baselines in Create/Edit Role. */
+export function getGrantablePageDefs(definitions: readonly PageDef[] = PAGE_DEFS): PageDef[] {
+  return definitions.filter(page => !NON_GRANTABLE_PAGE_SLUGS.has(page.slug) && !page.slug.includes(':'));
+}
+
+/** Group grantable pages for Role Management page-access UIs. */
+export function getGrantablePageGroups(definitions: readonly PageDef[] = PAGE_DEFS): Array<[string, PageDef[]]> {
+  const map = new globalThis.Map<string, PageDef[]>();
+  for (const page of getGrantablePageDefs(definitions)) {
+    const list = map.get(page.group) ?? [];
+    list.push(page);
+    map.set(page.group, list);
+  }
+  return Array.from(map.entries());
 }
 
 export interface PageRegistryIssue {

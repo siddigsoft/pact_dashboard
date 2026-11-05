@@ -10,6 +10,8 @@ import {
   transformUserClassificationFromDB,
   transformFeeStructureFromDB,
   classificationQueryKeys,
+  CLASSIFICATION_BASE_COLUMNS,
+  withRetainers,
 } from './classificationQueries';
 import type {
   UserClassification,
@@ -153,12 +155,12 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       const { data: result, error } = await supabase
         .from('user_classifications')
         .insert(insertData)
-        .select()
+        .select(CLASSIFICATION_BASE_COLUMNS)
         .single();
 
       if (error) throw error;
 
-      const newClassification = transformUserClassificationFromDB(result);
+      const newClassification = transformUserClassificationFromDB({ ...insertData, ...(result as object) });
       queryClient.invalidateQueries({ queryKey: classificationQueryKeys.userClassifications() });
 
       toast({
@@ -321,7 +323,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       const { data: result, error } = await supabase
         .from('user_classifications')
         .insert(insertData)
-        .select()
+        .select(CLASSIFICATION_BASE_COLUMNS)
         .single();
 
       if (error) {
@@ -336,7 +338,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       console.log('[Classification] Successfully inserted:', result?.id);
 
-      const newClassification = transformUserClassificationFromDB(result);
+      const newClassification = transformUserClassificationFromDB({ ...insertData, ...(result as object) });
 
       // Optimistically patch the cache so the UI updates instantly —
       // mark old active ones as inactive and push the new record in.
@@ -577,7 +579,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       const { data, error } = await supabase
         .from('user_classifications')
         .select(`
-          *,
+          ${CLASSIFICATION_BASE_COLUMNS},
           profiles!user_classifications_user_id_fkey (
             full_name,
             email,
@@ -587,7 +589,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       if (error) throw error;
 
-      return (data || []).map((item: any) => ({
+      return (await withRetainers((data || []) as any[])).map((item: any) => ({
         id: item.id,
         userId: item.user_id,
         classificationLevel: item.classification_level,

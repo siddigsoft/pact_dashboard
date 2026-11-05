@@ -29,11 +29,10 @@ const BLANK_TERM = { name_en:'', name_ar:'', note:'', is_active:true };
 const BLANK_LINE = { sequence:10, value_type:'balance', value:100, days:30, days_after:'invoice_date', discount_pct:0 };
 
 export default function AccountingPaymentTerms() {
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting } = useAuthorization();
   const { currentUser } = useUser();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin','admin','financialAdmin']);
-  const allowed   = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
+  const canManage = canWriteAccounting();
 
   const [terms, setTerms]       = useState<PaymentTerm[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -50,7 +49,7 @@ export default function AccountingPaymentTerms() {
     setTerms((data??[]) as PaymentTerm[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const sf = (k: keyof typeof BLANK_TERM, v: any) => setForm(p=>({...p,[k]:v}));
   const sl = (i: number, k: string, v: any) => setLines(prev => prev.map((l,idx)=>idx===i?{...l,[k]:v}:l));
@@ -97,7 +96,6 @@ export default function AccountingPaymentTerms() {
     return `${base} due in ${l.days} days (from ${l.days_after.replace(/_/g,' ')})${l.discount_pct>0?` — ${l.discount_pct}% discount`:''}`;
   };
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

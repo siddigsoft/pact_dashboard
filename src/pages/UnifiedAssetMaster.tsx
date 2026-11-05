@@ -98,12 +98,13 @@ function emptyDisposalForm() {
 }
 
 export default function UnifiedAssetMaster() {
-  const { hasAnyRole, isAuthenticated, checkPermission } = useAuthorization();
+  const { isAuthenticated, checkPermission } = useAuthorization();
   const { currentUser } = useAppContext();
   const canExport = checkPermission('fixed_assets', 'export');
-  const canEdit    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'hr_admin', 'ict']);
-  const canDispose = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
-  const canRunDep  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canCreate  = checkPermission('fixed_assets', 'create');
+  const canAssign  = checkPermission('fixed_assets', 'assign');
+  const canDispose = checkPermission('fixed_assets', 'delete');
+  const canRunDep  = checkPermission('fixed_assets', 'update');
 
   const [mainTab, setMainTab] = useState<'register' | 'depreciation'>('register');
 
@@ -156,8 +157,8 @@ export default function UnifiedAssetMaster() {
     const [periodRes, runRes] = await Promise.all([
       supabase
         .from('acct_fiscal_periods')
-        .select('id,period_label,start_date,end_date,status')
-        .eq('status', 'open')
+        .select('id,period_no,start_date,end_date,status,acct_fiscal_years(code)')
+        .in('status', ['open', 'soft_closed'])
         .order('start_date', { ascending: false })
         .limit(24),
       supabase
@@ -166,7 +167,13 @@ export default function UnifiedAssetMaster() {
         .order('created_at', { ascending: false })
         .limit(50),
     ]);
-    const periods = (periodRes.data ?? []) as FiscalPeriod[];
+    const periods: FiscalPeriod[] = ((periodRes.data ?? []) as any[]).map(p => ({
+      id: p.id,
+      period_label: `${p.acct_fiscal_years?.code ?? 'FY'}-P${String(p.period_no).padStart(2, '0')}`,
+      start_date: p.start_date,
+      end_date: p.end_date,
+      status: p.status,
+    }));
     setFiscalPeriods(periods);
     if (periods.length > 0 && !selectedPeriodId) setSelectedPeriodId(periods[0].id);
     setDepRuns((runRes.data ?? []) as DepRun[]);
@@ -379,7 +386,7 @@ export default function UnifiedAssetMaster() {
                 </Button>
               </ReportExportGate>
             )}
-            {canEdit && (
+            {canCreate && (
               <Button size="sm" onClick={() => { setForm(emptyForm()); setCreateOpen(true); }}>
                 <Plus className="h-4 w-4 mr-1" /> New Asset
               </Button>
@@ -460,7 +467,7 @@ export default function UnifiedAssetMaster() {
                           <td className="py-2 pr-3"><Badge className={`text-xs ${statusColor[a.status] ?? ''}`}>{a.status}</Badge></td>
                           <td className="py-2">
                             <div className="flex gap-1">
-                              {canEdit && a.status !== 'disposed' && (
+                              {canAssign && a.status !== 'disposed' && (
                                 <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Assign" onClick={() => { setAssignAsset(a); setAssignOpen(true); }}>
                                   <UserCheck className="h-3.5 w-3.5" />
                                 </Button>

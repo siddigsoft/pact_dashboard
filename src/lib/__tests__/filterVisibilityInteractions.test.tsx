@@ -65,7 +65,6 @@ vi.mock('@/utils/report-export', () => ({ exportToExcel: vi.fn(), exportMultiShe
 vi.mock('@/utils/formattedExcelExport', () => ({ exportFormattedMultiSheetExcel: vi.fn() }));
 vi.mock('@/services/NotificationTriggerService', () => ({ NotificationTriggerService: {} }));
 vi.mock('@/services/notification-insert', () => ({ insertNotificationsToDb: vi.fn() }));
-vi.mock('@/components/ui/connected-pages-bar', () => ({ ConnectedPagesBar: () => null }));
 vi.mock('@/components/mmp/CycleProgressBar', () => ({ CycleProgressBar: () => null }));
 
 import CRMPartners from '@/pages/CRMPartners';

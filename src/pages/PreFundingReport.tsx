@@ -4,6 +4,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FitNumber } from '@/components/ui/fit-number';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -121,9 +122,9 @@ function kpiCard(title: string, value: string, sub: string, icon: React.ElementT
     <Card className="border">
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold mt-0.5 truncate">{value}</p>
+            <FitNumber value={value} className="text-2xl font-bold mt-0.5" />
             <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
           </div>
           <div className={cn('h-9 w-9 rounded-lg flex items-center justify-center shrink-0', cls)}>

@@ -26,23 +26,6 @@ export function columnStorageSlug(page: PageColumnDef): string {
 
 export const COLUMN_REGISTRY: PageColumnDef[] = [
   {
-    pageSlug: 'site-visits',
-    pageLabel: 'Site Visits',
-    columns: [
-      { key: 'name',            label: 'Site Name' },
-      { key: 'hub',             label: 'Hub' },
-      { key: 'state',           label: 'State' },
-      { key: 'locality',        label: 'Locality' },
-      { key: 'collector',       label: 'Collector' },
-      { key: 'claimed_by',      label: 'Claimed By' },
-      { key: 'transport_fee',   label: 'Transport Fee',   sensitive: true },
-      { key: 'enumerator_fee',  label: 'Enumerator Fee',  sensitive: true },
-      { key: 'verified_by',     label: 'Verified By' },
-      { key: 'status',          label: 'Status' },
-      { key: 'date',            label: 'Visit Date' },
-    ],
-  },
-  {
     pageSlug: 'hr-hub:payroll-admin',
     storageSlug: 'payroll-admin',
     pageLabel: 'HR Hub · Payroll Admin',
@@ -127,19 +110,6 @@ export const COLUMN_REGISTRY: PageColumnDef[] = [
       { key: 'reference',   label: 'Reference' },
       { key: 'status',      label: 'Status' },
       { key: 'date',        label: 'Date' },
-    ],
-  },
-  {
-    pageSlug: 'finance-hub',
-    pageLabel: 'Finance Hub',
-    columns: [
-      { key: 'project',     label: 'Project / Hub' },
-      { key: 'inflow',      label: 'Inflow',            sensitive: true },
-      { key: 'outflow',     label: 'Outflow',           sensitive: true },
-      { key: 'net',         label: 'Net Balance',       sensitive: true },
-      { key: 'budget',      label: 'Budget Amount',     sensitive: true },
-      { key: 'fund_source', label: 'Fund Source' },
-      { key: 'allocation',  label: 'Allocation Amount', sensitive: true },
     ],
   },
   {

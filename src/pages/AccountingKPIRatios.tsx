@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -16,9 +15,8 @@ const fmt = (n: number, d = 2) => new Intl.NumberFormat('en-US', { minimumFracti
 const fmtM = (n: number) => `$${fmt(n / 1000000, 2)}M`;
 
 export default function AccountingKPIRatios() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
 
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(String(currentYear));
@@ -70,10 +68,9 @@ export default function AccountingKPIRatios() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void run(); }, [allowed, year]);
+  useEffect(() => { void run(); }, [year]);
 
   if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const TrendIcon = ({ t }: { t?: string }) => t === 'up' ? <TrendingUp className="w-4 h-4 text-emerald-600" /> : t === 'down' ? <TrendingDown className="w-4 h-4 text-rose-600" /> : <Minus className="w-4 h-4 text-muted-foreground" />;
 

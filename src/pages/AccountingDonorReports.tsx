@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
@@ -17,7 +16,6 @@ import {
 import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, Legend } from 'recharts';
 import { useDonorReportsQuery } from '@/hooks/useAccountingQueries';
@@ -33,10 +31,9 @@ const RESTRICTION_CFG: Record<string, { label: string; color: string; short: str
 const CHART_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#0ea5e9'];
 
 export default function AccountingDonorReports() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated } = useAuthorization();
 
-  const reportsQuery = useDonorReportsQuery(allowed && isAuthenticated);
+  const reportsQuery = useDonorReportsQuery(isAuthenticated);
   const funds = reportsQuery.data?.funds ?? [];
   const activity = reportsQuery.data?.activity ?? [];
   const partners = reportsQuery.data?.partners ?? [];
@@ -138,21 +135,10 @@ export default function AccountingDonorReports() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
   if (loading && !reportsQuery.data) return <PageLoader label="Loading donor reports…" />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1100px]">
-      <PageInfoBanner
-        title="Donor-Restricted Fund Reporting"
-        description="Track revenue and expenditure by fund type (unrestricted, donor-restricted, board-designated, quasi-endowment). Includes inter-fund elimination analysis for consolidated reporting."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Tag Journal Lines',       description: 'Each journal line is tagged to a specific donor fund.' },
-          { step: 2, role: 'Finance Admin', action: 'Review Fund Activity',    description: 'Monitor income and expenditure per fund in real time.' },
-          { step: 3, role: 'Finance Admin', action: 'Check Restrictions',      description: 'Verify spend aligns with donor-imposed restriction type.' },
-          { step: 4, role: 'Finance Admin', action: 'Generate Eliminations',   description: 'Inter-fund transfers are eliminated for consolidated reporting.' },
-        ]}
-      />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -20,7 +19,6 @@ import {
 import { format, parseISO, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -76,9 +74,8 @@ const CHECK_LABELS: Record<string, { label: string; icon: React.ElementType; des
 };
 
 export default function AccountingPeriodClose() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const canClose  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const canClose  = canWriteAccounting();
   const { toast } = useToast();
 
   const [years, setYears]       = useState<FiscalYear[]>([]);
@@ -106,7 +103,7 @@ export default function AccountingPeriodClose() {
     setLoading(false);
   }, [selectedYear]);
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const visiblePeriods = useMemo(() =>
     periods.filter(p => p.fiscal_year_id === selectedYear).sort((a, b) => a.period_no - b.period_no),
@@ -233,20 +230,9 @@ export default function AccountingPeriodClose() {
   }, [visiblePeriods]);
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1000px]">
-      <PageInfoBanner
-        title="Period Close Management"
-        description="Guided period-close workflow. Each period progresses from Open → Soft Closed → Hard Closed → Locked. Pre-close checks verify journals, bank reconciliation, and AP invoices before each transition."
-        workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Open',                   description: 'Period is open; all journal entries are permitted.' },
-          { step: 2, role: 'Finance Admin', action: 'Soft Close',             description: 'Restrict new posts — only period-close adjustments allowed.' },
-          { step: 3, role: 'Finance Admin', action: 'Hard Close',             description: 'No new journal entries allowed; period is finalised.' },
-          { step: 4, role: 'Super Admin',   action: 'Locked',                 description: 'Period is permanently locked; no changes possible.' },
-        ]}
-      />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

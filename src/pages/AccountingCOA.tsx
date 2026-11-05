@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -120,11 +120,10 @@ const BLANK_FORM = {
 type FormState = typeof BLANK_FORM;
 
 export default function AccountingCOA() {
-  const { hasAnyRole, isAuthenticated, checkPermission } = useAuthorization();
+  const { isAuthenticated, checkPermission, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const navigate = useNavigate();
-  const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const roleCanManage = hasAnyRole(['super_admin', 'admin']);
+  const roleCanManage = canWriteAccounting();
   const canExport = checkPermission('accounting', 'export');
 
   const overrideCanManage = usePageManageOverride('accounting-coa', roleCanManage);
@@ -352,7 +351,7 @@ export default function AccountingCOA() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   // ── derived ───────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -770,7 +769,6 @@ export default function AccountingCOA() {
   if (!authReady || !isAuthenticated) {
     return <PageLoader label="Checking session…" />;
   }
-  if (!allowed) return <Navigate to="/" replace />;
 
   // ── potential parent accounts for the form ────────────────
   const parentOptions = rows.filter(r => !editTarget || r.id !== editTarget.id);

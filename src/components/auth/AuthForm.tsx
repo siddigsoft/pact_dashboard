@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Mail, Lock, Eye, EyeOff, User, Phone, Badge, AlertTriangle } from "lucide-react";
+import { ALLOWED_EMAIL_DOMAINS, isAllowedEmailDomain } from "@/lib/email-domains";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from 'react-i18next';
 import { useAppContext } from '@/context/AppContext';
@@ -271,9 +272,7 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           if (!firstErrorField) firstErrorField = 'email';
           hasErrors = true;
         } else {
-          const allowedDomains = ['pactorg.com', 'pactorg.org'];
-          const emailDomain = email.trim().split('@')[1]?.toLowerCase();
-          if (!emailDomain || !allowedDomains.includes(emailDomain)) {
+          if (!isAllowedEmailDomain(email)) {
             setFieldErrors(prev => ({ ...prev, email: true }));
             if (!firstErrorField) firstErrorField = 'email';
             hasErrors = true;
@@ -746,8 +745,7 @@ const AuthForm = ({ mode }: AuthFormProps) => {
                 // Clear error while typing; re-validate domain once there's an @ symbol
                 const domain = val.split('@')[1]?.toLowerCase();
                 if (domain) {
-                  const allowed = ['pactorg.com', 'pactorg.org'];
-                  setFieldErrors(prev => ({ ...prev, email: domain.length > 3 && !allowed.includes(domain) }));
+                  setFieldErrors(prev => ({ ...prev, email: domain.length > 3 && !ALLOWED_EMAIL_DOMAINS.includes(domain) }));
                 } else {
                   setFieldErrors(prev => ({ ...prev, email: false }));
                 }
@@ -761,7 +759,7 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           </div>
           {fieldErrors.email ? (
             <p className="text-red-500 text-sm mt-1">
-              {email.trim() && !['pactorg.com', 'pactorg.org'].includes(email.trim().split('@')[1]?.toLowerCase())
+              {email.trim() && !isAllowedEmailDomain(email)
                 ? 'Only @pactorg.com or @pactorg.org email addresses are allowed'
                 : 'Email is required'}
             </p>

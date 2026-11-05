@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -18,7 +17,6 @@ import { format, parseISO, differenceInMonths, addMonths } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
@@ -94,9 +92,8 @@ function calcDepreciation(asset: Asset, asOfDate: Date): { monthlyDep: number; a
 const BLANK: Partial<Asset> = { name_en: '', name_ar: '', category: 'equipment', currency: 'USD', acquisition_date: new Date().toISOString().slice(0, 10), acquisition_cost: 0, useful_life_months: 60, salvage_value: 0, depreciation_method: 'straight_line', status: 'active', location: '', serial_number: '', supplier: '', notes: '' };
 
 export default function AccountingFixedAssets() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-fixed-assets', roleCanEdit);
 
@@ -424,7 +421,6 @@ export default function AccountingFixedAssets() {
   }
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const DepBar = ({ asset }: { asset: Asset }) => {
     const { depreciationPct, bookValue, accumulated, monthlyDep } = calcDepreciation(asset, today);
@@ -465,11 +461,6 @@ export default function AccountingFixedAssets() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Fixed Assets Register"
-        description="Track organizational assets with automatic depreciation calculation (straight-line or declining balance). Book value updates in real time. Run supabase/fixed_assets_migration.sql to activate this page."
-        descriptionAr="تتبع أصول المنظمة مع احتساب الاستهلاك تلقائياً (القسط الثابت أو المتناقص). تتحدث القيمة الدفترية في الوقت الفعلي."
-      />
 
       {error && <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">{error}</div>}
 

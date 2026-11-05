@@ -6,10 +6,8 @@ import { calculateUserWorkload } from '@/utils/collectorUtils';
 import SimpleFieldTeamMap from '@/components/map/SimpleFieldTeamMap';
 import SiteVisitsSummary from '@/components/field-team/SiteVisitsSummary';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -65,10 +63,7 @@ const FieldTeam = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { checkPermission, hasAnyRole } = useAuthorization();
   const invalidateFieldTeam = useInvalidateFieldTeamDirectory();
-
-  const canAccess = checkPermission('users', 'read') || hasAnyRole(['admin']);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 250);
@@ -77,7 +72,7 @@ const FieldTeam = () => {
 
   const fieldTeamQuery = useFieldTeamDirectory({
     search: debouncedSearch,
-    enabled: canAccess,
+    enabled: true,
   });
   const fieldTeamUsers = useMemo(
     () => flattenFieldTeamPagesAsUsers(fieldTeamQuery.data?.pages),
@@ -85,13 +80,11 @@ const FieldTeam = () => {
   );
 
   useEffect(() => {
-    if (!canAccess) return;
     if (fieldTeamQuery.hasNextPage && !fieldTeamQuery.isFetchingNextPage) {
       const pages = fieldTeamQuery.data?.pages.length ?? 0;
       if (pages > 0 && pages < 3) void fieldTeamQuery.fetchNextPage();
     }
   }, [
-    canAccess,
     fieldTeamQuery.hasNextPage,
     fieldTeamQuery.isFetchingNextPage,
     fieldTeamQuery.data?.pages.length,
@@ -146,31 +139,6 @@ const FieldTeam = () => {
       (visit) => visit.status === 'pending' || visit.status === 'permitVerified'
     );
   }, [siteVisits]);
-
-  if (!canAccess) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-destructive">Access Denied</CardTitle>
-            <CardDescription>
-              You don't have permission to access this page.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="outline"
-              onClick={() => navigate('/dashboard')}
-              className="w-full"
-              data-testid="button-return-dashboard"
-            >
-              Return to Dashboard
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -307,11 +275,6 @@ const FieldTeam = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <PageInfoBanner
-        title="Field Team"
-        description="Live view of every field worker — where they are right now (last GPS ping), what they're doing (current site visit), and their workload over the past 30 days. Use the map to see real-time positions, the table to drill into a person's recent visits, or the workload chart to spot overloaded or under-utilised collectors. FOMs and supervisors use this page to dispatch help where it's needed."
-        descriptionAr="عرض مباشر لكل عامل ميداني — أين يتواجد الآن (آخر إشارة GPS) وماذا يفعل (زيارة الموقع الحالية) وعبء عمله خلال الـ 30 يومًا الماضية. استخدم الخريطة لرؤية المواقع في الوقت الفعلي، والجدول للتعمق في زيارات الشخص الأخيرة، أو الرسم البياني لعبء العمل لرصد المجمعين المثقلين بالعمل أو غير المستغلين. يستخدم مديرو العمليات الميدانية والمشرفون هذه الصفحة لإرسال المساعدة حيث الحاجة."
-      />
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">

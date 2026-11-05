@@ -22,7 +22,7 @@ const GlobalSearchPage = () => {
     { name: 'User Management', path: '/users' },
     { name: 'Register User', path: '/register' },
     { name: 'Role Management', path: '/role-management' },
-    { name: 'Finance', path: '/finance' },
+    { name: 'Finance Hub', path: '/finance-hub' },
     { name: 'Reports', path: '/reports' },
     { name: 'Notifications', path: '/notifications' },
     { name: 'Chat', path: '/chat' },

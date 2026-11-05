@@ -223,7 +223,7 @@ export function MobileDashboardScreen({
                 size="sm"
                 onClick={() => {
                   hapticPresets.buttonPress();
-                  navigate('/site-visits');
+                  navigate('/field-ops');
                 }}
                 className="text-xs"
                 data-testid="button-view-all-visits"

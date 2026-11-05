@@ -161,12 +161,12 @@ serve(async (req: Request) => {
     | null = null
   if (isAdminApproval) {
     // Admin-approval path requires HARD checks — never trust the body alone.
-    //   1. Caller must hold an admin/finance role on profiles.
+    //   1. Caller must hold tasks:approve (checked with the caller's own JWT).
     //   2. The approval row must exist, be 'approved', match task_id,
     //      and its user_id must equal the task's assigned_to.
     //   3. The override_amount (if any) must equal the approval's reward_amount.
-    const [{ data: callerProfile }, { data: approvalRow }] = await Promise.all([
-      sb.from('profiles').select('id, role').eq('id', user.id).maybeSingle(),
+    const [{ data: canApprove }, { data: approvalRow }] = await Promise.all([
+      userSb.rpc('current_user_has_resource_permission', { p_resource: 'tasks', p_action: 'approve' }),
       sb
         .from('task_reward_approvals')
         .select('id, task_id, user_id, status, reward_amount, reward_currency, reward_deductions_snapshot, reward_deductions_total, reward_net')
@@ -174,12 +174,8 @@ serve(async (req: Request) => {
         .maybeSingle(),
     ])
 
-    const ADMIN_ROLES = new Set([
-      'super_admin', 'admin', 'hr_admin', 'finance_admin', 'finance', 'finance_manager',
-    ])
-    const callerRole = (callerProfile?.role as string | null) ?? ''
-    if (!ADMIN_ROLES.has(callerRole)) {
-      return new Response(JSON.stringify({ ok: false, error: 'Forbidden — admin role required' }), {
+    if (canApprove !== true) {
+      return new Response(JSON.stringify({ ok: false, error: 'Forbidden — tasks:approve permission required' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })

@@ -1,6 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useProjectStalledAlert } from '@/hooks/useProjectStalledAlert';
 import {
   Plus,
@@ -27,7 +26,6 @@ import ProjectList from '@/components/project/ProjectList';
 import ProjectBoardView from '@/components/project/ProjectBoardView';
 import ProjectTimelineView from '@/components/project/ProjectTimelineView';
 import { useProjectContext } from '@/context/project/ProjectContext';
-import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useUser } from '@/context/user/UserContext';
@@ -57,7 +55,7 @@ const ProjectsPage = () => {
   const { isFilterVisible } = useCurrentUserAccess();
   const navigate = useNavigate();
   useProjectStalledAlert();
-  const { hasAnyRole, isSuperAdmin, hasExplicitActionGrant, checkPermission } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin, hasExplicitActionGrant } = useAuthorization();
   const { currentUser } = useUser();
 
   const projectContext = useProjectContext();
@@ -157,45 +155,8 @@ const ProjectsPage = () => {
     setFilterSearch('');
   };
 
-  // Baseline roles, Access Control page/action grant, or projects:read permission.
-  const canViewProjects =
-    isSuperAdmin() ||
-    hasAnyRole([
-      'admin', 'Admin', 'fom', 'FOM', 'ict', 'ICT', 'projectManager', 'ProjectManager',
-      'employee', 'Employee', 'countryDirector', 'Country Director', 'hr', 'HR',
-    ]) ||
-    hasGrantedOrgProjectsAccess ||
-    checkPermission('projects', 'read');
-
-  if (!canViewProjects) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="text-center space-y-3 max-w-sm">
-          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
-            <FolderKanban className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h2 className="text-xl font-semibold">Access Restricted</h2>
-          <p className="text-muted-foreground text-sm">
-            You do not have access to the Projects module.
-          </p>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="text-sm text-primary underline hover:no-underline"
-          >
-            Return to Dashboard
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background p-2.5 md:p-3 space-y-2.5">
-      <PageInfoBanner
-        title="Projects"
-        description="Browse, create, and manage every project in the organization. Each project has its own lifecycle (10 stage flows depending on type), team, budget, milestones, and tasks. Click a project to open its details, advance its stage, edit its team, or archive it. Use the filters to focus on a specific status, type, or hub."
-        descriptionAr="تصفح وأنشئ وأدِر كل مشروع في المنظمة. لكل مشروع دورة حياته الخاصة (10 تدفقات مراحل حسب النوع) وفريقه وميزانيته ومعالمه ومهامه. انقر على مشروع لفتح تفاصيله أو تقدّم مرحلته أو تعديل فريقه أو أرشفته. استخدم الفلاتر للتركيز على حالة أو نوع أو مركز معين."
-      />
       {/* Compact Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -235,9 +196,6 @@ const ProjectsPage = () => {
           )}
         </div>
       </div>
-
-      {/* Quick Navigation */}
-      <ConnectedPagesBar exclude="projects" include={['analytics', 'portfolio']} />
 
       {/* Condensed Statistics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">

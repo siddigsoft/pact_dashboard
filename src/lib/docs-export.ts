@@ -1580,7 +1580,6 @@ const documentationSections: Section[] = [
           "Geofencing: Location-based boundary detection",
           "IndexedDB: Browser-based offline storage",
           "Retainer: Regular monthly payment for classified personnel",
-          "PageInfoBanner: Information banner showing page purpose and workflow steps",
           "Reconciliation: Process of matching advance payments against actual receipts"
         ]
       }

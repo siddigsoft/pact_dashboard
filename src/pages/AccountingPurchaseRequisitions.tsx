@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +19,6 @@ import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -69,9 +67,8 @@ const BLANK = {
 };
 
 export default function AccountingPurchaseRequisitions() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor', 'project_manager', 'program_manager']);
-  const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const canApprove = canWriteAccounting();
   const { toast } = useToast();
 
   const [prs, setPRs]       = useState<PR[]>([]);
@@ -110,7 +107,7 @@ export default function AccountingPurchaseRequisitions() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => prs.filter(p => {
     if (statusFilter !== 'all' && p.status !== statusFilter) return false;
@@ -214,21 +211,9 @@ export default function AccountingPurchaseRequisitions() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed)   return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1200px]">
-      <PageInfoBanner
-        title="Purchase Requisitions"
-        description="Request purchases before they are converted to Purchase Orders. PRs go through a review and approval workflow before a PO can be raised."
-        workflowSteps={[
-          { step: 1, role: 'Requestor',     action: 'Create Draft',       description: 'Fill in item description, quantity, estimated cost and required date.' },
-          { step: 2, role: 'Requestor',     action: 'Submit for Review',  description: 'Submit the PR to trigger the approval workflow.' },
-          { step: 3, role: 'Finance Admin', action: 'Finance Review',     description: 'Finance checks budget availability and GL coding.' },
-          { step: 4, role: 'Admin',         action: 'Manager Approval',   description: 'Department head approves the purchase need.' },
-          { step: 5, role: 'Finance Admin', action: 'Convert to PO',      description: 'Approved PR is converted into a formal Purchase Order.' },
-        ]}
-      />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

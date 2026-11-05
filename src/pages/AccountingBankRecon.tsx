@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
@@ -17,7 +16,6 @@ import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
@@ -43,9 +41,8 @@ const BLANK_BANK = { account_name: '', bank_name: '', account_number: '', curren
 const BLANK_LINE = { statement_date: '', description: '', reference: '', amount: '', running_balance: '', currency: 'USD' };
 
 export default function AccountingBankRecon() {
-  const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { canWriteAccounting } = useAuthorization();
+  const roleCanEdit = canWriteAccounting();
 
   const overrideCanEdit = usePageManageOverride('accounting-bank-recon', roleCanEdit);
 
@@ -294,7 +291,6 @@ export default function AccountingBankRecon() {
     exportToExcel(rows, `Bank Recon - ${selectedBank?.account_name ?? 'Report'}`, `bank-recon-${selectedBank?.account_name ?? 'report'}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="bank-recon-page">
@@ -333,11 +329,6 @@ export default function AccountingBankRecon() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Bank Reconciliation"
-        description="Upload your bank statement lines (via CSV import or manual entry), then match each line to a posted journal entry. The system shows matched vs. unmatched items and highlights any balance differences between your GL and the bank. Run the migration supabase/bank_recon_migration.sql first if the page shows an error."
-        descriptionAr="قم بتحميل بنود كشف الحساب المصرفي (عبر استيراد CSV أو إدخال يدوي)، ثم طابق كل بند مع إدخال دفتر يومية مرحّل. يعرض النظام البنود المطابقة وغير المطابقة ويبرز أي فروقات بين دفتر الأستاذ والبنك."
-      />
 
       {/* Top: Bank selector + manage */}
       <div className="flex flex-wrap items-end gap-3 mb-4">

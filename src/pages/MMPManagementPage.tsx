@@ -23,7 +23,7 @@ interface PartialPaymentRow {
 const FieldOperationManagerPage = () => {
   const { currentUser } = useAppContext();
   const { mmpFiles, deleteMMPFile } = useMMP();
-  const { checkPermission, hasAnyRole, isSuperAdmin } = useAuthorization();
+  const { checkPermission, isSuperAdmin } = useAuthorization();
   const [deleteId, setDeleteId] = useState<string|null>(null);
   const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
@@ -33,8 +33,6 @@ const FieldOperationManagerPage = () => {
 
   // Delete is restricted to Super Admins only — it is a destructive, irreversible operation.
   const canDeleteMMP = isSuperAdmin() || checkPermission('mmp', 'delete');
-
-  const allowed = hasAnyRole(['admin', 'ict', 'fom', 'superAdmin']);
 
   useEffect(() => {
     const fetchPartials = async () => {
@@ -47,8 +45,8 @@ const FieldOperationManagerPage = () => {
       setPartialRows((data as PartialPaymentRow[]) || []);
       setPartialLoading(false);
     };
-    if (allowed) fetchPartials();
-  }, [allowed]);
+    fetchPartials();
+  }, []);
 
   const partialStats = useMemo(() => {
     const totalFull = partialRows.reduce((s, r) => s + (r.approved_amount || r.requested_amount), 0);
@@ -88,15 +86,6 @@ const FieldOperationManagerPage = () => {
     });
     return map;
   }, [mmpFiles]);
-
-  if (!allowed) {
-    return (
-      <div className="max-w-xl mx-auto mt-20 p-8 bg-white rounded-xl shadow text-center">
-        <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
-        <p className="text-gray-600">You do not have permission to view this page.</p>
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto p-6 md:p-10 space-y-8">

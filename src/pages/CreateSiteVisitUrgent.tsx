@@ -83,7 +83,7 @@ type UrgentSiteVisitForm = z.infer<typeof urgentSiteVisitSchema>;
 const CreateSiteVisitUrgent = () => {
   const navigate = useNavigate();
   const { currentUser, users } = useUser();
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const { mmpFiles } = useMMP();
   const { createSiteVisit } = useSiteVisitContext();
   const [localities, setLocalities] = useState<{ id: string; name: string; }[]>([]);
@@ -156,7 +156,7 @@ const CreateSiteVisitUrgent = () => {
       code: site.siteCode
     }));
 
-  const canAccess = checkPermission('site_visits', 'create') || hasAnyRole(['admin']);
+  const canAccess = checkPermission('site_visits', 'create');
   if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -170,7 +170,7 @@ const CreateSiteVisitUrgent = () => {
           <CardContent>
             <Button
               variant="outline"
-              onClick={() => navigate('/site-visits')}
+              onClick={() => navigate('/field-ops')}
               className="w-full"
             >
               Return to Site Visits
@@ -255,7 +255,7 @@ const CreateSiteVisitUrgent = () => {
           }
         );
         setTimeout(() => {
-          navigate('/site-visits');
+          navigate('/field-ops');
         }, 1500);
       } else {
         throw new Error("Failed to create site visit");

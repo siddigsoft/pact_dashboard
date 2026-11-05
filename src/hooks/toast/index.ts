@@ -47,9 +47,10 @@ function toast({ variant, duration, action, ...props }: Toast) {
   const id = genId();
 
   // Get base duration from the variant or default
-  const toastDuration = duration || 
-    (variant && DEFAULT_DURATIONS[variant]) || 
-    DEFAULT_DURATIONS.default;
+  const toastDuration = duration ??
+    (variant ? DEFAULT_DURATIONS?.[variant] : undefined) ??
+    DEFAULT_DURATIONS?.default ??
+    6000;
 
   const update = (props: ToasterToast) =>
     dispatch({

@@ -9,25 +9,23 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CreateRoleRequest, RESOURCES, ACTIONS, ResourceType, ActionType, RoleWithPermissions } from '@/types/roles';
+import { CreateRoleRequest, ResourceType, ActionType, RoleWithPermissions } from '@/types/roles';
 import { roleTemplates, permissionPresets, getCategoryColor, RoleTemplate } from '@/constants/roleTemplates';
-import { RoleBaselineAccessEditor } from './RoleBaselineAccessEditor';
-import { RoleBaselineAccess } from '@/types/roles';
-import { supabase } from '@/integrations/supabase/client';
-import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { PermissionManager } from './PermissionManager';
+import { getGrantablePageGroups } from '@/lib/access-registry';
+import { withPageDefaultPermissions } from '@/lib/page-default-permissions';
 import {
   Briefcase, MapPin, Wallet, BarChart3, Globe, Users, FileSearch, Wrench,
   Wand2, ListChecks, Star, Info, ChevronLeft, ChevronRight, Check,
 } from 'lucide-react';
 
-type WizardStep = 'template' | 'details' | 'pages' | 'actions' | 'baseline' | 'assign' | 'review';
+type WizardStep = 'template' | 'details' | 'pages' | 'actions' | 'assign' | 'review';
 
 const STEPS: Array<{ id: WizardStep; label: string }> = [
   { id: 'template', label: 'Template' },
   { id: 'details', label: 'Role details' },
   { id: 'pages', label: 'Page access' },
   { id: 'actions', label: 'Actions' },
-  { id: 'baseline', label: 'Tabs, columns & scope' },
   { id: 'assign', label: 'Assign users' },
   { id: 'review', label: 'Review & save' },
 ];
@@ -60,28 +58,29 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
   cloneSourceRole,
   users = [],
 }) => {
-  const [baseline, setBaseline] = useState<RoleBaselineAccess>({ tab_rules: [], column_rules: [] });
-  const [allowCostScope, setAllowCostScope] = useState(false);
-  useEffect(() => { if (open) { supabase.rpc('workspace_check_super_admin').then(({ data }) => setAllowCostScope(data === true)); } }, [open]);
   const [step, setStep] = useState<WizardStep>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<RoleTemplate | null>(null);
   const [formData, setFormData] = useState({ name: '', display_name: '', description: '' });
   const [selectedPermissions, setSelectedPermissions] = useState<Record<string, boolean>>({});
   const [selectedPages, setSelectedPages] = useState<Record<string, boolean>>({});
   const [selectedUsers, setSelectedUsers] = useState<Record<string, boolean>>({});
-  const [setAsPrimary, setSetAsPrimary] = useState(false);
   const [userFilter, setUserFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const pageGroups = useMemo(() => {
-    const map = new Map<string, typeof PAGE_DEFS>();
-    for (const page of PAGE_DEFS) {
-      const list = map.get(page.group) ?? [];
-      list.push(page);
-      map.set(page.group, list);
-    }
-    return Array.from(map.entries());
-  }, []);
+  const pageGroups = useMemo(() => getGrantablePageGroups(), []);
+  const [pageSearch, setPageSearch] = useState('');
+  const visiblePageGroups = useMemo(() => {
+    const q = pageSearch.trim().toLowerCase();
+    if (!q) return pageGroups;
+    return pageGroups
+      .map(([group, groupPages]) => [
+        group,
+        group.toLowerCase().includes(q)
+          ? groupPages
+          : groupPages.filter(page => page.label.toLowerCase().includes(q) || page.slug.toLowerCase().includes(q)),
+      ] as [string, typeof groupPages])
+      .filter(([, groupPages]) => groupPages.length > 0);
+  }, [pageGroups, pageSearch]);
 
   useEffect(() => {
     if (cloneSourceRole && open) {
@@ -105,14 +104,13 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
   }, [cloneSourceRole, open]);
 
   const resetDialogState = () => {
-    setBaseline({ tab_rules: [], column_rules: [] });
     setStep('template');
     setSelectedTemplate(null);
     setFormData({ name: '', display_name: '', description: '' });
     setSelectedPermissions({});
     setSelectedPages({});
+    setPageSearch('');
     setSelectedUsers({});
-    setSetAsPrimary(false);
     setUserFilter('');
     setError(null);
   };
@@ -150,6 +148,21 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
       }),
     [selectedPermissions],
   );
+
+  const draftRole = useMemo<RoleWithPermissions>(() => ({
+    id: '',
+    name: formData.name,
+    display_name: formData.display_name || 'New role',
+    is_system_role: false,
+    is_active: true,
+    created_at: '',
+    updated_at: '',
+    permissions: permissionList.map(p => ({ id: '', role_id: '', created_at: '', ...p })),
+  }), [formData.name, formData.display_name, permissionList]);
+
+  const handleMatrixChange = (perms: { resource: ResourceType; action: ActionType }[]) => {
+    setSelectedPermissions(Object.fromEntries(perms.map(p => [`${p.resource}:${p.action}`, true])));
+  };
 
   const pageSlugList = useMemo(
     () => Object.entries(selectedPages).filter(([, v]) => v).map(([slug]) => slug),
@@ -200,20 +213,19 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
     }
     if (step === 'pages') { setStep('actions'); return; }
     if (step === 'actions') {
-      if (permissionList.length === 0) {
+      if (withPageDefaultPermissions(permissionList, pageSlugList).length === 0) {
         setError('Select at least one action permission.');
         return;
       }
-      setStep('baseline');
+      setStep('assign');
       return;
     }
-    if (step === 'baseline') { setStep('assign'); return; }
     if (step === 'assign') { setStep('review'); return; }
   };
 
   const goBack = () => {
     setError(null);
-    const order: WizardStep[] = ['template', 'details', 'pages', 'actions', 'baseline', 'assign', 'review'];
+    const order: WizardStep[] = ['template', 'details', 'pages', 'actions', 'assign', 'review'];
     const idx = order.indexOf(step);
     if (idx > 0) setStep(order[idx - 1]);
   };
@@ -222,21 +234,20 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
     setError(null);
     const detailsError = validateDetails();
     if (detailsError) { setError(detailsError); setStep('details'); return; }
-    if (permissionList.length === 0) {
+    if (withPageDefaultPermissions(permissionList, pageSlugList).length === 0) {
       setError('Select at least one action permission.');
       setStep('actions');
       return;
     }
 
     const payload: CreateRoleRequest = {
-      ...baseline,
       name: formData.name.trim(),
       display_name: formData.display_name.trim(),
       description: formData.description.trim(),
-      permissions: permissionList,
+      permissions: withPageDefaultPermissions(permissionList, pageSlugList) as typeof permissionList,
       page_slugs: pageSlugList,
       assign_user_ids: assignUserIds,
-      set_as_primary: setAsPrimary,
+      set_as_primary: true, // one role per person — assignment replaces any prior role
       reason: 'Created via staged Role Management wizard',
     };
 
@@ -385,9 +396,21 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                 {step === 'pages' && (
                   <div className="space-y-4">
                     <p className="text-sm text-muted-foreground">
-                      Selected pages grant access to this role in navigation and routes.
+                      Selected pages grant access to this role in navigation and routes. Each selected page also grants the read permission it needs, so it opens without “Access Denied”.
                     </p>
-                    {pageGroups.map(([group, pages]) => (
+                    <div className="sticky top-0 z-10 bg-background py-2">
+                      <Input
+                        type="search"
+                        placeholder="Search pages by name, slug, or group…"
+                        value={pageSearch}
+                        onChange={e => setPageSearch(e.target.value)}
+                        data-testid="input-create-role-page-search"
+                      />
+                    </div>
+                    {visiblePageGroups.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No pages match “{pageSearch}”.</p>
+                    )}
+                    {visiblePageGroups.map(([group, pages]) => (
                       <Card key={group}>
                         <CardHeader className="py-3">
                           <div className="flex items-center justify-between">
@@ -432,39 +455,15 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                         </Button>
                       ))}
                     </div>
-                    {RESOURCES.map((resource) => (
-                      <Card key={resource}>
-                        <CardHeader className="py-3">
-                          <CardTitle className="text-base capitalize">{resource.replace('_', ' ')}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-0">
-                          {ACTIONS.map((action) => (
-                            <label key={`${resource}:${action}`} className="flex items-center gap-2 text-sm cursor-pointer">
-                              <Checkbox
-                                checked={!!selectedPermissions[`${resource}:${action}`]}
-                                onCheckedChange={(checked) => setSelectedPermissions((prev) => ({
-                                  ...prev,
-                                  [`${resource}:${action}`]: !!checked,
-                                }))}
-                                data-testid={`permission-${resource}-${action}`}
-                              />
-                              <span className="capitalize">{action}</span>
-                            </label>
-                          ))}
-                        </CardContent>
-                      </Card>
-                    ))}
+                    <PermissionManager role={draftRole} onChange={handleMatrixChange} />
                   </div>
                 )}
 
-                {step === 'baseline' && <RoleBaselineAccessEditor value={baseline} onChange={setBaseline} allowCostScope={allowCostScope} />}
-
                 {step === 'assign' && (
                   <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Checkbox id="set-primary" checked={setAsPrimary} onCheckedChange={(c) => setSetAsPrimary(!!c)} />
-                      <Label htmlFor="set-primary">Set as primary role for assigned users</Label>
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Each person has one role. Assigning a user here replaces their current role.
+                    </p>
                     <Input placeholder="Filter users…" value={userFilter} onChange={(e) => setUserFilter(e.target.value)} />
                     <div className="space-y-2 max-h-[50vh] overflow-auto border rounded-md p-3">
                       {filteredUsers.length === 0 && (
@@ -511,7 +510,6 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                         ))}
                       </CardContent>
                     </Card>
-                    <Card><CardHeader><CardTitle className="text-base">Tabs, columns & scope</CardTitle></CardHeader><CardContent className="text-sm">{baseline.tab_rules?.filter(rule => rule.is_blocked).length ?? 0} hidden tabs � {baseline.column_rules?.filter(rule => rule.is_hidden).length ?? 0} hidden columns � Cost scope: {baseline.cost_scope?.mode ?? 'application default'}</CardContent></Card>
                     <Card>
                       <CardHeader><CardTitle className="text-base">Users ({assignUserIds.length})</CardTitle></CardHeader>
                       <CardContent className="text-sm">
@@ -524,7 +522,7 @@ export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
                           </ul>
                         )}
                         <p className="text-muted-foreground mt-2">
-                          Primary role update: {setAsPrimary ? 'yes' : 'no'}
+                          Assigned users will have this role only (any previous role is replaced).
                         </p>
                         <p className="text-muted-foreground">
                           Role, access defaults and assignments save together with one audit record.

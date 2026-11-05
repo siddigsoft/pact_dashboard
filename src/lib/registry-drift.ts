@@ -32,6 +32,7 @@ const EXCLUDED_SLUGS = new Set([
   'mobile-cost-submission',  // covered by cost-submission in registry
   // Legacy pages already superseded by hub entries
   'finance', // legacy, covered by finance-hub
+  'page-access', 'permissions-management', // redirect to /role-management
 ]);
 
 /**

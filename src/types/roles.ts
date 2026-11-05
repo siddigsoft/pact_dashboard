@@ -133,6 +133,7 @@ export type ResourceType =
   | 'pre_funding'
   | 'procurement'
   | 'fixed_assets'
+  | 'incentives'
   // HR
   | 'hr'
   | 'payroll'
@@ -142,6 +143,8 @@ export type ResourceType =
   | 'succession'
   | 'pulse_surveys'
   | 'hr_analytics'
+  | 'performance_reviews'
+  | 'training'
   // Tools & communication
   | 'surveys'
   | 'tasks'
@@ -191,6 +194,12 @@ export type ActionType =
   // Financial button permissions are separate from page/resource CRUD.
   | 'mark_paid'
   | 'use_for_payment'
+  | 'assign_cost'
+  /** Cost submission approval levels (hub supervisor -> FOM -> country director -> final). */
+  | 'approve_hub'
+  | 'approve_field_ops'
+  | 'approve_country'
+  | 'approve_final'
   /** Explicit lifecycle/status and configuration mutations. */
   | 'status'
   | 'settings';
@@ -200,8 +209,9 @@ export const RESOURCES: ResourceType[] = [
   'projects', 'portfolio', 'analytics', 'mmp', 'site_visits', 'hub_operations',
   'safety', 'incidents', 'equipment', 'coverage_map',
   'finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions',
-  'pre_funding', 'procurement', 'fixed_assets',
+  'pre_funding', 'procurement', 'fixed_assets', 'incentives',
   'hr', 'payroll', 'salary_advances', 'leave', 'benefits', 'succession', 'pulse_surveys', 'hr_analytics',
+  'performance_reviews', 'training',
   'surveys', 'tasks', 'notifications', 'broadcast', 'whatsapp', 'calendar',
   'signatures', 'integrations', 'transactions', 'chat',
   'crm', 'reports',
@@ -213,7 +223,9 @@ export const ACTIONS: ActionType[] = [
   'publish', 'send', 'recall', 'revert', 'send_to_finance', 'revert_paid', 'revert_tier',
   'restore', 'override', 'submit', 'export',
   'full_report', 'state_report', 'hub_report',
-  'mark_paid', 'use_for_payment', 'status', 'settings',
+  'mark_paid', 'use_for_payment', 'assign_cost',
+  'approve_hub', 'approve_field_ops', 'approve_country', 'approve_final',
+  'status', 'settings',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -227,10 +239,10 @@ export const RESOURCE_LABELS: Record<ResourceType, string> = {
   safety: 'Safety Hub', incidents: 'Incident Reports', equipment: 'Equipment', coverage_map: 'Coverage Map',
   finances: 'Finances', wallets: 'Wallets', accounting: 'Accounting',
   down_payments: 'Down Payments', cost_submissions: 'Cost Submissions',
-  pre_funding: 'Pre-Funding', procurement: 'Procurement (P2P)', fixed_assets: 'Fixed Assets',
+  pre_funding: 'Pre-Funding', procurement: 'Procurement (P2P)', fixed_assets: 'Fixed Assets', incentives: 'Incentives',
   hr: 'HR Hub', payroll: 'Payroll', salary_advances: 'Salary Advances', leave: 'Leave Management',
   benefits: 'Benefits Enrollment', succession: 'Succession Planning', pulse_surveys: 'Pulse Surveys',
-  hr_analytics: 'HR Analytics',
+  hr_analytics: 'HR Analytics', performance_reviews: 'Performance Reviews', training: 'Training & Certifications',
   surveys: 'Surveys', tasks: 'Tasks', notifications: 'Notifications',
   broadcast: 'Broadcast', whatsapp: 'WhatsApp', calendar: 'Calendar',
   signatures: 'Signatures', integrations: 'Integrations', transactions: 'Transactions', chat: 'Chat',
@@ -248,6 +260,11 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   full_report: 'Full MMP Report', state_report: 'State MMP Report', hub_report: 'Hub MMP Report',
   mark_paid: 'Mark Cost Submission Paid',
   use_for_payment: 'Use Pre-Fund for Payment',
+  assign_cost: 'Assign Cost',
+  approve_hub: 'Approve at Hub Level',
+  approve_field_ops: 'Approve at Field Operations Level',
+  approve_country: 'Approve at Country Level',
+  approve_final: 'Final Approval',
   status: 'Change Status',
   settings: 'Manage Settings',
 };
@@ -293,7 +310,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'site_visits', action: 'create' }, { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' }, { resource: 'site_visits', action: 'delete' },
     { resource: 'site_visits', action: 'assign' }, { resource: 'site_visits', action: 'approve' },
-    { resource: 'site_visits', action: 'export' },
+    { resource: 'site_visits', action: 'export' }, { resource: 'site_visits', action: 'assign_cost' },
+    { resource: 'projects', action: 'settings' },
     { resource: 'hub_operations', action: 'read' }, { resource: 'hub_operations', action: 'update' },
     // Field ops
     { resource: 'safety', action: 'read' }, { resource: 'safety', action: 'update' },
@@ -349,6 +367,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'pulse_surveys', action: 'read' }, { resource: 'pulse_surveys', action: 'create' },
     { resource: 'pulse_surveys', action: 'update' }, { resource: 'pulse_surveys', action: 'export' },
     { resource: 'hr_analytics', action: 'read' }, { resource: 'hr_analytics', action: 'export' },
+    { resource: 'performance_reviews', action: 'read' }, { resource: 'performance_reviews', action: 'create' },
+    { resource: 'performance_reviews', action: 'update' }, { resource: 'performance_reviews', action: 'approve' },
+    { resource: 'performance_reviews', action: 'delete' }, { resource: 'performance_reviews', action: 'export' },
+    { resource: 'training', action: 'read' }, { resource: 'training', action: 'create' },
+    { resource: 'training', action: 'update' }, { resource: 'training', action: 'delete' },
     // Tools
     { resource: 'surveys', action: 'create' }, { resource: 'surveys', action: 'read' },
     { resource: 'surveys', action: 'update' }, { resource: 'surveys', action: 'delete' },
@@ -466,7 +489,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'mmp', action: 'update' }, { resource: 'mmp', action: 'approve' },
     { resource: 'mmp', action: 'archive' }, { resource: 'mmp', action: 'export' },
     { resource: 'site_visits', action: 'create' }, { resource: 'site_visits', action: 'read' },
-    { resource: 'site_visits', action: 'update' },
+    { resource: 'site_visits', action: 'update' }, { resource: 'site_visits', action: 'assign_cost' },
     { resource: 'finances', action: 'read' },
     { resource: 'reports', action: 'read' }, { resource: 'reports', action: 'create' },
     { resource: 'reports', action: 'export' },
@@ -760,6 +783,15 @@ for (const permissions of Object.values(DEFAULT_ROLE_PERMISSIONS)) {
   for (const action of ['full_report', 'state_report', 'hub_report'] as const) {
     if (!permissions.some(p => p.resource === 'mmp' && p.action === action)) {
       permissions.push({ resource: 'mmp', action });
+    }
+  }
+}
+
+// All staff answer pulse surveys and request their own benefit enrollment.
+for (const permissions of Object.values(DEFAULT_ROLE_PERMISSIONS)) {
+  for (const resource of ['pulse_surveys', 'benefits'] as const) {
+    if (!permissions.some(p => p.resource === resource && p.action === 'submit')) {
+      permissions.push({ resource, action: 'submit' });
     }
   }
 }

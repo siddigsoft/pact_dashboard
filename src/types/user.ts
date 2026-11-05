@@ -100,7 +100,6 @@ export interface User {
       sms?: boolean;
     };
     theme?: 'light' | 'dark' | 'system';
-    defaultPage?: string;
     shareLocationWithTeam?: boolean;
     displayPersonalMetrics?: boolean;
   };
@@ -139,7 +138,7 @@ export interface User {
     country?: string;
     currency?: string;
     routingNumber?: string;
-  };
+  } | null;
 
   /**
    * Employment & department fields (from profiles table)

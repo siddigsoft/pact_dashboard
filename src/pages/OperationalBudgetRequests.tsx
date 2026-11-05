@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1415,23 +1414,6 @@ export default function OperationalBudgetRequests() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-6xl" data-testid="page-operational-budget-requests">
-      <PageInfoBanner
-        title="Operational Budget Requests"
-        description="Plan your hub or project spending in advance. Create a budget request with line items grouped by expense category, preview a formal document, then submit it for two-tier approval (Supervisor → Finance Admin). Once approved, the budget becomes the spend baseline that can be compared against actual cost submissions. Use 'New Request' below to start — approved requests can be exported as a formatted PDF or Excel workbook."
-        descriptionAr="خطط إنفاق المحور أو المشروع مسبقاً. أنشئ طلب ميزانية ببنود مصنفة، راجع المستند الرسمي، ثم أرسله للموافقة (مشرف → مدير مالي). بمجرد الاعتماد يصبح هذا الطلب خط الأساس للمقارنة مع تقديمات التكاليف الفعلية. اضغط 'طلب جديد' للبدء."
-        workflowSteps={[
-          { step: 1, role: 'Planner / Coordinator', action: 'Create & Preview',  description: 'Fill in title, period, hub, and add line items by category. Click "Preview & Submit" to see the formatted document.' },
-          { step: 2, role: 'Supervisor / FOM',       action: 'Tier 1 Review',    description: 'The Supervisor or FOM receives a notification, reviews the request, and approves or rejects with notes.' },
-          { step: 3, role: 'Finance Admin',           action: 'Tier 2 Approval', description: 'Finance Admin gives final sign-off. The status becomes Approved and the budget is locked as the spend baseline.' },
-          { step: 4, role: 'Anyone with access',     action: 'Export',           description: 'Export any approved (or draft) request as a formatted PDF report or a branded Excel workbook with 3 sheets.' },
-        ]}
-        workflowStepsAr={[
-          { step: 1, role: 'منسق / مخطط',    action: 'إنشاء ومعاينة',      description: 'أدخل العنوان والفترة والمحور وأضف البنود. اضغط "معاينة وإرسال" لرؤية المستند الرسمي.' },
-          { step: 2, role: 'مشرف / مدير ميداني', action: 'مراجعة المستوى الأول', description: 'يصل إشعار للمشرف للموافقة أو الرفض مع ملاحظات.' },
-          { step: 3, role: 'مدير مالي',        action: 'الموافقة النهائية',  description: 'الموافقة النهائية من المدير المالي.' },
-          { step: 4, role: 'أي مستخدم',         action: 'تصدير',             description: 'تصدير الطلب كملف PDF أو Excel بصيغة مصممة.' },
-        ]}
-      />
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 justify-between">

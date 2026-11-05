@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,7 +14,6 @@ import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { getDefaultAccountingPeriod } from '@/lib/accountingReporting';
 import { AccountingReportReadiness } from '@/components/accounting/AccountingReportReadiness';
 import { calculateBalanceSheet, statementNetBalance } from '@/lib/accountingStatements';
@@ -37,8 +35,7 @@ function netBalance(row: TbRow, type: string): number {
 }
 
 export default function AccountingFinancialStatements() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { isAuthenticated } = useAuthorization();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -302,7 +299,6 @@ export default function AccountingFinancialStatements() {
   };
 
   if (!isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const StatementSection = ({ rows, type, title, titleAr, totalLabel, totalLabelAr, total, accentClass }: {
     rows: TbRow[]; type: string; title: string; titleAr: string;
@@ -360,11 +356,6 @@ export default function AccountingFinancialStatements() {
         </Button>
       </div>
 
-      <PageInfoBanner
-        title="Financial Statements"
-        description="Generates the Income Statement (Revenue - Expenses = Net Surplus/Deficit) and Balance Sheet (Assets = Liabilities + Net Assets) for a selected fiscal period and fund scope. Both statements can be exported as PDF or CSV for donor and audit reports."
-        descriptionAr="يولّد قائمة الدخل (الإيرادات - المصروفات = صافي الفائض/العجز) والميزانية العمومية (الأصول = الالتزامات + صافي الأصول) للفترة المالية ونطاق الصندوق المحددين. يمكن تصدير كلتا القائمتين كـ PDF أو CSV لتقارير المانحين والمراجعة."
-      />
 
       {/* Filters */}
       <Card className="mb-4">

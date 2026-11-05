@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -26,11 +25,10 @@ interface Country { id: string; name_en: string; flag_emoji: string }
 const fmt = (n: number | null) => n != null ? `$${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(n)}` : '—';
 
 export default function AccountingPerDiemRates() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { isAuthenticated, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const canManage = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const canManage = canWriteAccounting();
 
   const [rows, setRows] = useState<PerDiem[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
@@ -56,7 +54,7 @@ export default function AccountingPerDiemRates() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -92,7 +90,6 @@ export default function AccountingPerDiemRates() {
   };
 
   if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-4 p-4">

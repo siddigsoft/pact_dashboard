@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
@@ -15,10 +14,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Loader2, ShoppingCart, Plus, Download, RefreshCw, Search, CheckCircle2, XCircle, Clock, FileText, Pencil, ChevronRight, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
-import { formatNumber } from '@/lib/accountingFormat';
+import { downloadCsv, formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 
 interface Vendor { id: string; vendor_code: string | null; name_en: string; vendor_type: string }
@@ -59,9 +57,8 @@ const STATUS_FLOW: Record<string, string[]> = {
 const BLANK = { title: '', description: '', vendor_id: '', country_id: '', fund_id: '', gl_account_id: '', amount: 0, currency: 'USD', required_date: '', notes: '', invoice_ref: '' };
 
 export default function AccountingPurchaseOrders() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor', 'project_manager', 'program_manager']);
-  const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { loading: authLoading, canWriteAccounting } = useAuthorization();
+  const canApprove = canWriteAccounting();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
 
@@ -201,7 +198,6 @@ export default function AccountingPurchaseOrders() {
   };
 
   if (authLoading) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const StatusBadge = ({ status }: { status: string }) => {
     const cfg = STATUS_CFG[status] ?? STATUS_CFG.draft;
@@ -237,7 +233,6 @@ export default function AccountingPurchaseOrders() {
         </div>
       </div>
 
-      <PageInfoBanner title="Purchase Orders" description="Manage the full procurement lifecycle — draft → submit → approve → order → receive → complete. Approvers can approve or reject submitted POs. Requires supabase/purchase_orders_migration.sql to activate." descriptionAr="إدارة دورة المشتريات الكاملة من المسودة حتى الإتمام. يحتاج إلى تنفيذ purchase_orders_migration.sql." />
 
       {error && <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">{error}</div>}
 

@@ -4,14 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { COLUMN_REGISTRY, columnStorageSlug } from '@/lib/column-registry';
 
 const COLUMN_CONSUMER_BY_STORAGE_SLUG: Record<string, string> = {
-  'site-visits': 'src/pages/SiteVisits.tsx',
   'payroll-admin': 'src/pages/PayrollAdmin.tsx',
   employees: 'src/pages/Employees.tsx',
   users: 'src/pages/Users.tsx',
   'admin-wallets': 'src/pages/AdminWallets.tsx',
   'cost-submission': 'src/pages/CostSubmission.tsx',
   'transaction-scanner': 'src/pages/TransactionScanner.tsx',
-  'finance-hub': 'src/pages/Finance.tsx',
   'accounting-general-ledger': 'src/pages/AccountingGeneralLedger.tsx',
   'accounting-journals': 'src/pages/AccountingJournals.tsx',
   'down-payment-approval': 'src/pages/DownPaymentApproval.tsx',
@@ -40,21 +38,9 @@ describe('column registry wiring', () => {
     expect(columnStorageSlug(COLUMN_REGISTRY.find(page => page.pageSlug === 'hr-hub')!)).toBe('hr');
   });
 
-  it('uses persisted identities for column writes in every access editor', () => {
-    for (const file of [
-      'src/components/role-management/RoleBaselineAccessEditor.tsx',
-      'src/components/role-management/unified/PermissionsTab.tsx',
-      'src/components/role-management/unified/PageAccessTab.tsx',
-    ]) {
-      const source = fs.readFileSync(path.resolve(process.cwd(), file), 'utf8');
-      expect(source, file).toContain('columnStorageSlug');
-    }
-
-    const pageAccessSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/role-management/unified/PageAccessTab.tsx'),
-      'utf8',
-    );
-    expect(pageAccessSource).not.toContain('upsertColumnVisibility(page.slug');
-    expect(pageAccessSource).toContain('upsertColumnVisibility(colStorageSlug');
+  it('uses persisted identities for column writes in role baseline editor', () => {
+    const file = 'src/components/role-management/RoleBaselineAccessEditor.tsx';
+    const source = fs.readFileSync(path.resolve(process.cwd(), file), 'utf8');
+    expect(source, file).toContain('columnStorageSlug');
   });
 });

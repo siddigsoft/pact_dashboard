@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -72,8 +71,7 @@ const AML_TONE: Record<AmlAlert['status'], string> = {
 };
 
 export default function FinanceAuditTrail() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'auditor']);
+  const { loading: authLoading } = useAuthorization();
 
   const [tab, setTab] = useState('changes');
   const [range, setRange] = useState('30');
@@ -139,7 +137,7 @@ export default function FinanceAuditTrail() {
     setLoading(false);
   };
 
-  useEffect(() => { if (allowed) void load(); }, [allowed, range]);
+  useEffect(() => { void load(); }, [range]);
 
   const tableOptions = useMemo(() => Array.from(new Set(logs.map(l => l.table_name))).sort(), [logs]);
 
@@ -203,7 +201,6 @@ export default function FinanceAuditTrail() {
   };
 
   if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-4 max-w-[1400px]">

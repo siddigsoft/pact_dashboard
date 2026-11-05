@@ -12,7 +12,6 @@
     Link2,
     Database,
     ClipboardList,
-    Copy,
     LogOut,
     LayoutDashboard,
     ChevronUp,
@@ -20,7 +19,6 @@
     ShieldCheck,
     Network,
     Calendar,
-    CalendarOff,
     Archive,
     CreditCard,
     DollarSign,
@@ -50,43 +48,19 @@
     Mail,
     Smartphone,
     HelpCircle,
-    PenTool,
-    PhoneCall,
-    RefreshCw,
-    Megaphone,
-    ScanLine,
-    Siren,
-    Shuffle,
     AlertTriangle,
-    Package,
     HeartPulse,
-    Heart,
-    ShieldAlert,
     RotateCcw,
     CheckSquare,
     Handshake,
     FolderOpen,
     Compass,
-    Lock,
     Inbox,
-    FileBarChart,
-    CalendarCheck,
     Sparkles,
-    FilePlus,
     Wallet,
-    Clock,
-    Landmark,
-    Settings2,
-    Zap,
-    ShoppingCart,
     ArrowLeftRight,
-    PiggyBank,
-    Search,
-    GraduationCap,
+    Settings2,
     Layers,
-    FileDown,
-    Languages,
-    Webhook,
     X as XIcon,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
@@ -107,9 +81,6 @@
     SidebarMenuItem, 
     SidebarMenuButton,
     SidebarMenuAction,
-    SidebarMenuSub,
-    SidebarMenuSubItem,
-    SidebarMenuSubButton,
     SidebarSeparator,
     SidebarTrigger,
     useSidebar
@@ -139,7 +110,7 @@
   import { getMmpDisplayLabel } from "@/lib/mmp-display";
   import { useViewAs } from "@/context/ViewAsContext";
   import { useCurrentUserAccessManifest } from "@/hooks/useCurrentUserAccessManifest";
-  import { evaluateManifestPageAccess, manifestHasPermission, getManifestNavigationPages } from "@/lib/current-user-access";
+  import { evaluateManifestPageAccess, manifestHasPermission, getManifestNavigationPages, isHubTabNavigationPath } from "@/lib/current-user-access";
   import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
   import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
   import { CSS } from '@dnd-kit/utilities';
@@ -147,39 +118,28 @@
   import { toast } from "@/hooks/use-toast";
   import { cn } from "@/lib/utils";
 
-  /** Groups with many links â€” collapsed by default to reduce visual clutter */
+  /** All top-level sections start collapsed; the active route section auto-expands. */
   const DENSE_COLLAPSED_BY_DEFAULT = new Set([
-    // section parents
-    'workspace-parent', 'programme-parent', 'comms-parent', 'fieldops-parent',
-    'coordination-parent', 'hr-parent', 'crm-parent', 'surveys-parent',
-    'analytics-parent', 'admin-parent', 'help-parent', 'superadmin-parent',
-    'super-admin',
-    'finance-accounting',
-    'finance-accounting-ops',
-    'finance-accounting-p2p',
-    'finance-accounting-controls',
-    'finance-accounting-advanced',
-    'finance-hub-operations',
-    'finance-hub-reports',
-    'finance-reports',
-    'finance-management',
-    'admin',
-    'hr-people',
+    'workspace-parent', 'workspace-more', 'programme-parent', 'incentives-parent', 'comms-parent',
+    'fieldops-parent', 'coordination-parent', 'finance-parent', 'accounting-parent',
+    'hr-parent', 'crm-parent', 'surveys-parent', 'analytics-parent', 'admin-parent',
+    'help-parent', 'superadmin-parent',
+    'super-admin', 'finance-reports', 'finance-management', 'admin', 'hr-people',
     'analytics',
-    'finance-parent',
   ]);
 
-  const SIDEBAR_GROUP_SHELL = "py-1 px-2";
+  const SIDEBAR_COLLAPSE_STORAGE_KEY = 'pact-sidebar-collapsed-v2';
+
+  const SIDEBAR_GROUP_SHELL = "py-0.5 px-1.5";
   const SIDEBAR_GROUP_LABEL =
-    "min-h-8 h-auto py-1 px-2.5 text-[11px] leading-snug tracking-wide font-semibold cursor-pointer flex items-center gap-2 rounded-lg transition-colors";
-  // Base class for section headers — individual iconColor overrides the icon hue per-section.
+    "min-h-7 h-auto py-1.5 px-2 text-[11px] leading-none tracking-wide font-semibold uppercase cursor-pointer flex items-center gap-2 rounded-md transition-colors duration-150";
   const SIDEBAR_SECTION_LABEL =
-    "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60";
-  // min-h + h-auto so long labels wrap to a second line instead of truncating
+    "text-foreground/65 hover:text-foreground hover:bg-muted/70";
   const SIDEBAR_NAV_ITEM =
-    "min-h-9 h-auto py-1.5 rounded-lg text-[13px] font-medium leading-snug transition-all duration-200";
-  const SIDEBAR_NAV_SUB_ITEM =
-    "min-h-8 h-auto py-1 rounded-md text-[12px] font-medium leading-snug transition-all duration-200";
+    "min-h-8 h-auto py-1.5 rounded-md text-[13px] font-medium leading-snug transition-colors duration-150";
+  const SIDEBAR_ICON_MUTED = "text-foreground/50";
+  const SIDEBAR_ICON_ACTIVE = "text-[#273677] dark:text-[#AAB7EC]";
+  const WORKSPACE_PRIMARY_PATHS = new Set(['/dashboard', '/my-tasks', '/my-projects', '/notifications']);
 
   const isNavPathActive = (pathname: string, search: string, url: string) => {
     const [base, query] = url.split('?');
@@ -288,20 +248,19 @@
           tooltip={item.title}
           className={cn(
             SIDEBAR_NAV_ITEM,
-            isActive &&
-              "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 font-semibold"
+            isActive
+              ? "bg-[#273677]/10 text-[#273677] dark:bg-[#AAB7EC]/15 dark:text-[#AAB7EC] font-semibold"
+              : "text-foreground/85 hover:bg-muted/80",
           )}
         >
           <Link to={item.url} className="flex items-center gap-2.5 pl-4" data-testid={`nav-favorite-${item.id}`}>
             <item.icon
               className={cn(
                 "h-4 w-4 shrink-0",
-                isActive
-                  ? "text-amber-700 dark:text-amber-300"
-                  : "text-amber-600 dark:text-amber-400"
+                isActive ? SIDEBAR_ICON_ACTIVE : SIDEBAR_ICON_MUTED,
               )}
             />
-            <span className="flex-1 min-w-0">{item.title}</span>
+            <span className="flex-1 min-w-0 truncate">{item.title}</span>
           </Link>
         </SidebarMenuButton>
         <SidebarMenuAction
@@ -310,7 +269,7 @@
           aria-label="Remove from favorites"
           data-testid={`button-unfavorite-${item.id}`}
         >
-          <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+          <Star className="h-3.5 w-3.5 text-[#B94B13] fill-[#B94B13]" />
         </SidebarMenuAction>
       </SidebarMenuItem>
     );
@@ -394,8 +353,6 @@
         programme.push({ id: 'programme-hub', title: 'Programme Hub', url: '/programme-hub', icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
       if (!isHidden('/projects'))
         programme.push({ id: 'projects', title: 'Projects', url: '/projects', icon: FolderOpen, priority: 2, isPinned: isPinned('/projects') });
-      if (!isHidden('/portfolio') && !isHidden('/programme-hub'))
-        programme.push({ id: 'portfolio', title: 'Portfolio', url: '/programme-hub?tab=portfolio', icon: LayoutDashboard, priority: 3, isPinned: isPinned('/programme-hub?tab=portfolio') });
       if (programme.length)
         groups.push({ id: 'programme-planning', label: 'Planning', order: 2.1, items: programme, parentGroup: 'programme' } as any);
 
@@ -450,10 +407,6 @@
     if (canSeeProgrammeHub && !isHidden('/programme-hub')) {
       planningItems.push({ id: 'programme-hub', title: "Programme Hub", url: "/programme-hub", icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
     }
-    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isProjectManager || isSeniorManagement)) {
-      const mmpTitle = getMmpDisplayLabel(defaultRole, roles, isSuperAdmin);
-      planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
-    }
     const canSeeFieldDataHub = isSuperAdmin || isAdmin || isICT || isFOM || isDataTeam || isProjectManager || isCountryDirector || isSeniorManagement;
     if (canSeeFieldDataHub && !isHidden('/field-data')) {
       planningItems.push({ id: 'field-data-hub', title: "Field Data Hub", url: "/field-data", icon: Layers, priority: 3, isPinned: isPinned('/field-data') });
@@ -473,11 +426,15 @@
     if (incentiveItems.length) groups.push({ id: 'incentives-main', label: 'Bonuses', order: 2.15, items: incentiveItems, parentGroup: 'incentives' } as any);
 
     // â”€â”€ 4. Field Operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // ── Field Ops Hub (replaces 9 flat items) ─────────────────────────────────
+    // ── Field Ops: hub + MMP (all sites / monitoring plans) ───────────────────
     const fieldOpsItems: MenuGroup['items'] = [];
     const canSeeFieldOps = isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataCollector || isDataTeam || perms.siteVisits || perms.fieldTeam;
     if (canSeeFieldOps && !isHidden('/field-ops')) {
       fieldOpsItems.push({ id: 'field-ops-hub', title: "Field Ops Hub", url: "/field-ops", icon: Compass, priority: 1, isPinned: isPinned('/field-ops') });
+    }
+    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isProjectManager || isSeniorManagement)) {
+      const mmpTitle = getMmpDisplayLabel(defaultRole, roles, isSuperAdmin);
+      fieldOpsItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'fieldops-ops', label: 'Operations', order: 4.1, items: fieldOpsItems, parentGroup: 'fieldops' } as any);
 
@@ -527,14 +484,20 @@
     if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: myMoneyLabel, order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
 
     const approvalItems: MenuGroup['items'] = [];
-    if (!isHidden('/approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM || isCountryDirector || isSeniorManagement)) {
+    // Prefer Approvals Hub as the single door; keep standalone trackers that are not hub tabs.
+    const canSeeApprovalsHub = isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM || isCountryDirector || isSeniorManagement;
+    if (!isHidden('/approvals') && canSeeApprovalsHub) {
       approvalItems.push({ id: 'approvals-hub', title: "Approvals Hub", url: "/approvals", icon: Inbox, priority: 0, isPinned: isPinned('/approvals') });
-    }
-    if (!isHidden('/supervisor-approvals') && canSeePath('/supervisor-approvals', defaultRole)) {
-      approvalItems.push({ id: 'supervisor-approvals', title: "Tier 1 Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 1, isPinned: isPinned('/supervisor-approvals') });
-    }
-    if (!isHidden('/withdrawal-approval') && canSeePath('/withdrawal-approval', defaultRole)) {
-      approvalItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/withdrawal-approval') });
+    } else {
+      if (!isHidden('/supervisor-approvals') && canSeePath('/supervisor-approvals', defaultRole)) {
+        approvalItems.push({ id: 'supervisor-approvals', title: "Tier 1 Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 1, isPinned: isPinned('/supervisor-approvals') });
+      }
+      if (!isHidden('/withdrawal-approval') && canSeePath('/withdrawal-approval', defaultRole)) {
+        approvalItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/withdrawal-approval') });
+      }
+      if (!isHidden('/finance-approval') && canSeePath('/finance-approval', defaultRole)) {
+        approvalItems.push({ id: 'finance-approval', title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4, isPinned: isPinned('/finance-approval') });
+      }
     }
     if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isCountryDirector || isSeniorManagement)) {
       approvalItems.push({ id: 'down-payment-approval', title: "Down-Payment Tracker", url: "/down-payment-approval", icon: DollarSign, priority: 3, isPinned: isPinned('/down-payment-approval') });
@@ -542,177 +505,57 @@
     if (!isHidden('/field-payments') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       approvalItems.push({ id: 'field-payments', title: "Field Payments Centre", url: "/field-payments", icon: Receipt, priority: 3.5, isPinned: isPinned('/field-payments') });
     }
-    if (!isHidden('/finance-approval') && canSeePath('/finance-approval', defaultRole)) {
-      approvalItems.push({ id: 'finance-approval', title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4, isPinned: isPinned('/finance-approval') });
-    }
     if (approvalItems.length) groups.push({ id: 'finance-approvals', label: "Approvals", order: 5.2, items: approvalItems, parentGroup: 'finance' } as any);
 
-    // ── Finance Hub — 2 sections mirroring FinanceHub page ───────────────────
+    // ── Finance Hub — single door; tabs live inside the hub ──────────────────
     const finHubAccess = isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM || isCountryDirector || isSeniorManagement;
     if (finHubAccess && !isHidden('/finance-hub')) {
-      // ── 1. Operations ─────────────────────────────────────────────────────
-      const fhOpsItems: MenuGroup['items'] = [];
-      fhOpsItems.push({ id: 'finance-hub-home',         title: 'Finance Hub',          url: '/finance-hub',                        icon: LayoutDashboard, priority: 1, isPinned: isPinned('/finance-hub') });
-      fhOpsItems.push({ id: 'finance-hub-budget',       title: 'Budget',               url: '/finance-hub?tab=budget',             icon: DollarSign,      priority: 2, isPinned: isPinned('/finance-hub?tab=budget') });
-      fhOpsItems.push({ id: 'finance-hub-fin-ops',      title: 'Financial Operations', url: '/finance-hub?tab=financial-ops',      icon: Activity,        priority: 3, isPinned: isPinned('/finance-hub?tab=financial-ops') });
-      fhOpsItems.push({ id: 'finance-hub-wallets',      title: 'Wallets Admin',        url: '/finance-hub?tab=admin-wallets',      icon: CreditCard,      priority: 4, isPinned: isPinned('/finance-hub?tab=admin-wallets') });
-      fhOpsItems.push({ id: 'finance-hub-recon',        title: 'Reconciliation',       url: '/finance-hub?tab=reconciliation',     icon: RefreshCw,       priority: 5, isPinned: isPinned('/finance-hub?tab=reconciliation') });
-      fhOpsItems.push({ id: 'finance-hub-subscriptions',title: 'Subscriptions',        url: '/finance-hub?tab=subscriptions',      icon: Layers,          priority: 6, isPinned: isPinned('/finance-hub?tab=subscriptions') });
-      groups.push({ id: 'finance-hub-operations', label: 'Finance Hub', order: 5.3, items: fhOpsItems, parentGroup: 'finance' } as any);
-
-      // ── 2. Reports ────────────────────────────────────────────────────────
-      const fhReportItems: MenuGroup['items'] = [];
-      fhReportItems.push({ id: 'finance-hub-wallet-rpt',    title: 'Wallet Reports',            url: '/finance-hub?tab=wallet-reports',      icon: BarChart3,     priority: 1, isPinned: isPinned('/finance-hub?tab=wallet-reports') });
-      fhReportItems.push({ id: 'finance-hub-advance-rpt',   title: 'Transport Advance Report',  url: '/finance-hub?tab=advance-report',      icon: ClipboardList, priority: 2, isPinned: isPinned('/finance-hub?tab=advance-report') });
-      fhReportItems.push({ id: 'finance-hub-dup-payments',  title: 'Duplicate Payments',        url: '/finance-hub?tab=duplicate-payments',  icon: Copy,          priority: 3, isPinned: isPinned('/finance-hub?tab=duplicate-payments') });
-      fhReportItems.push({ id: 'finance-hub-cost-pred',     title: 'Cost Predictions',          url: '/finance-hub?tab=cost-predictions',    icon: TrendingUp,    priority: 4, isPinned: isPinned('/finance-hub?tab=cost-predictions') });
-      fhReportItems.push({ id: 'finance-hub-fx',            title: 'Exchange Rates',            url: '/finance-hub?tab=exchange-rates',      icon: ArrowLeftRight,priority: 5, isPinned: isPinned('/finance-hub?tab=exchange-rates') });
-      fhReportItems.push({ id: 'finance-hub-salary-rpt',    title: 'Salary & Retainer Report',  url: '/finance-hub?tab=salary-retainer',     icon: Users,         priority: 6, isPinned: isPinned('/finance-hub?tab=salary-retainer') });
-      fhReportItems.push({ id: 'finance-hub-month-end',     title: 'Month-End Summary',         url: '/finance-hub?tab=month-end',           icon: CalendarCheck, priority: 7, isPinned: isPinned('/finance-hub?tab=month-end') });
-      fhReportItems.push({ id: 'finance-hub-field-pay',     title: 'Field Payments Centre',     url: '/field-payments',                      icon: Receipt,       priority: 8, isPinned: isPinned('/field-payments') });
-      groups.push({ id: 'finance-hub-reports', label: 'Finance Reports', order: 5.31, items: fhReportItems, parentGroup: 'finance' } as any);
+      groups.push({
+        id: 'finance-hub-group',
+        label: 'Finance Hub',
+        order: 5.3,
+        items: [{ id: 'finance-hub-home', title: 'Finance Hub', url: '/finance-hub', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/finance-hub') }],
+        parentGroup: 'finance',
+      } as any);
     }
 
-    // ── Pre-Funding module ────────────────────────────────────────────
-    const preFundItems: MenuGroup['items'] = [];
-    const addPreFundItem = (
-      id: string,
-      title: string,
-      url: string,
-      icon: any,
-      priority: number,
-    ) => {
-      if (!isHidden(url)) {
-        preFundItems.push({ id, title, url, icon, priority, isPinned: isPinned(url) });
-      }
-    };
-
-    const isPreFundFinance = isSuperAdmin || isAdmin || isFinancialAdmin;
-    if (isPreFundFinance) {
-      // Keep this list aligned with all eight tabs in PreFundingHub.
-      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding',                         Banknote,    1);
-      addPreFundItem('pre-funding-registry',  'Fund Registry',       '/pre-funding/registry',                FileText,    2);
-      addPreFundItem('pre-funding-approvals', 'Approval Flow',       '/pre-funding/approvals',               CheckSquare, 3);
-      addPreFundItem('pre-funding-recon',     'Reconciliation',      '/pre-funding/reconciliation',          Landmark,    4);
-      addPreFundItem('pre-funding-alloc',    'Allocation Dashboard', '/pre-funding?tab=allocations',        Users,       5);
-      addPreFundItem('pre-funding-settings',  'Settings',             '/pre-funding/settings',               Settings,    6);
-      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding/report',                 FileBarChart, 7);
-      addPreFundItem('pre-funding-distribute','Distribute Funds',     '/pre-funding?tab=distribute',         Wallet,       8);
-    } else if (isCountryDirector) {
-      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding',                         Banknote,    1);
-      addPreFundItem('pre-funding-alloc',    'Allocation Dashboard', '/pre-funding?tab=allocations',        Users,       2);
-      addPreFundItem('pre-funding-distribute','Distribute Funds',     '/pre-funding?tab=distribute',         Wallet,       3);
-      addPreFundItem('pre-funding-recon',     'Reconciliation',      '/pre-funding/reconciliation',          Landmark,    4);
-      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding/report',                 FileBarChart, 5);
-    } else if (isCoordinator || isSupervisor || isFOM || isFundHolder || isAuditor) {
-      // Non-finance users see the same scoped tabs that PreFundingHub allows.
-      addPreFundItem('pre-funding-overview',  'Overview',            '/pre-funding',                         Banknote,    1);
-      if (isCoordinator || isSupervisor || isFOM) {
-        addPreFundItem('pre-funding-approvals', 'Approval Flow',     '/pre-funding/approvals',               CheckSquare, 2);
-      }
-      addPreFundItem('pre-funding-alloc',    'Allocation Dashboard', '/pre-funding?tab=allocations',        Users,       3);
-      addPreFundItem('pre-funding-distribute','Distribute Funds',     '/pre-funding?tab=distribute',         Wallet,       4);
-      addPreFundItem('pre-funding-report',    'Report',               '/pre-funding/report',                 FileBarChart, 5);
+    // ── Pre-Funding — single door; tabs live inside the hub ──────────────────
+    const canSeePreFunding =
+      isSuperAdmin || isAdmin || isFinancialAdmin || isCountryDirector ||
+      isCoordinator || isSupervisor || isFOM || isFundHolder || isAuditor;
+    if (canSeePreFunding && !isHidden('/pre-funding')) {
+      groups.push({
+        id: 'finance-prefunding',
+        label: 'Pre-Funding',
+        order: 5.45,
+        items: [{ id: 'pre-funding', title: 'Pre-Funding', url: '/pre-funding', icon: Banknote, priority: 1, isPinned: isPinned('/pre-funding') }],
+        parentGroup: 'finance',
+      } as any);
     }
-    if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
 
-    // ── Accounting module — 5 sections mirroring AccountingHub ───────────────
-    // Keep navigation aligned with the Accounting route's read gate. Individual
-    // panels continue to enforce their own action-level permissions.
+    // ── Accounting — single door; tabs live inside the hub ───────────────────
     const acctAccess = isSuperAdmin || isAdmin || isFinance || isFinancialAdmin || isAccountant || isAuditor;
-    const acctAuditAccess = acctAccess;
-
-    if (acctAccess) {
-      // ── 1. Core Ledger ──────────────────────────────────────────────────────
-      const coreItems: MenuGroup['items'] = [];
-      if (!isHidden('/accounting'))                    coreItems.push({ id: 'accounting-hub',         title: 'Accounting Hub',       url: '/accounting',                          icon: LayoutDashboard, priority: 1,  isPinned: isPinned('/accounting') });
-      if (!isHidden('/accounting/journals'))           coreItems.push({ id: 'accounting-journals',    title: 'Journal Entries',      url: '/accounting?tab=journals',             icon: Receipt,         priority: 2,  isPinned: isPinned('/accounting?tab=journals') });
-      if (!isHidden('/accounting/coa'))                coreItems.push({ id: 'accounting-coa',         title: 'Chart of Accounts',    url: '/accounting?tab=coa',                  icon: BarChart3,       priority: 3,  isPinned: isPinned('/accounting?tab=coa') });
-      if (!isHidden('/accounting/trial-balance'))      coreItems.push({ id: 'accounting-trial-bal',   title: 'Trial Balance',        url: '/accounting?tab=trial-balance',        icon: TrendingUp,      priority: 4,  isPinned: isPinned('/accounting?tab=trial-balance') });
-      if (!isHidden('/accounting/ledger'))             coreItems.push({ id: 'accounting-ledger',      title: 'General Ledger',       url: '/accounting?tab=ledger',               icon: BookOpen,        priority: 5,  isPinned: isPinned('/accounting?tab=ledger') });
-      if (!isHidden('/accounting/reports'))            coreItems.push({ id: 'accounting-reports',     title: 'Reports & Statements', url: '/accounting?tab=reports',              icon: FileText,        priority: 6,  isPinned: isPinned('/accounting?tab=reports') });
-      if (!isHidden('/accounting/fiscal-years'))       coreItems.push({ id: 'accounting-fiscal-yrs',  title: 'Fiscal Years',         url: '/accounting?tab=fiscal-years',         icon: Calendar,        priority: 7,  isPinned: isPinned('/accounting?tab=fiscal-years') });
-      if (!isHidden('/accounting/search'))             coreItems.push({ id: 'accounting-search',      title: 'Quick Search',         url: '/accounting?tab=search',               icon: Search,          priority: 8,  isPinned: isPinned('/accounting?tab=search') });
-      if (coreItems.length) groups.push({ id: 'finance-accounting-core', label: 'Core Ledger', order: 5.50, items: coreItems, parentGroup: 'accounting' } as any);
-
-      // ── 2. Financial Operations ─────────────────────────────────────────────
-      const finOpsItems: MenuGroup['items'] = [];
-      if (!isHidden('/accounting/bank-recon'))         finOpsItems.push({ id: 'accounting-bank-recon',    title: 'Bank Reconciliation',  url: '/accounting?tab=bank-recon',           icon: Landmark,    priority: 1,  isPinned: isPinned('/accounting?tab=bank-recon') });
-      if (!isHidden('/accounting/budget-planning'))    finOpsItems.push({ id: 'accounting-budget-plan',   title: 'Budget Planning',      url: '/accounting?tab=budget-planning',      icon: PiggyBank,   priority: 2,  isPinned: isPinned('/accounting?tab=budget-planning') });
-      if (!isHidden('/accounting/budget-variance'))    finOpsItems.push({ id: 'accounting-budget-var',    title: 'Budget vs Actual',     url: '/accounting?tab=budget-variance',      icon: BarChart3,   priority: 3,  isPinned: isPinned('/accounting?tab=budget-variance') });
-      if (!isHidden('/accounting/annual-budget'))      finOpsItems.push({ id: 'accounting-annual-bud',    title: 'Annual Budget',        url: '/accounting?tab=annual-budget',        icon: PiggyBank,   priority: 4,  isPinned: isPinned('/accounting?tab=annual-budget') });
-      if (!isHidden('/accounting/cash-flow'))          finOpsItems.push({ id: 'accounting-cash-flow',     title: 'Cash Flow',            url: '/accounting?tab=cash-flow',            icon: TrendingUp,  priority: 5,  isPinned: isPinned('/accounting?tab=cash-flow') });
-      if (!isHidden('/accounting/cash-flow-forecast')) finOpsItems.push({ id: 'accounting-cashflow-fc',  title: 'Cash Flow Forecast',   url: '/accounting?tab=cash-flow-forecast',   icon: TrendingUp,  priority: 6,  isPinned: isPinned('/accounting?tab=cash-flow-forecast') });
-      if (!isHidden('/accounting/fixed-assets'))       finOpsItems.push({ id: 'accounting-fixed-assets',  title: 'Fixed Assets',         url: '/accounting?tab=fixed-assets',         icon: Package,     priority: 7,  isPinned: isPinned('/accounting?tab=fixed-assets') });
-      if (!isHidden('/accounting/gl-bridge'))          finOpsItems.push({ id: 'accounting-gl-bridge',     title: 'GL Bridge Engine',     url: '/accounting?tab=gl-bridge',            icon: Zap,         priority: 8,  isPinned: isPinned('/accounting?tab=gl-bridge') });
-      if (!isHidden('/accounting/bank-statement-import')) finOpsItems.push({ id: 'accounting-bank-import', title: 'Bank Statement Import', url: '/accounting?tab=bank-statement-import', icon: Landmark,  priority: 9,  isPinned: isPinned('/accounting?tab=bank-statement-import') });
-      if (finOpsItems.length) groups.push({ id: 'finance-accounting-ops', label: 'Financial Operations', order: 5.51, items: finOpsItems, parentGroup: 'accounting' } as any);
-
-      // ── 3. Procurement & P2P ────────────────────────────────────────────────
-      const p2pItems: MenuGroup['items'] = [];
-      if (!isHidden('/accounting/vendors'))                 p2pItems.push({ id: 'accounting-vendors',      title: 'Vendor Registry',         url: '/accounting?tab=vendors',               icon: Building2,    priority: 1, isPinned: isPinned('/accounting?tab=vendors') });
-      if (!isHidden('/accounting/purchase-requisitions'))   p2pItems.push({ id: 'accounting-pr',           title: 'Purchase Requisitions',   url: '/accounting?tab=purchase-requisitions', icon: Receipt,      priority: 2, isPinned: isPinned('/accounting?tab=purchase-requisitions') });
-      if (!isHidden('/accounting/purchase-orders'))         p2pItems.push({ id: 'accounting-po',           title: 'Purchase Orders',         url: '/accounting?tab=purchase-orders',       icon: ShoppingCart, priority: 3, isPinned: isPinned('/accounting?tab=purchase-orders') });
-      if (!isHidden('/accounting/grn'))                     p2pItems.push({ id: 'accounting-grn',          title: 'Goods Receipt Notes',     url: '/accounting?tab=grn',                   icon: Package,      priority: 4, isPinned: isPinned('/accounting?tab=grn') });
-      if (!isHidden('/accounting/ap-invoices'))              p2pItems.push({ id: 'accounting-ap-inv',       title: 'AP Invoices',             url: '/accounting?tab=ap-invoices',           icon: FileText,     priority: 5, isPinned: isPinned('/accounting?tab=ap-invoices') });
-      if (!isHidden('/accounting/cheque-register'))          p2pItems.push({ id: 'accounting-cheque',       title: 'Cheque Register',         url: '/accounting?tab=cheque-register',       icon: CreditCard,   priority: 6, isPinned: isPinned('/accounting?tab=cheque-register') });
-      if (!isHidden('/accounting/ap-aging'))                 p2pItems.push({ id: 'accounting-ap-aging',     title: 'AP Aging',                url: '/accounting?tab=ap-aging',              icon: Clock,        priority: 7, isPinned: isPinned('/accounting?tab=ap-aging') });
-      if (!isHidden('/accounting/expense-reports'))          p2pItems.push({ id: 'accounting-exp-reports',  title: 'Expense Reports',         url: '/accounting?tab=expense-reports',       icon: Receipt,      priority: 8, isPinned: isPinned('/accounting?tab=expense-reports') });
-      if (p2pItems.length) groups.push({ id: 'finance-accounting-p2p', label: 'Procurement & P2P', order: 5.52, items: p2pItems, parentGroup: 'accounting' } as any);
-
-      // ── 4. Controls & Compliance ────────────────────────────────────────────
-      const controlsItems: MenuGroup['items'] = [];
-      if (!isHidden('/accounting/period-close'))        controlsItems.push({ id: 'accounting-period-close', title: 'Period Close',         url: '/accounting?tab=period-close',         icon: Lock,           priority: 1, isPinned: isPinned('/accounting?tab=period-close') });
-      if (!isHidden('/accounting/budget-encumbrance'))  controlsItems.push({ id: 'accounting-encumbrance',  title: 'Budget Encumbrance',   url: '/accounting?tab=budget-encumbrance',   icon: Wallet,         priority: 2, isPinned: isPinned('/accounting?tab=budget-encumbrance') });
-      if (!isHidden('/accounting/funds'))               controlsItems.push({ id: 'accounting-funds',         title: 'Funds',                url: '/accounting?tab=funds',                icon: Landmark,       priority: 3, isPinned: isPinned('/accounting?tab=funds') });
-      if (!isHidden('/accounting/multi-currency'))      controlsItems.push({ id: 'accounting-multi-curr',   title: 'Multi-Currency',        url: '/accounting?tab=multi-currency',       icon: ArrowLeftRight, priority: 4, isPinned: isPinned('/accounting?tab=multi-currency') });
-      if (!isHidden('/accounting/tax'))                 controlsItems.push({ id: 'accounting-tax',           title: 'Tax Management',       url: '/accounting?tab=tax',                  icon: Receipt,        priority: 5, isPinned: isPinned('/accounting?tab=tax') });
-      if (!isHidden('/accounting/analytic-plans'))      controlsItems.push({ id: 'accounting-analytic',      title: 'Analytic Plans',       url: '/accounting?tab=analytic-plans',       icon: BarChart3,      priority: 6, isPinned: isPinned('/accounting?tab=analytic-plans') });
-      if (acctAuditAccess && !isHidden('/accounting/donor-reports')) controlsItems.push({ id: 'accounting-donor', title: 'Donor Fund Reports', url: '/accounting?tab=donor-reports',  icon: Heart,          priority: 7, isPinned: isPinned('/accounting?tab=donor-reports') });
-      if (!isHidden('/accounting/sod'))                 controlsItems.push({ id: 'accounting-sod',           title: 'Segregation of Duties',url: '/accounting?tab=sod',                  icon: ShieldCheck,    priority: 8, isPinned: isPinned('/accounting?tab=sod') });
-      if (!isHidden('/accounting/aml'))                 controlsItems.push({ id: 'accounting-aml',           title: 'AML & Compliance',     url: '/accounting?tab=aml',                  icon: ShieldAlert,    priority: 9, isPinned: isPinned('/accounting?tab=aml') });
-      if (controlsItems.length) groups.push({ id: 'finance-accounting-controls', label: 'Controls & Compliance', order: 5.53, items: controlsItems, parentGroup: 'accounting' } as any);
-
-      // ── 5. Advanced & Reporting ─────────────────────────────────────────────
-      const advancedItems: MenuGroup['items'] = [];
-      if (!isHidden('/accounting/grants'))             advancedItems.push({ id: 'accounting-grants',       title: 'Grant Tracking',       url: '/accounting?tab=grants',               icon: Award,       priority: 1, isPinned: isPinned('/accounting?tab=grants') });
-      if (!isHidden('/accounting/cost-allocation'))    advancedItems.push({ id: 'accounting-cost-alloc',  title: 'Cost Allocation',      url: '/accounting?tab=cost-allocation',      icon: Zap,         priority: 2, isPinned: isPinned('/accounting?tab=cost-allocation') });
-      if (!isHidden('/accounting/consolidation'))      advancedItems.push({ id: 'accounting-consolidate', title: 'Consolidation',        url: '/accounting?tab=consolidation',        icon: Building2,   priority: 3, isPinned: isPinned('/accounting?tab=consolidation') });
-      if (!isHidden('/accounting/gl-audit'))           advancedItems.push({ id: 'accounting-gl-audit',    title: 'GL Bridge Audit',      url: '/accounting?tab=gl-audit',             icon: Activity,    priority: 4, isPinned: isPinned('/accounting?tab=gl-audit') });
-      if (!isHidden('/accounting/finance-audit-trail'))advancedItems.push({ id: 'accounting-audit-trail', title: 'Finance Audit Trail',  url: '/accounting?tab=finance-audit-trail',  icon: ScrollText,  priority: 5, isPinned: isPinned('/accounting?tab=finance-audit-trail') });
-      if (!isHidden('/accounting/intercompany'))       advancedItems.push({ id: 'accounting-intercompany',title: 'Intercompany',         url: '/accounting?tab=intercompany',         icon: ArrowLeftRight, priority: 6, isPinned: isPinned('/accounting?tab=intercompany') });
-      if (!isHidden('/accounting/settings'))           advancedItems.push({ id: 'accounting-settings',    title: 'Accounting Settings',  url: '/accounting?tab=settings',             icon: Settings,    priority: 7, isPinned: isPinned('/accounting?tab=settings') });
-      if (advancedItems.length) groups.push({ id: 'finance-accounting-advanced', label: 'Advanced & Reporting', order: 5.54, items: advancedItems, parentGroup: 'accounting' } as any);
+    if (acctAccess && !isHidden('/accounting')) {
+      groups.push({
+        id: 'finance-accounting',
+        label: 'Accounting',
+        order: 5.50,
+        items: [{ id: 'accounting-hub', title: 'Accounting', url: '/accounting', icon: BookOpen, priority: 1, isPinned: isPinned('/accounting') }],
+        parentGroup: 'accounting',
+      } as any);
     }
 
-    // â”€â”€ 7. HR & People â€” logical flow: Employees â†’ Payroll â†’ Retainer â†’ Leave â†’ Analytics â†’ My Payslip â”€â”€
+    // ── HR & People — Employees (standalone) + HR Hub (tabs inside hub) ──────
     const hrItems: MenuGroup['items'] = [];
-    const hrAdminAccess = isSuperAdmin || isAdmin || isFinancialAdmin || isSeniorManagement;
     const hrStrictAccess = isSuperAdmin || isAdmin;
-    // 1. Employees — admin & super admin only
     if (!isHidden('/employees') && hrStrictAccess) {
       hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 1, isPinned: isPinned('/employees') });
     }
-    // 2. HR Hub — full hub with all sections (admin only)
-    if (!isHidden('/hr') && hrAdminAccess) {
+    // One HR entry for anyone who can open /hr (self-service tabs live in the hub)
+    if (!isHidden('/hr')) {
       hrItems.push({ id: 'hr-hub', title: "HR Hub", url: "/hr", icon: Briefcase, priority: 2, isPinned: isPinned('/hr') });
     }
-    // 3. My Payslip — personal payslip for every staff member
-    if (!isHidden('/hr')) {
-      hrItems.push({ id: 'my-payslip', title: "My Payslip", url: "/hr?tab=payroll", icon: Receipt, priority: 3, isPinned: false });
-    }
-    // 4. Leave Requests — all staff submit; admins approve
-    if (!isHidden('/hr')) {
-      hrItems.push({ id: 'leave-requests', title: "Leave Requests", url: "/hr?tab=leave-requests", icon: CalendarOff, priority: 4, isPinned: false });
-    }
-    // 5. Timesheet — daily work log for all staff
-    if (!isHidden('/hr')) {
-      hrItems.push({ id: 'timesheet', title: "Timesheet", url: "/hr?tab=timesheet", icon: ClipboardCheck, priority: 5, isPinned: false });
-    }
-    const hrAdminItems = hrItems.filter(i => ['employees','hr-hub'].includes(i.id));
-    const hrSelfItems  = hrItems.filter(i => ['my-payslip','leave-requests','timesheet'].includes(i.id));
-    if (hrAdminItems.length) groups.push({ id: 'hr-admin',        label: 'People Management', order: 5.61, items: hrAdminItems, parentGroup: 'hr' } as any);
-    if (hrSelfItems.length)  groups.push({ id: 'hr-self-service', label: 'My HR',             order: 5.62, items: hrSelfItems,  parentGroup: 'hr' } as any);
+    if (hrItems.length) groups.push({ id: 'hr-admin', label: 'People', order: 5.61, items: hrItems, parentGroup: 'hr' } as any);
 
     // â”€â”€ 8. CRM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const crmItems: MenuGroup['items'] = [];
@@ -804,13 +647,28 @@
     const navigate = useNavigate();
     const { currentUser, logout, roles } = useAppContext();
     const { showDueReminders } = useSiteVisitReminders();
-    const { state } = useSidebar();
+    const { state, isMobile, setOpenMobile } = useSidebar();
     const isSidebarCollapsed = state === 'collapsed';
+    useEffect(() => {
+      if (isMobile) setOpenMobile(false);
+    }, [pathname, search, isMobile, setOpenMobile]);
     const { isSuperAdmin: realIsSuperAdmin } = useSuperAdmin();
     const { viewAs, setViewAs, clearViewAs, openPickerRequest, clearOpenPickerRequest } = useViewAs();
-    // When in view-as mode, override SA flag and treat current roles as the viewed role only
-    const isSuperAdmin = viewAs ? (viewAs.role === 'superAdmin' || viewAs.role === 'super_admin') : realIsSuperAdmin;
     const { userSettings, updateMenuPreferences, menuPreferences: contextMenuPrefs } = useSettings();
+
+    const effectiveAccessUserId = viewAs?.mode === 'user' ? viewAs.userId : (viewAs ? undefined : currentUser?.id);
+    // Fetch whenever the super_admins table flag is off so a profile-role
+    // Super Admin (not yet in super_admins) still gets a real SA nav.
+    const { data: currentAccessManifest } = useCurrentUserAccessManifest(
+      !!currentUser?.id && (!!viewAs || !realIsSuperAdmin),
+    );
+    // Match useAuthorization: table SA OR assigned/profile superAdmin role.
+    const isSuperAdmin = viewAs
+      ? (viewAs.role === 'superAdmin' || viewAs.role === 'super_admin')
+      : (realIsSuperAdmin || (currentAccessManifest?.roles ?? []).some(r => {
+          const n = String(r ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          return n === 'superadmin';
+        }));
 
     // View As picker state
     const [viewAsOpen, setViewAsOpen] = useState(false);
@@ -820,6 +678,21 @@
     const [viewAsUserSelected, setViewAsUserSelected] = useState<{ id: string; full_name: string; role: string } | null>(null);
     const [viewAsUsers, setViewAsUsers] = useState<{ id: string; full_name: string; email: string; role: string }[]>([]);
     const [viewAsUsersLoading, setViewAsUsersLoading] = useState(false);
+
+    const { data: activeRoles = [] } = useQuery({
+      queryKey: ['view-as-active-roles'],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('roles')
+          .select('name, display_name, description')
+          .eq('is_active', true)
+          .order('display_name');
+        if (error) throw error;
+        return (data ?? []) as { name: string; display_name: string | null; description: string | null }[];
+      },
+      enabled: realIsSuperAdmin && viewAsOpen,
+      staleTime: 60_000,
+    });
 
     // Check if non-super-admin user has been explicitly granted monitoring page access
     // Uses a SECURITY DEFINER RPC to bypass RLS (direct table query blocked for non-admins)
@@ -847,14 +720,6 @@
       openViewAsDialog();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openPickerRequest]);
-
-    const effectiveAccessUserId = viewAs?.mode === 'user' ? viewAs.userId : (viewAs ? undefined : currentUser?.id);
-    // For the signed-in user, access inputs arrive from one server-derived
-    // endpoint. View As intentionally retains the admin-only fallback queries:
-    // a preview must never pretend to be another user's authenticated session.
-    const { data: currentAccessManifest } = useCurrentUserAccessManifest(
-      !!currentUser?.id && !viewAs && !isSuperAdmin,
-    );
 
     // Fetch this user's page_access_overrides so that manually granted pages
     // appear in the sidebar even when the role-based check would deny them.
@@ -954,9 +819,14 @@
 
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
       try {
-        const stored = localStorage.getItem('pact-sidebar-collapsed');
+        const stored = localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY);
         if (stored !== null) {
           const parsed: string[] = JSON.parse(stored);
+          // Add the new disclosure once without resetting existing section choices.
+          if (localStorage.getItem('pact-sidebar-workspace-more-initialized') !== 'true') {
+            parsed.push('workspace-more');
+            localStorage.setItem('pact-sidebar-workspace-more-initialized', 'true');
+          }
           return new Set(parsed);
         }
       } catch {}
@@ -995,7 +865,6 @@
     const pendingTier2CostCount = counts.pendingTier2Cost;
     const pendingFinanceCount = counts.pendingFinanceDp;
     const unreadNotifCount = counts.unreadNotifications;
-    const openIncidentCount = counts.openIncidents;
     const pendingVerificationCount = counts.pendingVerification;
     const pendingWalletCount = counts.pendingWallet;
     const myTasksOverdueCount = counts.myTasksOverdue;
@@ -1126,9 +995,9 @@
     // reference every render, making menuGroups and the useEffect(menuGroups)
     // fire on every render, creating a continuous sidebar flicker.
     const menuGroups = useMemo(() => {
-      // Signed-in navigation has one registry/evaluator. Workflow role checks
-      // below are retained solely for the separate administrator preview.
-      if (!viewAs && !isSuperAdmin) {
+      // Navigation (including View As previews) has one registry/evaluator,
+      // fed by the signed-in or previewed manifest.
+      if (!isSuperAdmin) {
         if (!currentAccessManifest) return [];
         const groups: Array<MenuGroup & { parentGroup: string }> = [];
         for (const page of getManifestNavigationPages(currentAccessManifest)) {
@@ -1161,7 +1030,7 @@
       const isSMTUser = smtCandidates.some(r => /^(smt)$/i.test(String(r ?? '').trim()));
       const SMT_ALLOW = new Set([
         '/dashboard', '/my-tasks', '/my-projects', '/calendar', '/notifications',
-        '/programme-hub', '/projects', '/portfolio', '/programme-hub?tab=portfolio',
+        '/programme-hub', '/projects', '/portfolio',
       ]);
       const isSmtAllowedUrl = (url: string) =>
         SMT_ALLOW.has(url) || SMT_ALLOW.has(url.split('?')[0]);
@@ -1226,6 +1095,7 @@
         for (const [slug, configuredRoles] of Object.entries(sidebarRoleConfigs)) {
           const pageDef = getPageDefinition(slug);
           if (!pageDef || !isAllowedPage(slug, pageDef.path)) continue;
+          if (isHubTabNavigationPath(pageDef.path)) continue;
           if (isSMTUser && !isSmtAllowedUrl(pageDef.path)) continue;
           const alreadyExists = groups.some(group => group.items.some(item => item.url === pageDef.path));
           if (!alreadyExists) {
@@ -1252,6 +1122,9 @@
           if (isBlocked) {
             // Remove this item from whichever group contains it
             groups.forEach(g => { g.items = g.items.filter(item => item.url !== pageDef.path); });
+          } else if (isHubTabNavigationPath(pageDef.path)) {
+            // Hub tabs stay inside HubLayout — do not inject as sidebar leaves
+            continue;
           } else {
             // Ensure this item exists in its group (add if missing)
             const navigationGroup = getPageNavigationGroup(pageDef.group);
@@ -1314,20 +1187,25 @@
         } else {
           next.add(groupId);
         }
-        try { localStorage.setItem('pact-sidebar-collapsed', JSON.stringify([...next])); } catch {}
+        try { localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, JSON.stringify([...next])); } catch {}
         return next;
       });
     };
 
-    // Keep the section for the current page expanded
+    // Keep only the section for the current page expanded
     useEffect(() => {
       if (!menuGroups.length) return;
       const toExpand = new Set<string>();
       menuGroups.forEach((group: MenuGroup & { parentGroup?: string }) => {
-        if (group.items.some(item => isNavPathActive(pathname, search, item.url))) {
+        const activeItem = group.items.find(item => isNavPathActive(pathname, search, item.url));
+        if (activeItem) {
           toExpand.add(group.id);
           if ((group as { parentGroup?: string }).parentGroup) {
-            toExpand.add(`${(group as { parentGroup?: string }).parentGroup!}-parent`);
+            const parent = (group as { parentGroup?: string }).parentGroup!;
+            toExpand.add(`${parent}-parent`);
+            if (parent === 'workspace' && !WORKSPACE_PRIMARY_PATHS.has(activeItem.url)) {
+              toExpand.add('workspace-more');
+            }
           }
         }
       });
@@ -1339,10 +1217,10 @@
           if (next.has(id)) { next.delete(id); changed = true; }
         });
         if (!changed) return prev;
-        try { localStorage.setItem('pact-sidebar-collapsed', JSON.stringify([...next])); } catch {}
+        try { localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, JSON.stringify([...next])); } catch {}
         return next;
       });
-    }, [pathname, menuGroups]);
+    }, [pathname, search, menuGroups]);
 
     const getInitials = (name: string) =>
       name.split(" ").map((part) => part[0]).join("").toUpperCase().substring(0, 2);
@@ -1427,28 +1305,26 @@
 
     return (
       <>
-        <Sidebar collapsible="offcanvas" className="border-r border-slate-200/80 bg-white dark:border-gray-800 dark:bg-slate-950">
+        <Sidebar collapsible="offcanvas" className="border-r border-border bg-card dark:bg-slate-950">
 
-        {/* h-14 matches the Navbar so the logo sits on the header's baseline. No
-            border-b: the Navbar's rule stops at the sidebar divider, leaving this
-            one unbroken full-height panel — the Workspace Hub's connected look. */}
+        {/* h-14 matches the Navbar so the logo sits on the header's baseline. */}
         <SidebarHeader className="px-3 py-0">
           <div className="flex h-14 items-center gap-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
             <img src={Logo} alt="PACT Logo" className="h-8 w-8 shrink-0 object-contain" />
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate group-data-[collapsible=icon]:hidden">
+            <span className="text-sm font-semibold tracking-tight text-foreground truncate group-data-[collapsible=icon]:hidden">
               PACT
             </span>
             <SidebarTrigger
-              className="ml-auto h-7 w-7 shrink-0 rounded-md text-slate-500 hover:text-slate-700 dark:text-slate-400 group-data-[collapsible=icon]:hidden"
+              className="ml-auto h-7 w-7 shrink-0 rounded-md text-foreground/55 hover:text-foreground group-data-[collapsible=icon]:hidden"
               data-testid="button-sidebar-trigger"
             />
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="px-2 pt-3 pb-2 gap-0.5">
+        <SidebarContent className="px-2 pt-2 pb-2 gap-0">
           {favoriteItems.length > 0 && (
             <Collapsible open={!isFavoritesCollapsed}>
-              <SidebarGroup className={cn(SIDEBAR_GROUP_SHELL, "pb-2")}>
+              <SidebarGroup className={cn(SIDEBAR_GROUP_SHELL, "pb-1")}>
                 <CollapsibleTrigger asChild>
                   <SidebarGroupLabel
                     className={cn(SIDEBAR_GROUP_LABEL, SIDEBAR_SECTION_LABEL)}
@@ -1459,15 +1335,15 @@
                     }}
                     data-testid="group-label-favorites"
                   >
+                    <Star className="h-3.5 w-3.5 fill-[#B94B13] text-[#B94B13] shrink-0" />
+                    <span className="flex-1 truncate normal-case tracking-normal">Favorites</span>
+                    <span className="text-[10px] font-normal tabular-nums text-foreground/40">{favoriteItems.length}</span>
                     <ChevronDown
                       className={cn(
-                        "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                        "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
                         isFavoritesCollapsed && "-rotate-90"
                       )}
                     />
-                    <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500 shrink-0" />
-                    <span className="flex-1 truncate">Favorites</span>
-                    <span className="text-[10px] font-normal tabular-nums opacity-60">{favoriteItems.length}</span>
                   </SidebarGroupLabel>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -1497,24 +1373,24 @@
           )}
 
           {(() => {
-            // ── Section config: parentGroup value → display config ──────────────
-            type SectionCfg = { label: string; Icon: React.ElementType; labelClass: string; iconColor: string };
+            // Section icons share one quiet brand treatment; active links carry emphasis.
+            type SectionCfg = { label: string; Icon: React.ElementType; iconColor: string };
             const SECTION_CFG: Record<string, SectionCfg> = {
-              'workspace':     { label: 'My Workspace',             Icon: LayoutDashboard, labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-indigo-500 dark:text-indigo-400'  },
-              'programme':     { label: 'Programme Management',     Icon: FolderKanban,    labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-blue-500 dark:text-blue-400'      },
-              'incentives':    { label: 'Incentive Bonuses',        Icon: Award,           labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-amber-500 dark:text-amber-400'    },
-              'comms':         { label: 'Communication',            Icon: MessageSquare,   labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-emerald-500 dark:text-emerald-400'},
-              'fieldops':      { label: 'Field Operations',         Icon: Activity,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-orange-500 dark:text-orange-400'  },
-              'coordination':  { label: 'Coordination & Oversight', Icon: Network,         labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-purple-500 dark:text-purple-400'  },
-              'finance':       { label: 'Payments & Finance',       Icon: Banknote,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-green-500 dark:text-green-400'    },
-              'accounting':    { label: 'Accounting',               Icon: BookOpen,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-teal-500 dark:text-teal-400'      },
-              'hr':            { label: 'HR & People',              Icon: Users,           labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-pink-500 dark:text-pink-400'      },
-              'crm':           { label: 'CRM',                      Icon: Handshake,       labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-violet-500 dark:text-violet-400'  },
-              'surveys':       { label: 'Surveys',                  Icon: ClipboardList,   labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-cyan-500 dark:text-cyan-400'      },
-              'analytics':     { label: 'Analytics & Reports',      Icon: BarChart3,       labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-purple-500 dark:text-purple-400'  },
-              'admin':         { label: 'Administration',           Icon: Settings,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-slate-500 dark:text-slate-400'    },
-              'help':          { label: 'Help & Support',           Icon: HelpCircle,      labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-slate-500 dark:text-slate-400'    },
-              'superadmin':    { label: 'Super Admin',              Icon: ShieldCheck,     labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-rose-500 dark:text-rose-400'      },
+              'workspace':     { label: 'Workspace',      Icon: LayoutDashboard, iconColor: SIDEBAR_ICON_MUTED },
+              'programme':     { label: 'Programme',      Icon: FolderKanban,    iconColor: SIDEBAR_ICON_MUTED },
+              'incentives':    { label: 'Bonuses',        Icon: Award,           iconColor: SIDEBAR_ICON_MUTED },
+              'comms':         { label: 'Communication',  Icon: MessageSquare,   iconColor: SIDEBAR_ICON_MUTED },
+              'fieldops':      { label: 'Field Ops',      Icon: Activity,        iconColor: SIDEBAR_ICON_MUTED },
+              'coordination':  { label: 'Coordination',   Icon: Network,         iconColor: SIDEBAR_ICON_MUTED },
+              'finance':       { label: 'Finance',        Icon: Banknote,        iconColor: SIDEBAR_ICON_MUTED },
+              'accounting':    { label: 'Accounting',     Icon: BookOpen,        iconColor: SIDEBAR_ICON_MUTED },
+              'hr':            { label: 'HR & People',    Icon: Users,           iconColor: SIDEBAR_ICON_MUTED },
+              'crm':           { label: 'CRM',            Icon: Handshake,       iconColor: SIDEBAR_ICON_MUTED },
+              'surveys':       { label: 'Surveys',        Icon: ClipboardList,   iconColor: SIDEBAR_ICON_MUTED },
+              'analytics':     { label: 'Analytics',      Icon: BarChart3,       iconColor: SIDEBAR_ICON_MUTED },
+              'admin':         { label: 'Administration', Icon: Settings,        iconColor: SIDEBAR_ICON_MUTED },
+              'help':          { label: 'Help',           Icon: HelpCircle,      iconColor: SIDEBAR_ICON_MUTED },
+              'superadmin':    { label: 'Super Admin',    Icon: ShieldCheck,     iconColor: SIDEBAR_ICON_MUTED },
             };
 
             // Group sub-groups by parentGroup; track min order for sorting sections
@@ -1534,7 +1410,7 @@
               count > 0 ? (
                 <span
                   className={cn(
-                    "ml-auto shrink-0 inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-white text-[9px] font-bold leading-none",
+                    "ml-auto shrink-0 inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-md text-[10px] font-semibold tabular-nums leading-none",
                     className
                   )}
                   data-testid={testId}
@@ -1543,10 +1419,9 @@
                 </span>
               ) : null;
 
-            // Two-tier badge vocabulary: red = a queue waiting on the user's
-            // action, blue = informational unread count. One hue per meaning.
-            const BADGE_ACTION = "bg-red-500";
-            const BADGE_INFO = "bg-blue-600";
+            // Action queue vs informational unread
+            const BADGE_ACTION = "bg-[#B94B13] text-white";
+            const BADGE_INFO = "bg-[#273677] text-white";
             const renderItemBadge = (itemId: string) => {
               switch (itemId) {
                 case 'approvals-hub':
@@ -1572,9 +1447,6 @@
                   return <NavCountBadge count={pendingFinanceCount} className={BADGE_ACTION} testId="badge-finance-approval-count" />;
                 case 'notifications':
                   return <NavCountBadge count={unreadNotifCount} className={BADGE_INFO} testId="badge-notifications-unread-count" />;
-                case 'incident-reports':
-                case 'safety-hub':
-                  return <NavCountBadge count={openIncidentCount} className={BADGE_ACTION} testId="badge-incident-count" />;
                 case 'my-wallet':
                   return <NavCountBadge count={pendingWalletCount} className={BADGE_ACTION} testId="badge-wallet-pending-count" />;
                 case 'my-tasks':
@@ -1586,177 +1458,123 @@
               }
             };
 
-            const renderMenuItems = (items: MenuGroup['items'], nested = false, iconColor = 'text-slate-500 dark:text-slate-400') => {
-              if (nested) {
-                return (
-                  <SidebarMenuSub className="mx-2 gap-0.5 border-l border-slate-200/80 dark:border-gray-700">
-                    {items.map((item) => {
-                      const isActive = isNavPathActive(pathname, search, item.url);
-                      const isItemFavorite = isFavorite(item.url);
-                      return (
-                        <SidebarMenuSubItem key={item.id} className="group/subitem relative">
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={isActive}
+            // Flat list under each section — no nested Personal/Team/Tools accordions
+            const renderMenuItems = (items: MenuGroup['items'], sectionIconColor = SIDEBAR_ICON_MUTED) => (
+              <SidebarMenu className="gap-0.5 px-0.5">
+                {items.map((item, itemIndex) => {
+                  const isActive = isNavPathActive(pathname, search, item.url);
+                  const isItemFavorite = isFavorite(item.url);
+                  return (
+                    <SidebarMenuItem key={item.id} index={itemIndex}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        tooltip={item.title}
+                        className={cn(
+                          SIDEBAR_NAV_ITEM,
+                          isActive
+                            ? "bg-[#273677]/10 text-[#273677] dark:bg-[#AAB7EC]/15 dark:text-[#AAB7EC] font-semibold"
+                            : "text-foreground/85 hover:bg-muted/80 hover:text-foreground",
+                        )}
+                      >
+                        <Link to={item.url} onClick={() => setOpenMobile(false)} className="flex items-center gap-2.5" data-testid={`nav-link-${item.id}`}>
+                          <item.icon
                             className={cn(
-                              SIDEBAR_NAV_SUB_ITEM,
-                              isActive &&
-                                "bg-blue-100 text-blue-700 dark:bg-blue-900/70 dark:text-blue-300 font-semibold"
-                            )}
-                          >
-                            <Link to={item.url} className="flex items-center gap-2 pr-6" data-testid={`nav-link-${item.id}`}>
-                              <item.icon
-                                className={cn(
-                                  "h-3.5 w-3.5 shrink-0",
-                                  isActive
-                                    ? "text-blue-700 dark:text-blue-300"
-                                    : iconColor
-                                )}
-                              />
-                              <span className="flex-1">{item.title}</span>
-                              {renderItemBadge(item.id)}
-                            </Link>
-                          </SidebarMenuSubButton>
-                          <button
-                            className={cn(
-                              "absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center rounded transition-opacity",
-                              isItemFavorite
-                                ? "opacity-100"
-                                : "opacity-0 group-hover/subitem:opacity-100"
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              toggleFavorite(item.url, item.title, item.icon?.name || 'Star');
-                            }}
-                            aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                            data-testid={`button-favorite-${item.id}`}
-                          >
-                            <Star
-                              className={cn(
-                                "h-3 w-3",
-                                isItemFavorite
-                                  ? "text-amber-500 fill-amber-500"
-                                  : "text-muted-foreground"
-                              )}
-                            />
-                          </button>
-                        </SidebarMenuSubItem>
-                      );
-                    })}
-                  </SidebarMenuSub>
-                );
-              }
-
-              return (
-                <SidebarMenu className="gap-0.5 px-0.5">
-                  {items.map((item, itemIndex) => {
-                    const isActive = isNavPathActive(pathname, search, item.url);
-                    const isItemFavorite = isFavorite(item.url);
-                    return (
-                      <SidebarMenuItem key={item.id} index={itemIndex}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={isActive}
-                          tooltip={item.title}
-                          className={cn(
-                            SIDEBAR_NAV_ITEM,
-                            isActive &&
-                              "bg-blue-100 text-blue-700 dark:bg-blue-900/70 dark:text-blue-300 font-semibold shadow-sm border border-blue-200/60 dark:border-blue-800/50"
-                          )}
-                        >
-                          <Link to={item.url} className="flex items-center gap-2.5" data-testid={`nav-link-${item.id}`}>
-                            <item.icon
-                              className={cn(
-                                "h-4 w-4 shrink-0",
-                                isActive
-                                  ? "text-blue-700 dark:text-blue-300"
-                                  : iconColor
-                              )}
-                            />
-                            <span className="flex-1">{item.title}</span>
-                            {renderItemBadge(item.id)}
-                          </Link>
-                        </SidebarMenuButton>
-                        <SidebarMenuAction
-                          showOnHover={!isItemFavorite}
-                          className={isItemFavorite ? "opacity-100" : undefined}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFavorite(item.url, item.title, item.icon?.name || 'Star');
-                          }}
-                          aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                          data-testid={`button-favorite-${item.id}`}
-                        >
-                          <Star
-                            className={cn(
-                              "h-3.5 w-3.5",
-                              isItemFavorite
-                                ? "text-amber-500 fill-amber-500"
-                                : "text-muted-foreground"
+                              "h-4 w-4 shrink-0",
+                              isActive ? SIDEBAR_ICON_ACTIVE : sectionIconColor,
                             )}
                           />
-                        </SidebarMenuAction>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              );
-            };
-
-            const renderSubGroups = (subGroups: SubGroup[], iconColor = 'text-slate-500 dark:text-slate-400') =>
-              subGroups.sort((a, b) => a.order - b.order).map(subGroup => {
-                const isSubCollapsed = collapsedGroups.has(subGroup.id);
-                return (
-                  <Collapsible key={subGroup.id} open={!isSubCollapsed}>
-                    <CollapsibleTrigger asChild>
-                      <button
-                        type="button"
-                        className="w-full min-h-7 py-1 px-3 text-[11px] font-medium leading-snug text-muted-foreground cursor-pointer flex items-center gap-2 rounded-md hover:bg-muted/50 transition-colors"
-                        onClick={() => toggleGroupCollapse(subGroup.id)}
-                        data-testid={`group-label-${subGroup.id}`}
+                          <span className="flex-1 truncate">{item.title}</span>
+                          {renderItemBadge(item.id)}
+                        </Link>
+                      </SidebarMenuButton>
+                      <SidebarMenuAction
+                        showOnHover={!isItemFavorite}
+                        className={isItemFavorite ? "opacity-100" : undefined}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(item.url, item.title, item.icon?.name || 'Star');
+                        }}
+                        aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                        data-testid={`button-favorite-${item.id}`}
                       >
-                        <ChevronDown
+                        <Star
                           className={cn(
-                            "h-3 w-3 shrink-0 transition-transform duration-200",
-                            isSubCollapsed && "-rotate-90"
+                            "h-3.5 w-3.5",
+                            isItemFavorite
+                              ? "text-[#B94B13] fill-[#B94B13]"
+                              : "text-muted-foreground"
                           )}
                         />
-                        <span className="flex-1 text-left">{subGroup.label}</span>
-                        <span className="text-[10px] tabular-nums opacity-50">{subGroup.items.length}</span>
-                      </button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      {renderMenuItems(subGroup.items, true, iconColor)}
-                    </CollapsibleContent>
-                  </Collapsible>
-                );
-              });
+                      </SidebarMenuAction>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            );
 
-            // ── Generic section renderer (works for all sections) ──────────────
+            const flattenSectionItems = (subGroups: SubGroup[]): MenuGroup['items'] => {
+              const seen = new Set<string>();
+              const flat: MenuGroup['items'] = [];
+              [...subGroups].sort((a, b) => a.order - b.order).forEach(sg => {
+                [...sg.items].sort((a, b) => a.priority - b.priority).forEach(item => {
+                  if (seen.has(item.url)) return;
+                  seen.add(item.url);
+                  flat.push(item);
+                });
+              });
+              return flat;
+            };
+
             const renderSection = (parentGroupId: string, subGroups: SubGroup[], keySuffix = '') => {
               const cfg = SECTION_CFG[parentGroupId];
               if (!cfg || subGroups.length === 0) return null;
               const parentKey = `${parentGroupId}-parent`;
               const isCollapsed = collapsedGroups.has(parentKey);
-              const { label, Icon, labelClass, iconColor } = cfg;
+              const { label, Icon, iconColor } = cfg;
+              const items = flattenSectionItems(subGroups);
+              if (items.length === 0) return null;
+              const primaryWorkspaceItems = parentGroupId === 'workspace'
+                ? items.filter(item => WORKSPACE_PRIMARY_PATHS.has(item.url))
+                : items;
+              const moreWorkspaceItems = parentGroupId === 'workspace'
+                ? items.filter(item => !WORKSPACE_PRIMARY_PATHS.has(item.url))
+                : [];
+              const moreWorkspaceCollapsed = collapsedGroups.has('workspace-more');
               return (
                 <Collapsible key={`${parentKey}${keySuffix}`} open={!isCollapsed}>
                   <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
                     <CollapsibleTrigger asChild>
                       <SidebarGroupLabel
-                        className={cn(SIDEBAR_GROUP_LABEL, labelClass)}
+                        className={cn(SIDEBAR_GROUP_LABEL, SIDEBAR_SECTION_LABEL)}
                         onClick={() => toggleGroupCollapse(parentKey)}
                         data-testid={`group-label-${parentKey}${keySuffix}`}
                       >
-                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isCollapsed && "-rotate-90")} />
                         <Icon className={cn("h-3.5 w-3.5 shrink-0", iconColor)} />
-                        <span className="flex-1">{label}</span>
+                        <span className="flex-1 truncate">{label}</span>
+                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-150", isCollapsed && "-rotate-90")} />
                       </SidebarGroupLabel>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <SidebarGroupContent className="space-y-1 pt-0.5">
-                        {renderSubGroups(subGroups, iconColor)}
+                      <SidebarGroupContent className="pt-0.5 pb-1">
+                        {renderMenuItems(primaryWorkspaceItems, iconColor)}
+                        {moreWorkspaceItems.length > 0 && (
+                          <Collapsible open={!moreWorkspaceCollapsed}>
+                            <CollapsibleTrigger asChild>
+                              <button
+                                type="button"
+                                onClick={() => toggleGroupCollapse('workspace-more')}
+                                className="mt-1 flex min-h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-medium text-foreground/65 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                aria-label={`${moreWorkspaceCollapsed ? 'Show' : 'Hide'} more workspace links`}
+                              >
+                                <span className="flex-1">More workspace</span>
+                                <span className="tabular-nums text-foreground/40">{moreWorkspaceItems.length}</span>
+                                <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform duration-150', moreWorkspaceCollapsed && '-rotate-90')} />
+                              </button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>{renderMenuItems(moreWorkspaceItems, iconColor)}</CollapsibleContent>
+                          </Collapsible>
+                        )}
                       </SidebarGroupContent>
                     </CollapsibleContent>
                   </SidebarGroup>
@@ -1771,7 +1589,7 @@
           })()}
         </SidebarContent>
 
-        <SidebarFooter className="border-t border-slate-200/70 px-3 py-3">
+        <SidebarFooter className="border-t border-border px-3 py-3">
           {/* View As picker — Super Admins only; always uses real SA status */}
           {realIsSuperAdmin && (
             <div className="mb-2 group-data-[collapsible=icon]:hidden">
@@ -1819,13 +1637,13 @@
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-2.5 px-2.5 py-2 h-11 hover:bg-blue-50 dark:hover:bg-gray-800 rounded-xl group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+                  className="w-full justify-start gap-2.5 px-2.5 py-2 h-11 hover:bg-primary/5 rounded-lg group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
                   data-testid="button-user-menu"
                 >
                   <div className="relative shrink-0">
                     <Avatar className="h-7 w-7">
                       <AvatarImage src={currentUser.avatar} alt={currentUser.fullName || currentUser.name} />
-                      <AvatarFallback className="bg-blue-600 text-white text-[10px]">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-[10px]">
                         {getInitials(currentUser.fullName || currentUser.name)}
                       </AvatarFallback>
                     </Avatar>
@@ -1876,7 +1694,7 @@
 
       </Sidebar>
 
-      {isSidebarCollapsed && (
+      {isSidebarCollapsed && !isMobile && (
         <div className="fixed left-4 top-4 z-50">
           <SidebarTrigger className="h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-gray-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-gray-500 dark:hover:bg-slate-800" />
         </div>
@@ -1922,6 +1740,16 @@
             ],
           },
         ];
+        const listedRoles = new Set(VIEW_AS_ROLE_GROUPS.flatMap(group => group.roles.map(r => r.value)));
+        const otherRoles = activeRoles
+          .filter(r => !listedRoles.has(r.name) && r.name !== 'superAdmin')
+          .map(r => ({ value: r.name, label: r.display_name || r.name, desc: r.description || 'Custom role' }));
+        if (otherRoles.length) {
+          VIEW_AS_ROLE_GROUPS.push({ label: 'Other Roles', color: 'text-slate-700 dark:text-slate-300', roles: otherRoles });
+        }
+        const roleLabelByValue = Object.fromEntries(
+          VIEW_AS_ROLE_GROUPS.flatMap(group => group.roles.map(r => [r.value, r.label])),
+        ) as Record<string, string>;
 
         const ROLE_BADGE_COLOR: Record<string, string> = {
           datacollector: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -2089,12 +1917,7 @@
                     disabled={viewAsTab === 'role' ? !viewAsRoleSelected : !viewAsUserSelected}
                     onClick={() => {
                       if (viewAsTab === 'role' && viewAsRoleSelected) {
-                        const label = {
-                          dataCollector: 'Data Collector', coordinator: 'Coordinator', supervisor: 'Supervisor',
-                          fom: 'Field Ops Manager', countryDirector: 'Country Director', dataTeam: 'Data Team',
-                          financialAdmin: 'Financial Admin', auditor: 'Financial Auditor',
-                          projectManager: 'Project Manager', admin: 'Admin', ict: 'ICT', employee: 'Employee',
-                        }[viewAsRoleSelected] ?? viewAsRoleSelected;
+                        const label = roleLabelByValue[viewAsRoleSelected] ?? viewAsRoleSelected;
                         setViewAs({ mode: 'role', role: viewAsRoleSelected, displayName: label });
                       } else if (viewAsTab === 'user' && viewAsUserSelected) {
                         setViewAs({ mode: 'user', role: viewAsUserSelected.role, userId: viewAsUserSelected.id, displayName: viewAsUserSelected.full_name });

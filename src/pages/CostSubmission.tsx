@@ -60,7 +60,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { PaymentHistoryPanel } from '@/components/financial/PaymentHistoryPanel';
 import { deleteLatestSourcePayment, fetchDeletedPreFundSourcePayments, isActivePreFundSourcePayment, type PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
 import { EmailNotificationService } from '@/services/email-notification.service';
@@ -74,13 +73,21 @@ import { getStatesInHub, normalizeHubId, hubs, getStateName } from '@/data/sudan
 import { getHubAccessInfo, isStateInAnyHub, getAdditionalSupervisorHubIds } from '@/utils/hubAccessControl';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
-const MGMT_ROLES = [
-  'fom', 'field_operation_manager', 'Field Operation Manager (FOM)',
-  'countryDirector', 'country_director', 'CountryDirector',
-  'superAdmin', 'super_admin', 'SuperAdmin',
-  'admin', 'Admin',
-  'financial_admin', 'finance',
-];
+async function fetchPermissionHolderIds(resource: string, actions: string[]): Promise<string[]> {
+  const { data, error } = await supabase.rpc('users_with_resource_permission', { p_resource: resource, p_actions: actions });
+  if (error) throw error;
+  return ((data || []) as Array<{ user_id: string }>).map(r => r.user_id);
+}
+
+async function fetchPaymentRecipients(): Promise<Array<{ id: string; email: string; name: string; role: string }>> {
+  const ids = await fetchPermissionHolderIds('cost_submissions', ['mark_paid']);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from('profiles').select('id, email, full_name, role').in('id', ids);
+  if (error) throw error;
+  return (data || [])
+    .filter(u => u.email)
+    .map(u => ({ id: u.id, email: u.email as string, name: u.full_name || (u.email as string), role: u.role || '' }));
+}
 
 async function notifyMgmtOfCostEvent(
   eventTitle: string,
@@ -91,14 +98,10 @@ async function notifyMgmtOfCostEvent(
   titleAr?: string,
 ): Promise<void> {
   try {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id')
-      .in('role', MGMT_ROLES)
-      .eq('status', 'approved');
-    (data || []).filter(u => u.id !== excludeUserId).forEach(u => {
+    const ids = await fetchPermissionHolderIds('cost_submissions', ['approve_field_ops', 'approve_country', 'approve_final']);
+    ids.filter(id => id !== excludeUserId).forEach(id => {
       NotificationTriggerService.send({
-        userId: u.id,
+        userId: id,
         title: eventTitle,
         titleAr: titleAr || eventTitle,
         message: eventMessage,
@@ -263,18 +266,10 @@ const CostSubmission = () => {
   const isAdmin           = hasAnyRole(['admin']);
   const isSupervisor      = hasAnyRole(['supervisor']);
   const isFOM             = hasAnyRole(['fom']);
-  // Primary-role-only supervisor check — excludes additional_roles so a FOM with an
-  // additional Supervisor role for hub-scoping is NOT treated as a T1 approver for
-  // coordinator submissions.
-  const primaryRole = (currentUser?.role || '').toLowerCase().replace(/[\s_()-]/g, '');
-  const isPrimaryRoleSupervisor = primaryRole.includes('supervisor') || primaryRole === 'hubsupervisor';
-  const isCoordinator     = hasAnyRole(['coordinator']);
   const isCountryDirector = hasAnyRole(['countryDirector']);
-  const isDataCollector   = hasAnyRole(['dataCollector']);
   const isSuperAdmin      = isAdminOrSuperUser || isSuperAdminFn();
   const isStrictCostSubmissionAdmin = isAdmin || isSuperAdminFn();
   const isFinanceAdmin    = hasAnyRole(['financialAdmin']);
-  const isDataTeam        = hasAnyRole(['dataTeam']);
   const [hasKassalaSupervisorAssignment, setHasKassalaSupervisorAssignment] = useState(false);
 
   useEffect(() => {
@@ -303,7 +298,7 @@ const CostSubmission = () => {
     isFilterExplicitlyVisible(`cost-submission.${key}`);
   const canManagePreFundFilters = isAdmin || isSuperAdminFn() || isKassalaCostSupervisor;
 
-  const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataTeam || isDataCollector;
+  const canSubmitOperationalCosts = checkPermission('cost_submissions', 'submit');
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
   // Reconciliation tab: Finance Admin, Admin, Super Admin only (+ role-management overrides)
   const canViewReconciliationTab = isFinanceAdmin || isAdmin || isSuperAdmin;
@@ -455,9 +450,9 @@ const CostSubmission = () => {
 
   // Reports tab: which cards are collapsed (card IDs), and which role rows are expanded in the timeline
   const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
-  const toggleReportCard = (id: string) => setCollapsedCards(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleReportCard = (id: string) => setCollapsedCards(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const [expandedRoles, setExpandedRoles] = useState<Set<string>>(new Set());
-  const toggleRole = (role: string) => setExpandedRoles(prev => { const n = new Set(prev); n.has(role) ? n.delete(role) : n.add(role); return n; });
+  const toggleRole = (role: string) => setExpandedRoles(prev => { const n = new Set(prev); if (n.has(role)) n.delete(role); else n.add(role); return n; });
 
   // Maps pre_fund_transaction_id → fund name for the reports tab (lazy — only when Reports is open)
   const [txnToFundMap, setTxnToFundMap] = useState<Map<string, string>>(new Map());
@@ -953,7 +948,7 @@ const CostSubmission = () => {
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const toggleCard = (id: string) => setExpandedCards(prev => {
     const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
 
@@ -1532,61 +1527,56 @@ const CostSubmission = () => {
     return 'pending';
   };
 
-  const canTier1Approve = (oc: OperationalCostSubmission): boolean => {
-    if (oc.tier1_status !== 'pending') return false;
-    if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
-    if (isSuperAdmin || isAdmin) return true;
-    if (isKassalaCostSupervisor) {
-      return hasFourTiers(oc) && getEffectiveSubmissionHubId(oc) === 'kassala-hub';
-    }
-    // Coordinator: T1 = Hub Supervisor (or FOM when the hub has no supervisor).
-    if (hasFourTiers(oc)) {
-      // Resolve effective hub (submission hub_id, or fall back to submitter's hubId)
-      const effectiveHubId = getEffectiveSubmissionHubId(oc);
+  // Approval levels a submission climbs, starting above its submitter's level.
+  type ApprovalLevel = 'hub' | 'field_ops' | 'country' | 'final';
+  const approvalChain = (oc: OperationalCostSubmission): ApprovalLevel[] => {
+    if (isCDSubmission(oc)) return ['final'];
+    if (isFomSubmission(oc)) return ['country', 'final'];
+    if (hasFourTiers(oc)) return ['hub', 'field_ops', 'country', 'final'];
+    if (hasThreeTiers(oc)) return ['field_ops', 'country', 'final'];
+    return ['final', 'final'];
+  };
 
-      // If this hub has NO supervisor at all, FOM steps in as T1 approver.
-      if (isFOM && !hubHasSupervisor(effectiveHubId)) return true;
+  const canApproveHubLevel = checkPermission('cost_submissions', 'approve_hub');
+  const canApproveFieldOpsLevel = checkPermission('cost_submissions', 'approve_field_ops');
+  const canApproveCountryLevel = checkPermission('cost_submissions', 'approve_country');
+  const canApproveFinalLevel = checkPermission('cost_submissions', 'approve_final');
 
-      // Primary-role Supervisor: approve submissions from any of their supervised hubs
-      // (primary hub + secondary hub from profile + additional_roles hub assignments).
-      if (isPrimaryRoleSupervisor) {
-        const supervisorHubAccess = getHubAccessInfo(currentUser as any);
-        const myHubIds = supervisorHubAccess.hubIds;
+  const canActAtLevel = (oc: OperationalCostSubmission, level: ApprovalLevel | undefined): boolean => {
+    switch (level) {
+      case 'final': return canApproveFinalLevel;
+      case 'country': return canApproveCountryLevel;
+      case 'field_ops': return canApproveFieldOpsLevel;
+      case 'hub': {
+        const effectiveHubId = getEffectiveSubmissionHubId(oc);
+        // Field-ops approvers cover hub level for hubs that have no supervisor.
+        if (canApproveFieldOpsLevel && !hubHasSupervisor(effectiveHubId)) return true;
+        if (!canApproveHubLevel) return false;
+        // Final approvers are org-wide; other hub approvers are limited to their own hubs.
+        if (canApproveFinalLevel) return true;
+        const myHubIds = getHubAccessInfo(currentUser as any).hubIds;
         if (myHubIds.length === 0) return false;
         if (!effectiveHubId) return teamMemberIds.includes(oc.submitted_by);
         return myHubIds.includes(effectiveHubId);
       }
-      // FOM who also holds a Supervisor role via additional_roles — hub-scoped T1 approval.
-      if (isFOM && isSupervisor) {
-        const supervisedHubIds = getAdditionalSupervisorHubIds(currentUser as any);
-        if (supervisedHubIds.length === 0) return false;
-        if (!effectiveHubId) return teamMemberIds.includes(oc.submitted_by);
-        return supervisedHubIds.some(h => normalizeHubId(h) === effectiveHubId);
-      }
-      return false;
+      default: return false;
     }
-    // Supervisor: T1 = FOM — unrestricted; FOM approves ALL supervisor submissions.
-    if (hasThreeTiers(oc)) {
-      return isFOM;
+  };
+
+  const canTier1Approve = (oc: OperationalCostSubmission): boolean => {
+    if (oc.tier1_status !== 'pending') return false;
+    if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
+    if (isKassalaCostSupervisor) {
+      return hasFourTiers(oc) && getEffectiveSubmissionHubId(oc) === 'kassala-hub';
     }
-    // FOM submission: T1 = Country Director
-    if (isFomSubmission(oc)) return isCountryDirector;
-    // Country Director submission: T1 = Admin/SuperAdmin (handled above)
-    return false;
+    return canActAtLevel(oc, approvalChain(oc)[0]);
   };
 
   const canTier2Approve = (oc: OperationalCostSubmission): boolean => {
-    // CD submissions are single-tier — no T2
     if (isCDSubmission(oc)) return false;
     if (oc.tier1_status !== 'approved' || oc.tier2_status !== 'pending') return false;
     if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
-    if (isSuperAdmin || isAdmin) return true;
-    // Coordinator: T2 = FOM
-    if (hasFourTiers(oc)) return isFOM;
-    // Supervisor: T2 = Country Director
-    if (hasThreeTiers(oc)) return isCountryDirector;
-    // FOM submission: T2 = Admin/SuperAdmin (handled by isSuperAdmin || isAdmin above)
-    return false;
+    return canActAtLevel(oc, approvalChain(oc)[1]);
   };
 
   const canTier3Approve = (oc: OperationalCostSubmission): boolean => {
@@ -1595,11 +1585,7 @@ const CostSubmission = () => {
     if (oc.tier2_status !== 'approved') return false;
     if (oc.tier3_status !== 'pending' && oc.tier3_status !== null) return false;
     if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
-    if (isSuperAdmin || isAdmin) return true;
-    // Coordinator: T3 = Country Director
-    if (hasFourTiers(oc)) return isCountryDirector;
-    // Supervisor: T3 = Admin/SuperAdmin (handled above)
-    return false;
+    return canActAtLevel(oc, approvalChain(oc)[2]);
   };
 
   const canTier4Approve = (oc: OperationalCostSubmission): boolean => {
@@ -1607,8 +1593,7 @@ const CostSubmission = () => {
     if (oc.tier3_status !== 'approved') return false;
     if (oc.tier4_status !== 'pending' && oc.tier4_status !== null) return false;
     if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
-    if (isSuperAdmin) return true;
-    return isAdmin;
+    return canActAtLevel(oc, approvalChain(oc)[3]);
   };
 
   const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2 | 3 | 4) => {
@@ -1751,6 +1736,7 @@ const CostSubmission = () => {
           const approverName = (currentUser as any)?.name || (currentUser as any)?.fullName || 'Reviewer';
           const tierArMapG: Record<number, string> = { 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة', 4: 'الرابعة' };
           const repSub = submissions[0];
+          const submitterName = users.find(u => u.id === repSub?.submitted_by)?.name || 'the submitter';
           const repRef = groupTitle || repSub?.reference_number || repSub?.id?.slice(0, 8)?.toUpperCase() || groupId.slice(0, 8).toUpperCase();
           const totalAmtG = submissions.reduce((s, x) => s + (x.amount_cents || 0), 0);
           const amtStrG = `${repSub?.currency || 'SDG'} ${(totalAmtG / 100).toLocaleString()}`;
@@ -1792,25 +1778,14 @@ const CostSubmission = () => {
           // Notify next-tier approvers if not final
           if (action === 'approve' && !isFinalG) {
             const nextTierNumG = tier + 1;
-            let nextRolesG: string[] = [];
-            if (hasFourTiers(repSub)) {
-              if (tier === 1) nextRolesG = ['fom', 'Field Operation Manager (FOM)'];
-              if (tier === 2) nextRolesG = ['countryDirector', 'CountryDirector', 'country_director'];
-              if (tier === 3) nextRolesG = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-            } else if (hasThreeTiers(repSub)) {
-              if (tier === 1) nextRolesG = ['fom', 'Field Operation Manager (FOM)'];
-              if (tier === 2) nextRolesG = ['countryDirector', 'CountryDirector', 'country_director'];
-            } else if (isFomSubmission(repSub)) {
-              if (tier === 1) nextRolesG = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-            } else {
-              nextRolesG = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-            }
-            if (nextRolesG.length > 0) {
-              supabase.from('profiles').select('id').in('role', nextRolesG).eq('status', 'approved')
+            const chainG = repSub ? approvalChain(repSub) : [];
+            const nextLevelG = chainG[tier];
+            if (nextLevelG) {
+              Promise.resolve(supabase.rpc('cost_submission_level_approvers', { p_level: nextLevelG }))
                 .then(({ data }) => {
-                  const ids = (data || []).map(r => r.id);
+                  const ids = ((data || []) as Array<{ approver_id: string }>).map(r => r.approver_id);
                   if (!ids.length) return;
-                  const totalTiersG = hasFourTiers(repSub) ? 4 : hasThreeTiers(repSub) ? 3 : 2;
+                  const totalTiersG = chainG.length;
                   const flowPartsG: string[] = [];
                   for (let t = 1; t <= tier; t++) flowPartsG.push(`Tier ${t}: ✓ Approved`);
                   flowPartsG.push(`Tier ${nextTierNumG}: ⏳ Your Review`);
@@ -2122,33 +2097,17 @@ const CostSubmission = () => {
 
         // 2️⃣ When a tier is approved and more remain, notify the next-tier approvers
         if (action === 'approve' && !isFinal) {
-          let nextRoles: string[] = [];
           const nextTierNum = tier + 1;
+          const chain = approvalChain(submission);
+          const nextLevel = chain[tier];
 
-          if (hasFourTiers(submission)) {
-            if (tier === 1) nextRoles = ['fom', 'Field Operation Manager (FOM)'];
-            if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
-            if (tier === 3) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-          } else if (hasThreeTiers(submission)) {
-            if (tier === 1) nextRoles = ['fom', 'Field Operation Manager (FOM)'];
-            if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
-          } else if (isFomSubmission(submission)) {
-            if (tier === 1) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-          } else {
-            if (tier === 1) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
-          }
-
-          if (nextRoles.length > 0) {
-            supabase
-              .from('profiles')
-              .select('id')
-              .in('role', nextRoles)
-              .eq('status', 'approved')
+          if (nextLevel) {
+            Promise.resolve(supabase.rpc('cost_submission_level_approvers', { p_level: nextLevel }))
               .then(({ data: nextApprovers }) => {
-                const ids = (nextApprovers || []).map(a => a.id);
+                const ids = ((nextApprovers || []) as Array<{ approver_id: string }>).map(a => a.approver_id);
                 if (ids.length === 0) return;
                 // Build approval flow string: "T1: ✓ Approved → T2: ✓ Approved → T3: ⏳ Your Review → T4: Pending"
-                const totalTiersInd = hasFourTiers(submission) ? 4 : hasThreeTiers(submission) ? 3 : isFomSubmission(submission) ? 2 : 2;
+                const totalTiersInd = chain.length;
                 const flowPartsInd: string[] = [];
                 for (let t = 1; t <= tier; t++) flowPartsInd.push(`Tier ${t}: ✓ Approved`);
                 flowPartsInd.push(`Tier ${nextTierNum}: ⏳ Your Review`);
@@ -2185,8 +2144,8 @@ const CostSubmission = () => {
         }
 
         // Optimistically update local state
-        setOperationalCosts(prev =>
-          prev.map(oc =>
+        queryClient.setQueryData(_opsQueryKey, (old: OperationalCostSubmission[] | undefined) =>
+          (old ?? []).map(oc =>
             oc.id === submission.id ? { ...oc, ...updates } : oc
           )
         );
@@ -2702,12 +2661,13 @@ const CostSubmission = () => {
         currency: string;
         available_balance: number;
       }> = [];
+      let fundRows: any[] = [];
       try {
         const { data: pfData, error: fundsError } = await supabase
           .rpc('get_payment_eligible_pre_funds', { p_currency: oc.currency });
         if (fundsError) throw fundsError;
 
-        const fundRows = (pfData ?? []) as any[];
+        fundRows = (pfData ?? []) as any[];
         preFunds = fundRows.map(fund => ({
             id: fund.id,
             name: fund.name,
@@ -2930,7 +2890,9 @@ const CostSubmission = () => {
         preFunds = results.flatMap(result => ((result.data ?? []) as any[]).map((f: any) => ({
           id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
         })));
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[CostSubmission] Failed to load pre-funds for batch payment:', err);
+      }
       // Only update if the dialog is still open
       setBatchCostPayDialog(prev => prev.open ? { ...prev, preFunds } : prev);
     })();
@@ -2940,7 +2902,7 @@ const CostSubmission = () => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     setBatchCostPayDialog(prev => {
-      prev.proofPreviewUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch (_) {} });
+      prev.proofPreviewUrls.forEach(u => { if (u) URL.revokeObjectURL(u); });
       const previewUrls = files.map(f => f.type.startsWith('image/') ? URL.createObjectURL(f) : '');
       return { ...prev, proofFiles: files, proofPreviewUrls: previewUrls };
     });
@@ -3143,29 +3105,18 @@ const CostSubmission = () => {
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
       setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: false, selectedRecipientIds: cached.map(r => r.id), ccEmails: [], availableRecipients: cached }));
-      supabase
-        .from('profiles')
-        .select('id, email, full_name, role')
-        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-        .eq('status', 'approved')
-        .then(({ data }) => {
-          if (data) {
-            const fresh = data.filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
-            cachedRecipientsRef.current = fresh;
-            setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
-          }
-        });
+      fetchPaymentRecipients()
+        .then(fresh => {
+          cachedRecipientsRef.current = fresh;
+          setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
+        })
+        .catch(console.warn);
     } else {
       setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: true, selectedRecipientIds: [], ccEmails: [], availableRecipients: [] }));
       try {
-        const { data: financeUsers } = await supabase
-          .from('profiles')
-          .select('id, email, full_name, role')
-          .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-          .eq('status', 'approved');
-        const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+        const recipients = await fetchPaymentRecipients();
         cachedRecipientsRef.current = recipients;
-        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
       } catch {
         setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
         toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
@@ -3207,7 +3158,7 @@ const CostSubmission = () => {
       }
       freshCosts = rpcResult.data as OperationalCostSubmission[];
       // Update the global state with the fresh data too
-      if (freshCosts.length > 0) setOperationalCosts(freshCosts);
+      if (freshCosts.length > 0) queryClient.setQueryData(_opsQueryKey, freshCosts);
     } catch (err) {
       // Never replace an authorized RPC response with an unscoped direct read.
       setBulkCostEmailDialog(prev => ({ ...prev, open: false, loading: false }));
@@ -3261,14 +3212,9 @@ const CostSubmission = () => {
         setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: cached, selectedRecipientIds: cached.map(r => r.id), loading: false }));
         return;
       }
-      const { data: financeUsers } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, role')
-        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-        .eq('status', 'approved');
-      const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+      const recipients = await fetchPaymentRecipients();
       cachedRecipientsRef.current = recipients;
-      setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
+      setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
     } catch {
       setBulkCostEmailDialog(prev => ({ ...prev, loading: false }));
       toast({ title: "Error / خطأ", description: "Failed to load recipients.", variant: "destructive" });
@@ -3778,14 +3724,18 @@ const CostSubmission = () => {
         }).then(() => setDeletionLog(prev => [{ ...submission, _log_type: 'approved_request', deleted_at: new Date().toISOString(), deleted_by_name: deleterName }, ...prev]));
         // Notify the original requester
         if (submission.delete_requested_by) {
+          const deletedTitle = submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled';
           dispatchNotification({
-            userId: submission.delete_requested_by,
-            title: '✅ Deletion Request Approved',
-            message: `Your request to delete "${submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}" was approved and the submission has been removed.`,
-            type: 'success',
-            category: 'financial',
+            event: 'cost_approved',
+            recipientIds: [submission.delete_requested_by],
+            titleEn: '✅ Deletion Request Approved',
+            titleAr: '✅ تمت الموافقة على طلب الحذف',
+            messageEn: `Your request to delete "${deletedTitle}" was approved and the submission has been removed.`,
+            messageAr: `تمت الموافقة على طلبك لحذف "${deletedTitle}" وتمت إزالة الطلب.`,
             priority: 'normal',
-            link: '/cost-submission',
+            entityType: 'costSubmission',
+            entityId: submission.id,
+            actionUrl: '/cost-submission',
             sendEmail: true,
           });
         }
@@ -3858,14 +3808,18 @@ const CostSubmission = () => {
         toast({ title: 'Request Rejected', description: 'The deletion request has been rejected and the submitter notified.' });
         // Notify the requester with feedback
         if (submission.delete_requested_by) {
+          const rejectedTitle = submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled';
           dispatchNotification({
-            userId: submission.delete_requested_by,
-            title: '❌ Deletion Request Rejected',
-            message: `Your request to delete "${submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}" was rejected.${notes.trim() ? ` Feedback: ${notes.trim()}` : ' Please make the required corrections and resubmit.'}`,
-            type: 'warning',
-            category: 'financial',
+            event: 'cost_rejected',
+            recipientIds: [submission.delete_requested_by],
+            titleEn: '❌ Deletion Request Rejected',
+            titleAr: '❌ تم رفض طلب الحذف',
+            messageEn: `Your request to delete "${rejectedTitle}" was rejected.${notes.trim() ? ` Feedback: ${notes.trim()}` : ' Please make the required corrections and resubmit.'}`,
+            messageAr: `تم رفض طلبك لحذف "${rejectedTitle}".${notes.trim() ? ` الملاحظات: ${notes.trim()}` : ' يرجى إجراء التصحيحات المطلوبة وإعادة التقديم.'}`,
             priority: 'normal',
-            link: `/cost-submission?open=${submission.id}`,
+            entityType: 'costSubmission',
+            entityId: submission.id,
+            actionUrl: `/cost-submission?open=${submission.id}`,
             sendEmail: true,
           });
         }
@@ -4132,23 +4086,6 @@ const CostSubmission = () => {
       )}
 
       {expenseMode === 'operational' && (<>
-      <PageInfoBanner
-        title="Cost Submission - Operational Expenses"
-        description="This page is for submitting OPERATIONAL COSTS you have already spent during fieldwork -- things like transportation, accommodation, communication, supplies, and other work-related expenses (9 categories available). This is DIFFERENT from wallet withdrawals (taking money out of your wallet -- use My Wallet page) and transportation advances (getting money upfront before a trip -- use Down-Payment Approval page). Here you are requesting REIMBURSEMENT for expenses already incurred. Each submission goes through a two-tier approval before the amount is credited to your wallet."
-        descriptionAr="هذه الصفحة مخصصة لتقديم التكاليف التشغيلية التي أنفقتها أثناء العمل الميداني -- مثل النقل، والإقامة، والاتصالات، والمستلزمات، وغيرها من المصاريف المتعلقة بالعمل (٩ فئات متاحة). هذه الصفحة مختلفة عن سحب المحفظة (سحب الأموال من محفظتك -- استخدم صفحة محفظتي) وعن السلف المسبقة للنقل (الحصول على أموال مقدماً قبل الرحلة -- استخدم صفحة الموافقة على الدفعات المقدمة). هنا أنت تطلب استرداد مصاريف تم إنفاقها بالفعل. كل طلب يمر بموافقة على مستويين قبل إضافة المبلغ إلى محفظتك."
-        workflowSteps={[
-          { step: 1, role: 'Supervisor / Coordinator', action: 'Submits expense (YOU ARE HERE)', description: 'Fill in cost details, select the expense category, attach receipts if needed, and submit for review.' },
-          { step: 2, role: 'FOM / Country Director', action: 'Tier 1 Review', description: 'FOM or Country Director checks the expense is legitimate, then approves, rejects, or sends it back for edits.' },
-          { step: 3, role: 'Admin / Super Admin', action: 'Final approval with signature (Tier 2)', description: 'Admin gives final approval and signs digitally. An approval certificate PDF is generated.' },
-          { step: 4, role: 'System', action: 'Credits your wallet', description: 'The approved amount is automatically added to your wallet balance. You can then request a withdrawal from the My Wallet page.' },
-        ]}
-        workflowStepsAr={[
-          { step: 1, role: 'مشرف / منسق', action: 'يقدم المصروف (أنت هنا)', description: 'قم بملء تفاصيل التكلفة، واختر فئة المصروف، وأرفق الإيصالات إن لزم الأمر، ثم أرسل للمراجعة.' },
-          { step: 2, role: 'مدير العمليات / مدير القطر', action: 'المراجعة (المستوى الأول)', description: 'يتحقق مدير العمليات الميدانية أو مدير القطر من صحة المصروف، ثم يوافق عليه أو يرفضه أو يعيده للتعديل.' },
-          { step: 3, role: 'المسؤول', action: 'الموافقة النهائية مع التوقيع (المستوى الثاني)', description: 'يمنح المسؤول الموافقة النهائية ويوقّع رقمياً. يتم إنشاء شهادة موافقة بصيغة PDF.' },
-          { step: 4, role: 'النظام', action: 'يُضيف رصيداً لمحفظتك', description: 'يُضاف المبلغ المعتمد تلقائياً إلى رصيد محفظتك. يمكنك بعدها طلب سحب من صفحة محفظتي.' },
-        ]}
-      />
 
       {/* Task #56 — the legacy "Paid out of your own pocket? Use My Expenses,
           not here" cross-link block was removed because the new
@@ -5500,7 +5437,7 @@ const CostSubmission = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={fetchOperationalCosts}
+              onClick={() => fetchOperationalCosts()}
               disabled={operationalCostsLoading}
               data-testid="button-refresh-operational"
             >
@@ -12486,7 +12423,7 @@ const CostSubmission = () => {
         onOpenChange={(open) => {
           if (!open && !markAsPaidDialog.uploading) {
             markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFundsLoading: false, preFundsError: null, preFundsEmptyReason: null, payAmountStr: '' });
+            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: false, preFundsError: null, preFundsEmptyReason: null, payAmountStr: '' });
           }
         }}
       >
@@ -12816,7 +12753,7 @@ const CostSubmission = () => {
         open={batchCostPayDialog.open}
         onOpenChange={(open) => {
           if (!open && !batchCostPayDialog.uploading) {
-            batchCostPayDialog.proofPreviewUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch (_) {} });
+            batchCostPayDialog.proofPreviewUrls.forEach(u => { if (u) URL.revokeObjectURL(u); });
             setBatchCostPayDialog({ open: false, submissions: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
           }
         }}
@@ -13108,7 +13045,7 @@ const CostSubmission = () => {
               type="button"
               variant="outline"
               onClick={() => {
-                batchCostPayDialog.proofPreviewUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch (_) {} });
+                batchCostPayDialog.proofPreviewUrls.forEach(u => { if (u) URL.revokeObjectURL(u); });
                 setBatchCostPayDialog({ open: false, submissions: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
               }}
               disabled={batchCostPayDialog.uploading}
@@ -13402,7 +13339,7 @@ const CostSubmission = () => {
           events.push({ ts: '', icon: '⏳', label: 'Tier 1 Approval — Pending', by: null, notes: null, color: 'bg-amber-400' });
         }
 
-        if (hasTwoTiers(aud) || hasThreeTiers(aud) || hasFourTiers(aud)) {
+        if (approvalChain(aud).length >= 2) {
           if (aud.tier2_approved_at) {
             const approved = aud.tier2_status === 'approved';
             events.push({ ts: aud.tier2_approved_at, icon: approved ? '✅' : '❌', label: `Tier 2 ${approved ? 'Approved' : 'Rejected'}`, by: t2User, notes: aud.tier2_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || null, color: approved ? 'bg-green-500' : 'bg-red-500' });

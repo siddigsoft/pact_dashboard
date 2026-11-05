@@ -799,12 +799,6 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       // Limit parallel file writes during chunk rendering — prevents OOM on low-RAM servers
       maxParallelFileOps: 3,
-      external: [
-        '@capacitor-firebase/crashlytics',
-        '@capacitor/haptics',
-        'capacitor-native-biometric',
-        'capacitor-native-settings',
-      ],
       output: {
         // Merge tiny chunks when Rollup can do so without crossing a dynamic import
         // boundary. This reduces render/write overhead while keeping lazy routes lazy.
@@ -874,11 +868,6 @@ export default defineConfig(({ mode }) => ({
           // Animation
           if (id.includes('framer-motion')) {
             return 'animations';
-          }
-          
-          // Capacitor (mobile)
-          if (id.includes('@capacitor')) {
-            return 'capacitor';
           }
           
           // Date utilities

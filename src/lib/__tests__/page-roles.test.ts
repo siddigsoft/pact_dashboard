@@ -13,6 +13,7 @@ import {
   canSeeRoutePermission,
   canSeePageWithOverrides,
   canSeePageWithOverridesResult,
+  isOwnUserProfilePath,
   isProjectMembershipDetailPath,
   resolveResourcePermissionOverride,
   resolveRouteAccessTarget,
@@ -69,6 +70,16 @@ describe('page access registry integrity', () => {
     expect(isProjectMembershipDetailPath('/projects/660399f4-80a2-4642-8f66-9f1f245775e6/team')).toBe(false);
   });
 
+  it('recognizes own user profile paths only when the path id matches', () => {
+    const id = '21602d5c-22ef-43e2-b178-606400d3b659';
+    expect(isOwnUserProfilePath(`/users/${id}`, id)).toBe(true);
+    expect(isOwnUserProfilePath(`/users/${id}/`, id)).toBe(true);
+    expect(isOwnUserProfilePath(`/users/${id}`, 'other-id')).toBe(false);
+    expect(isOwnUserProfilePath('/users', id)).toBe(false);
+    expect(isOwnUserProfilePath(`/users/${id}`, null)).toBe(false);
+    expect(isOwnUserProfilePath(`/users/${id}`, undefined)).toBe(false);
+  });
+
   it('resolves query-tab definitions when query parameters are reordered', () => {
     expect(resolveSlug('/finance-hub?source=sidebar&tab=subscriptions')).toBe('finance-subscriptions');
     expect(resolveSlug('/accounting?view=summary&tab=bank-recon')).toBe('accounting-bank-recon');
@@ -110,26 +121,33 @@ describe('page access registry integrity', () => {
 function mockOverrideQueries({
   actionOverride = null,
   pageOverride = null,
+  roleConfig = null,
   actionError = null,
   pageError = null,
+  configError = null,
   actionThrows = false,
   pageThrows = false,
 }: {
   actionOverride?: Record<string, unknown> | null;
   pageOverride?: Record<string, unknown> | null;
+  roleConfig?: { roles: string[] } | null;
   actionError?: Record<string, unknown> | null;
   pageError?: Record<string, unknown> | null;
+  configError?: Record<string, unknown> | null;
   actionThrows?: boolean;
   pageThrows?: boolean;
 } = {}) {
   mockedFrom.mockImplementation(((table: string) => {
     const isActionOverride = table === 'user_permission_overrides';
     const isPageOverride = table === 'page_access_overrides';
+    const isRoleConfig = table === 'page_role_configs';
     const response = isActionOverride
       ? { data: actionOverride, error: actionError }
       : isPageOverride
         ? { data: pageOverride, error: pageError }
-        : { data: null, error: null };
+        : isRoleConfig
+          ? { data: roleConfig, error: configError }
+          : { data: null, error: null };
     const query: Record<string, unknown> = {
       select: () => query,
       eq: () => query,
@@ -155,6 +173,17 @@ describe('direct report route permissions', () => {
     });
   });
 
+  it('resolves the MMP Full Report sidebar deep-link without inheriting mmp:read', () => {
+    expect(resolveRoutePermission('/mmp', '', '#full-report')).toEqual({
+      resource: 'mmp',
+      action: 'full_report',
+    });
+    expect(resolveRoutePermission('/mmp')).toEqual({
+      resource: 'mmp',
+      action: 'read',
+    });
+  });
+
   it('uses the report page read permission for direct report routes', () => {
     expect(resolveRoutePermission('/cost-submission/reports')).toEqual({
       resource: 'cost_submissions',
@@ -170,10 +199,6 @@ describe('direct report route permissions', () => {
     });
     expect(resolveRoutePermission('/analytics', '?tab=reports')).toEqual({
       resource: 'reports',
-      action: 'read',
-    });
-    expect(resolveRoutePermission('/field-ops', '?tab=incident-reports')).toEqual({
-      resource: 'incidents',
       action: 'read',
     });
     expect(resolveRoutePermission('/field-data/exports')).toEqual({
@@ -417,6 +442,26 @@ describe('direct report route permissions', () => {
       requirement!,
       true,
     )).resolves.toEqual({ allowed: true });
+  });
+
+  it('lets page_role_configs win over hardcoded PAGE_DEFS roles', async () => {
+    // PAGE_DEFS.role-management includes admin; DB config can remove them.
+    expect(canSeePage('role-management', 'admin')).toBe(true);
+    mockOverrideQueries({
+      roleConfig: { roles: ['superAdmin'] },
+    });
+
+    await expect(canSeePageWithOverrides(
+      'role-management',
+      'admin',
+      'user-1',
+    )).resolves.toBe(false);
+
+    await expect(canSeePageWithOverrides(
+      'role-management',
+      'superAdmin',
+      'user-1',
+    )).resolves.toBe(true);
   });
 
   it('preserves an explicit action grant for a role-blocked report route', async () => {

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -24,10 +23,7 @@ interface RevalRow {
 }
 
 export default function AccountingUnrealizedGL() {
-  const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
-
-  const [rates, setRates]       = useState<ExchangeRate[]>([]);
+    const [rates, setRates]       = useState<ExchangeRate[]>([]);
   const [fxLines, setFxLines]   = useState<FxLine[]>([]);
   const [loading, setLoading]   = useState(true);
   const [asOf, setAsOf]         = useState(new Date().toISOString().slice(0,10));
@@ -67,7 +63,7 @@ export default function AccountingUnrealizedGL() {
     })));
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed, asOf, baseCurrency]);
+  useEffect(() => { void load(); }, [asOf, baseCurrency]);
 
   const getRate = (from: string, to: string, beforeDate: string): number | null => {
     const matches = rates.filter(r => r.from_currency === from && r.to_currency === to && r.effective_date <= asOf);
@@ -113,7 +109,6 @@ export default function AccountingUnrealizedGL() {
     })), 'Unrealized G/L', 'unrealized-gl.xlsx'
   );
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

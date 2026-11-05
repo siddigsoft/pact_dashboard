@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -27,7 +28,6 @@ import {
   Calendar, Building2, User, CheckCircle2, XCircle, BarChart3,
   Filter, X, Database, Globe,
 } from 'lucide-react';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
@@ -607,7 +607,8 @@ export default function DownPaymentApproval() {
     mmpName: cycleContextMmpName,
     projectId: urlProjectId,
   }));
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(Boolean(cycleContextMmpName || urlProjectId));
+  const [showDuplicateSites, setShowDuplicateSites] = useState(false);
   useEffect(() => {
     setFilters(current => {
       const next = { ...current };
@@ -1182,7 +1183,7 @@ export default function DownPaymentApproval() {
   const partialBalance = partialPayDialog.req ? getDownPaymentBalance(partialPayDialog.req) : null;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-5 p-4 sm:p-6">
       {cycleContextMmpName && (
         <div className="flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
           <span>🔍</span>
@@ -1191,7 +1192,7 @@ export default function DownPaymentApproval() {
         </div>
       )}
       {/* ── Page header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <DollarSign className="h-7 w-7 text-primary" />
@@ -1209,6 +1210,7 @@ export default function DownPaymentApproval() {
                 : 'Process approved down-payment requests and manage payments'}
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
         {isAdmin && !isFieldPaymentOnly && (
           <div className="flex items-center gap-2 p-1 bg-muted rounded-lg">
             <Button variant={selectedTier === 'tier1' ? 'default' : 'ghost'} size="sm" onClick={() => setSelectedTier('tier1')} className="gap-2" data-testid="button-tier1">
@@ -1243,62 +1245,42 @@ export default function DownPaymentApproval() {
             Country Director — View Only
           </Badge>
         )}
+        <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-2" data-testid="button-related-finance-pages">
+            Related pages <ChevronDown className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onClick={() => navigate('/financial-operations')} data-testid="button-goto-financial-ops">Financial Ops</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate('/budget')} data-testid="button-goto-budget">Budget</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate('/cost-submission')} data-testid="button-goto-cost-submissions">Cost Submissions</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate('/wallet')} data-testid="button-goto-wallet">Wallet</DropdownMenuItem>
+        </DropdownMenuContent>
+        </DropdownMenu>
+        </div>
       </div>
-
-      {/* ── Quick nav ── */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => navigate('/financial-operations')} data-testid="button-goto-financial-ops">
-          <TrendingUp className="h-4 w-4 mr-2" />Financial Ops
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => navigate('/budget')} data-testid="button-goto-budget">
-          <DollarSign className="h-4 w-4 mr-2" />Budget
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => navigate('/cost-submission')} data-testid="button-goto-cost-submissions">
-          <Receipt className="h-4 w-4 mr-2" />Cost Submissions
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => navigate('/wallet')} data-testid="button-goto-wallet">
-          <Wallet className="h-4 w-4 mr-2" />Wallet
-        </Button>
-      </div>
-
-      <PageInfoBanner
-        title="Down-Payment Approval - Transportation Advances"
-        description="This page handles TRANSPORTATION ADVANCE requests -- money given to field staff BEFORE they do their work, to cover travel costs for site visits. This is DIFFERENT from Tier 1/Tier 2 Approvals, which handle wallet withdrawals (money already earned). Advances approved here are automatically deducted later when the site visit fee is credited to the staff member's wallet, so there is no double-paying."
-        descriptionAr="تتعامل هذه الصفحة مع طلبات السلف المسبقة للنقل -- أموال تُعطى للموظفين الميدانيين قبل قيامهم بالعمل لتغطية تكاليف التنقل للزيارات الميدانية."
-        workflowSteps={[
-          { step: 1, role: 'Data Collector', action: 'Requests travel advance', description: 'A field staff member requests upfront money for transportation before going on a site visit.' },
-          { step: 2, role: 'Supervisor', action: 'Reviews request (Tier 1)', description: 'Supervisor reviews and approves or rejects the advance request.' },
-          { step: 3, role: 'Admin', action: 'Authorizes payment (Tier 2)', description: 'Admin or Finance Admin approves the advance amount and authorizes payment.' },
-          { step: 4, role: 'Finance Admin', action: 'Sends advance', description: 'Finance sends the advance money to the staff member.' },
-          { step: 5, role: 'System', action: 'Auto-deducts when work is done', description: 'When the site visit fee is credited, the advance is automatically subtracted.' },
-        ]}
-        workflowStepsAr={[
-          { step: 1, role: 'جامع بيانات', action: 'يطلب سلفة نقل', description: 'يطلب الموظف الميداني أموالاً مقدمة لتغطية تكاليف النقل.' },
-          { step: 2, role: 'المشرف', action: 'يراجع الطلب (المستوى الأول)', description: 'يراجع المشرف ويوافق أو يرفض.' },
-          { step: 3, role: 'المدير', action: 'يعتمد الصرف (المستوى الثاني)', description: 'يوافق المدير على مبلغ السلفة.' },
-          { step: 4, role: 'مدير المالية', action: 'يُرسل السلفة', description: 'يرسل المبلغ للموظف.' },
-          { step: 5, role: 'النظام', action: 'يخصم تلقائياً', description: 'تُخصم السلفة تلقائياً عند إضافة أتعاب الزيارة.' },
-        ]}
-      />
 
       {/* ── Duplicate active-advance warning banner ── */}
       {isAdmin && duplicateSites.length > 0 && !duplicateBannerDismissed && (
         <div
-          className="rounded-lg border border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30 px-4 py-3 space-y-2"
+          className="rounded-lg border border-[#EC6A1F]/35 bg-[#EC6A1F]/5 px-4 py-3 dark:bg-[#EC6A1F]/10"
           data-testid="banner-duplicate-advances"
         >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-              <p className="text-sm font-semibold text-red-800 dark:text-red-200">
-                {duplicateSites.length} site{duplicateSites.length !== 1 ? 's' : ''} with duplicate active advances detected
-              </p>
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-[#B94B13]" />
+            <p className="min-w-0 flex-1 text-sm font-semibold text-[#713811] dark:text-orange-200">
+              {duplicateSites.length} site{duplicateSites.length === 1 ? '' : 's'} need{duplicateSites.length === 1 ? 's' : ''} duplicate advance review
+            </p>
+            <Button type="button" variant="outline" size="sm" className="h-8 border-[#EC6A1F]/40 text-[#713811] dark:text-orange-200" onClick={() => setShowDuplicateSites(value => !value)} aria-expanded={showDuplicateSites} data-testid="button-toggle-duplicate-sites">
+              {showDuplicateSites ? 'Hide sites' : 'Review sites'}
+              {showDuplicateSites ? <ChevronDown className="ml-1.5 h-3.5 w-3.5 rotate-180" /> : <ChevronDown className="ml-1.5 h-3.5 w-3.5" />}
+            </Button>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/40 shrink-0"
+              className="h-8 w-8 shrink-0 p-0 text-[#713811] hover:bg-[#EC6A1F]/10"
               onClick={() => {
                 localStorage.setItem(LS_BANNER_KEY, duplicateKey);
                 setDismissedDupKey(duplicateKey);
@@ -1309,15 +1291,16 @@ export default function DownPaymentApproval() {
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
-          <p className="text-xs text-red-700 dark:text-red-300 ml-6">
-            Each site below has more than one active (non-cancelled) advance row. The unique index cannot be applied until these are resolved. Click a site name to view its rows in the All Requests tab, then cancel the extra row.
+          {showDuplicateSites && <div className="mt-3 border-t border-[#EC6A1F]/20 pt-3">
+          <p className="mb-3 text-xs text-[#713811] dark:text-orange-200">
+            Select a site to review its requests, then resolve the extra active advance.
           </p>
-          <div className="ml-6 flex flex-wrap gap-2">
+          <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
             {duplicateSites.map((site, i) => (
               <button
                 key={i}
                 type="button"
-                className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-white dark:bg-red-950/50 px-2.5 py-1 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+                className="inline-flex items-center gap-1 rounded-md border border-[#EC6A1F]/30 bg-white px-2.5 py-1 text-xs font-medium text-[#713811] transition-colors hover:bg-[#EC6A1F]/10 dark:bg-slate-900 dark:text-orange-200"
                 onClick={() => {
                   setFilters(f => ({ ...f, siteName: site.siteName }));
                   setViewTab('allRequests');
@@ -1326,20 +1309,21 @@ export default function DownPaymentApproval() {
               >
                 <MapPin className="h-3 w-3" />
                 {site.siteName}
-                <span className="ml-0.5 rounded-full bg-red-200 dark:bg-red-800 px-1.5 text-[10px] font-semibold text-red-800 dark:text-red-200">
+                <span className="ml-0.5 rounded-full bg-[#EC6A1F]/15 px-1.5 text-[10px] font-semibold">
                   {site.count}
                 </span>
               </button>
             ))}
           </div>
+          </div>}
         </div>
       )}
 
       {/* ── Full filter panel (primary filter for all tabs) ── */}
       <div>
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
           <Button
-            variant={showFilters ? 'secondary' : 'outline'}
+            variant="outline"
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
             data-testid="button-toggle-page-filters"
@@ -1347,6 +1331,7 @@ export default function DownPaymentApproval() {
             <Filter className="h-4 w-4 mr-1.5" />
             Filters
             {activeFilterCount > 0 && <Badge variant="secondary" className="ml-1.5">{activeFilterCount} active</Badge>}
+            <ChevronDown className={`ml-1.5 h-3.5 w-3.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
           </Button>
           <Badge variant="secondary" className="text-xs">{filteredRequests.length} of {requests.length} requests</Badge>
         </div>

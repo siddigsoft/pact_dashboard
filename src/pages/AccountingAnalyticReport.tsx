@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -25,10 +24,7 @@ interface GroupRow { label: string; revenue: number; expense: number; net: numbe
 const FUNCTIONS = ['program','management','fundraising','operations','overhead','other'];
 
 export default function AccountingAnalyticReport() {
-  const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin','admin','finance','financialAdmin','accountant','auditor']);
-
-  const [lines, setLines]       = useState<AnalyticLine[]>([]);
+    const [lines, setLines]       = useState<AnalyticLine[]>([]);
   const [funds, setFunds]       = useState<Fund[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -65,7 +61,7 @@ export default function AccountingAnalyticReport() {
     setProjects((pRes.data??[]) as Project[]);
     setLoading(false);
   };
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => lines.filter(l => {
     if (fundFilter !== 'all' && l.fund_id !== fundFilter) return false;
@@ -101,7 +97,6 @@ export default function AccountingAnalyticReport() {
     'Analytic Report','analytic-report.xlsx'
   );
 
-  if (!allowed) return null;
 
   return (
     <div className="space-y-4 p-1">

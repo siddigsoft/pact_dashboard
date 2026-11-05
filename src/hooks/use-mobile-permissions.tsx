@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useDevice } from './use-device';
 
 export type PermissionType = 'location' | 'camera' | 'notifications' | 'storage' | 'microphone';
 export type PermissionStatus = 'granted' | 'denied' | 'prompt' | 'unknown';
@@ -30,7 +29,6 @@ const PERMISSION_SETUP_KEY = 'pact_permission_setup_complete';
 const LOCATION_CHECK_INTERVAL = 30000;
 
 export function useMobilePermissions() {
-  const { isNative, deviceInfo } = useDevice();
   const [permissions, setPermissions] = useState<PermissionState>(defaultPermissions);
   const [isChecking, setIsChecking] = useState(false);
   const [showPermissionModal, setShowPermissionModal] = useState<PermissionType | null>(null);
@@ -68,88 +66,7 @@ export function useMobilePermissions() {
         if (perm === 'denied') return 'denied';
         return 'prompt';
       }
-      if (type === 'storage') {
-        return 'granted';
-      }
-      return 'unknown';
-    } catch {
-      return 'unknown';
-    }
-  };
-
-  const checkNativePermission = async (type: PermissionType): Promise<PermissionStatus> => {
-    try {
-      if (type === 'location') {
-        try {
-          const geolocationModule = await import('@capacitor/geolocation');
-          const Geolocation = geolocationModule.Geolocation;
-          const status = await Geolocation.checkPermissions();
-          return status.location === 'granted' ? 'granted' : 
-                 status.location === 'denied' ? 'denied' : 'prompt';
-        } catch {
-          return 'unknown';
-        }
-      }
-      if (type === 'camera') {
-        try {
-          const cameraModule = await import('@capacitor/camera');
-          const Camera = cameraModule.Camera;
-          const status = await Camera.checkPermissions();
-          console.log('[Permissions] Camera check result:', JSON.stringify(status));
-          const cameraState = status.camera;
-          if (cameraState === 'granted' || cameraState === 'limited') return 'granted';
-          if (cameraState === 'denied') return 'denied';
-          return 'prompt';
-        } catch (error) {
-          console.error('[Permissions] Camera check error:', error);
-          return 'unknown';
-        }
-      }
-      if (type === 'microphone') {
-        try {
-          // For native apps, check using navigator.permissions API which works on Android WebView
-          if ('permissions' in navigator) {
-            try {
-              const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-              console.log('[Permissions] Microphone check result:', result.state);
-              if (result.state === 'granted') return 'granted';
-              if (result.state === 'denied') return 'denied';
-              return 'prompt';
-            } catch {
-              // Some browsers don't support microphone permission query
-              console.log('[Permissions] navigator.permissions.query not supported for microphone');
-            }
-          }
-          // Fallback: check if mediaDevices is available and enumerate devices
-          if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const hasAudio = devices.some(d => d.kind === 'audioinput');
-            console.log('[Permissions] Has audio input device:', hasAudio);
-            // If devices have labels, permission was previously granted
-            const hasLabels = devices.some(d => d.kind === 'audioinput' && d.label);
-            if (hasLabels) return 'granted';
-            return hasAudio ? 'prompt' : 'denied';
-          }
-          return 'prompt';
-        } catch (error) {
-          console.error('[Permissions] Microphone check error:', error);
-          return 'prompt';
-        }
-      }
-      if (type === 'notifications') {
-        try {
-          const pushModule = await import('@capacitor/push-notifications');
-          const PushNotifications = pushModule.PushNotifications;
-          const status = await PushNotifications.checkPermissions();
-          return status.receive === 'granted' ? 'granted' : 
-                 status.receive === 'denied' ? 'denied' : 'prompt';
-        } catch {
-          return 'unknown';
-        }
-      }
-      if (type === 'storage') {
-        return 'granted';
-      }
+      if (type === 'storage') return 'granted';
       return 'unknown';
     } catch {
       return 'unknown';
@@ -157,199 +74,101 @@ export function useMobilePermissions() {
   };
 
   const checkLocationOnly = useCallback(async (): Promise<PermissionStatus> => {
-    if (isNative) {
-      return await checkNativePermission('location');
-    } else {
-      return await checkWebPermission('location');
-    }
-  }, [isNative]);
+    return await checkWebPermission('location');
+  }, []);
 
   const checkAllPermissions = useCallback(async () => {
     setIsChecking(true);
     const newPermissions: PermissionState = { ...defaultPermissions };
 
     try {
-      if (isNative) {
-        newPermissions.location = await checkNativePermission('location');
-        newPermissions.camera = await checkNativePermission('camera');
-        newPermissions.microphone = await checkNativePermission('microphone');
-        newPermissions.notifications = await checkNativePermission('notifications');
-        newPermissions.storage = await checkNativePermission('storage');
-      } else {
-        newPermissions.location = await checkWebPermission('location');
-        newPermissions.camera = await checkWebPermission('camera');
-        newPermissions.microphone = await checkWebPermission('microphone');
-        newPermissions.notifications = await checkWebPermission('notifications');
-        newPermissions.storage = 'granted';
-      }
+      newPermissions.location = await checkWebPermission('location');
+      newPermissions.camera = await checkWebPermission('camera');
+      newPermissions.microphone = await checkWebPermission('microphone');
+      newPermissions.notifications = await checkWebPermission('notifications');
+      newPermissions.storage = 'granted';
     } catch (error) {
       console.error('Error checking permissions:', error);
     }
 
     setPermissions(newPermissions);
     setIsChecking(false);
-    
+
     if (newPermissions.location !== 'granted') {
       setIsLocationBlocked(true);
     } else {
       setIsLocationBlocked(false);
-      // Mark setup as complete when location permission is granted
       if (!setupComplete) {
-        console.log('[Permissions] Location granted - marking setup complete');
         localStorage.setItem(PERMISSION_SETUP_KEY, 'true');
         setSetupComplete(true);
       }
     }
-    
+
     return newPermissions;
-  }, [isNative, setupComplete]);
+  }, [setupComplete]);
 
   const requestPermission = async (type: PermissionType): Promise<PermissionResult> => {
     try {
       if (type === 'location') {
-        if (isNative) {
-          try {
-            const geolocationModule = await import('@capacitor/geolocation');
-            const Geolocation = geolocationModule.Geolocation;
-            const result = await Geolocation.requestPermissions();
-            const status = result.location === 'granted' ? 'granted' : 'denied';
-            setPermissions(prev => ({ ...prev, location: status }));
-            if (status !== 'granted') {
-              setIsLocationBlocked(true);
-            } else {
+        return new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            () => {
+              setPermissions(prev => ({ ...prev, location: 'granted' }));
               setIsLocationBlocked(false);
-            }
-            return { type, status };
-          } catch (error) {
-            setIsLocationBlocked(true);
-            return { type, status: 'denied', error: String(error) };
-          }
-        } else {
-          return new Promise((resolve) => {
-            navigator.geolocation.getCurrentPosition(
-              () => {
-                setPermissions(prev => ({ ...prev, location: 'granted' }));
-                setIsLocationBlocked(false);
-                resolve({ type, status: 'granted' });
-              },
-              (error) => {
-                const status = error.code === 1 ? 'denied' : 'prompt';
-                setPermissions(prev => ({ ...prev, location: status }));
-                if (status === 'denied') {
-                  setIsLocationBlocked(true);
-                }
-                resolve({ type, status, error: error.message });
-              },
-              { enableHighAccuracy: true, timeout: 10000 }
-            );
-          });
-        }
+              resolve({ type, status: 'granted' });
+            },
+            (error) => {
+              const status = error.code === 1 ? 'denied' : 'prompt';
+              setPermissions(prev => ({ ...prev, location: status }));
+              if (status === 'denied') setIsLocationBlocked(true);
+              resolve({ type, status, error: error.message });
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        });
       }
 
       if (type === 'camera') {
-        if (isNative) {
-          try {
-            const cameraModule = await import('@capacitor/camera');
-            const Camera = cameraModule.Camera;
-            const result = await Camera.requestPermissions({ permissions: ['camera'] });
-            console.log('[Permissions] Camera request result:', JSON.stringify(result));
-            const cameraState = result.camera;
-            const status: PermissionStatus = (cameraState === 'granted' || cameraState === 'limited') ? 'granted' : 'denied';
-            setPermissions(prev => ({ ...prev, camera: status }));
-            return { type, status };
-          } catch (error) {
-            console.error('[Permissions] Camera request error:', error);
-            setPermissions(prev => ({ ...prev, camera: 'denied' }));
-            return { type, status: 'denied', error: String(error) };
-          }
-        } else {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            stream.getTracks().forEach(track => track.stop());
-            setPermissions(prev => ({ ...prev, camera: 'granted' }));
-            return { type, status: 'granted' };
-          } catch (error) {
-            setPermissions(prev => ({ ...prev, camera: 'denied' }));
-            return { type, status: 'denied', error: String(error) };
-          }
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          stream.getTracks().forEach(track => track.stop());
+          setPermissions(prev => ({ ...prev, camera: 'granted' }));
+          return { type, status: 'granted' };
+        } catch (error) {
+          setPermissions(prev => ({ ...prev, camera: 'denied' }));
+          return { type, status: 'denied', error: String(error) };
         }
       }
 
       if (type === 'microphone') {
         try {
-          console.log('[Permissions] Requesting microphone access...');
-          
-          // Use getUserMedia to trigger the native permission dialog on Android/iOS
-          // This is the proper way to request RECORD_AUDIO permission
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            console.log('[Permissions] MediaDevices API not available');
+          if (!navigator.mediaDevices?.getUserMedia) {
             setPermissions(prev => ({ ...prev, microphone: 'denied' }));
             return { type, status: 'denied', error: 'Microphone not supported on this device' };
           }
-          
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('Microphone permission timeout')), 15000);
-          });
-          
-          const micPromise = navigator.mediaDevices.getUserMedia({ audio: true });
-          
-          try {
-            const stream = await Promise.race([micPromise, timeoutPromise]);
-            if (stream && typeof stream.getTracks === 'function') {
-              stream.getTracks().forEach(track => track.stop());
-            }
-            console.log('[Permissions] Microphone access granted');
-            setPermissions(prev => ({ ...prev, microphone: 'granted' }));
-            return { type, status: 'granted' };
-          } catch (raceError: any) {
-            if (raceError?.message === 'Microphone permission timeout') {
-              console.log('[Permissions] Microphone request timed out');
-              setPermissions(prev => ({ ...prev, microphone: 'prompt' }));
-              return { type, status: 'prompt', error: 'Permission request timed out. Please try again.' };
-            }
-            throw raceError;
-          }
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach(track => track.stop());
+          setPermissions(prev => ({ ...prev, microphone: 'granted' }));
+          return { type, status: 'granted' };
         } catch (error: any) {
-          console.error('[Permissions] Microphone request error:', error?.name, error?.message);
-          
-          // Properly handle the error and update status
           if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
             setPermissions(prev => ({ ...prev, microphone: 'denied' }));
-            return { type, status: 'denied', error: 'Microphone access was denied. Please enable it in your device settings.' };
-          } else if (error?.name === 'NotFoundError') {
-            setPermissions(prev => ({ ...prev, microphone: 'denied' }));
-            return { type, status: 'denied', error: 'No microphone found on this device.' };
+            return { type, status: 'denied', error: 'Microphone access was denied.' };
           }
-          
           setPermissions(prev => ({ ...prev, microphone: 'prompt' }));
-          return { type, status: 'prompt', error: 'Could not access microphone. Please try again.' };
+          return { type, status: 'prompt', error: 'Could not access microphone.' };
         }
       }
 
       if (type === 'notifications') {
-        if (isNative) {
-          try {
-            const pushModule = await import('@capacitor/push-notifications');
-            const PushNotifications = pushModule.PushNotifications;
-            const result = await PushNotifications.requestPermissions();
-            const status = result.receive === 'granted' ? 'granted' : 'denied';
-            setPermissions(prev => ({ ...prev, notifications: status }));
-            return { type, status };
-          } catch (error) {
-            return { type, status: 'denied', error: String(error) };
-          }
-        } else {
-          if (!('Notification' in window)) {
-            return { type, status: 'denied', error: 'Notifications not supported' };
-          }
-          const result = await Notification.requestPermission();
-          let status: PermissionStatus;
-          if (result === 'granted') status = 'granted';
-          else if (result === 'denied') status = 'denied';
-          else status = 'prompt';
-          setPermissions(prev => ({ ...prev, notifications: status }));
-          return { type, status };
+        if (!('Notification' in window)) {
+          return { type, status: 'denied', error: 'Notifications not supported' };
         }
+        const result = await Notification.requestPermission();
+        const status: PermissionStatus =
+          result === 'granted' ? 'granted' : result === 'denied' ? 'denied' : 'prompt';
+        setPermissions(prev => ({ ...prev, notifications: status }));
+        return { type, status };
       }
 
       if (type === 'storage') {
@@ -365,32 +184,15 @@ export function useMobilePermissions() {
 
   const requestAllPermissions = async (): Promise<PermissionResult[]> => {
     const results: PermissionResult[] = [];
-    
-    setShowPermissionModal('location');
-    const locationResult = await requestPermission('location');
-    results.push(locationResult);
-    
-    if (locationResult.status !== 'granted') {
-      setShowPermissionModal(null);
-      return results;
+    for (const type of ['location', 'camera', 'microphone', 'notifications', 'storage'] as PermissionType[]) {
+      setShowPermissionModal(type);
+      const result = await requestPermission(type);
+      results.push(result);
+      if (type === 'location' && result.status !== 'granted') {
+        setShowPermissionModal(null);
+        return results;
+      }
     }
-    
-    setShowPermissionModal('camera');
-    const cameraResult = await requestPermission('camera');
-    results.push(cameraResult);
-    
-    setShowPermissionModal('microphone');
-    const micResult = await requestPermission('microphone');
-    results.push(micResult);
-    
-    setShowPermissionModal('notifications');
-    const notifResult = await requestPermission('notifications');
-    results.push(notifResult);
-    
-    setShowPermissionModal('storage');
-    const storageResult = await requestPermission('storage');
-    results.push(storageResult);
-
     setShowPermissionModal(null);
     return results;
   };
@@ -400,13 +202,13 @@ export function useMobilePermissions() {
       case 'location':
         return {
           title: 'Location Access Required',
-          description: 'PACT needs access to your location to track field visits and share your position with your team. This permission is required and cannot be disabled.',
+          description: 'PACT needs access to your location to track field visits and share your position with your team.',
           icon: 'map-pin',
         };
       case 'camera':
         return {
           title: 'Camera Access',
-          description: 'PACT needs camera access to capture site photos and verify field visits. Photos help document site conditions accurately.',
+          description: 'PACT needs camera access to capture site photos and verify field visits.',
           icon: 'camera',
         };
       case 'microphone':
@@ -418,13 +220,13 @@ export function useMobilePermissions() {
       case 'notifications':
         return {
           title: 'Push Notifications',
-          description: 'Stay updated with assignment alerts, approval requests, and team messages. You can customize notifications in settings.',
+          description: 'Stay updated with assignment alerts, approval requests, and team messages.',
           icon: 'bell',
         };
       case 'storage':
         return {
           title: 'Storage Access',
-          description: 'PACT needs storage access to save offline data and cache site information for areas with limited connectivity.',
+          description: 'PACT needs storage access to save offline data and cache site information.',
           icon: 'folder',
         };
       default:
@@ -432,28 +234,7 @@ export function useMobilePermissions() {
     }
   };
 
-  const openAppSettings = async (): Promise<boolean> => {
-    try {
-      if (isNative) {
-        try {
-          const nativeSettingsModule = await import('capacitor-native-settings');
-          const { NativeSettings, AndroidSettings, IOSSettings } = nativeSettingsModule;
-          await NativeSettings.open({
-            optionAndroid: AndroidSettings.ApplicationDetails,
-            optionIOS: IOSSettings.App
-          });
-          return true;
-        } catch {
-          console.log('[Permissions] Native settings plugin not available, user must open settings manually');
-          return false;
-        }
-      }
-      return false;
-    } catch (error) {
-      console.error('Failed to open app settings:', error);
-      return false;
-    }
-  };
+  const openAppSettings = async (): Promise<boolean> => false;
 
   const isSetupComplete = (): boolean => {
     try {
@@ -465,14 +246,8 @@ export function useMobilePermissions() {
 
   const markSetupComplete = () => {
     try {
-      console.log('[Permissions] markSetupComplete called');
       localStorage.setItem(PERMISSION_SETUP_KEY, 'true');
       setSetupComplete(true);
-      console.log('[Permissions] Setup marked complete, localStorage set to true');
-      
-      // Verify it was saved
-      const saved = localStorage.getItem(PERMISSION_SETUP_KEY);
-      console.log('[Permissions] Verification - localStorage value:', saved);
     } catch (error) {
       console.error('[Permissions] Failed to save setup status:', error);
     }
@@ -487,22 +262,11 @@ export function useMobilePermissions() {
     }
   };
 
-  // Initialize only once on mount - do NOT add checkAllPermissions to dependencies
   useEffect(() => {
-    if (hasInitialized.current) {
-      console.log('[Permissions] Already initialized, skipping');
-      return;
-    }
+    if (hasInitialized.current) return;
     hasInitialized.current = true;
-    
-    const savedSetup = isSetupComplete();
-    console.log('[Permissions] Initializing, setupComplete from localStorage:', savedSetup);
-    setSetupComplete(savedSetup);
-    
-    // Only run initial check, don't re-run on every render
-    checkAllPermissions().catch(err => {
-      console.error('[Permissions] Initial check error:', err);
-    });
+    setSetupComplete(isSetupComplete());
+    checkAllPermissions().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -510,61 +274,26 @@ export function useMobilePermissions() {
     if (setupComplete) {
       locationCheckInterval.current = setInterval(async () => {
         const locationStatus = await checkLocationOnly();
-        if (locationStatus !== 'granted') {
-          setIsLocationBlocked(true);
-          setPermissions(prev => ({ ...prev, location: locationStatus }));
-        } else {
-          setIsLocationBlocked(false);
-          setPermissions(prev => ({ ...prev, location: 'granted' }));
-        }
+        setIsLocationBlocked(locationStatus !== 'granted');
+        setPermissions(prev => ({ ...prev, location: locationStatus }));
       }, LOCATION_CHECK_INTERVAL);
     }
-
     return () => {
-      if (locationCheckInterval.current) {
-        clearInterval(locationCheckInterval.current);
-      }
+      if (locationCheckInterval.current) clearInterval(locationCheckInterval.current);
     };
   }, [setupComplete, checkLocationOnly]);
 
   useEffect(() => {
-    const handleAppStateChange = async () => {
-      console.log('[Permissions] App resumed, checking location...');
+    if (!setupComplete) return;
+    const handleVisibility = async () => {
+      if (document.visibilityState !== 'visible') return;
       const locationStatus = await checkLocationOnly();
-      console.log('[Permissions] Location status after resume:', locationStatus);
       setPermissions(prev => ({ ...prev, location: locationStatus }));
-      if (locationStatus !== 'granted') {
-        setIsLocationBlocked(true);
-      } else {
-        setIsLocationBlocked(false);
-      }
+      setIsLocationBlocked(locationStatus !== 'granted');
     };
-
-    const setupAppStateListener = async () => {
-      if (isNative) {
-        try {
-          const appModule = await import('@capacitor/app');
-          appModule.App.addListener('appStateChange', async ({ isActive }) => {
-            if (isActive) {
-              await handleAppStateChange();
-            }
-          });
-        } catch (error) {
-          console.error('Failed to setup app state listener:', error);
-        }
-      } else {
-        document.addEventListener('visibilitychange', async () => {
-          if (document.visibilityState === 'visible') {
-            await handleAppStateChange();
-          }
-        });
-      }
-    };
-
-    if (setupComplete) {
-      setupAppStateListener();
-    }
-  }, [isNative, setupComplete, checkLocationOnly]);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [setupComplete, checkLocationOnly]);
 
   return {
     permissions,

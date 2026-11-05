@@ -36,10 +36,10 @@ const BLANK: Omit<Company,'id'|'created_at'> = {
 };
 
 export default function AccountingCompanies() {
-  const { hasAnyRole } = useAuthorization();
+  const { canWriteAccounting } = useAuthorization();
   const { currentUser } = useUser();
   const { toast } = useToast();
-  const canManage = hasAnyRole(['super_admin','admin','financialAdmin']);
+  const canManage = canWriteAccounting();
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [countries, setCountries]   = useState<Country[]>([]);

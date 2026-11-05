@@ -38,12 +38,15 @@ const REPORT_ROUTE_ALIASES: Array<{
   registryRoute: string;
   action?: ActionType;
   query?: RegExp;
+  hash?: RegExp;
 }> = [
   { pattern: /^\/mmp\/[^/]+\/full-report\/?$/, registryRoute: '/mmp', action: 'full_report' },
+  // Sidebar deep-link for the Full Report capability — must not inherit mmp:read
+  // from the /mmp ReportsDirectory card.
+  { pattern: /^\/mmp\/?$/, registryRoute: '/mmp', action: 'full_report', hash: /^#full-report$/ },
   { pattern: /^\/accounting\/reports\/?$/, registryRoute: '/accounting', action: 'read' },
   { pattern: /^\/accounting\/donor-reports\/?$/, registryRoute: '/accounting', action: 'read' },
   { pattern: /^\/pre-funding\/report\/?$/, registryRoute: '/pre-funding', action: 'read' },
-  { pattern: /^\/incident-reports\/?$/, registryRoute: '/field-ops?tab=incidents', action: 'read' },
   { pattern: /^\/data-export-center\/?$/, registryRoute: '/data-export-center', action: 'read' },
   { pattern: /^\/field-data\/exports\/?$/, registryRoute: '/field-data', action: 'export' },
   { pattern: /^\/analytics\/?$/, query: /(?:^|&)tab=(?:reports|data-export-center)(?:&|$)/, registryRoute: '/reports', action: 'read' },
@@ -52,7 +55,6 @@ const REPORT_ROUTE_ALIASES: Array<{
   { pattern: /^\/finance-hub\/?$/, query: /(?:^|&)tab=wallet-reports(?:&|$)/, registryRoute: '/wallet-reports', action: 'read' },
   { pattern: /^\/finance-hub\/?$/, query: /(?:^|&)tab=salary-retainer(?:&|$)/, registryRoute: '/salary-retainer-report', action: 'read' },
   { pattern: /^\/field-payments\/?$/, query: /(?:^|&)tab=fees(?:&|$)/, registryRoute: '/enumerator-fees-report', action: 'read' },
-  { pattern: /^\/field-ops\/?$/, query: /(?:^|&)tab=incident-reports(?:&|$)/, registryRoute: '/field-ops?tab=incidents', action: 'read' },
   { pattern: /^\/field-data\/?$/, query: /(?:^|&)tab=exports(?:&|$)/, registryRoute: '/field-data', action: 'export' },
   { pattern: /^\/pre-funding\/?$/, query: /(?:^|&)tab=report(?:&|$)/, registryRoute: '/pre-funding', action: 'read' },
   { pattern: /^\/hr\/?$/, query: /(?:^|&)tab=salary-retainer(?:&|$)/, registryRoute: '/salary-retainer-report', action: 'read' },
@@ -111,6 +113,22 @@ export function resolveRoutePermission(
   }
   const cleanPath = pathOnly(pathname);
   const query = search.startsWith('?') ? search.slice(1) : search;
+  const normalizedHash = hash
+    ? (hash.startsWith('#') ? hash : `#${hash}`)
+    : '';
+
+  // Hash-specific report aliases must win before path-only directory cards
+  // (e.g. /mmp#full-report must not inherit mmp:read from /mmp).
+  if (normalizedHash) {
+    const hashAlias = REPORT_ROUTE_ALIASES.find(candidate =>
+      candidate.hash &&
+      candidate.pattern.test(cleanPath) &&
+      candidate.hash.test(normalizedHash) &&
+      (!candidate.query || candidate.query.test(query))
+    );
+    if (hashAlias) return registryPermission(hashAlias.registryRoute, hashAlias.action);
+  }
+
   // ReportsDirectory destinations are the canonical action map. Resolve them
   // before the broader registry aliases so query tabs do not inherit the
   // parent hub's permission (for example fixed-assets must not become
@@ -118,7 +136,9 @@ export function resolveRoutePermission(
   const directoryPermission = resolveReportsDirectoryRoutePermission(pathname, query, hash);
   if (directoryPermission) return directoryPermission;
   const alias = REPORT_ROUTE_ALIASES.find(candidate =>
-    candidate.pattern.test(cleanPath) && (!candidate.query || candidate.query.test(query))
+    !candidate.hash &&
+    candidate.pattern.test(cleanPath) &&
+    (!candidate.query || candidate.query.test(query))
   );
   if (alias) return registryPermission(alias.registryRoute, alias.action);
   if (!REPORT_ROUTES.has(cleanPath)) return null;
@@ -286,6 +306,11 @@ export function resolveSlug(pathname: string): string | null {
   for (let len = segments.length - 1; len >= 1; len--) {
     const candidate = '/' + segments.slice(0, len).join('/');
     if (PATH_TO_SLUG[candidate]) return PATH_TO_SLUG[candidate];
+    const parentRedirect = PAGE_ACCESS_REDIRECTS.find(r => r.fromPath === candidate);
+    if (parentRedirect) {
+      const destination = resolveRegisteredLocation(parentRedirect.toPath);
+      if (destination) return destination;
+    }
   }
   return null;
 }
@@ -299,6 +324,25 @@ export function isProjectMembershipDetailPath(pathname: string): boolean {
   const match = cleanPath.match(/^\/projects\/([^/]+)$/);
   if (!match) return false;
   return !['create', 'analytics'].includes(match[1]);
+}
+
+/**
+ * True for /users/:id when :id equals userId (own profile).
+ * False for /users catalogue, missing userId, or a different user's id.
+ */
+export function isOwnUserProfilePath(
+  pathname: string,
+  userId: string | null | undefined,
+): boolean {
+  if (!userId) return false;
+  const cleanPath = splitLocation(pathname).pathname.replace(/\/$/, '') || '/';
+  const match = cleanPath.match(/^\/users\/([^/]+)$/);
+  return !!match && match[1] === userId;
+}
+
+/** True for /settings — the signed-in user's own preferences page. */
+export function isOwnSettingsPath(pathname: string): boolean {
+  return (splitLocation(pathname).pathname.replace(/\/$/, '') || '/') === '/settings';
 }
 
 /**

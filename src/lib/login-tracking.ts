@@ -1,6 +1,4 @@
 import { supabase } from '@/integrations/supabase/client';
-import { Capacitor } from '@capacitor/core';
-import { Device } from '@capacitor/device';
 
 export interface LoginEvent {
   id?: string;
@@ -33,34 +31,10 @@ export interface SessionInfo {
   user_agent?: string;
 }
 
-// Get device information
 export async function getDeviceInfo(): Promise<SessionInfo> {
   const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-  
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const deviceInfo = await Device.getInfo();
-      const appInfo = await Device.getId().catch(() => ({ identifier: 'unknown' }));
-      return {
-        platform: deviceInfo.platform === 'ios' ? 'ios' : 'android',
-        device_model: deviceInfo.model,
-        device_manufacturer: deviceInfo.manufacturer,
-        os_version: deviceInfo.osVersion,
-        app_version: '1.0.0',
-        user_agent: userAgent,
-      };
-    } catch (err) {
-      console.error('[LoginTracking] Error getting device info:', err);
-      return {
-        platform: Capacitor.getPlatform() === 'ios' ? 'ios' : 'android',
-        user_agent: userAgent,
-      };
-    }
-  }
-  
-  // Web browser - parse user agent
   const browserInfo = parseBrowserInfo(userAgent);
-  
+
   return {
     platform: 'web',
     browser: browserInfo.browser,
@@ -70,13 +44,11 @@ export async function getDeviceInfo(): Promise<SessionInfo> {
   };
 }
 
-// Parse browser info from user agent
 function parseBrowserInfo(userAgent: string): { browser: string; version: string; os: string } {
   let browser = 'Unknown';
   let version = '';
   let os = 'Unknown';
-  
-  // Detect browser
+
   if (userAgent.includes('Firefox/')) {
     browser = 'Firefox';
     const match = userAgent.match(/Firefox\/(\d+\.\d+)/);
@@ -94,8 +66,7 @@ function parseBrowserInfo(userAgent: string): { browser: string; version: string
     const match = userAgent.match(/Version\/(\d+\.\d+)/);
     if (match) version = match[1];
   }
-  
-  // Detect OS
+
   if (userAgent.includes('Windows')) {
     os = 'Windows';
     if (userAgent.includes('Windows NT 10.0')) os = 'Windows 10/11';
@@ -116,13 +87,12 @@ function parseBrowserInfo(userAgent: string): { browser: string; version: string
     const match = userAgent.match(/OS (\d+_\d+)/);
     if (match) os = `iOS ${match[1].replace('_', '.')}`;
   }
-  
+
   return { browser, version, os };
 }
 
-// Record a login event
 export async function recordLoginEvent(
-  userId: string, 
+  userId: string,
   success: boolean = true,
   options?: {
     mfaUsed?: boolean;
@@ -132,7 +102,7 @@ export async function recordLoginEvent(
 ): Promise<void> {
   try {
     const deviceInfo = await getDeviceInfo();
-    
+
     const loginEvent: LoginEvent = {
       user_id: userId,
       platform: deviceInfo.platform,
@@ -149,15 +119,13 @@ export async function recordLoginEvent(
       login_method: options?.loginMethod || 'password',
       session_id: options?.sessionId,
     };
-    
-    // Insert into login_events table
+
     const { error } = await supabase
       .from('login_events')
       .insert([loginEvent]);
-    
+
     if (error) {
       console.error('[LoginTracking] Error recording login event:', error);
-      // Fall back to localStorage if table doesn't exist
       saveToLocalStorage(loginEvent);
     } else {
       console.log('[LoginTracking] Login event recorded:', deviceInfo.platform);
@@ -167,12 +135,10 @@ export async function recordLoginEvent(
   }
 }
 
-// Record logout event
-export async function recordLogoutEvent(userId: string, sessionId?: string): Promise<void> {
+export async function recordLogoutEvent(userId: string, _sessionId?: string): Promise<void> {
   try {
     const logoutTime = new Date().toISOString();
-    
-    // First fetch the most recent open session for this user
+
     const { data: sessions, error: fetchError } = await supabase
       .from('login_events')
       .select('id')
@@ -180,23 +146,22 @@ export async function recordLogoutEvent(userId: string, sessionId?: string): Pro
       .is('logout_at', null)
       .order('login_at', { ascending: false })
       .limit(1);
-    
+
     if (fetchError) {
       console.error('[LoginTracking] Error fetching session:', fetchError);
       return;
     }
-    
+
     if (!sessions || sessions.length === 0) {
       console.log('[LoginTracking] No open session found for user:', userId);
       return;
     }
-    
-    // Update the specific session by id
+
     const { error: updateError } = await supabase
       .from('login_events')
       .update({ logout_at: logoutTime })
       .eq('id', sessions[0].id);
-    
+
     if (updateError) {
       console.error('[LoginTracking] Error recording logout:', updateError);
     } else {
@@ -207,7 +172,6 @@ export async function recordLogoutEvent(userId: string, sessionId?: string): Pro
   }
 }
 
-// Get login history for a user
 export async function getLoginHistory(
   userId?: string,
   options?: {
@@ -222,40 +186,26 @@ export async function getLoginHistory(
     let query = supabase
       .from('login_events')
       .select('*', { count: 'exact' });
-    
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
-    
-    if (options?.platform) {
-      query = query.eq('platform', options.platform);
-    }
-    
-    if (options?.fromDate) {
-      query = query.gte('login_at', options.fromDate.toISOString());
-    }
-    
-    if (options?.toDate) {
-      query = query.lte('login_at', options.toDate.toISOString());
-    }
-    
+
+    if (userId) query = query.eq('user_id', userId);
+    if (options?.platform) query = query.eq('platform', options.platform);
+    if (options?.fromDate) query = query.gte('login_at', options.fromDate.toISOString());
+    if (options?.toDate) query = query.lte('login_at', options.toDate.toISOString());
+
     query = query.order('login_at', { ascending: false });
-    
-    if (options?.limit) {
-      query = query.limit(options.limit);
-    }
-    
+
+    if (options?.limit) query = query.limit(options.limit);
     if (options?.offset) {
       query = query.range(options.offset, options.offset + (options.limit || 10) - 1);
     }
-    
+
     const { data, error, count } = await query;
-    
+
     if (error) {
       console.error('[LoginTracking] Error fetching login history:', error);
       return { data: getFromLocalStorage(), count: 0 };
     }
-    
+
     return { data: data || [], count: count || 0 };
   } catch (err) {
     console.error('[LoginTracking] Error in getLoginHistory:', err);
@@ -263,7 +213,6 @@ export async function getLoginHistory(
   }
 }
 
-// Get login statistics
 export async function getLoginStats(): Promise<{
   totalLogins: number;
   webLogins: number;
@@ -276,7 +225,7 @@ export async function getLoginStats(): Promise<{
     const { data: events, error } = await supabase
       .from('login_events')
       .select('*');
-    
+
     if (error || !events) {
       return {
         totalLogins: 0,
@@ -287,31 +236,29 @@ export async function getLoginStats(): Promise<{
         avgSessionDuration: null,
       };
     }
-    
+
     const webLogins = events.filter(e => e.platform === 'web').length;
     const androidLogins = events.filter(e => e.platform === 'android').length;
     const iosLogins = events.filter(e => e.platform === 'ios').length;
-    
-    // Count unique device models
+
     const uniqueDevices = new Set(
       events
         .filter(e => e.device_model)
         .map(e => `${e.device_manufacturer || ''}-${e.device_model}`)
     ).size;
-    
-    // Calculate average session duration
+
     const sessionsWithDuration = events.filter(e => e.login_at && e.logout_at);
     let avgSessionDuration: number | null = null;
-    
+
     if (sessionsWithDuration.length > 0) {
       const totalDuration = sessionsWithDuration.reduce((acc, e) => {
         const loginTime = new Date(e.login_at).getTime();
         const logoutTime = new Date(e.logout_at!).getTime();
         return acc + (logoutTime - loginTime);
       }, 0);
-      avgSessionDuration = totalDuration / sessionsWithDuration.length / 1000 / 60; // in minutes
+      avgSessionDuration = totalDuration / sessionsWithDuration.length / 1000 / 60;
     }
-    
+
     return {
       totalLogins: events.length,
       webLogins,
@@ -333,7 +280,6 @@ export async function getLoginStats(): Promise<{
   }
 }
 
-// Get active sessions (users currently logged in)
 export async function getActiveSessions(): Promise<LoginEvent[]> {
   try {
     const { data, error } = await supabase
@@ -341,12 +287,12 @@ export async function getActiveSessions(): Promise<LoginEvent[]> {
       .select('*')
       .is('logout_at', null)
       .order('login_at', { ascending: false });
-    
+
     if (error) {
       console.error('[LoginTracking] Error fetching active sessions:', error);
       return [];
     }
-    
+
     return data || [];
   } catch (err) {
     console.error('[LoginTracking] Error in getActiveSessions:', err);
@@ -354,13 +300,11 @@ export async function getActiveSessions(): Promise<LoginEvent[]> {
   }
 }
 
-// Local storage fallback
 function saveToLocalStorage(event: LoginEvent): void {
   try {
     const stored = localStorage.getItem('pact_login_events');
     const events: LoginEvent[] = stored ? JSON.parse(stored) : [];
     events.unshift(event);
-    // Keep only last 100 events
     localStorage.setItem('pact_login_events', JSON.stringify(events.slice(0, 100)));
   } catch (err) {
     console.error('[LoginTracking] Error saving to localStorage:', err);
@@ -371,7 +315,7 @@ function getFromLocalStorage(): LoginEvent[] {
   try {
     const stored = localStorage.getItem('pact_login_events');
     return stored ? JSON.parse(stored) : [];
-  } catch (err) {
+  } catch {
     return [];
   }
 }

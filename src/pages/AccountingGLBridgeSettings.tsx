@@ -124,8 +124,7 @@ function AccountPicker({
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AccountingGLBridgeSettings() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { isAuthenticated } = useAuthorization();
 
   const [configs, setConfigs]   = useState<BridgeConfig[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -176,8 +175,8 @@ export default function AccountingGLBridgeSettings() {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && allowed) load();
-  }, [isAuthenticated, allowed, load]);
+    if (isAuthenticated) load();
+  }, [isAuthenticated, load]);
 
   // ── Edit handler ───────────────────────────────────────────────────────────
   function handleEdit(sourceEvent: string, side: 'debit' | 'credit', id: string | null) {
@@ -275,7 +274,7 @@ export default function AccountingGLBridgeSettings() {
   }
 
   // ── Access guard ───────────────────────────────────────────────────────────
-  if (!isAuthenticated || !allowed) {
+  if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
         <AlertTriangle className="h-5 w-5 mr-2" />

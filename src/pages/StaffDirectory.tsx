@@ -28,7 +28,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/user/UserContext";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
-import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import {
   exportStaffToExcel, exportStaffToPDF, exportStaffToCSV, type ExportProfile,
 } from "@/utils/staffDirectoryExport";
@@ -1487,11 +1486,6 @@ export default function StaffDirectory() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 space-y-5">
         {/* ── Info Banner ── */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <PageInfoBanner
-            title="Staff Directory"
-            description="View field team profiles across all operations. Directory tab shows live online status and device info. Capacity shows headcount breakdown by Hub, State, and Role. Bank Accounts shows the full account registry with registered/missing status. Online Now shows who is currently active."
-            descriptionAr="عرض ملفات تعريف الفريق الميداني عبر جميع العمليات. يعرض الحضور المباشر ومعلومات الجهاز وتوزيع القدرات والحسابات البنكية."
-          />
           {canAccessDepts && (
             <Link
               to="/departments"

@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { fetchAccountingFinanceKpis } from '@/services/accountingFinanceKpis';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FitNumber } from '@/components/ui/fit-number';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -122,8 +122,8 @@ function KpiCard({
             ) : error ? (
               <div className="text-[11px] text-amber-600 mt-1 flex items-center gap-1"><AlertTriangle className="h-3 w-3" />Run migration</div>
             ) : (
-              <div className="mt-1.5 flex items-end gap-1.5">
-                <div className="text-2xl font-bold tabular-nums leading-none">{value}</div>
+              <div className="mt-1.5 flex min-w-0 items-end gap-1.5">
+                <FitNumber value={value} className="min-w-0 flex-1 text-2xl font-bold leading-none" />
                 {trend === 'up' && <TrendingUp className="h-3.5 w-3.5 text-rose-500 mb-0.5" />}
                 {trend === 'down' && <TrendingDown className="h-3.5 w-3.5 text-emerald-500 mb-0.5" />}
               </div>
@@ -196,10 +196,7 @@ function QuickLink({ href, icon: Icon, color, label, sub }: { href: string; icon
 /* ─── main component ─────────────────────────────────────────────────── */
 export default function AccountingFinanceDashboard() {
   const { authReady } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-
-  const {
+    const {
     data: kpis,
     isLoading,
     isFetching,
@@ -209,7 +206,7 @@ export default function AccountingFinanceDashboard() {
   } = useQuery({
     queryKey: ['accounting', 'finance-kpis'],
     queryFn: fetchAccountingFinanceKpis,
-    enabled: authReady && allowed,
+    enabled: authReady,
     staleTime: 1000 * 60 * 2,
   });
 
@@ -227,7 +224,7 @@ export default function AccountingFinanceDashboard() {
       if (err) return 0;
       return count ?? 0;
     },
-    enabled: authReady && allowed,
+    enabled: authReady,
     staleTime: 60_000,
   });
 
@@ -257,7 +254,6 @@ export default function AccountingFinanceDashboard() {
   );
 
   if (!authReady) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const revExpTrend = monthlyRevExp.data ?? [];
   const hasRevExpData = revExpTrend.some(d => d.revenue > 0 || d.expense > 0);

@@ -47,15 +47,12 @@ const BLANK = {
 
 export default function DisciplinaryTracking() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('hr', 'export');
   const { toast } = useToast();
-  const roleCanManage = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_manager']);
-  const canRead = checkPermission('hr', 'read');
-  const canView = roleCanManage || canRead;
-  const canCreate = roleCanManage || checkPermission('hr', 'create');
-  const canUpdate = roleCanManage || checkPermission('hr', 'update');
-  const canDelete = roleCanManage || checkPermission('hr', 'delete');
+  const canCreate = checkPermission('hr', 'create');
+  const canUpdate = checkPermission('hr', 'update');
+  const canDelete = checkPermission('hr', 'delete');
 
   const [cases, setCases] = useState<Case[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -70,8 +67,8 @@ export default function DisciplinaryTracking() {
   const [forbidden, setForbidden] = useState(false);
 
   useEffect(() => {
-    if (canView) fetchAll();
-  }, [canView]);
+    fetchAll();
+  }, []);
 
   async function fetchAll() {
     setLoading(true);
@@ -159,13 +156,6 @@ export default function DisciplinaryTracking() {
     else { toast({ title: 'Case deleted' }); fetchAll(); }
   }
 
-  if (!canView) {
-    return (
-      <Card className="border-dashed"><CardContent className="py-16 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
-        <Lock className="h-5 w-5" />Disciplinary & grievance records are restricted to HR and admin roles.
-      </CardContent></Card>
-    );
-  }
   if (loading) return <PageLoader compact />;
   if (missingTable) {
     return (

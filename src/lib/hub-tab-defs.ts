@@ -42,18 +42,8 @@ export const HUB_TAB_REGISTRY: HubDef[] = [
         sectionId: 'monitoring',
         sectionLabel: 'Monitoring',
         tabs: [
-          { tabId: 'site-visits', label: 'Site Visits', description: 'Plan and manage field site visits.' },
           { tabId: 'monitoring-form', label: 'Monitoring Form', description: 'Submit structured monitoring data for a site visit.' },
           { tabId: 'coverage-map', label: 'MMP Coverage Map', description: 'Map MMP site coverage and completion status.' },
-        ],
-      },
-      {
-        sectionId: 'safety',
-        sectionLabel: 'Safety & Assets',
-        tabs: [
-          { tabId: 'safety-hub', label: 'Safety Hub', description: 'Review safety alerts and field staff check-ins.' },
-          { tabId: 'incident-reports', label: 'Incident Reports', description: 'Log and follow up on field incidents.' },
-          { tabId: 'equipment', label: 'Equipment Tracking', description: 'Track equipment assigned to field teams.' },
         ],
       },
       {
@@ -149,8 +139,7 @@ export const HUB_TAB_REGISTRY: HubDef[] = [
         sectionLabel: 'People & Access',
         tabs: [
           { tabId: 'users',               label: 'User Management',      description: 'Create and manage user accounts, roles, and profiles.' },
-          { tabId: 'role-management',     label: 'Role Management',      description: 'Configure roles, permissions, and per-user access overrides.' },
-          { tabId: 'page-access',         label: 'Page Access Control',  description: 'Grant or block page access for individual users.' },
+          { tabId: 'role-management',     label: 'Role Management',      description: 'Opens /role-management — role baselines for pages, actions, tabs, and assignments.' },
           { tabId: 'departments',         label: 'Departments',          description: 'Manage organisational departments.' },
           { tabId: 'hub-management',      label: 'Hub Management',       description: 'Configure hubs, sub-hubs, and localities.' },
         ],
@@ -196,8 +185,7 @@ export const HUB_TAB_REGISTRY: HubDef[] = [
         sectionId: 'permissions',
         sectionLabel: 'Permissions & Audit',
         tabs: [
-          { tabId: 'roles',           label: 'Roles',            description: 'Manage system and custom roles, assign users, and configure permissions.' },
-          { tabId: 'user-access',     label: 'User Access',      description: 'Canonical per-user control of page access, hub tabs, action permissions, and data scope.' },
+          { tabId: 'roles',           label: 'Role Management',  description: 'Door to /role-management — create and edit role baselines only.' },
           { tabId: 'audit-logs',      label: 'Audit Logs',       description: 'Immutable record of all system actions.' },
           { tabId: 'button-registry', label: 'Button Registry',  description: 'Full button and permission map across the entire platform.' },
         ],

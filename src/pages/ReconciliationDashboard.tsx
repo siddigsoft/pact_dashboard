@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -513,10 +512,6 @@ const ReconciliationDashboard = () => {
         </Button>
       </div>
 
-      <PageInfoBanner
-        title="Reconciliation Dashboard"
-        description="This page allows finance staff to systematically reconcile payments against submitted receipts. Items appear here once they have been marked as paid but have not yet been reconciled. Use the Reconcile button to confirm that payment has been verified against the original submission. Bulk reconciliation is available for processing multiple items at once."
-      />
 
       {cycleContext && (
         <div className="flex items-center gap-2 rounded-md border border-blue-400/40 bg-blue-50/60 dark:bg-blue-950/30 px-4 py-3 text-sm" data-testid="banner-cycle-context">

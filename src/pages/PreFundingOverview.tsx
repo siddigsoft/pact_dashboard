@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePreFundOrgAccess } from '@/hooks/usePreFundOrgAccess';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FitNumber } from '@/components/ui/fit-number';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -230,11 +231,10 @@ function calcBurnDaysLeft(f: PreFundRow): number | null {
 }
 
 export default function PreFundingOverview() {
-  const { hasAnyRole, checkPermission } = useAuthorization();
-  const { canViewOrgPreFunds, isFinanceAdmin } = usePreFundOrgAccess();
+  const { checkPermission } = useAuthorization();
+  const { isFinanceAdmin } = usePreFundOrgAccess();
   const navigate = useNavigate();
   // Finance/admin + Access Control grant: org-wide balance view; others: role baselines
-  const canAccess = canViewOrgPreFunds || hasAnyRole(['coordinator', 'supervisor', 'fom', 'dataTeam', 'data_collector', 'employee', 'countryDirector']);
   const canCreatePreFund = checkPermission('pre_funding', 'create');
   const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
 
@@ -609,15 +609,6 @@ export default function PreFundingOverview() {
     exportToExcel(rows, 'Pre-Fund Balances', `pre-fund-balances-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
-  if (!canAccess) {
-    return (
-      <div className="p-8 text-center">
-        <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
-        <p className="text-muted-foreground">You don't have access to Pre-Funding.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-5 p-4 md:p-6">
       {/* Header */}
@@ -775,7 +766,7 @@ export default function PreFundingOverview() {
                     <div className="text-[9px] text-muted-foreground" dir="rtl">{kpi.labelAr}</div>
                     {(kpi as any).calculating
                       ? <div className="mt-1.5 h-8 w-36 rounded bg-muted animate-pulse" />
-                      : <div className="mt-1.5 text-2xl font-bold tabular-nums leading-none">{kpi.value}</div>
+                      : <FitNumber value={kpi.value} className="mt-1.5 text-2xl font-bold leading-none" />
                     }
                     <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{kpi.sub}</div>
                   </div>

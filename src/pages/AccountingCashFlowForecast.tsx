@@ -14,7 +14,6 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { cn } from '@/lib/utils';
-import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid,
 } from 'recharts';
@@ -34,7 +33,6 @@ interface HistoricalRow { month: string; inflows: number; outflows: number; net:
 export default function AccountingCashFlowForecast() {
   const { checkPermission } = useAuthorization();
   const { authReady } = useAppContext();
-  const allowed = checkPermission('finances', 'read');
   const canExport = checkPermission('finances', 'export');
 
   const [loading, setLoading] = useState(true);
@@ -50,7 +48,7 @@ export default function AccountingCashFlowForecast() {
   const [missingTables, setMissingTables] = useState<string[]>([]);
 
   const load = useCallback(async () => {
-    if (!allowed || !authReady) return;
+    if (!authReady) return;
     setLoading(true); setError(null);
     try {
       const missing: string[] = [];
@@ -166,9 +164,9 @@ export default function AccountingCashFlowForecast() {
       setMissingTables(missing);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
-  }, [allowed, authReady]);
+  }, [authReady]);
 
-  useEffect(() => { if (allowed && authReady) void load(); }, [allowed, authReady, load]);
+  useEffect(() => { if (authReady) void load(); }, [authReady, load]);
 
   const forecast: ForecastRow[] = useMemo(() => {
     const rows: ForecastRow[] = [];
@@ -217,7 +215,6 @@ export default function AccountingCashFlowForecast() {
   };
 
   if (!authReady) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   const lowestBalance = forecast.reduce((min, r) => Math.min(min, r.closingBalance), Infinity);
   const netPositiveMonths = forecast.filter(r => r.net >= 0).length;
@@ -249,11 +246,6 @@ export default function AccountingCashFlowForecast() {
         </div>
       </div>
 
-      <PageInfoBanner
-        title="Cash Flow Forecast"
-        description="12-month rolling projection built from actual bank balances, 6-month average inflows/outflows, open purchase orders (spread over 4 months), and open encumbrances (spread over 3 months). Projections are indicative — apply manual adjustments in your budget system for precision."
-        descriptionAr="توقع دوار لمدة 12 شهرًا مبني على أرصدة البنوك الفعلية ومتوسط التدفقات الداخلة والخارجة خلال 6 أشهر."
-      />
 
       {missingTables.length > 0 && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/10 p-3 flex items-start gap-2">

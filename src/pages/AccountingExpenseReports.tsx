@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
@@ -45,13 +44,12 @@ const fmt = (n: number | null | undefined) =>
   new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
 
 export default function AccountingExpenseReports() {
-  const { hasAnyRole, isAuthenticated, user } = useAuthorization();
+  const { isAuthenticated, user, canWriteAccounting } = useAuthorization();
   const { authReady } = useAppContext();
   const { toast } = useToast();
-  const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor', 'coordinator', 'fom']);
-  const canTier1  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'fom']);
-  const canTier2  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
-  const canPay    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const canTier1  = canWriteAccounting();
+  const canTier2  = canWriteAccounting();
+  const canPay    = canWriteAccounting();
 
   const [rows, setRows]           = useState<ExpenseReport[]>([]);
   const [employees, setEmployees] = useState<{ id: string; full_name: string }[]>([]);
@@ -115,7 +113,7 @@ export default function AccountingExpenseReports() {
     setPdCalc(null); setPdCountry('');
   };
 
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -182,7 +180,6 @@ export default function AccountingExpenseReports() {
   };
 
   if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
-  if (!allowed) return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-4 p-4">

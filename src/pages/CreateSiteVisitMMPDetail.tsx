@@ -20,7 +20,7 @@ const CreateSiteVisitMMPDetail = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, calculateDistanceFee } = useAppContext();
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const { getMmpById } = useMMP();
   const { createSiteVisit } = useSiteVisitContext();
   
@@ -71,7 +71,7 @@ const CreateSiteVisitMMPDetail = () => {
     setLoading(false);
   }, [id]);
 
-  const canAccess = checkPermission('site_visits', 'create') || hasAnyRole(['admin']);
+  const canAccess = checkPermission('site_visits', 'create');
   if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -85,7 +85,7 @@ const CreateSiteVisitMMPDetail = () => {
           <CardContent>
             <Button
               variant="outline"
-              onClick={() => navigate('/site-visits')}
+              onClick={() => navigate('/field-ops')}
               className="w-full"
             >
               Return to Site Visits
@@ -211,7 +211,7 @@ const CreateSiteVisitMMPDetail = () => {
         title: 'Site visits created',
         description: `Successfully created ${createdCount} site visit${createdCount !== 1 ? 's' : ''}.`,
       });
-      navigate('/site-visits');
+      navigate('/field-ops');
     } catch (error) {
       console.error('Error creating site visits:', error);
       toast({

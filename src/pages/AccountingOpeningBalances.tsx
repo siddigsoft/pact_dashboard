@@ -44,8 +44,7 @@ function newLine(): BalanceLine {
 }
 
 export default function AccountingOpeningBalances() {
-  const { hasAnyRole, isAuthenticated } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { isAuthenticated } = useAuthorization();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [years, setYears] = useState<FiscalYear[]>([]);
@@ -215,7 +214,7 @@ export default function AccountingOpeningBalances() {
     ]);
   }
 
-  if (!isAuthenticated || !allowed) {
+  if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
         <AlertTriangle className="h-5 w-5 mr-2" />

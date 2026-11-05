@@ -206,7 +206,7 @@ function buildOfferPdf(c: Candidate, posting: JobPosting, deptName: string): jsP
 
 export default function Recruitment() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole, checkPermission } = useAuthorization();
+  const { checkPermission } = useAuthorization();
   const canExport = checkPermission('hr', 'export');
   const canCreate = checkPermission('hr', 'create');
   const canUpdate = checkPermission('hr', 'update');
@@ -217,8 +217,8 @@ export default function Recruitment() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { isConnected: outlookConnected, createEvent: createOutlookEvent } = useOutlookCalendar();
-  const isAdmin   = hasAnyRole(['super_admin','admin','hr','hr_admin','hr_manager']);
-  const isManager = hasAnyRole(['super_admin','admin','hr','hr_admin','hr_manager','manager']);
+  const isAdmin   = canUpdate;
+  const isManager = canApprove;
 
   // ── Data
   const [postings,    setPostings]    = useState<JobPosting[]>([]);

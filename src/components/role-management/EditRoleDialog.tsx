@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,9 +6,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RoleBaselineAccessEditor } from './RoleBaselineAccessEditor';
 import { supabase } from '@/integrations/supabase/client';
-import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { getGrantablePageGroups } from '@/lib/access-registry';
+import { withPageDefaultPermissions } from '@/lib/page-default-permissions';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RoleBaselineAccess, RoleWithPermissions, UpdateRoleRequest, ResourceType, ActionType } from '@/types/roles';
 import { PermissionManager } from './PermissionManager';
@@ -64,9 +66,24 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
 
   const [selectedPermissions, setSelectedPermissions] = useState<{ resource: ResourceType; action: ActionType }[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const pageGroups = useMemo(() => getGrantablePageGroups(), []);
+  const [pageSearch, setPageSearch] = useState('');
+  const visiblePageGroups = useMemo(() => {
+    const q = pageSearch.trim().toLowerCase();
+    if (!q) return pageGroups;
+    return pageGroups
+      .map(([group, groupPages]) => [
+        group,
+        group.toLowerCase().includes(q)
+          ? groupPages
+          : groupPages.filter(page => page.label.toLowerCase().includes(q) || page.slug.toLowerCase().includes(q)),
+      ] as [string, typeof groupPages])
+      .filter(([, groupPages]) => groupPages.length > 0);
+  }, [pageGroups, pageSearch]);
 
   useEffect(() => {
     if (role) {
+      setPageSearch('');
       setFormData({
         display_name: role.display_name,
         description: role.description || '',
@@ -93,7 +110,7 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
         ...formData,
         ...baseline,
         page_slugs: pages,
-        permissions: selectedPermissions
+        permissions: withPageDefaultPermissions(selectedPermissions, pages) as typeof selectedPermissions
       });
       if (ok) {
         onOpenChange(false);
@@ -105,12 +122,13 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
 
   const handleUpdatePermissions = async (roleId: string, permissions: { resource: ResourceType; action: ActionType }[]) => {
     if (baselineLoading || baselineError) return false;
-    setSelectedPermissions(permissions);
+    const merged = withPageDefaultPermissions(permissions, pages) as typeof permissions;
+    setSelectedPermissions(merged);
     const ok = await onUpdateRole(roleId, {
       ...formData,
       ...baseline,
       page_slugs: pages,
-      permissions
+      permissions: merged
     });
     return ok;
   };
@@ -123,9 +141,12 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Edit Role: {role.display_name}</DialogTitle>
           <DialogDescription>
-            Update role information and permissions.
+            Role defaults live here: pages, tabs, and action permissions for this role.
           </DialogDescription>
         </DialogHeader>
+        <p className="text-xs text-muted-foreground -mt-2 mb-1">
+          Permissions, page defaults, and tab/column rules for this role save through Role Management only.
+        </p>
 
         {baselineError && <p role="alert" className="text-sm text-destructive">{baselineError}</p>}
         <Tabs defaultValue="general" className="w-full">
@@ -181,8 +202,58 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
           <TabsContent value="baseline" className="space-y-4">
             {baselineLoading ? <p className="text-sm">Loading access defaults…</p> : !baselineError && <>
               <h3 className="font-semibold">Page access</h3>
-              <p className="text-sm text-muted-foreground">Selected pages grant this role access. All defaults save together.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">{PAGE_DEFS.map(page => <label key={page.slug} className="flex items-center gap-2 text-sm"><Checkbox checked={pages.includes(page.slug)} onCheckedChange={checked => setPages(current => checked ? [...current, page.slug] : current.filter(slug => slug !== page.slug))} />{page.label}</label>)}</div>
+              <p className="text-sm text-muted-foreground">Selected pages grant this role access in navigation and routes. Each selected page also grants the read permission it needs, so it opens without “Access Denied”. All defaults save together.</p>
+              <div className="sticky top-0 z-10 bg-background py-2">
+                <Input
+                  type="search"
+                  placeholder="Search pages by name, slug, or group…"
+                  value={pageSearch}
+                  onChange={e => setPageSearch(e.target.value)}
+                  data-testid="input-role-page-search"
+                />
+              </div>
+              <div className="space-y-3">
+                {visiblePageGroups.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No pages match “{pageSearch}”.</p>
+                )}
+                {visiblePageGroups.map(([group, groupPages]) => (
+                  <Card key={group}>
+                    <CardHeader className="py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <CardTitle className="text-base">{group}</CardTitle>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const allOn = groupPages.every(page => pages.includes(page.slug));
+                            setPages(current => {
+                              if (allOn) return current.filter(slug => !groupPages.some(page => page.slug === slug));
+                              const next = new Set(current);
+                              groupPages.forEach(page => next.add(page.slug));
+                              return Array.from(next);
+                            });
+                          }}
+                        >
+                          Toggle group
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-0">
+                      {groupPages.map(page => (
+                        <label key={page.slug} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={pages.includes(page.slug)}
+                            onCheckedChange={checked => setPages(current => checked ? [...current, page.slug] : current.filter(slug => slug !== page.slug))}
+                          />
+                          <span>{page.label}</span>
+                          <span className="text-xs text-muted-foreground">{page.slug}</span>
+                        </label>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
               <RoleBaselineAccessEditor value={baseline} onChange={setBaseline} allowCostScope={allowCostScope} />
               <Button type="button" disabled={submitting || isLoading} onClick={() => { void handleSubmit({ preventDefault() {} } as React.FormEvent); }}>{submitting ? 'Saving…' : 'Save role and access defaults'}</Button>
             </>}

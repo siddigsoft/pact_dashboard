@@ -79,61 +79,14 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   }, []);
 
   useEffect(() => {
-    let networkListener: any = null;
-    let cleanupWebListeners: (() => void) | null = null;
-    
-    // Initialize network status - use Capacitor Network plugin if available
-    const initNetworkStatus = async () => {
-      try {
-        // Check if we're in a Capacitor app
-        if (typeof (window as any).Capacitor !== 'undefined') {
-          const { Network } = await import('@capacitor/network');
-          const status = await Network.getStatus();
-          setIsOnline(status.connected);
-          
-          // Listen for network changes
-          networkListener = await Network.addListener('networkStatusChange', (status) => {
-            setIsOnline(status.connected);
-          });
-        } else {
-          // Web fallback
-          setIsOnline(navigator.onLine);
-          const handleOnline = () => setIsOnline(true);
-          const handleOffline = () => setIsOnline(false);
-          
-          window.addEventListener('online', handleOnline);
-          window.addEventListener('offline', handleOffline);
-          
-          cleanupWebListeners = () => {
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-          };
-        }
-      } catch (error) {
-        console.warn('[MobileAuthScreen] Failed to initialize network monitoring, using navigator.onLine', error);
-        setIsOnline(navigator.onLine);
-        const handleOnline = () => setIsOnline(true);
-        const handleOffline = () => setIsOnline(false);
-        
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-        
-        cleanupWebListeners = () => {
-          window.removeEventListener('online', handleOnline);
-          window.removeEventListener('offline', handleOffline);
-        };
-      }
-    };
-    
-    initNetworkStatus();
-    
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
     return () => {
-      if (networkListener) {
-        networkListener.remove();
-      }
-      if (cleanupWebListeners) {
-        cleanupWebListeners();
-      }
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 

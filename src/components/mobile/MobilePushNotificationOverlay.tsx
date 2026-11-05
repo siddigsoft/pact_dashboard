@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
 import { useNavigate } from 'react-router-dom';
-import { Capacitor } from '@capacitor/core';
 import { useViewMode } from '@/context/ViewModeContext';
 
 export type NotificationType = 'call' | 'message' | 'general';
@@ -41,7 +40,7 @@ export function MobilePushNotificationOverlay({ className }: MobilePushNotificat
   const [currentNotification, setCurrentNotification] = useState<PushNotification | null>(null);
   const navigate = useNavigate();
   const { viewMode } = useViewMode();
-  const isMobile = viewMode === 'mobile' || Capacitor.isNativePlatform();
+  const isMobile = viewMode === 'mobile';
 
   useEffect(() => {
     const handleNativeNotification = (event: CustomEvent) => {
