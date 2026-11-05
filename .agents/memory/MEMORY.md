@@ -83,3 +83,4 @@
 - [Claimed Sites server filtering](claimed-sites-server-filtering.md) — Large admin site lists load bounded server-filtered pages with authoritative counts and stale-request protection.
 - [Claimant settlement serialization](claimant-settlement-serialization.md) — Site settlement and claimant reassignment share site-row serialization; old retries never rewind the latest claimant.
 - [Project lifecycle policy](project-lifecycle-policy.md) — Separate retention from completion, optional independent acceptance, and capture-time state from recorded period evidence.
+- [Protected project rendering](protected-project-render-verification.md) — Check parent JSX bindings; child tests and transpilation can miss crashes in inactive-tab props.

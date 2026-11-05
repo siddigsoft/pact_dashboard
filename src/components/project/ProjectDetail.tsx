@@ -1507,7 +1507,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
         
         <TabsContent value="team" className="space-y-4 mt-4">
-          {canArchive && <ProjectCapacityPanel projectId={project.id} archived={isArchived} />}
+          {canArchive && <ProjectCapacityPanel projectId={project.id} archived={project.archived} />}
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold flex items-center gap-2">
               Team Members
