@@ -19,6 +19,8 @@ import { ToastAction } from '@/components/ui/toast';
 import { ensureValidSession } from '@/lib/session-health';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
+import { analyzeTransactionDuplicates } from '@/utils/transactionDuplicates';
+import { appendScannerDuplicateSheets } from '@/utils/scannerDuplicateSheets';
 
 type TxRow = {
   id: string;
@@ -166,6 +168,8 @@ function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessio
   // Accept rows that have status === 'done', or rows that have no status field at all (loaded from DB)
   const done = rows.filter(r => r.status === 'done' || r.status === undefined);
   if (!done.length) { console.warn('[Export] No rows to export'); return; }
+  const duplicateAudit = analyzeTransactionDuplicates(done);
+  const duplicateMeta = new Map(duplicateAudit.details.map(item => [item.row, item]));
 
   const sorted = [...done].sort((a, b) => {
     if (a.transaction_date < b.transaction_date) return -1;
@@ -197,8 +201,8 @@ function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessio
   const sSubLbl = { font: { bold: true, sz: 10, color: { rgb: '1D3461' } }, fill: { patternType: 'solid', fgColor: { rgb: 'E0ECF8' } } };
 
   const ws: any = {};
-  const COLS = ['#', 'Transaction ID', 'Date', 'Time', 'From Account', 'To Account', 'Recipient Name', 'Mobile', 'Comment', 'Amount (SDG)'];
-  const colWidths = [5, 22, 14, 10, 22, 22, 34, 16, 22, 18];
+  const COLS = ['#', 'Transaction ID', 'Date', 'Time', 'From Account', 'To Account', 'Recipient Name', 'Mobile', 'Comment', 'Amount (SDG)', 'Duplicate Status', 'Occurrences'];
+  const colWidths = [5, 22, 14, 10, 22, 22, 34, 16, 22, 18, 48, 14];
 
   let r = 0;
   const setCell = (row: number, col: number, v: any, s?: any, t?: string) => {
@@ -223,8 +227,16 @@ function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessio
   setCell(r, 0, `${label}Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}   |   Total: ${done.length} transactions`, sMeta);
   addMerge(r, 0, r, 9); r++; r++;
 
-  setCell(r, 0, '★  GRAND TOTAL', sGrand); addMerge(r, 0, r, 8);
+  setCell(r, 0, 'GRAND TOTAL — INCLUDING DUPLICATES (SDG)', sGrand); addMerge(r, 0, r, 8);
   setCell(r, 9, grandTotal, sGrandN); setRow(r, 26); r++;
+  for (const [title, value] of [
+    ['Total WITHOUT extra duplicates — count once (SDG)', duplicateAudit.uniqueTotal],
+    ['Extra duplicate amount (SDG)', duplicateAudit.duplicateAmount],
+    [`Repeated IDs: ${duplicateAudit.duplicateGroups} | Extra duplicate rows: ${duplicateAudit.extraRows} | Conflicts: ${duplicateAudit.conflictGroups}`, duplicateAudit.extraRows],
+  ] as const) {
+    setCell(r, 0, title, sSumLbl); addMerge(r, 0, r, 8);
+    setCell(r, 9, value, sSumNum); r++;
+  }
 
   Object.entries(groups).forEach(([date, items]) => {
     let d = date; try { d = format(new Date(date), 'dd MMM yyyy'); } catch {}
@@ -259,6 +271,15 @@ function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessio
       setCell(r, 7, tx.mobile_number, base);
       setCell(r, 8, tx.comment, base);
       setCell(r, 9, amt, amtStyle);
+      const meta = duplicateMeta.get(tx)!;
+      setCell(r, 10, meta.status, base);
+      setCell(r, 11, meta.occurrences, base);
+      if (meta.occurrences > 1) {
+        for (let col = 0; col < COLS.length; col++) {
+          const cell = ws[XLSXStyle.utils.encode_cell({ r, c: col })];
+          cell.s = { ...cell.s, fill: { patternType: 'solid', fgColor: { rgb: meta.conflict ? 'F8CBAD' : 'FFF2CC' } } };
+        }
+      }
       r++;
     });
 
@@ -267,10 +288,10 @@ function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessio
     runningTotal += sub; r++; r++;
   });
 
-  setCell(r, 0, '★  GRAND TOTAL', sGrand); addMerge(r, 0, r, 8);
+  setCell(r, 0, 'GRAND TOTAL — INCLUDING DUPLICATES (SDG)', sGrand); addMerge(r, 0, r, 8);
   setCell(r, 9, runningTotal, sGrandN); setRow(r, 26); r++;
 
-  ws['!ref'] = XLSXStyle.utils.encode_range({ r: 0, c: 0 }, { r, c: 9 });
+  ws['!ref'] = XLSXStyle.utils.encode_range({ r: 0, c: 0 }, { r, c: 11 });
   ws['!cols'] = colWidths.map(w => ({ wch: w }));
 
   const wb = XLSXStyle.utils.book_new();
@@ -322,7 +343,7 @@ function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessio
   sm2(r2, 0, r2, 5); r2++; r2++;
 
   // Grand total banner
-  sc(r2, 0, '★  GRAND TOTAL', sGrand); sm2(r2, 0, r2, 4);
+  sc(r2, 0, 'TOTAL INCLUDING DUPLICATES — see Duplicate Summary for count-once totals', sGrand); sm2(r2, 0, r2, 4);
   sc(r2, 5, grandRecipientTotal, sGrandN);
   ws2['!rows'][r2] = { hpt: 26 }; r2++; r2++;
 
@@ -347,7 +368,7 @@ function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessio
 
   r2++;
   // Bottom grand total
-  sc(r2, 0, '★  GRAND TOTAL', sGrand); sm2(r2, 0, r2, 4);
+  sc(r2, 0, 'TOTAL INCLUDING DUPLICATES', sGrand); sm2(r2, 0, r2, 4);
   sc(r2, 5, grandRecipientTotal, sGrandN);
   ws2['!rows'][r2] = { hpt: 26 }; r2++;
 
@@ -355,6 +376,7 @@ function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessio
   ws2['!cols'] = rWidths.map(w => ({ wch: w }));
 
   XLSXStyle.utils.book_append_sheet(wb, ws2, 'Recipients Summary');
+  appendScannerDuplicateSheets(wb, done);
 
   const fname = sessionName
     ? `PACT_Transfers_${sessionName.replace(/[^a-zA-Z0-9_-]/g, '_')}_${format(new Date(), 'yyyyMMdd')}.xlsx`
@@ -453,16 +475,9 @@ export default function TransactionScanner() {
   const processing = pendingRows.length > 0;
   const statusMsg = rows.find(r => r.status === 'processing' && r.error)?.error;
 
-  // Duplicate detection — find transaction_ids that appear more than once among done rows
-  const duplicateIds = useMemo<Set<string>>(() => {
-    const counts = new Map<string, number>();
-    doneRows.forEach(r => {
-      if (r.transaction_id) counts.set(r.transaction_id, (counts.get(r.transaction_id) || 0) + 1);
-    });
-    const dupes = new Set<string>();
-    counts.forEach((count, id) => { if (count > 1) dupes.add(id); });
-    return dupes;
-  }, [doneRows]);
+  const duplicateAudit = analyzeTransactionDuplicates(doneRows);
+  const duplicateIds = new Set(duplicateAudit.details
+    .filter(item => item.occurrences > 1).map(item => item.id));
 
   // Unique recipients for the filtered export dialog — derived from filterExportSource
   const filterUniqueRecipients = useMemo(() => computeUniqueRecipients(filterExportSource), [filterExportSource]);
@@ -834,20 +849,41 @@ export default function TransactionScanner() {
       doc.setFontSize(8); doc.setTextColor(100, 100, 100);
       doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}  |  ${doneRows.length} transactions  |  Total: ${grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })} SDG`, 14, 20);
       if (dateRange) doc.text(`Date range: ${dateRange}`, 14, 25);
+      const audit = analyzeTransactionDuplicates(doneRows);
+      doc.text(`Including duplicates: ${audit.total.toLocaleString('en')} SDG | Count once: ${audit.uniqueTotal.toLocaleString('en')} SDG | Extra amount: ${audit.duplicateAmount.toLocaleString('en')} SDG`, 14, 30);
+      doc.text(`${audit.duplicateGroups} repeated IDs | ${audit.extraRows} extra rows | ${audit.conflictGroups} conflicting IDs. Count once keeps first input occurrence; review conflicts.`, 14, 35);
       autoTable(doc, {
-        head: [['#', 'Tx ID', 'Date', 'Time', 'Recipient', 'To Account', 'Amount (SDG)', 'Comment', 'Notes', 'Verified']],
+        head: [['#', 'Tx ID', 'Date', 'Time', 'Recipient', 'To Account', 'Amount (SDG)', 'Comment', 'Notes', 'Verified', 'Duplicate status']],
         body: doneRows.map((r, i) => [
           i + 1, r.transaction_id, fmtDate(r.transaction_date), r.transaction_time,
           r.recipient_name || '', r.to_account || '',
           amountNum(r.amount).toLocaleString('en', { minimumFractionDigits: 2 }),
-          r.comment !== 'N/A' ? (r.comment || '') : '', r.note || '', r.verified ? '✓' : '',
+          r.comment !== 'N/A' ? (r.comment || '') : '', r.note || '', r.verified ? '✓' : '', audit.details[i].status,
         ]),
-        startY: dateRange ? 30 : 26,
+        startY: 40,
+        didParseCell: (cell: any) => {
+          if (cell.section === 'body' && audit.details[cell.row.index]?.occurrences > 1) {
+            cell.cell.styles.fillColor = audit.details[cell.row.index].conflict ? [248, 203, 173] : [255, 242, 204];
+          }
+        },
         styles: { fontSize: 7, cellPadding: 2 },
         headStyles: { fillColor: [15, 32, 65], textColor: 255, fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [242, 246, 255] },
         columnStyles: { 6: { halign: 'right', fontStyle: 'bold' }, 9: { halign: 'center' } },
       });
+      if (audit.extraRows > 0) {
+        doc.addPage();
+        doc.text('Duplicate review by transaction and account', 14, 14);
+        autoTable(doc, {
+          startY: 20,
+          head: [['Tx ID', 'From Account', 'To Account', 'Occurrences', 'Amount (SDG)', 'Decision']],
+          body: audit.details.filter(item => item.occurrences > 1).map(item => [
+            item.id, item.row.from_account, item.row.to_account, item.occurrences,
+            amountNum(item.row.amount).toLocaleString('en'), item.status,
+          ]),
+          styles: { fontSize: 7, cellPadding: 2, fillColor: [255, 242, 204] },
+        });
+      }
       doc.save(`PACT_Transfers_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
     } catch (err: any) {
       toast({ title: 'PDF Export Failed', description: err.message || 'Unknown error', variant: 'destructive' });
@@ -1015,7 +1051,12 @@ export default function TransactionScanner() {
                 {duplicateIds.size} duplicate transaction{duplicateIds.size !== 1 ? 's' : ''} detected
               </p>
               <p className="text-amber-700 dark:text-amber-400 text-xs mt-0.5">
-                The same receipt was scanned more than once. Duplicates are highlighted in amber below — remove extras before saving or exporting.
+                {duplicateAudit.extraRows} extra duplicate rows across {duplicateAudit.duplicateGroups} repeated IDs.
+                {' '}Including duplicates: {duplicateAudit.total.toLocaleString('en')} SDG.
+                {' '}Count once: {duplicateAudit.uniqueTotal.toLocaleString('en')} SDG.
+                {' '}Extra amount: {duplicateAudit.duplicateAmount.toLocaleString('en')} SDG.
+                {' '}Exports keep and highlight every row, with account-level duplicate details.
+                {duplicateAudit.conflictGroups > 0 && ` ${duplicateAudit.conflictGroups} conflicting IDs require review; count-once totals keep the first input occurrence.`}
               </p>
             </div>
           </div>
@@ -1120,7 +1161,7 @@ export default function TransactionScanner() {
                     const isErr = row.status === 'error';
                     const isPending = row.status === 'pending';
                     const isProcessing = row.status === 'processing';
-                    const isDuplicate = isDone && !!row.transaction_id && duplicateIds.has(row.transaction_id);
+                    const isDuplicate = isDone && !!row.transaction_id && duplicateIds.has(row.transaction_id.trim());
                     const isLowConfidence = isDone && !isDuplicate && row.amount_confidence !== undefined && row.amount_confidence < 90;
                     const isSelected = selectedRowId === row.id;
                     const hasFile = fileMapRef.current.has(row.id);

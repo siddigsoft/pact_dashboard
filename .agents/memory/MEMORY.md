@@ -1,3 +1,4 @@
+- [Scanner duplicate reporting](scanner-duplicate-reporting.md) — Preserve highlighted duplicate rows in exports with count-once totals and account-level evidence.
 - [radix-select-empty-value](radix-select-empty-value.md) — SelectItem value="" is forbidden by Radix; use sentinel '__none__' or it throws a render error caught by ErrorBoundary.
 - [wizard-button-type-fix](wizard-button-type-fix.md) — sed 's/<Button /<Button type="button" /g' misses multiline <Button\n tags; always grep for them after running sed.
 - [profile-role-vs-user-roles-perm-gap](profile-role-vs-user-roles-perm-gap.md) — hasPermission & Permission Tester miss profiles.role; fixed via profileRolesCache in refreshUserPermissions + step 5 in hasPermission.
