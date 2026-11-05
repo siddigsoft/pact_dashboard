@@ -13,10 +13,17 @@ export async function scannerRequest(
       response = await request(controller.signal);
       // Include body reading in the timeout; a response can stall after headers.
       data = await response.json().catch(() => ({ error: `Scanner returned HTTP ${response.status}.` }));
+      if (controller.signal.aborted) throw new Error('Request timed out');
     } catch (error) {
       const message = controller.signal.aborted
         ? 'Scanning timed out. Please retry this image.'
         : 'Could not reach the scanner. Check your connection and retry.';
+      if (!controller.signal.aborted && attempt < 2) {
+        clearTimeout(timer);
+        onStatus?.(`Connection interrupted — retry ${attempt + 1}/2 in 3s…`);
+        await wait(3000);
+        continue;
+      }
       throw new Error(message);
     } finally {
       clearTimeout(timer);
@@ -30,6 +37,9 @@ export async function scannerRequest(
         throw new Error('AI service is temporarily busy. This image was not read; retry it later.');
       }
       const requested = Number(response.headers.get('Retry-After') ?? data.retryAfterSec);
+      if (Number.isFinite(requested) && requested > 60) {
+        throw new Error(`AI rate limit requires waiting ${Math.ceil(requested)} seconds. Retry this image later.`);
+      }
       const seconds = Number.isFinite(requested) && requested > 0
         ? Math.min(Math.max(requested, 1), 60)
         : response.status === 429 ? 30 : 3 * (attempt + 1);

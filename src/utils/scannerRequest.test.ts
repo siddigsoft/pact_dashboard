@@ -23,14 +23,26 @@ describe('scannerRequest', () => {
     await expect(scannerRequest(request)).rejects.toThrow('daily quota');
     expect(request).toHaveBeenCalledTimes(1);
   });
-  it('honors bounded retry-after and reports the wait', async () => {
-    const request = vi.fn().mockResolvedValueOnce(reply(429, {}, { 'Retry-After': '120' }))
+  it('honors retry-after and reports the wait', async () => {
+    const request = vi.fn().mockResolvedValueOnce(reply(429, {}, { 'Retry-After': '45' }))
       .mockResolvedValueOnce(reply(200, {}));
     const wait = vi.fn().mockResolvedValue(undefined);
     const status = vi.fn();
     await scannerRequest(request, status, wait);
-    expect(wait).toHaveBeenCalledWith(60_000);
-    expect(status).toHaveBeenCalledWith(expect.stringContaining('60s'));
+    expect(wait).toHaveBeenCalledWith(45_000);
+    expect(status).toHaveBeenCalledWith(expect.stringContaining('45s'));
+  });
+  it('does not retry earlier than a long provider cooldown', async () => {
+    const request = vi.fn().mockResolvedValue(reply(429, {}, { 'Retry-After': '120' }));
+    await expect(scannerRequest(request)).rejects.toThrow('120 seconds');
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+  it('retries connection interruptions with a bounded count', async () => {
+    const request = vi.fn().mockRejectedValueOnce(new Error('Failed to send'))
+      .mockResolvedValueOnce(reply(200, { text: '[]' }));
+    const wait = vi.fn().mockResolvedValue(undefined);
+    expect(await scannerRequest(request, undefined, wait)).toEqual({ text: '[]' });
+    expect(wait).toHaveBeenCalledWith(3000);
   });
   it('does not expose raw provider diagnostics on permanent failures', async () => {
     await expect(scannerRequest(async () => reply(400, { error: 'internal provider JSON' })))

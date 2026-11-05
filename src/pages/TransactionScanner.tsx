@@ -21,6 +21,8 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { ReportExportGate } from '@/components/auth/ReportExportGate';
 import { analyzeTransactionDuplicates } from '@/utils/transactionDuplicates';
 import { appendScannerDuplicateSheets } from '@/utils/scannerDuplicateSheets';
+import { scannerRequest } from '@/utils/scannerRequest';
+import { createScannerQueue, restoreScannerRows, scannerSavedTotal, serializeScannerRows } from '@/utils/scannerSession';
 
 type TxRow = {
   id: string;
@@ -74,11 +76,16 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 const BATCH_SIZE = 1;
 
 function compressImage(file: File): Promise<{ base64: string; mimeType: string }> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    const timer = setTimeout(() => reject(new Error('Image preparation timed out. Try a smaller JPG or PNG.')), 15_000);
+    const fail = () => { clearTimeout(timer); reject(new Error('Could not read this image. Try a JPG or PNG.')); };
+    reader.onerror = fail;
     reader.onload = (e) => {
       const img = new Image();
+      img.onerror = fail;
       img.onload = () => {
+        try {
         const MAX = 1024;
         let { width, height } = img;
         if (width > MAX || height > MAX) {
@@ -88,7 +95,9 @@ function compressImage(file: File): Promise<{ base64: string; mimeType: string }
         const canvas = document.createElement('canvas');
         canvas.width = width; canvas.height = height;
         canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+        clearTimeout(timer);
         resolve({ base64: canvas.toDataURL('image/jpeg', 0.82).split(',')[1], mimeType: 'image/jpeg' });
+        } catch { fail(); }
       };
       img.src = e.target!.result as string;
     };
@@ -116,52 +125,31 @@ async function extractBatch(
   images: Array<{ base64: string; mimeType: string }>,
   onStatus?: (msg: string) => void,
 ): Promise<Array<Partial<TxRow>>> {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    await ensureValidSession();
-    const { data, error } = await supabase.functions.invoke('extract-transaction', {
-      body: { images },
-    });
-
-    let payload: any = data ?? {};
-    let status = 200;
-    if (error) {
-      const ctx = (error as { context?: Response }).context;
-      status = ctx?.status ?? 500;
-      if (ctx) {
-        try {
-          payload = await ctx.json();
-        } catch {
-          payload = { error: error.message || `Server error (${status})` };
-        }
-      } else {
-        payload = { error: error.message || 'OCR request failed' };
+  {
+    const session = await ensureValidSession();
+    if (!session.success) throw new Error('Your session expired. Sign in again before scanning.');
+    const payload = await scannerRequest(async signal => {
+      const { data, error } = await supabase.functions.invoke('extract-transaction', {
+        body: { images }, signal,
+      });
+      if (error) {
+        const response = (error as { context?: Response }).context;
+        if (response instanceof Response) return response;
+        throw error;
       }
-    }
-
-    if (status === 503 && payload.needsGroqKey) {
-      throw new Error('__NEEDS_GROQ_KEY__');
-    }
-    if (status === 429) {
-      if (payload.isDailyExhausted) {
-        throw new Error('All AI models at daily quota. Quotas reset at midnight Pacific time.');
-      }
-      const waitSec = Math.min(payload.retryAfterSec ?? 30, 60);
-      onStatus?.(`Rate limited — waiting ${waitSec}s…`);
-      await sleep(waitSec * 1000);
-      continue;
-    }
-    if (error || status >= 400) {
-      throw new Error(payload.error || error?.message || `Server error ${status}`);
-    }
-
+      return new Response(JSON.stringify(data), { status: 200 });
+    }, onStatus);
     const clean = (payload.text || '').replace(/```json\n?|```\n?/g, '').trim();
     let parsed: any;
     try { parsed = JSON.parse(clean); } catch { throw new Error('Could not parse AI response'); }
 
     const arr = Array.isArray(parsed) ? parsed : [parsed];
+    if (arr.length !== images.length || arr.some(item =>
+      !item || typeof item !== 'object' || Array.isArray(item) || !Object.keys(item).length)) {
+      throw new Error('The AI did not return receipt details for this image. Please retry.');
+    }
     return arr.slice(0, images.length).map((x: any) => parseTxResult(x));
   }
-  throw new Error('All AI models at daily quota. Quotas reset at midnight Pacific time.');
 }
 
 function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessionName?: string) {
@@ -408,6 +396,7 @@ function fmtAcct(acct: string) {
 function computeUniqueRecipients(sourceRows: Array<any>) {
   const map = new Map<string, { name: string; account: string; count: number; total: number }>();
   sourceRows.forEach(r => {
+    if (r.status && r.status !== 'done') return;
     const key = r.to_account || r.recipient_name || 'Unknown';
     const ex = map.get(key);
     if (ex) { ex.count++; ex.total += amountNum(r.amount); }
@@ -462,6 +451,8 @@ export default function TransactionScanner() {
   const dropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileMapRef = useRef<Map<string, File>>(new Map());
+  const scannerQueueRef = useRef(createScannerQueue());
+  const saveInFlightRef = useRef(false);
 
   const updateRow = useCallback((id: string, patch: Partial<TxRow>) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r)), []);
@@ -482,7 +473,8 @@ export default function TransactionScanner() {
   // Unique recipients for the filtered export dialog — derived from filterExportSource
   const filterUniqueRecipients = useMemo(() => computeUniqueRecipients(filterExportSource), [filterExportSource]);
   const grandTotal = doneRows.reduce((s, r) => s + amountNum(r.amount), 0);
-  const progressPct = rows.length > 0 ? (doneRows.length / rows.length) * 100 : 0;
+  const processedCount = doneRows.length + errorRows.length;
+  const progressPct = rows.length > 0 ? (processedCount / rows.length) * 100 : 0;
   const doneCount = doneRows.length;
   const totalCount = rows.length;
 
@@ -555,89 +547,79 @@ export default function TransactionScanner() {
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
   const saveSession = useCallback(async (name: string) => {
-    if (!doneRows.length) return;
-    const session = await ensureValidSession();
-    if (!session.success) return;
+    if (!rows.length || saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     setSaving(true);
+    const receiptsToSave = serializeScannerRows(rows);
     try {
+      const session = await ensureValidSession();
+      if (!session.success) throw new Error('Sign in again before saving.');
       const { data: { user } } = await supabase.auth.getUser();
-      const totalAmt = doneRows.reduce((s, r) => s + amountNum(r.amount), 0);
-
-      // Strip frontend-only fields before saving
-      const receiptsToSave = doneRows.map(({ id: _id, fileName: _fn, status: _st, error: _er, ...rest }) => rest);
+      if (!user) throw new Error('Sign in before saving.');
+      const totalAmt = scannerSavedTotal(receiptsToSave);
 
       const { data, error } = await supabase.from('bank_transaction_scans').insert({
         session_name: name.trim() || null,
         scanned_by: user?.id || null,
         receipts: receiptsToSave,
-        receipt_count: doneRows.length,
+        receipt_count: receiptsToSave.length,
         total_amount: totalAmt,
-      }).select('id');
+      }).select('id, receipts').single();
 
       if (error) {
         console.error('[TransactionScanner] Save error:', error.code, error.message, error.details, error.hint);
         throw new Error(error.message || error.details || 'Database insert failed');
       }
 
-      console.log('[TransactionScanner] Saved successfully, id:', data?.[0]?.id);
-      toast({ title: 'Session saved', description: `${doneRows.length} receipts saved${name ? ` as "${name}"` : ''}.` });
+      if (!data?.id || JSON.stringify(data.receipts) !== JSON.stringify(receiptsToSave)) {
+        // jsonb may reorder object keys: compare canonical field values below.
+        const saved = data?.receipts as any[];
+        if (!data?.id || !Array.isArray(saved) || saved.length !== receiptsToSave.length ||
+          saved.some((row, index) => Object.keys(receiptsToSave[index]).some(key =>
+            JSON.stringify(row[key]) !== JSON.stringify(receiptsToSave[index][key])))) {
+          throw new Error('Save could not be verified. Reload saved records before trying again.');
+        }
+      }
+      toast({ title: 'Session saved', description: `${receiptsToSave.length} rows saved, including notes, verification, status and duplicates${name ? ` as "${name}"` : ''}.` });
+      setSaveDialogOpen(false);
       setAutoSaved(true);
       await loadSessions();
     } catch (err: any) {
       console.error('[TransactionScanner] Save caught error:', err);
       toast({ title: 'Save failed', description: err.message || 'Unknown error', variant: 'destructive' });
     } finally {
+      saveInFlightRef.current = false;
       setSaving(false);
     }
-  }, [doneRows, loadSessions, toast]);
+  }, [rows, loadSessions, toast]);
 
   const appendToSession = useCallback(async (targetId: string) => {
-    if (!doneRows.length || !targetId) return;
-    const session = await ensureValidSession();
-    if (!session.success) return;
+    if (!rows.length || !targetId || saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     setSaving(true);
     try {
-      const { data: existing, error: fetchErr } = await supabase
-        .from('bank_transaction_scans')
-        .select('receipts, receipt_count, total_amount, session_name')
-        .eq('id', targetId)
-        .single();
-      if (fetchErr) throw new Error(fetchErr.message);
-
-      const existingReceipts: any[] = existing.receipts || [];
-      const existingIds = new Set(existingReceipts.map((r: any) => r.transaction_id).filter(Boolean));
-      const newReceipts = doneRows.map(({ id: _id, fileName: _fn, status: _st, error: _er, ...rest }) => rest);
-
-      let addedCount = 0;
-      const merged = [...existingReceipts];
-      for (const r of newReceipts) {
-        if (!r.transaction_id || !existingIds.has(r.transaction_id)) {
-          merged.push(r);
-          addedCount++;
-        }
-      }
-
-      const newTotal = merged.reduce((s: number, r: any) => s + amountNum(r.amount), 0);
-      const { error: updateErr } = await supabase
-        .from('bank_transaction_scans')
-        .update({ receipts: merged, receipt_count: merged.length, total_amount: newTotal })
-        .eq('id', targetId);
-      if (updateErr) throw new Error(updateErr.message);
-
-      const skipped = newReceipts.length - addedCount;
+      const session = await ensureValidSession();
+      if (!session.success) throw new Error('Sign in again before saving.');
+      const { data, error } = await supabase.rpc('append_bank_scan_receipts', {
+        p_session_id: targetId, p_receipts: serializeScannerRows(rows),
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error('The saved session update was not confirmed.');
       toast({
         title: 'Session updated',
-        description: `Added ${addedCount} receipt${addedCount !== 1 ? 's' : ''}${skipped > 0 ? ` · ${skipped} duplicate${skipped !== 1 ? 's' : ''} skipped` : ''} to "${existing.session_name || 'Untitled scan'}"`,
+        description: `${data.added_count} new rows added; metadata refreshed for previously saved rows. Repeated transaction IDs are preserved.`,
       });
+      setSaveDialogOpen(false);
       setAutoSaved(true);
       await loadSessions();
     } catch (err: any) {
       console.error('[TransactionScanner] Append error:', err);
       toast({ title: 'Update failed', description: err.message || 'Unknown error', variant: 'destructive' });
     } finally {
+      saveInFlightRef.current = false;
       setSaving(false);
     }
-  }, [doneRows, loadSessions, toast]);
+  }, [rows, loadSessions, toast]);
 
   const doDeleteSession = useCallback(async (id: string) => {
     const session = await ensureValidSession();
@@ -658,7 +640,12 @@ export default function TransactionScanner() {
   }, [toast, doDeleteSession]);
 
   const loadSession = useCallback((session: SavedSession) => {
-    const restored: TxRow[] = (session.receipts || []).map((r: any) => ({
+    if (processing) {
+      toast({ title: 'Scan still running', description: 'Wait for the current scan to finish before loading a different session. You can save progress now.' });
+      return;
+    }
+    const restored: TxRow[] = restoreScannerRows(session.receipts || []).map((r: any) => ({
+      ...r,
       transaction_id: r.transaction_id || '',
       transaction_date: r.transaction_date || '',
       transaction_time: r.transaction_time || '',
@@ -668,16 +655,16 @@ export default function TransactionScanner() {
       mobile_number: r.mobile_number || 'N/A',
       comment: r.comment || 'N/A',
       amount: r.amount ?? 0,
-      id: crypto.randomUUID(),
-      status: 'done' as const,
-      fileName: '',
+      id: r.id,
+      status: r.status,
+      fileName: r.fileName,
     }));
     setRows(restored);
     setAutoSaved(true);
     setQuotaError(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     toast({ title: 'Session loaded', description: `${restored.length} receipts from "${session.session_name || format(new Date(session.scanned_at), 'dd MMM yyyy HH:mm')}"` });
-  }, [toast]);
+  }, [toast, processing]);
 
   useEffect(() => {
     if (rows.length >= 1 && doneRows.length === rows.length && errorRows.length === 0 && !autoSaved && !processing) {
@@ -709,7 +696,11 @@ export default function TransactionScanner() {
     batchRowIds.forEach(id => updateRow(id, { status: 'processing', error: undefined }));
     const onStatus = (msg: string) => batchRowIds.forEach(id => updateRow(id, { error: msg }));
     try {
-      const results = await extractBatch(images, onStatus);
+      onStatus('Queued — respecting provider rate limits…');
+      const results = await scannerQueueRef.current(() => {
+        onStatus('Reading receipt…');
+        return extractBatch(images, onStatus);
+      });
       batchRowIds.forEach((id, i) => {
         const r = results[i];
         if (r) updateRow(id, { status: 'done', error: undefined, ...r });
@@ -730,10 +721,16 @@ export default function TransactionScanner() {
   const retryRow = useCallback(async (rowId: string) => {
     const file = fileMapRef.current.get(rowId);
     if (file) {
-      const img = await compressImage(file);
-      await processBatch([rowId], [img]);
+      try {
+        const img = await compressImage(file);
+        await processBatch([rowId], [img]);
+      } catch (error: any) {
+        updateRow(rowId, { status: 'error', error: error.message || 'Image preparation failed' });
+      }
+    } else {
+      toast({ title: 'Original image needed', description: 'Re-upload this receipt image. Saved scan records retain details, not the image file.' });
     }
-  }, [processBatch]);
+  }, [processBatch, toast, updateRow]);
 
   const processFiles = useCallback(async (files: File[]) => {
     setQuotaError(null);
@@ -747,44 +744,24 @@ export default function TransactionScanner() {
     newRows.forEach((r, i) => fileMapRef.current.set(r.id, files[i]));
     setRows(prev => [...prev, ...newRows]);
 
-    // Pre-compress all images upfront in parallel before any API calls
-    const allImages = await Promise.all(files.map(compressImage));
-
-    // Build batch list — 1 image per batch (prevents Groq TPM rate-limit collisions)
-    const CONCURRENCY = 1;
-    const batches: Array<{ rowIds: string[]; imgs: Array<{ base64: string; mimeType: string }> }> = [];
-    for (let i = 0; i < newRows.length; i += BATCH_SIZE) {
-      batches.push({
-        rowIds: newRows.slice(i, i + BATCH_SIZE).map(r => r.id),
-        imgs: allImages.slice(i, i + BATCH_SIZE),
-      });
-    }
-
-    // Process one image at a time; 8 s gap keeps us safely within Groq's 30K TPM limit
-    // (Arabic receipts ≈ 4K tokens each → max 7.5 images/min → min 8 s between starts)
-    let aborted = false;
-    for (let i = 0; i < batches.length; i += CONCURRENCY) {
-      if (aborted) break;
-      const chunk = batches.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(chunk.map(b => processBatch(b.rowIds, b.imgs)));
-      if (results.some(r => !r)) {
-        aborted = true;
-        const processedSet = new Set(chunk.flatMap(b => b.rowIds));
-        const remaining = newRows.filter(r =>
-          !processedSet.has(r.id) && batches.slice(i + CONCURRENCY).some(b => b.rowIds.includes(r.id))
-        );
-        if (remaining.length > 0) {
-          setRows(prev => prev.map(r =>
-            remaining.some(nr => nr.id === r.id) && r.status === 'pending'
-              ? { ...r, status: 'error', error: 'Quota exhausted — will work tomorrow after midnight Pacific time' }
-              : r
-          ));
+    // Start the first image immediately, rather than decoding the entire upload
+    // first. The shared queue spaces starts and serializes all retry entry points.
+    for (let i = 0; i < newRows.length; i++) {
+      try {
+        const img = await compressImage(files[i]);
+        const canContinue = await processBatch([newRows[i].id], [img]);
+        if (!canContinue) {
+          const remaining = new Set(newRows.slice(i + 1).map(row => row.id));
+          setRows(prev => prev.map(row => remaining.has(row.id)
+            ? { ...row, status: 'error', error: 'Stopped because the AI service quota/configuration is unavailable. Retry later.' }
+            : row));
+          break;
         }
-        break;
+      } catch (error: any) {
+        updateRow(newRows[i].id, { status: 'error', error: error.message || 'Image preparation failed' });
       }
-      if (i + CONCURRENCY < batches.length) await sleep(8000);
     }
-  }, [processBatch]);
+  }, [processBatch, updateRow]);
 
   const onDrop = useCallback((e: ReactDragEvent) => {
     e.preventDefault();
@@ -803,13 +780,20 @@ export default function TransactionScanner() {
     const failed = rows.filter(r => r.status === 'error');
     for (let i = 0; i < failed.length; i += BATCH_SIZE) {
       const batch = failed.slice(i, i + BATCH_SIZE);
-      const batchFiles = batch.map(r => fileMapRef.current.get(r.id)!).filter(Boolean);
-      const imgs = await Promise.all(batchFiles.map(compressImage));
-      const canContinue = await processBatch(batch.map(r => r.id), imgs);
-      if (!canContinue) break;
-      if (i + BATCH_SIZE < failed.length) await sleep(8000);
+      const file = fileMapRef.current.get(batch[0].id);
+      if (!file) {
+        updateRow(batch[0].id, { error: 'Re-upload the original receipt image to retry this saved row.' });
+        continue;
+      }
+      try {
+        const img = await compressImage(file);
+        const canContinue = await processBatch([batch[0].id], [img]);
+        if (!canContinue) break;
+      } catch (error: any) {
+        updateRow(batch[0].id, { error: error.message || 'Image preparation failed' });
+      }
     }
-  }, [rows, processBatch]);
+  }, [rows, processBatch, updateRow]);
 
   const toggleCol = useCallback((col: string) => {
     setHiddenCols(prev => { const n = new Set(prev); n.has(col) ? n.delete(col) : n.add(col); return n; });
@@ -927,7 +911,7 @@ export default function TransactionScanner() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {doneRows.length > 0 && !processing && (
+          {rows.length > 0 && (
             <Button
               onClick={() => { setSaveName(''); setSaveDialogOpen(true); }}
               variant="outline"
@@ -935,7 +919,7 @@ export default function TransactionScanner() {
               disabled={saving}
             >
               <Save className="h-3.5 w-3.5" />
-              Save
+              {processing ? 'Save progress' : 'Save'}
             </Button>
           )}
           {doneRows.length > 0 && (
@@ -994,7 +978,10 @@ export default function TransactionScanner() {
           {processing ? (
             <div className="w-full max-w-sm px-4 space-y-2">
               <Progress value={progressPct} className="h-1.5" />
-              <p className="text-center text-xs text-muted-foreground">{doneCount} of {totalCount} images processed</p>
+              <p className="text-center text-xs text-muted-foreground">
+                {processedCount} of {totalCount} checked · {doneCount} read · {errorRows.length} need retry.
+                {' '}One request at a time; at least 8 seconds between image starts, not an extra delay after every result.
+              </p>
               {statusMsg && (
                 <p className="text-center text-xs text-amber-600 bg-amber-50 rounded px-3 py-1.5">{statusMsg}</p>
               )}
@@ -1435,8 +1422,8 @@ export default function TransactionScanner() {
                     <th className="px-4 py-2.5 text-left font-semibold w-8">#</th>
                     <th className="px-4 py-2.5 text-left font-semibold">Session Name</th>
                     <th className="px-4 py-2.5 text-left font-semibold">Date Saved</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">Receipts</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">Total (SDG)</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Saved rows</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Read receipts total (SDG)</th>
                     <th className="px-4 py-2.5 text-center font-semibold">Actions</th>
                   </tr>
                 </thead>
@@ -1669,14 +1656,14 @@ export default function TransactionScanner() {
                   placeholder={`e.g. March batch — ${doneRows.length} receipts`}
                   value={saveName}
                   onChange={e => setSaveName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { setSaveDialogOpen(false); saveSession(saveName); } }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !saving) void saveSession(saveName); }}
                   autoFocus
                 />
               </>
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Pick an existing session to add these receipts to. Duplicate transaction IDs will be skipped automatically.
+                  Pick an existing session. All rows and duplicate evidence are retained. Saving the same row again refreshes its notes and verification without adding another copy.
                 </p>
                 <div className="space-y-1 max-h-52 overflow-y-auto border rounded-lg p-1">
                   {savedSessions.map(s => (
@@ -1710,14 +1697,15 @@ export default function TransactionScanner() {
             )}
 
             <p className="text-xs text-muted-foreground">
-              {doneRows.length} receipts ready · Total: {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })} SDG
+              Snapshot: {rows.length} rows ({doneRows.length} read, {errorRows.length} failed, {pendingRows.length} waiting/reading).
+              {' '}Total of read receipts: {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })} SDG.
+              {' '}Includes accounts, notes, verification, confidence, filenames and status. Original image files are not stored.
             </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => {
-                setSaveDialogOpen(false);
                 if (saveMode === 'new') saveSession(saveName);
                 else appendToSession(appendTargetId);
               }}

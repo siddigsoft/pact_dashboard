@@ -10,6 +10,7 @@
  * Secrets: GOOGLE_AI_API_KEY (+ optional _2…_10), GROQ_API_KEY
  */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { OcrTemporaryError, ocrProviderFetch, providerRetrySeconds } from '../_shared/ocr-retry.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -174,7 +175,7 @@ async function callGeminiWithRotation(
       })
 
       for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await fetch(
+        const res = await ocrProviderFetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKeys[ki]}`,
           {
             method: 'POST',
@@ -203,13 +204,12 @@ async function callGeminiWithRotation(
             break
           }
           if (isMinuteLimit) {
-            const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)s/i)
-            const waitMs = retryMatch
-              ? (Math.ceil(parseFloat(retryMatch[1])) + 2) * 1000
-              : 15000
-            console.log(`[Gemini OCR] ${model} minute-limit — waiting ${waitMs}ms`)
-            await sleep(Math.min(waitMs, 45000))
-            continue
+            throw new OcrTemporaryError('AI rate limit reached. Waiting before retrying.', 429,
+              providerRetrySeconds(res.headers, msg))
+          }
+          if ([500, 502, 503, 504].includes(res.status)) {
+            throw new OcrTemporaryError('The AI service is temporarily busy. Please retry.', 503,
+              providerRetrySeconds(res.headers, msg, 5))
           }
           throw new Error(`Gemini API error: ${msg.slice(0, 300)}`)
         }
@@ -246,7 +246,7 @@ async function callGroqSingleImage(
   img: { base64: string; mimeType: string },
 ): Promise<string> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const res = await ocrProviderFetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -302,12 +302,12 @@ async function callGroqSingleImage(
         throw new Error(`Groq model unavailable: ${errMsg}`)
       }
       if (isMinuteLimit) {
-        const headerRetry = parseInt(res.headers.get('retry-after') || '0', 10)
-        const msgMatch = errMsg.match(/try again in (\d+(?:\.\d+)?)s/i)
-        const msgRetry = msgMatch ? Math.ceil(parseFloat(msgMatch[1])) : 0
-        const waitSec = Math.min(Math.max(headerRetry, msgRetry, 15), 45)
-        await sleep(waitSec * 1000)
-        continue
+        throw new OcrTemporaryError('AI rate limit reached. Waiting before retrying.', 429,
+          providerRetrySeconds(res.headers, errMsg))
+      }
+      if ([500, 502, 503, 504].includes(res.status)) {
+        throw new OcrTemporaryError('The AI service is temporarily busy. Please retry.', 503,
+          providerRetrySeconds(res.headers, errMsg, 5))
       }
       if (isInvalidImage) throw new Error(`Groq image rejected (${res.status}): ${errMsg}`)
       throw new Error(`Groq API error: ${errMsg}`)
@@ -346,6 +346,7 @@ async function callGroqOCR(
           results.push(Array.isArray(parsed) ? parsed[0] : parsed)
           if (parsed) successCount++
         } catch (imgErr: unknown) {
+          if (imgErr instanceof OcrTemporaryError) throw imgErr
           const msg = imgErr instanceof Error ? imgErr.message : String(imgErr)
           if (msg.startsWith('Groq model unavailable')) throw imgErr
           results.push(null)
@@ -414,6 +415,12 @@ serve(async (req: Request) => {
 
     return jsonResponse(200, { text: processed, model })
   } catch (err: unknown) {
+    if (err instanceof OcrTemporaryError) {
+      return jsonResponse(err.status, { error: err.message, retryAfterSec: err.retryAfterSec, isDailyExhausted: false })
+    }
+    if (err instanceof Error && ['AbortError', 'TimeoutError'].includes(err.name)) {
+      return jsonResponse(503, { error: 'The AI provider response timed out. Please retry.', retryAfterSec: 5, isDailyExhausted: false })
+    }
     const msg = err instanceof Error ? err.message : 'OCR failed'
     const noKey = msg.includes('GROQ_API_KEY not configured')
     const allExhausted = msg.includes('All Gemini') || msg.includes('All Groq')
